@@ -387,6 +387,8 @@ describe('OcrReviewInvocationAdapter', () => {
       diagnostic: OcrReviewAcceptanceDiagnostic
     ) => void;
     readonly planInputOverrides?: Record<string, unknown>;
+    /** Adds a second, distinct FindingDiscovery slot to the same adapter. */
+    readonly secondSlotPlanInputOverrides?: Record<string, unknown>;
     readonly lifecycle?: {
       readonly signal?: AbortSignal;
       readonly previewTimeoutMs?: () => number;
@@ -395,11 +397,21 @@ describe('OcrReviewInvocationAdapter', () => {
   }): {
     adapter: OcrReviewInvocationAdapter;
     workSlot: ReviewWorkSlotPlan;
+    secondWorkSlot?: ReviewWorkSlotPlan;
   } {
     const planned = planOcrReviewAssignments(
       planInput(options.planInputOverrides ?? {})
     );
-    const adapter = new OcrReviewInvocationAdapter(planned.assignments, {
+    const second = options.secondSlotPlanInputOverrides
+      ? planOcrReviewAssignments(
+          planInput(options.secondSlotPlanInputOverrides)
+        )
+      : undefined;
+    const assignments = [
+      ...planned.assignments,
+      ...(second?.assignments ?? []),
+    ];
+    const adapter = new OcrReviewInvocationAdapter(assignments, {
       ...options.lifecycle,
       model: 'admitted-model',
       binaryPath: '/opt/ocr/opencodereview',
@@ -424,7 +436,11 @@ describe('OcrReviewInvocationAdapter', () => {
       previewRunner: options.previewRunner,
       acceptanceDiagnostic: options.acceptanceDiagnostic,
     });
-    return { adapter, workSlot: planned.assignments[0].workSlot };
+    return {
+      adapter,
+      workSlot: planned.assignments[0].workSlot,
+      ...(second ? { secondWorkSlot: second.assignments[0].workSlot } : {}),
+    };
   }
 
   function executionInput(
@@ -921,6 +937,74 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(processRunner.calls).toHaveLength(0);
   });
 
+  it('never replays an engine run that failed without a proven unpaid denial', async () => {
+    // The first run may have paid for its model requests before failing; no
+    // gateway fact proves otherwise, so the next attempt must not dispatch.
+    const { bridge, requests } = bridgeFixture({
+      releaseRetrySafeFailure: () => {
+        throw new Error('release must not run without a proven denial');
+      },
+    });
+    const processRunner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: async (input) => {
+        const result = await processRunner.runner(input);
+        requests.count += 1;
+        return processRunner.calls.length === 1
+          ? { ...result, exitCode: 3 }
+          : result;
+      },
+      previewRunner: previewRunner().runner,
+    });
+    const first = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.execute(executionInput(first))).rejects.toThrow(
+      /review_action_v2_ocr_process_failed/u
+    );
+    const second = await adapter.prepare({ workSlot, attemptOrdinal: 2 });
+    await expect(adapter.execute(executionInput(second))).rejects.toThrow(
+      /review_action_v2_ocr_replay_fenced/u
+    );
+    expect(processRunner.calls).toHaveLength(1);
+  });
+
+  it('dispatches the next attempt once the previous run left a released proven denial', async () => {
+    // Production failure class: the run's only relay request was denied
+    // before dispatch, so the following attempt may run the engine again.
+    let effect: { effect: string } | undefined;
+    let released = 0;
+    const { bridge, requests } = bridgeFixture({
+      effectFacts: () => effect,
+      releaseRetrySafeFailure: () => {
+        if (effect?.effect !== 'not_dispatched') return false;
+        released += 1;
+        effect = undefined;
+        return true;
+      },
+    });
+    const processRunner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: async (input) => {
+        const result = await processRunner.runner(input);
+        requests.count += 1;
+        if (processRunner.calls.length > 1) return result;
+        effect = { effect: 'not_dispatched' };
+        return { ...result, exitCode: 1 };
+      },
+      previewRunner: previewRunner().runner,
+    });
+    const first = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.execute(executionInput(first))).rejects.toThrow(
+      /review_action_v2_ocr_review_agent_not_dispatched/u
+    );
+    const second = await adapter.prepare({ workSlot, attemptOrdinal: 2 });
+    const observation = await adapter.execute(executionInput(second));
+    expect(released).toBe(1);
+    expect(processRunner.calls).toHaveLength(2);
+    expect(observation.transportAttemptCount).toBe(1);
+  });
+
   it('classifies an inventory gap as a partial missing_paths observation', async () => {
     // §8.1/§8.2: a deleted file stays in the RR inventory denominator but the
     // producer never groups it; that gap is a bounded missing_paths
@@ -1003,39 +1087,79 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(observation.findingCount).toBe(20);
   });
 
+  function slowProcessRunner(counters: {
+    active: number;
+    maxActive: number;
+    runs: number;
+  }): OcrReviewProcessRunner {
+    return async (input) => {
+      counters.runs += 1;
+      counters.active += 1;
+      counters.maxActive = Math.max(counters.maxActive, counters.active);
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      counters.active -= 1;
+      const outputPath = input.argv[input.argv.indexOf('--output') + 1];
+      fs.writeFileSync(outputPath, nativeResultBody());
+      return {
+        closed: true,
+        exitCode: 0,
+        signal: null,
+        stdoutTail: '',
+        stderrTail: '',
+      };
+    };
+  }
+
   it('serializes engine invocations (real in-flight <= 1)', async () => {
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;
-    let active = 0;
-    let maxActive = 0;
-    const { adapter, workSlot } = adapterFixture({
+    const counters = { active: 0, maxActive: 0, runs: 0 };
+    const { adapter, workSlot, secondWorkSlot } = adapterFixture({
       bridge,
-      processRunner: async (input) => {
-        active += 1;
-        maxActive = Math.max(maxActive, active);
-        await new Promise((resolve) => setTimeout(resolve, 40));
-        active -= 1;
-        const outputPath = input.argv[input.argv.indexOf('--output') + 1];
-        fs.writeFileSync(outputPath, nativeResultBody());
-        return {
-          closed: true,
-          exitCode: 0,
-          signal: null,
-          stdoutTail: '',
-          stderrTail: '',
-        };
-      },
+      processRunner: slowProcessRunner(counters),
       previewRunner: previewRunner().runner,
+      secondSlotPlanInputOverrides: { compatibilityKey: '7'.repeat(64) },
     });
+    expect(secondWorkSlot?.workSlotId).not.toBe(workSlot.workSlotId);
     const first = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
-    const second = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const second = await adapter.prepare({
+      workSlot: secondWorkSlot!,
+      attemptOrdinal: 1,
+    });
     const [one, two] = await Promise.all([
       adapter.execute(executionInput(first)),
       adapter.execute(executionInput(second)),
     ]);
-    expect(maxActive).toBe(1);
+    expect(counters.maxActive).toBe(1);
+    expect(counters.runs).toBe(2);
     expect(one.transportAttemptCount).toBe(1);
     expect(two.transportAttemptCount).toBe(1);
+  });
+
+  it('never replays a finished run when executes of one slot race', async () => {
+    // The fence is checked inside the gate, so a racing execute cannot pass
+    // it before the first run dispatched and paid.
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const counters = { active: 0, maxActive: 0, runs: 0 };
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: slowProcessRunner(counters),
+      previewRunner: previewRunner().runner,
+    });
+    const first = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const second = await adapter.prepare({ workSlot, attemptOrdinal: 2 });
+    const [one, two] = await Promise.allSettled([
+      adapter.execute(executionInput(first)),
+      adapter.execute(executionInput(second)),
+    ]);
+    expect(counters.runs).toBe(1);
+    expect(one.status === 'fulfilled' && one.value.transportAttemptCount).toBe(
+      1
+    );
+    expect(two.status === 'rejected' && String(two.reason)).toMatch(
+      /review_action_v2_ocr_replay_fenced/u
+    );
   });
 
   it('does not dispatch when the root signal is already aborted', async () => {

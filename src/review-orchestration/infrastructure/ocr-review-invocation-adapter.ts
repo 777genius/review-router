@@ -569,6 +569,8 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
   >();
   private inFlight: Promise<unknown> = Promise.resolve();
   private running = false;
+  /** Slots whose engine run may already have paid for model requests. */
+  private readonly dispatchedSlots = new Set<string>();
 
   constructor(
     assignments: readonly OcrReviewAssignment[],
@@ -881,26 +883,37 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     }
     // §8.4 step 1: outer signal and current lease authority before dispatch.
     assertOcrInvocationLive(input);
-    // Step 2: known-terminal/unknown Gateway effect fences new calls. A
-    // positively proven not_dispatched denial paid nothing, so releasing it
-    // lifts the fence for one fresh dispatch; unknown/paid effects never do
-    // (§8.4 step 2).
-    const effectBefore = this.options.bridge.effectFacts?.();
-    if (effectBefore && effectBefore.effect !== 'none') {
-      if (
-        effectBefore.effect !== 'not_dispatched' ||
-        this.options.bridge.releaseRetrySafeFailure?.() !== true
-      ) {
-        throw new Error(
-          effectBefore.effect === 'not_dispatched'
-            ? 'review_action_v2_ocr_not_dispatched'
-            : 'review_action_v2_ocr_gateway_effect_unknown'
-        );
-      }
-    }
     // One engine invocation in flight; aborting callers never dispatch late.
-    const run = this.gate(() => this.runInvocation(input, assignment));
+    // The effect fence runs inside the gate so no check outlives a dispatch.
+    const run = this.gate(async () => {
+      this.assertDispatchPermitted(assignment.workSlot.workSlotId);
+      return await this.runInvocation(input, assignment);
+    });
     return await run;
+  }
+
+  /** §8.4 step 2: known-terminal/unknown Gateway effect fences new calls. A
+   * positively proven not_dispatched denial paid nothing, so releasing it
+   * lifts the fence for one fresh dispatch; unknown/paid effects never do.
+   * After an earlier engine run of the slot only that release reopens
+   * dispatch: without it the earlier run may have paid for its requests. */
+  private assertDispatchPermitted(workSlotId: string): void {
+    const effectBefore = this.options.bridge.effectFacts?.();
+    const effectKnown =
+      effectBefore !== undefined && effectBefore.effect !== 'none';
+    if (
+      (effectKnown || this.dispatchedSlots.has(workSlotId)) &&
+      (effectBefore?.effect !== 'not_dispatched' ||
+        this.options.bridge.releaseRetrySafeFailure?.() !== true)
+    ) {
+      throw new Error(
+        effectBefore?.effect === 'not_dispatched'
+          ? 'review_action_v2_ocr_not_dispatched'
+          : effectKnown
+            ? 'review_action_v2_ocr_gateway_effect_unknown'
+            : 'review_action_v2_ocr_replay_fenced'
+      );
+    }
   }
 
   private gate<T>(operation: () => Promise<T>): Promise<T> {
@@ -946,6 +959,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     });
     this.options.contextTools?.beginNativeSession();
     let processResult: OcrReviewProcessResult;
+    this.dispatchedSlots.add(assignment.workSlot.workSlotId);
     try {
       processResult = await this.options.processRunner({
         binaryPath: this.options.binaryPath,

@@ -211940,6 +211940,8 @@ var OcrReviewInvocationAdapter = class {
   preimages = /* @__PURE__ */ new WeakMap();
   inFlight = Promise.resolve();
   running = false;
+  /** Slots whose engine run may already have paid for model requests. */
+  dispatchedSlots = /* @__PURE__ */ new Set();
   /** Model-free: deterministic preview and semantic capture only (§5.2). */
   async prepare(input) {
     this.options.signal?.throwIfAborted();
@@ -212192,16 +212194,25 @@ var OcrReviewInvocationAdapter = class {
       throw new Error("review_action_v2_prepared_invocation_identity_mismatch");
     }
     assertOcrInvocationLive(input);
-    const effectBefore = this.options.bridge.effectFacts?.();
-    if (effectBefore && effectBefore.effect !== "none") {
-      if (effectBefore.effect !== "not_dispatched" || this.options.bridge.releaseRetrySafeFailure?.() !== true) {
-        throw new Error(
-          effectBefore.effect === "not_dispatched" ? "review_action_v2_ocr_not_dispatched" : "review_action_v2_ocr_gateway_effect_unknown"
-        );
-      }
-    }
-    const run2 = this.gate(() => this.runInvocation(input, assignment));
+    const run2 = this.gate(async () => {
+      this.assertDispatchPermitted(assignment.workSlot.workSlotId);
+      return await this.runInvocation(input, assignment);
+    });
     return await run2;
+  }
+  /** §8.4 step 2: known-terminal/unknown Gateway effect fences new calls. A
+   * positively proven not_dispatched denial paid nothing, so releasing it
+   * lifts the fence for one fresh dispatch; unknown/paid effects never do.
+   * After an earlier engine run of the slot only that release reopens
+   * dispatch: without it the earlier run may have paid for its requests. */
+  assertDispatchPermitted(workSlotId) {
+    const effectBefore = this.options.bridge.effectFacts?.();
+    const effectKnown = effectBefore !== void 0 && effectBefore.effect !== "none";
+    if ((effectKnown || this.dispatchedSlots.has(workSlotId)) && (effectBefore?.effect !== "not_dispatched" || this.options.bridge.releaseRetrySafeFailure?.() !== true)) {
+      throw new Error(
+        effectBefore?.effect === "not_dispatched" ? "review_action_v2_ocr_not_dispatched" : effectKnown ? "review_action_v2_ocr_gateway_effect_unknown" : "review_action_v2_ocr_replay_fenced"
+      );
+    }
   }
   gate(operation) {
     const next = this.inFlight.then(async () => {
@@ -212234,6 +212245,7 @@ var OcrReviewInvocationAdapter = class {
     });
     this.options.contextTools?.beginNativeSession();
     let processResult2;
+    this.dispatchedSlots.add(assignment.workSlot.workSlotId);
     try {
       processResult2 = await this.options.processRunner({
         binaryPath: this.options.binaryPath,

@@ -131210,6 +131210,10 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   localConnections: 4,
   cliOutputBytes: 8388608
 });
+var RELEASABLE_SATURATION_CODES = [
+  "relay_saturated",
+  "lane_saturated"
+];
 function observeTransport(observe, stage, responseReceived, httpStatus, error4, facts = {}) {
   try {
     void Promise.resolve(
@@ -131258,7 +131262,11 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
   origin;
   held = /* @__PURE__ */ new Set();
   inferenceDenied = false;
+  inferenceCancelled = false;
   terminal = false;
+  /** Set once any response other than a closed, unreferenced 503 saturation
+   * denial (or a transport error) is observed: something may have been paid. */
+  mayHaveDispatched = false;
   failure;
   requestRef;
   observedModel;
@@ -131270,11 +131278,12 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     return this.requestRef;
   }
   /** Positively proven pre-dispatch denial (closed relay_saturated/lane_saturated
-   * envelope, no request reference) paid nothing: a fresh dispatch may proceed.
-   * Unknown/paid effects keep denying inference for this consumer. */
+   * 503 envelope, no request reference) paid nothing: a fresh dispatch may
+   * proceed. A consumer that ever saw any other response, a transport error or
+   * cancellation keeps denying inference: earlier requests may have been paid. */
   releaseRetrySafeFailure() {
     const failure = this.failure;
-    if (this.terminal || !failure || failure.requestRef !== void 0 || failure.effect !== "not_dispatched" || failure.code !== "relay_saturated" && failure.code !== "lane_saturated")
+    if (this.terminal || this.inferenceCancelled || this.mayHaveDispatched || !failure || failure.requestRef !== void 0 || failure.effect !== "not_dispatched" || !RELEASABLE_SATURATION_CODES.includes(failure.code))
       return false;
     this.failure = void 0;
     this.inferenceDenied = false;
@@ -131429,7 +131438,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         const referenced = response.headers["x-reviewrouter-request-ref"] !== void 0;
         if (!this.directOpenRouter && !this.auxiliaryDescription && httpStatus === 503 && !referenced && /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
           response.headers["content-type"] ?? ""
-        ) && denial !== void 0 && relaySaturated(denial)) {
+        ) && denial !== void 0 && saturationDenial(denial, ["relay_saturated"])) {
           if (waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits || import_perf_hooks2.performance.now() + 1e3 > waitUntil)
             break;
           await (0, import_promises2.setTimeout)(1e3, void 0, { signal: controller.signal });
@@ -131439,6 +131448,10 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         }
         break;
       }
+      if (this.directOpenRouter || httpStatus !== 503 || response.headers["x-reviewrouter-request-ref"] !== void 0 || !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+        response.headers["content-type"] ?? ""
+      ) || denial === void 0 || !saturationDenial(denial, RELEASABLE_SATURATION_CODES))
+        this.mayHaveDispatched = true;
       const status = response.statusCode ?? 502;
       responseReceived = true;
       httpStatus = status;
@@ -131569,6 +131582,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         error4
       );
       this.inferenceDenied = true;
+      this.mayHaveDispatched = true;
       this.failure ??= {
         code: "transport",
         effect: "effect_unknown",
@@ -131605,6 +131619,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
   }
   cancelInference() {
     this.inferenceDenied = true;
+    this.inferenceCancelled = true;
     this.cancelHeldStreams();
   }
   /** Required companion endpoint: current authorized run -> scoped SCM read only.
@@ -131920,10 +131935,10 @@ async function boundedBytes(body2, maximum, signal) {
 function safeReference(value) {
   return typeof value === "string" && /^[A-Za-z0-9._~-]{1,200}$/.test(value) ? value : void 0;
 }
-function relaySaturated(bytes) {
+function saturationDenial(bytes, codes) {
   try {
     const space = "[ \\t\\r\\n]*";
-    const code = `"code"${space}:${space}"relay_saturated"`;
+    const code = `"code"${space}:${space}"(?:${codes.join("|")})"`;
     const effect = `"effect"${space}:${space}"not_dispatched"`;
     return new RegExp(
       `^${space}\\{${space}"error"${space}:${space}\\{${space}(?:${code}${space},${space}${effect}|${effect}${space},${space}${code})${space}\\}${space}\\}${space}$`
@@ -237242,6 +237257,8 @@ var OcrReviewInvocationAdapter = class {
   preimages = /* @__PURE__ */ new WeakMap();
   inFlight = Promise.resolve();
   running = false;
+  /** Slots whose engine run may already have paid for model requests. */
+  dispatchedSlots = /* @__PURE__ */ new Set();
   /** Model-free: deterministic preview and semantic capture only (§5.2). */
   async prepare(input) {
     this.options.signal?.throwIfAborted();
@@ -237494,16 +237511,25 @@ var OcrReviewInvocationAdapter = class {
       throw new Error("review_action_v2_prepared_invocation_identity_mismatch");
     }
     assertOcrInvocationLive(input);
-    const effectBefore = this.options.bridge.effectFacts?.();
-    if (effectBefore && effectBefore.effect !== "none") {
-      if (effectBefore.effect !== "not_dispatched" || this.options.bridge.releaseRetrySafeFailure?.() !== true) {
-        throw new Error(
-          effectBefore.effect === "not_dispatched" ? "review_action_v2_ocr_not_dispatched" : "review_action_v2_ocr_gateway_effect_unknown"
-        );
-      }
-    }
-    const run3 = this.gate(() => this.runInvocation(input, assignment));
+    const run3 = this.gate(async () => {
+      this.assertDispatchPermitted(assignment.workSlot.workSlotId);
+      return await this.runInvocation(input, assignment);
+    });
     return await run3;
+  }
+  /** §8.4 step 2: known-terminal/unknown Gateway effect fences new calls. A
+   * positively proven not_dispatched denial paid nothing, so releasing it
+   * lifts the fence for one fresh dispatch; unknown/paid effects never do.
+   * After an earlier engine run of the slot only that release reopens
+   * dispatch: without it the earlier run may have paid for its requests. */
+  assertDispatchPermitted(workSlotId) {
+    const effectBefore = this.options.bridge.effectFacts?.();
+    const effectKnown = effectBefore !== void 0 && effectBefore.effect !== "none";
+    if ((effectKnown || this.dispatchedSlots.has(workSlotId)) && (effectBefore?.effect !== "not_dispatched" || this.options.bridge.releaseRetrySafeFailure?.() !== true)) {
+      throw new Error(
+        effectBefore?.effect === "not_dispatched" ? "review_action_v2_ocr_not_dispatched" : effectKnown ? "review_action_v2_ocr_gateway_effect_unknown" : "review_action_v2_ocr_replay_fenced"
+      );
+    }
   }
   gate(operation) {
     const next = this.inFlight.then(async () => {
@@ -237536,6 +237562,7 @@ var OcrReviewInvocationAdapter = class {
     });
     this.options.contextTools?.beginNativeSession();
     let processResult2;
+    this.dispatchedSlots.add(assignment.workSlot.workSlotId);
     try {
       processResult2 = await this.options.processRunner({
         binaryPath: this.options.binaryPath,

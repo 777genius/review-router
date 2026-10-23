@@ -16,9 +16,13 @@ export function bundledReviewAgentForTransport(
       profile.agentKind === 'codex' &&
       profile.modelTransports.includes(transport)
   );
-  if (profiles.length !== 1)
+  const supporting = profiles.filter(
+    (profile) => profile.reviewSkillsVersion === 1
+  );
+  const candidates = supporting.length > 0 ? supporting : profiles;
+  if (candidates.length !== 1)
     throw new Error('review_agent_profile_unavailable');
-  return profiles[0]!;
+  return candidates[0]!;
 }
 
 /** Called only with runtimeEnv from the authenticated admitted checkout reply. */

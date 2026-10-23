@@ -1,3 +1,8 @@
+import { createCapturedReviewSkills } from '../../../src/control-plane/generated/review-action-v2/review-skills-contract';
+import {
+  createMaterializedReviewSkills,
+  type ReviewSkillsExecutionInput,
+} from '../../../src/review-skills/review-skills';
 /**
  * Plan 56 §12 real-CLI harness: the pinned managed OCR binary
  * (tools/ocr/out/opencodereview) runs against a synthetic Git repository and a
@@ -17,6 +22,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   buildOcrControlledRuleText,
+  buildOcrSkillsControlledRuleText,
   OcrReviewInvocationAdapter,
   planOcrReviewAssignments,
   runOcrReviewProcess,
@@ -63,6 +69,8 @@ function binaryAvailable(): boolean {
 }
 
 const available = binaryAvailable();
+if (!available && process.env.REVIEWROUTER_OCR_REQUIRED === '1')
+  throw new Error('required_managed_ocr_binary_unavailable');
 const describeHarness = available ? describe : describe.skip;
 
 interface RecordedRequest {
@@ -168,7 +176,12 @@ function git(repo: string, ...args: string[]): string {
 /* §12 scripted variants (real-CLI level)                              */
 /* ------------------------------------------------------------------ */
 
-type ScriptedRequestKind = 'main' | 'filter' | 'relocation' | 'compression';
+type ScriptedRequestKind =
+  | 'main'
+  | 'plan'
+  | 'filter'
+  | 'relocation'
+  | 'compression';
 
 interface ScriptedRequest {
   method: string;
@@ -176,6 +189,7 @@ interface ScriptedRequest {
   authorization: string | undefined;
   bodyKeys: readonly string[];
   kind: ScriptedRequestKind;
+  inputText: string;
   /** Request arrival -> response end; used for §7.2 serialization evidence. */
   startedAt: number;
   endedAt: number;
@@ -289,7 +303,10 @@ function startScriptedStub(script: ScriptedStubScript): Promise<{
             (tool) => tool.name ?? ''
           )
         : [];
-      const inputText = JSON.stringify(parsed.input ?? '');
+      const inputText = JSON.stringify({
+        instructions: parsed.instructions ?? '',
+        input: parsed.input ?? '',
+      });
       let kind: ScriptedRequestKind;
       if (
         toolNames.includes('task_done') ||
@@ -301,6 +318,8 @@ function startScriptedStub(script: ScriptedStubScript): Promise<{
         toolNames.includes('report_incorrect_comments')
       ) {
         kind = 'filter';
+      } else if (inputText.includes('expert in code review task planning')) {
+        kind = 'plan';
       } else if (inputText.includes('minimal contiguous code range')) {
         kind = 'relocation';
       } else {
@@ -313,6 +332,7 @@ function startScriptedStub(script: ScriptedStubScript): Promise<{
         authorization: request.headers.authorization,
         bodyKeys: Object.keys(parsed),
         kind,
+        inputText,
         startedAt,
         endedAt: startedAt,
       };
@@ -434,6 +454,8 @@ async function runScriptedScenario(input: {
   readonly checkoutRoot: string;
   readonly script: ScriptedStubScript;
   readonly maxTokens?: number;
+  readonly reviewSkills?: ReviewSkillsExecutionInput;
+  readonly assignedPaths?: readonly string[];
 }): Promise<ScriptedScenarioResult> {
   const stub = await startScriptedStub(input.script);
   try {
@@ -480,22 +502,20 @@ async function runScriptedScenario(input: {
       author: 'tester',
       draft: false,
       labels: [],
-      files: [
-        {
-          filename: 'calc.ts',
-          status: 'modified',
-          additions: 1,
-          deletions: 1,
-          changes: 2,
-          patch: git(
-            input.checkoutRoot,
-            'diff',
-            `${mergeBaseSha}..${headSha}`,
-            '--',
-            'calc.ts'
-          ),
-        },
-      ],
+      files: (input.assignedPaths ?? ['calc.ts']).map((filename) => ({
+        filename,
+        status: 'modified',
+        additions: 1,
+        deletions: 1,
+        changes: 2,
+        patch: git(
+          input.checkoutRoot,
+          'diff',
+          `${mergeBaseSha}..${headSha}`,
+          '--',
+          filename
+        ),
+      })),
       diff: '',
       additions: 1,
       deletions: 1,
@@ -582,10 +602,18 @@ async function runScriptedScenario(input: {
       ocrEffort: 'medium',
       modelReasoningEffort: 'medium',
       language: 'en',
-      ruleText: buildOcrControlledRuleText({
-        language: 'en',
-        assignedPaths: ['calc.ts'],
-      }),
+      reviewSkills: input.reviewSkills,
+      ruleText:
+        input.reviewSkills?.kind === 'captured'
+          ? buildOcrSkillsControlledRuleText({
+              language: 'en',
+              assignedPaths: input.assignedPaths ?? ['calc.ts'],
+              reviewSkills: input.reviewSkills,
+            })
+          : buildOcrControlledRuleText({
+              language: 'en',
+              assignedPaths: input.assignedPaths ?? ['calc.ts'],
+            }),
       backgroundText: 'Accidental subtraction in add().',
       checkoutRoot: input.checkoutRoot,
       processRunner: runOcrReviewProcess,
@@ -918,6 +946,108 @@ describeHarness(
       expect(observation.actualModel).toBe('stub-model');
       expect(observation.transportAttemptCount).toBe(1);
       expect(observation.qualityFlags).toEqual([]);
+    }, 120_000);
+
+    it('supplies composed skills and built-ins to real main/plan prompts with exact assigned inventory', async () => {
+      const repo = path.join(workspace, 'skills-repo');
+      fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+      git(repo, 'init', '-q');
+      fs.writeFileSync(
+        path.join(repo, 'calc.ts'),
+        'export const oldValue = 1;\n'
+      );
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-qm', 'base');
+      const baseSha = git(repo, 'rev-parse', 'HEAD').trim();
+      fs.writeFileSync(
+        path.join(repo, 'calc.ts'),
+        Array.from(
+          { length: 80 },
+          (_, i) => `export const value${i} = ${i};`
+        ).join('\n')
+      );
+      fs.writeFileSync(
+        path.join(repo, 'src/Foo.ts'),
+        'export const upper = true;\n'
+      );
+      fs.writeFileSync(
+        path.join(repo, 'src/foo.ts'),
+        'export const lower = true;\n'
+      );
+      fs.writeFileSync(
+        path.join(repo, 'unassigned.ts'),
+        'UNASSIGNED_SOURCE_MARKER'
+      );
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-qm', 'head');
+      const skill = (
+        skillId: string,
+        instructions: string,
+        includePaths: string[]
+      ) => ({
+        skillId,
+        revisionId: 'revision-1',
+        sourceWorkspaceId: 'source',
+        name: skillId,
+        description: 'custom review invariant',
+        instructions,
+        includePaths,
+        excludePaths: [],
+      });
+      const reviewSkills = createMaterializedReviewSkills(
+        createCapturedReviewSkills({
+          baseSha,
+          webSkills: [
+            skill('global-one', 'GLOBAL_ONE_MARKER', ['**']),
+            skill('global-two', 'GLOBAL_TWO_MARKER', ['**']),
+            skill('upper', 'UPPER_ONLY_MARKER', ['src/Foo.ts']),
+            skill('lower', 'LOWER_ONLY_MARKER', ['src/foo.ts']),
+            skill('other', 'UNRELATED_POLICY_MARKER', ['other/**']),
+          ],
+          gitSources: [],
+        }),
+        []
+      );
+      const scenario = await runScriptedScenario({
+        workspace,
+        checkoutRoot: repo,
+        script: { nComments: 0, contentLen: 0, filterMode: 'approve' },
+        assignedPaths: ['calc.ts', 'src/Foo.ts', 'src/foo.ts'],
+        reviewSkills,
+      });
+      expect(scenario.rejection).toBeUndefined();
+      expect(scenario.requests.some((request) => request.kind === 'plan')).toBe(
+        true
+      );
+      expect(scenario.requests.some((request) => request.kind === 'main')).toBe(
+        true
+      );
+      for (const request of scenario.requests.filter(
+        (item) => item.kind === 'main' || item.kind === 'plan'
+      )) {
+        expect(request.inputText).toContain('GLOBAL_ONE_MARKER');
+        expect(request.inputText).toContain('GLOBAL_TWO_MARKER');
+        expect(request.inputText).toContain('UPPER_ONLY_MARKER');
+        expect(request.inputText).toContain('LOWER_ONLY_MARKER');
+        expect(request.inputText).toContain(
+          'System-Specific Rules (Mandatory)'
+        );
+        expect(request.inputText).toContain('introduced or aggravated');
+        expect(request.inputText).not.toContain('UNRELATED_POLICY_MARKER');
+      }
+      expect(JSON.stringify(scenario.requests)).not.toContain(
+        'UNASSIGNED_SOURCE_MARKER'
+      );
+      const groups = (
+        scenario.resultRaw?.reviewrouter_outcome as {
+          groups: { paths: string[] }[];
+        }
+      ).groups;
+      expect(groups.flatMap((group) => group.paths).sort()).toEqual([
+        'calc.ts',
+        'src/Foo.ts',
+        'src/foo.ts',
+      ]);
     }, 120_000);
 
     // ------------------------------------------------------------------

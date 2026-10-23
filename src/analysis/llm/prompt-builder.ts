@@ -1,3 +1,8 @@
+import {
+  LEGACY_REVIEW_SKILLS,
+  renderReviewSkillsForPaths,
+  type ReviewSkillsExecutionInput,
+} from '../../review-skills/review-skills';
 import { createHash } from 'crypto';
 import {
   LifecycleTarget,
@@ -35,7 +40,8 @@ export class PromptBuilder {
     private readonly intensity: ReviewIntensity = 'standard',
     private readonly promptEnricher?: PromptEnricher,
     private readonly codeGraph?: CodeGraph,
-    private readonly memoryPromptContext?: string
+    private readonly memoryPromptContext?: string,
+    private readonly reviewSkills: ReviewSkillsExecutionInput = LEGACY_REVIEW_SKILLS
   ) {
     // Validate intensity parameter
     const validIntensities: ReviewIntensity[] = [
@@ -323,6 +329,16 @@ export class PromptBuilder {
       ''
     );
 
+    if (this.reviewSkills.kind === 'captured') {
+      pushShared(
+        renderReviewSkillsForPaths(
+          this.reviewSkills,
+          pr.files.map((file) => file.filename)
+        ),
+        ''
+      );
+    }
+
     if (this.memoryPromptContext) {
       pushShared(this.memoryPromptContext, '');
     }
@@ -440,6 +456,14 @@ export class PromptBuilder {
 
     return Object.freeze({
       version: 'prepared_review_prompt.v3',
+      ...(this.reviewSkills.kind === 'legacy'
+        ? {}
+        : {
+            reviewSkills: {
+              capturedDigest: this.reviewSkills.capture.digest,
+              executionDigest: this.reviewSkills.bundle.executionDigest,
+            },
+          }),
       investigationContextPrompt: renderPrompt(false),
       prompt: renderPrompt(true),
       pathCoverage,

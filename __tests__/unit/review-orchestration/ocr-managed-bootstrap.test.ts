@@ -36,13 +36,31 @@ function digestOf(json: string): string {
   return createHash('sha256').update(json).digest('hex');
 }
 
-describe('approved OCR profile parser (§4.1 seven keys)', () => {
+describe('approved OCR profile parser (legacy plus optional Skills capability)', () => {
   it('accepts the strict OCR union with a real contextGateway=false', () => {
     const json = profileJson();
     const profile = readApprovedOcrReviewAgent(json, digestOf(json));
     expect(profile.agentKind).toBe('ocr');
     expect(profile.contextGateway).toBe(false);
     expect(profile.modelTransports).toEqual(['account_gateway']);
+  });
+
+  it('preserves explicit capability and leaves legacy absence byte-compatible', () => {
+    const legacyJson = profileJson();
+    expect(
+      readApprovedOcrReviewAgent(legacyJson, digestOf(legacyJson))
+    ).not.toHaveProperty('reviewSkillsVersion');
+    const supporting = profileJson({ reviewSkillsVersion: 1 });
+    expect(
+      readApprovedOcrReviewAgent(supporting, digestOf(supporting))
+        .reviewSkillsVersion
+    ).toBe(1);
+    for (const value of [null, false, 2, '1']) {
+      const invalid = profileJson({ reviewSkillsVersion: value });
+      expect(() =>
+        readApprovedOcrReviewAgent(invalid, digestOf(invalid))
+      ).toThrow('review_agent_profile_capabilities_invalid');
+    }
   });
 
   it('peeks the captured agentKind before any Codex effect', () => {

@@ -1,3 +1,5 @@
+import profiles from '../../../src/control-plane/review-agent-profiles.json';
+import { parseReviewAgentProfiles } from '../../../src/control-plane/generated/review-action-v2/review-agent-profile';
 import { createHash } from 'crypto';
 import nock from 'nock';
 import { prepareSingleT0NativeInputs } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
@@ -98,6 +100,7 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     try {
       await expect(
         prepareSingleT0NativeInputs(authorizationResponse(), {
+          admittedAgent: parseReviewAgentProfiles(profiles)[0],
           runner: {
             apiUrl: 'https://api.example.test',
             audience: 'NEWTEST',

@@ -35,6 +35,7 @@ export type ApprovedOcrReviewAgent = Readonly<{
   modelTransports: readonly ['account_gateway'];
   contextGateway: false;
   cancellation: true;
+  reviewSkillsVersion?: 1;
 }>;
 
 /** Digest-checked agent kind peek used to dispatch before Codex effects. */
@@ -74,6 +75,9 @@ export function readApprovedOcrReviewAgent(
     'packageVersion',
     'profileRef',
   ];
+  if (Object.hasOwn(row, 'reviewSkillsVersion'))
+    keys.push('reviewSkillsVersion');
+  keys.sort();
   const transports = row.modelTransports;
   if (
     Object.keys(row).sort().join(',') !== keys.join(',') ||
@@ -83,6 +87,8 @@ export function readApprovedOcrReviewAgent(
     !/^[a-f0-9]{64}$/.test(row.binarySha256) ||
     typeof row.packageVersion !== 'string' ||
     !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(row.packageVersion) ||
+    (Object.hasOwn(row, 'reviewSkillsVersion') &&
+      row.reviewSkillsVersion !== 1) ||
     row.contextGateway !== false ||
     row.cancellation !== true ||
     !Array.isArray(transports) ||
@@ -92,6 +98,9 @@ export function readApprovedOcrReviewAgent(
     throw new Error('review_agent_profile_capabilities_invalid');
   }
   return Object.freeze({
+    ...(row.reviewSkillsVersion === 1
+      ? { reviewSkillsVersion: 1 as const }
+      : {}),
     profileRef: row.profileRef,
     agentKind: 'ocr',
     binarySha256: row.binarySha256,

@@ -205194,6 +205194,8 @@ var ReviewActionV2ClientFailureCode = /* @__PURE__ */ ((ReviewActionV2ClientFail
   ReviewActionV2ClientFailureCode2["NetworkFailure"] = "network_failure";
   ReviewActionV2ClientFailureCode2["ResponseTooLarge"] = "response_too_large";
   ReviewActionV2ClientFailureCode2["InvalidResponse"] = "invalid_response";
+  ReviewActionV2ClientFailureCode2["ProtocolDigestMismatch"] = "protocol_digest_mismatch";
+  ReviewActionV2ClientFailureCode2["ProtocolVersionMismatch"] = "protocol_version_mismatch";
   ReviewActionV2ClientFailureCode2["ProtocolError"] = "protocol_error";
   return ReviewActionV2ClientFailureCode2;
 })(ReviewActionV2ClientFailureCode || {});
@@ -205201,6 +205203,10 @@ var ReviewActionV2ClientError = class extends Error {
   constructor(code, operationId, options = {}) {
     const diagnostics = [
       `operation=${operationId}`,
+      options.expectedSchemaDigest === void 0 ? null : `expected_schema_digest=${options.expectedSchemaDigest}`,
+      options.receivedSchemaDigest === void 0 ? null : `received_schema_digest=${options.receivedSchemaDigest}`,
+      options.expectedProtocolVersion === void 0 ? null : `expected_protocol_version=${options.expectedProtocolVersion}`,
+      options.receivedProtocolVersion === void 0 ? null : `received_protocol_version=${options.receivedProtocolVersion}`,
       options.httpStatus === void 0 ? null : `http_status=${options.httpStatus}`,
       options.protocolErrorCode === void 0 ? null : `error_code=${options.protocolErrorCode}`,
       options.issues?.length ? `issues=${options.issues.join(",")}` : null
@@ -205216,12 +205222,20 @@ var ReviewActionV2ClientError = class extends Error {
     this.retryClass = options.retryClass;
     this.retryAfterMs = options.retryAfterMs;
     this.issues = options.issues ? [...options.issues] : void 0;
+    this.expectedSchemaDigest = options.expectedSchemaDigest;
+    this.receivedSchemaDigest = options.receivedSchemaDigest;
+    this.expectedProtocolVersion = options.expectedProtocolVersion;
+    this.receivedProtocolVersion = options.receivedProtocolVersion;
   }
   httpStatus;
   protocolErrorCode;
   retryClass;
   retryAfterMs;
   issues;
+  expectedSchemaDigest;
+  receivedSchemaDigest;
+  expectedProtocolVersion;
+  receivedProtocolVersion;
 };
 var responseSchemas = {
   ["review_run_authorize" /* ReviewRunAuthorize */]: review_run_authorize_schema_default,
@@ -205416,6 +205430,12 @@ var ReviewActionV2Client = class {
         this.responseByteLimit(operationId),
         operationId
       );
+      const protocolMismatch = minimalEnvelopeProtocolMismatch(
+        body2,
+        operationId,
+        response.status
+      );
+      if (protocolMismatch) throw protocolMismatch;
       const validator = this.validators[operationId];
       if (!validator(body2) || !isResponseEnvelope(body2)) {
         throw new ReviewActionV2ClientError(
@@ -205550,6 +205570,38 @@ function isResponseEnvelope(value) {
   const hasError = Object.prototype.hasOwnProperty.call(body2, "error");
   return hasResult !== hasError;
 }
+var WELL_FORMED_SCHEMA_DIGEST = /^[a-f0-9]{64}$/;
+var WELL_FORMED_PROTOCOL_VERSION = /^[0-9A-Za-z._-]{1,16}$/;
+function minimalEnvelopeProtocolMismatch(body2, operationId, httpStatus) {
+  if (!body2 || typeof body2 !== "object" || Array.isArray(body2)) return null;
+  const envelope = body2;
+  const schemaDigest = envelope.schemaDigest;
+  if (typeof schemaDigest === "string" && WELL_FORMED_SCHEMA_DIGEST.test(schemaDigest) && schemaDigest !== reviewActionV2PublishedSchemaDigest) {
+    return new ReviewActionV2ClientError(
+      "protocol_digest_mismatch" /* ProtocolDigestMismatch */,
+      operationId,
+      {
+        httpStatus,
+        expectedSchemaDigest: reviewActionV2PublishedSchemaDigest,
+        receivedSchemaDigest: schemaDigest
+      }
+    );
+  }
+  const protocolVersion = envelope.protocolVersion;
+  const requestId2 = envelope.requestId;
+  if (typeof schemaDigest === "string" && WELL_FORMED_SCHEMA_DIGEST.test(schemaDigest) && typeof requestId2 === "string" && requestId2.length > 0 && typeof protocolVersion === "string" && WELL_FORMED_PROTOCOL_VERSION.test(protocolVersion) && protocolVersion !== reviewActionV2PublishedProtocolVersion) {
+    return new ReviewActionV2ClientError(
+      "protocol_version_mismatch" /* ProtocolVersionMismatch */,
+      operationId,
+      {
+        httpStatus,
+        expectedProtocolVersion: reviewActionV2PublishedProtocolVersion,
+        receivedProtocolVersion: protocolVersion
+      }
+    );
+  }
+  return null;
+}
 async function readBoundedJson(response, maxBytes, operationId) {
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
@@ -205611,6 +205663,10 @@ function isRetryAllowed(semanticRetryClass, error4) {
   if (error4.code === "response_too_large" /* ResponseTooLarge */)
     return false;
   if (error4.code === "invalid_configuration" /* InvalidConfiguration */)
+    return false;
+  if (error4.code === "protocol_digest_mismatch" /* ProtocolDigestMismatch */)
+    return false;
+  if (error4.code === "protocol_version_mismatch" /* ProtocolVersionMismatch */)
     return false;
   if (error4.code === "protocol_error" /* ProtocolError */) {
     return error4.retryClass === semanticRetryClass;

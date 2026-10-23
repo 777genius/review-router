@@ -806,6 +806,306 @@ describe('ReviewActionV2Client', () => {
       code: ReviewActionV2ClientFailureCode.ResponseTooLarge,
     });
   });
+
+  it('reports protocol_digest_mismatch with only safe envelope diagnostics', async () => {
+    const foreignDigest = 'a'.repeat(64);
+    const fetchImpl = jest.fn(async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      return jsonResponse({
+        protocolVersion: reviewActionV2PublishedProtocolVersion,
+        schemaDigest: foreignDigest,
+        requestId: request.requestId,
+        serverTime: '2026-07-22T12:00:00.000Z',
+        result: {
+          status: ReviewExecutionStartResultStatus.Admitted,
+          authorizationToken: 'ghs_secret_token_value',
+        },
+      });
+    });
+    const client = createClient(fetchImpl);
+
+    const failure = await client
+      .execute(ReviewActionV2OperationId.ReviewExecutionStart, {
+        authorizationToken: 'authorization.token',
+        idempotencyKey: 'idem:start:digest-mismatch',
+        authorizationId: 'authorization-1',
+        executionId: 'execution-1',
+        reviewRevisionHash: '1'.repeat(64),
+        compatibilityKey: '2'.repeat(64),
+        planHash: '3'.repeat(64),
+        assignmentManifestCanonicalJson: null,
+        assignmentManifestHash: null,
+        workSlotsCanonicalJson: '[]',
+        sourceRunId: 'run-1',
+        sourceRunAttempt: '1',
+      })
+      .catch((error: unknown) => error as ReviewActionV2ClientError);
+
+    expect(failure).toBeInstanceOf(ReviewActionV2ClientError);
+    expect(failure).toMatchObject({
+      code: ReviewActionV2ClientFailureCode.ProtocolDigestMismatch,
+      httpStatus: 200,
+      expectedSchemaDigest: reviewActionV2PublishedSchemaDigest,
+      receivedSchemaDigest: foreignDigest,
+    });
+    expect((failure as ReviewActionV2ClientError).message).toBe(
+      `review_action_v2_protocol_digest_mismatch operation=review_execution_start expected_schema_digest=${reviewActionV2PublishedSchemaDigest} received_schema_digest=${foreignDigest} http_status=200`
+    );
+    expect((failure as ReviewActionV2ClientError).message).not.toContain(
+      'ghs_secret_token_value'
+    );
+    expect((failure as ReviewActionV2ClientError).issues).toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps digest mismatch diagnostics when the response also fails the full schema', async () => {
+    const foreignDigest = 'b'.repeat(64);
+    const fetchImpl = jest.fn(async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      return jsonResponse({
+        protocolVersion: reviewActionV2PublishedProtocolVersion,
+        schemaDigest: foreignDigest,
+        requestId: request.requestId,
+        serverTime: '2026-07-22T12:00:00.000Z',
+        result: { unexpectedShape: true },
+      });
+    });
+
+    await expect(
+      createClient(fetchImpl).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.ProtocolDigestMismatch,
+      expectedSchemaDigest: reviewActionV2PublishedSchemaDigest,
+      receivedSchemaDigest: foreignDigest,
+    });
+  });
+
+  it('keeps missing or malformed digest on the invalid-response path', async () => {
+    const missingDigest = jest.fn(async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      return jsonResponse({
+        protocolVersion: reviewActionV2PublishedProtocolVersion,
+        requestId: request.requestId,
+        serverTime: '2026-07-22T12:00:00.000Z',
+        result: { status: ReviewRunAuthorizationResultStatus.Authorized },
+      });
+    });
+    await expect(
+      createClient(missingDigest, 1).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.InvalidResponse,
+    });
+
+    const malformedDigest = jest.fn(async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      return jsonResponse({
+        protocolVersion: reviewActionV2PublishedProtocolVersion,
+        schemaDigest: `sha256:${'c'.repeat(64)}`,
+        requestId: request.requestId,
+        serverTime: '2026-07-22T12:00:00.000Z',
+        result: { status: ReviewRunAuthorizationResultStatus.Authorized },
+      });
+    });
+    await expect(
+      createClient(malformedDigest, 1).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.InvalidResponse,
+    });
+  });
+
+  it('keeps previous errors for HTML and broken JSON bodies', async () => {
+    const html = jest.fn(
+      async () =>
+        new Response('<html><body>502 Bad Gateway</body></html>', {
+          status: 502,
+          headers: { 'content-type': 'text/html' },
+        })
+    );
+    await expect(
+      createClient(html, 1).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.InvalidResponse,
+    });
+
+    const brokenJson = jest.fn(
+      async () =>
+        new Response('{"protocolVersion":"2","schemaDigest":', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+    );
+    await expect(
+      createClient(brokenJson, 1).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.InvalidResponse,
+    });
+  });
+
+  it('still rejects an expected-digest response with invalid content', async () => {
+    const fetchImpl = jest.fn(async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      return jsonResponse({
+        protocolVersion: reviewActionV2PublishedProtocolVersion,
+        schemaDigest: reviewActionV2PublishedSchemaDigest,
+        requestId: request.requestId,
+        serverTime: '2026-07-22T12:00:00.000Z',
+        result: { unexpectedShape: true },
+      });
+    });
+
+    await expect(
+      createClient(fetchImpl, 1).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.InvalidResponse,
+    });
+  });
+
+  it('reports protocol_version_mismatch as a separate non-retryable reason', async () => {
+    const fetchImpl = jest.fn(async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      return jsonResponse({
+        protocolVersion: '1',
+        schemaDigest: reviewActionV2PublishedSchemaDigest,
+        requestId: request.requestId,
+        serverTime: '2026-07-22T12:00:00.000Z',
+        result: { status: ReviewRunAuthorizationResultStatus.Authorized },
+      });
+    });
+
+    await expect(
+      createClient(fetchImpl).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.ProtocolVersionMismatch,
+      expectedProtocolVersion: reviewActionV2PublishedProtocolVersion,
+      receivedProtocolVersion: '1',
+      message: `review_action_v2_protocol_version_mismatch operation=review_run_authorize expected_protocol_version=${reviewActionV2PublishedProtocolVersion} received_protocol_version=1 http_status=200`,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a version mismatch without a well-formed minimal envelope on the invalid-response path', async () => {
+    const versionOnly = jest.fn(async () => jsonResponse({ protocolVersion: '1' }));
+    await expect(
+      createClient(versionOnly, 1).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.InvalidResponse,
+    });
+
+    const missingRequestId = jest.fn(async () =>
+      jsonResponse({
+        protocolVersion: '1',
+        schemaDigest: reviewActionV2PublishedSchemaDigest,
+        serverTime: '2026-07-22T12:00:00.000Z',
+        result: { status: ReviewRunAuthorizationResultStatus.Authorized },
+      })
+    );
+    await expect(
+      createClient(missingRequestId, 1).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.InvalidResponse,
+    });
+    expect(versionOnly).toHaveBeenCalledTimes(1);
+    expect(missingRequestId).toHaveBeenCalledTimes(1);
+  });
 });
 
 function createClient(fetchImpl: typeof fetch, maxAttempts = 2) {

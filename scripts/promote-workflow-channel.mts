@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { isDeepStrictEqual } from 'node:util';
 import yaml from 'js-yaml';
+import { checkWorkflowChannelProtocolCompatibility } from './protocol-compat-check.mjs';
 
 const REVIEW_ROUTER_API_ORIGIN = (
   JSON.parse(
@@ -17,11 +18,13 @@ type PromotionPhase =
   | 'fetch'
   | 'abi'
   | 'precondition'
+  | 'compat'
   | 'push'
   | 'readback';
 let phase: PromotionPhase = 'validate';
 let pushIssued = false;
 let pushCompleted = false;
+let rejectionReason: string | null = null;
 
 function need(value: unknown): asserts value {
   if (!value) throw new Error('workflow_channel_promotion_rejected');
@@ -94,7 +97,7 @@ function git(args: string[], env = process.env): string {
   }).trim();
 }
 
-function promote(): void {
+async function promote(): Promise<void> {
   const version = process.env.TARGET_VERSION ?? '';
   const expected = process.env.EXPECTED_CURRENT_SHA ?? '';
   need(
@@ -141,6 +144,29 @@ function promote(): void {
       typeof release.published_at === 'string' &&
       Number.isFinite(Date.parse(release.published_at))
   );
+  // Read-only compatibility gate: the candidate manifest is read via Git at the
+  // exact target SHA and never executed. Promotion stops before any push when
+  // the deployed API does not support the candidate contract triple.
+  phase = 'compat';
+  let manifestSource = '';
+  try {
+    manifestSource = git([
+      'show',
+      `${target}:src/control-plane/generated/review-action-v2/manifest.json`,
+    ]);
+  } catch {
+    manifestSource = '';
+  }
+  const compatibility = await checkWorkflowChannelProtocolCompatibility({
+    manifestSource,
+    protocolInfoUrl:
+      process.env.PROTOCOL_INFO_URL ??
+      `${REVIEW_ROUTER_API_ORIGIN}/api/action/v2/protocol-info`,
+  });
+  if (!compatibility.compatible) {
+    rejectionReason = compatibility.reason;
+    throw new Error('workflow_channel_protocol_incompatible');
+  }
   need(
     git(['ls-remote', '--exit-code', 'origin', 'refs/tags/workflow-v1']) ===
       `${expected}\trefs/tags/workflow-v1`
@@ -191,7 +217,7 @@ try {
     process.stdout.write('workflow_channel_abi_compatible\n');
   } else {
     need(args.length === 0);
-    promote();
+    await promote();
   }
 } catch {
   // A failed/unknown publication is not automatically retried.
@@ -202,6 +228,7 @@ try {
       pushIssued,
       pushCompleted,
       outcome: pushIssued ? 'unknown' : 'not_issued',
+      ...(rejectionReason ? { reason: rejectionReason } : {}),
     }) + '\n'
   );
   process.exitCode = 1;

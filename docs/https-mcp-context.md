@@ -83,12 +83,12 @@ tool names. External credentials never enter OCR's configuration or environment.
 ### Qualifying actual OCR tool use
 
 A selected connection or successful `tools/list` does not prove invocation.
-The native qualification can additionally exercise the real anonymous DeepWiki
-HTTPS server with the pinned OCR rr.3 binary:
+The native qualification can additionally exercise real anonymous DeepWiki, Microsoft Learn and Cloudflare Docs
+HTTPS servers with the pinned OCR rr.3 binary:
 
 ```sh
 REVIEWROUTER_TEST_APPROVED_OCR_BINARY=/absolute/path/to/opencodereview-linux-amd64 \
-REVIEWROUTER_TEST_LIVE_DEEPWIKI=1 \
+REVIEWROUTER_TEST_LIVE_MCP=1 \
 npm test -- __tests__/unit/context-tools/ocr-native.test.ts --runInBand
 ```
 
@@ -100,15 +100,20 @@ a skipped qualification. Before starting OCR, the test computes its binary SHA-2
 that differs from the approved rr.3 fixture; the local command enforces the same
 binary identity as CI.
 This runs in disposable repositories and uses a synthetic model endpoint with
-no provider credentials or paid inference. The external server is real: OCR
-must call `rr_mcp_deepwiki_read_wiki_structure` for `microsoft/TypeScript`, receive
+no provider credentials or paid inference. The external servers are real: OCR must call the selected DeepWiki
+`read_wiki_structure`, Learn `microsoft_docs_search`, and Cloudflare
+`search_cloudflare_documentation` tools in separate scenarios, receive
 nonempty documentation, and include that output in its next model request.
 The broker must report exactly one call, no failure, and a native connection.
 The invalid-capability scenario must dispatch zero model requests. An unavailable
-DeepWiki server fails the opt-in qualification rather than silently skipping it.
+selected server fails the opt-in qualification rather than silently skipping it.
 
 This proves native execution and result delivery. It does not prove that a live
 model independently chose to use the tool, or that every review needs MCP.
 Keep live model canary evidence separate: record the exact run and captured
 plan, and require an actual tool-call receipt with `calls > 0` before claiming
 MCP usage. Never infer invocation from configuration or connection status.
+
+`REVIEWROUTER_TEST_LIVE_DEEPWIKI=1` remains available for the narrower DeepWiki-only
+scenario. Neither flag calls a paid model. A successful catalog listing or saved
+Dashboard connection remains separate evidence from a native tool invocation.

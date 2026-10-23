@@ -828,6 +828,67 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(serialized).not.toContain('private_path_923.ts');
   });
 
+  it('tiers a preserved filter decision to provider_warning alone', async () => {
+    const body = JSON.parse(nativeResultBody()) as Record<string, unknown>;
+    const outcome = body.reviewrouter_outcome as {
+      groups: Record<string, unknown>[];
+    };
+    (outcome.groups[0].phases as Record<string, unknown>).filter = {
+      state: 'failed',
+      reason: 'invalid_arguments',
+    };
+    outcome.groups[0].filter_decision_valid = false;
+    const diagnostic = jest.fn<void, [OcrReviewAcceptanceDiagnostic]>();
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      acceptanceDiagnostic: diagnostic,
+      processRunner: processRunnerWriting(JSON.stringify(body)).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    // Comments were preserved: inspection and path coverage are intact, so
+    // the advisory warning must not claim context inspection was incomplete.
+    expect(observation.qualityFlags).toEqual(['provider_warning']);
+    expect(diagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        acceptedPartial: true,
+        classificationPartial: true,
+      })
+    );
+  });
+
+  it('keeps context_inspection_incomplete when a preserved filter decision shares a phase failure', async () => {
+    const body = JSON.parse(nativeResultBody()) as Record<string, unknown>;
+    const outcome = body.reviewrouter_outcome as {
+      groups: Record<string, unknown>[];
+    };
+    (outcome.groups[0].phases as Record<string, unknown>).filter = {
+      state: 'failed',
+      reason: 'invalid_arguments',
+    };
+    (outcome.groups[0].phases as Record<string, unknown>).plan = {
+      state: 'failed',
+      reason: 'provider_error',
+    };
+    outcome.groups[0].filter_decision_valid = false;
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunnerWriting(JSON.stringify(body)).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+    ]);
+  });
+
   it('never reruns after a truncated managed result (no new inference)', async () => {
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;

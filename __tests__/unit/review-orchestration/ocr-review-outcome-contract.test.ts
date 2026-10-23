@@ -293,6 +293,105 @@ describe('classifyOcrReviewOutcome (§8.2 mapping invariant)', () => {
     expect(classification.reasons).toContain('phase_failed');
   });
 
+  it('tiers a preserved filter decision as filterCommentsPreserved', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [
+            validGroup({
+              phases: {
+                plan: validPhase,
+                compression: validPhase,
+                relocation: validPhase,
+                filter: { state: 'failed', reason: 'invalid_arguments' },
+              },
+              filter_decision_valid: false,
+            }),
+          ],
+        })
+      )
+    );
+    expect(classification.partial).toBe(true);
+    expect(classification.filterCommentsPreserved).toBe(true);
+    expect(classification.reasons).toContain('invalid_filter_decision');
+    expect(classification.reasons).toContain('phase_failed');
+  });
+
+  it('does not tier a preserved filter decision alongside another phase failure', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [
+            validGroup({
+              phases: {
+                plan: { state: 'failed', reason: 'provider_error' },
+                compression: validPhase,
+                relocation: validPhase,
+                filter: { state: 'failed', reason: 'invalid_arguments' },
+              },
+              filter_decision_valid: false,
+            }),
+          ],
+        })
+      )
+    );
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
+  it('does not tier a failed filter without a preserved-decision proof', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [
+            validGroup({
+              phases: {
+                plan: validPhase,
+                compression: validPhase,
+                relocation: validPhase,
+                filter: { state: 'failed', reason: 'provider_error' },
+              },
+              filter_decision_valid: null,
+            }),
+          ],
+        })
+      )
+    );
+    expect(classification.partial).toBe(true);
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
+  it('does not tier a preserved filter decision with an incomplete main phase', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [
+            validGroup({
+              main_completed: false,
+              stop_cause: 'review_limit_reached',
+              rounds: { configured: 2, started: 1, completed: 0 },
+              phases: {
+                plan: validPhase,
+                compression: validPhase,
+                relocation: validPhase,
+                filter: { state: 'failed', reason: 'invalid_arguments' },
+              },
+              filter_decision_valid: false,
+            }),
+          ],
+        })
+      )
+    );
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
+  it('reports no preserved-filter tier on a natural completed run', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(validOutcome())
+    );
+    expect(classification.partial).toBe(false);
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
   it('keeps natural not_applicable phase skips unflagged', () => {
     const classification = classifyOcrReviewOutcome(
       parseOcrReviewOutcome(validOutcome())

@@ -340,6 +340,8 @@ describe('captured text-only review skills', () => {
       modelReasoningEffort: null,
       language: 'en',
       limits: { requestTimeoutSec: 600 },
+      retryPolicyVersion: 'ocr-managed-no-replay.v1',
+      attemptBudget: 1,
     });
     expect(createHash('sha256').update(semantic).digest('hex')).toBe(
       '482319de1123a1cf3552838e72778dce1fe3bfbf531cee53d8b5f11a2d635cc5'

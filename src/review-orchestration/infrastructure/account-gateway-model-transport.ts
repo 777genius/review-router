@@ -40,6 +40,11 @@ export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   localConnections: 4,
   cliOutputBytes: 8_388_608,
 });
+// Closed pre-dispatch saturation denials a later attempt may retry once released.
+const RELEASABLE_SATURATION_CODES: readonly string[] = [
+  'relay_saturated',
+  'lane_saturated',
+];
 
 export type GatewayReadback = Readonly<{ httpStatus: number; value: unknown }>;
 /** RR-specific selectors are checked against the authorized run by the server. */
@@ -141,6 +146,9 @@ export type LocalGatewayModelTransport = Readonly<{
    * requests, so acceptance reads this instead of guessing from exit status. */
   requestCount?(): number;
   failureFact(): GatewayFailureFact | undefined;
+  /** Releases only positively proven unpaid pre-dispatch denials; false keeps
+   * the inference fence for unknown/paid effects. */
+  releaseRetrySafeFailure?(): boolean;
   setContextToolsGuard?(guard: (() => void) | undefined): void;
   /** Trusted parent only; its receipt never contributes review-engine evidence. */
   generatePrDescription?(input: {
@@ -194,7 +202,11 @@ export class AccountGatewayModelTransport {
   private readonly origin: URL;
   private readonly held = new Set<AbortController>();
   private inferenceDenied = false;
+  private inferenceCancelled = false;
   private terminal = false;
+  /** Set once any response other than a closed, unreferenced 503 saturation
+   * denial (or a transport error) is observed: something may have been paid. */
+  private mayHaveDispatched = false;
   private failure?: GatewayFailureFact;
   private requestRef?: string;
   private observedModel?: string;
@@ -218,6 +230,27 @@ export class AccountGatewayModelTransport {
   }
   get lastRequestRef(): string | undefined {
     return this.requestRef;
+  }
+
+  /** Positively proven pre-dispatch denial (closed relay_saturated/lane_saturated
+   * 503 envelope, no request reference) paid nothing: a fresh dispatch may
+   * proceed. A consumer that ever saw any other response, a transport error or
+   * cancellation keeps denying inference: earlier requests may have been paid. */
+  releaseRetrySafeFailure(): boolean {
+    const failure = this.failure;
+    if (
+      this.terminal ||
+      this.inferenceCancelled ||
+      this.mayHaveDispatched ||
+      !failure ||
+      failure.requestRef !== undefined ||
+      failure.effect !== 'not_dispatched' ||
+      !RELEASABLE_SATURATION_CODES.includes(failure.code)
+    )
+      return false;
+    this.failure = undefined;
+    this.inferenceDenied = false;
+    return true;
   }
   get actualModel(): string | undefined {
     return this.inferenceDenied || this.modelUncertain
@@ -423,7 +456,7 @@ export class AccountGatewayModelTransport {
             response.headers['content-type'] ?? ''
           ) &&
           denial !== undefined &&
-          relaySaturated(denial)
+          saturationDenial(denial, ['relay_saturated'])
         ) {
           if (
             waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits ||
@@ -437,6 +470,19 @@ export class AccountGatewayModelTransport {
         }
         break;
       }
+      // Waited-out denials above paid nothing; only a closed saturation
+      // denial as the final response keeps that proof.
+      if (
+        this.directOpenRouter ||
+        httpStatus !== 503 ||
+        response.headers['x-reviewrouter-request-ref'] !== undefined ||
+        !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+          response.headers['content-type'] ?? ''
+        ) ||
+        denial === undefined ||
+        !saturationDenial(denial, RELEASABLE_SATURATION_CODES)
+      )
+        this.mayHaveDispatched = true;
       const status = response.statusCode ?? 502;
       responseReceived = true;
       httpStatus = status;
@@ -604,6 +650,7 @@ export class AccountGatewayModelTransport {
         error
       );
       this.inferenceDenied = true;
+      this.mayHaveDispatched = true;
       this.failure ??= {
         code: 'transport',
         effect: 'effect_unknown',
@@ -643,6 +690,7 @@ export class AccountGatewayModelTransport {
   }
   cancelInference(): void {
     this.inferenceDenied = true;
+    this.inferenceCancelled = true;
     this.cancelHeldStreams();
   }
 
@@ -954,6 +1002,7 @@ export async function startLocalGatewayModelTransport(
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
     failureFact: () => contextToolsFailure ?? transport.lastFailure,
+    releaseRetrySafeFailure: () => transport.releaseRetrySafeFailure(),
     setContextToolsGuard: (guard: (() => void) | undefined) => {
       contextToolsGuard = guard;
     },
@@ -1055,11 +1104,11 @@ function safeReference(value: unknown): string | undefined {
     ? value
     : undefined;
 }
-function relaySaturated(bytes: Buffer): boolean {
+function saturationDenial(bytes: Buffer, codes: readonly string[]): boolean {
   try {
     // Closed JSON envelope: no extra fields, duplicate keys or requestRef.
     const space = '[ \\t\\r\\n]*';
-    const code = `"code"${space}:${space}"relay_saturated"`;
+    const code = `"code"${space}:${space}"(?:${codes.join('|')})"`;
     const effect = `"effect"${space}:${space}"not_dispatched"`;
     return new RegExp(
       `^${space}\\{${space}"error"${space}:${space}\\{${space}(?:${code}${space},${space}${effect}|${effect}${space},${space}${code})${space}\\}${space}\\}${space}$`

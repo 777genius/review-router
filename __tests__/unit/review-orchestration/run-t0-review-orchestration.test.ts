@@ -43,7 +43,104 @@ import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import { ExecutionDeadline } from '../../../src/review-execution/domain/execution-deadline';
 
 describe('RunT0ReviewOrchestration', () => {
-  it.each(['generated', 'unknown', 'restored', 'joined', 'disabled'] as const)(
+  it.each(['rejection', 'synchronous throw'])(
+    'continues without optional comparison history after a baseline %s',
+    async (failure) => {
+      const fixture = createFixture({ workSlotCount: 1 });
+      const restore = jest.fn().mockImplementation(() => {
+        const error = new Error('comparison_history_unavailable');
+        if (failure === 'synchronous throw') throw error;
+        return Promise.reject(error);
+      });
+      Object.assign(fixture.controlPlane, {
+        restoreComparisonBaseline: restore,
+      });
+      const result = await fixture.useCase.execute(fixture.command);
+      expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+      expect(restore).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.restoreSnapshot).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalled();
+      expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+        expect.objectContaining({ comparisonBaseline: null })
+      );
+      expect(fixture.controlPlane.requestPublication).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('preserves cancellation while optional comparison history is unavailable', async () => {
+    const fixture = createFixture({ workSlotCount: 1 });
+    const abort = new AbortController();
+    Object.assign(fixture.dependencies, { signal: abort.signal });
+    Object.assign(fixture.controlPlane, {
+      restoreComparisonBaseline: jest.fn().mockImplementation(async () => {
+        abort.abort(new Error('cancelled_during_comparison'));
+        throw new Error('comparison_history_unavailable');
+      }),
+    });
+    await expect(fixture.useCase.execute(fixture.command)).rejects.toThrow(
+      'cancelled_during_comparison'
+    );
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+  });
+
+  it.each(['restoreSnapshot', 'restoreExecution'] as const)(
+    'retains required %s failures even when optional history also fails',
+    async (operation) => {
+      const fixture = createFixture({ workSlotCount: 1 });
+      fixture.controlPlane[operation]
+        .mockReset()
+        .mockRejectedValueOnce(new Error('required_restore_failed'));
+      Object.assign(fixture.controlPlane, {
+        restoreComparisonBaseline: jest
+          .fn()
+          .mockRejectedValue(new Error('comparison_history_unavailable')),
+      });
+      const result = await fixture.useCase.execute(fixture.command);
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'required_restore_failed',
+      });
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(
+        fixture.dependencies.projectionBuilder.build
+      ).not.toHaveBeenCalled();
+    }
+  );
+  it('forwards the immutable comparison baseline before projecting the current review', async () => {
+    const fixture = createFixture({ workSlotCount: 1 });
+    const baseline = Object.freeze({
+      schemaVersion: 'comparison_baseline.v1' as const,
+      appliedResolutions: [],
+      sourceReviewedHeadSha: '1'.repeat(40),
+      sourceReviewRevisionHash: 'b'.repeat(64),
+      sourceExecutionGeneration: '1',
+      snapshotVersion: 1,
+      projectionPolicyVersion: 'review-projection-policy.v5-t0' as const,
+      projectionEnvelopeVersion: 'review_projection.v1' as const,
+      priorLineageHints: [],
+    });
+    const restore = jest.fn().mockResolvedValue(baseline);
+    Object.assign(fixture.controlPlane, { restoreComparisonBaseline: restore });
+    await fixture.useCase.execute(fixture.command);
+    expect(restore).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+      expect.objectContaining({ comparisonBaseline: baseline })
+    );
+    expect(restore.mock.invocationCallOrder[0]).toBeLessThan(
+      jest.mocked(fixture.dependencies.projectionBuilder.build).mock
+        .invocationCallOrder[0]
+    );
+  });
+  it.each([
+    'generated',
+    'unknown',
+    'restored',
+    'joined',
+    'disabled',
+    'busy-then-acquired',
+    'busy-timeout',
+    'busy-abort',
+  ] as const)(
     'runs an optional PR description once after review slots (%s)',
     async (outcome) => {
       const fixture = createFixture({ workSlotCount: 2 });
@@ -72,6 +169,14 @@ describe('RunT0ReviewOrchestration', () => {
           providerRequestEnvelopeHash: hash('request'),
         },
       };
+      let descriptionWaitStartedAt: number | undefined;
+      let descriptionWaitElapsedMs = 0;
+      const captureDescriptionWait = () => {
+        if (descriptionWaitStartedAt !== undefined)
+          descriptionWaitElapsedMs =
+            fixture.dependencies.clock.monotonicNowMs() -
+            descriptionWaitStartedAt;
+      };
       const generator = {
         prepare: jest.fn(
           async (
@@ -92,20 +197,38 @@ describe('RunT0ReviewOrchestration', () => {
             throw new Error('synthetic_effect_unknown');
           return description;
         }),
-        unavailable: jest.fn(),
+        unavailable: jest.fn(captureDescriptionWait),
       };
       Object.assign(fixture.dependencies, { prDescription: generator });
-      if (outcome === 'joined') {
+      if (outcome === 'joined' || outcome.startsWith('busy-')) {
         const acquire =
           fixture.controlPlane.acquireInvocationLease.getMockImplementation()!;
+        let descriptionAttempts = 0;
         fixture.controlPlane.acquireInvocationLease.mockImplementation(
-          async (input) =>
-            input.workSlot.taskKind === ReviewTaskKind.PrDescription
-              ? {
-                  status: ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable,
-                }
-              : acquire(input)
+          async (input) => {
+            if (input.workSlot.taskKind !== ReviewTaskKind.PrDescription)
+              return acquire(input);
+            descriptionWaitStartedAt ??=
+              fixture.dependencies.clock.monotonicNowMs();
+            captureDescriptionWait();
+            descriptionAttempts += 1;
+            if (outcome === 'busy-then-acquired' && descriptionAttempts > 1)
+              return acquire(input);
+            return {
+              status:
+                outcome === 'joined'
+                  ? ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable
+                  : ReviewInvocationLeaseAcquireOutcomeStatus.Busy,
+            };
+          }
         );
+        if (outcome === 'busy-abort') {
+          const abort = new AbortController();
+          Object.assign(fixture.dependencies, { signal: abort.signal });
+          fixture.dependencies.delay.sleep = jest.fn(async () => {
+            abort.abort(new Error('description_wait_cancelled'));
+          });
+        }
       }
       if (outcome === 'restored') {
         const refresh =
@@ -120,6 +243,14 @@ describe('RunT0ReviewOrchestration', () => {
           )
           .mockImplementation(refresh);
       }
+      if (outcome === 'busy-abort') {
+        await expect(fixture.useCase.execute(fixture.command)).rejects.toThrow(
+          'description_wait_cancelled'
+        );
+        expect(generator.execute).not.toHaveBeenCalled();
+        expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+        return;
+      }
       const result = await fixture.useCase.execute(fixture.command);
       expect([
         result.status,
@@ -127,15 +258,41 @@ describe('RunT0ReviewOrchestration', () => {
       ]).toEqual([ReviewOrchestrationResultStatus.Completed, null]);
       expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(2);
       expect(fixture.controlPlane.attachObservation).toHaveBeenCalledTimes(2);
-      const invoked = outcome === 'generated' || outcome === 'unknown';
+      const invoked =
+        outcome === 'generated' ||
+        outcome === 'unknown' ||
+        outcome === 'busy-then-acquired';
       expect(generator.execute).toHaveBeenCalledTimes(invoked ? 1 : 0);
       const descriptionAcquisitions =
         fixture.controlPlane.acquireInvocationLease.mock.calls.filter(
           ([input]) => input.workSlot.taskKind === ReviewTaskKind.PrDescription
         );
-      expect(descriptionAcquisitions).toHaveLength(
-        invoked || outcome === 'joined' ? 1 : 0
-      );
+      if (outcome === 'busy-timeout') {
+        expect(descriptionAcquisitions.length).toBeGreaterThan(1);
+        expect(descriptionAcquisitions.length).toBeLessThanOrEqual(5);
+      } else {
+        expect(descriptionAcquisitions).toHaveLength(
+          outcome === 'busy-then-acquired'
+            ? 2
+            : invoked || outcome === 'joined'
+              ? 1
+              : 0
+        );
+      }
+      if (outcome.startsWith('busy-')) {
+        expect(
+          descriptionAcquisitions.every(
+            ([input]) =>
+              input.acquireRequestId ===
+                descriptionAcquisitions[0][0].acquireRequestId &&
+              input.idempotencyKey ===
+                descriptionAcquisitions[0][0].idempotencyKey &&
+              input.manifest === descriptionAcquisitions[0][0].manifest
+          )
+        ).toBe(true);
+        expect(descriptionWaitElapsedMs).toBeLessThanOrEqual(5_000);
+        expect(descriptionWaitElapsedMs).toBeGreaterThan(0);
+      }
       expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
         invoked ? 3 : 2
       );
@@ -143,7 +300,9 @@ describe('RunT0ReviewOrchestration', () => {
         fixture.dependencies.projectionBuilder.build
       ).mock.calls[0][0];
       expect(projectionInput.prDescription).toEqual(
-        outcome === 'generated' ? description : undefined
+        outcome === 'generated' || outcome === 'busy-then-acquired'
+          ? description
+          : undefined
       );
       expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledWith(
         expect.objectContaining({ allowPartial: false })
@@ -2278,6 +2437,61 @@ describe('RunT0ReviewOrchestration', () => {
         exhaustedWorkSlotIds: ['slot-1', 'slot-2'],
       })
     );
+  });
+
+  it('waits on a busy provider lane past the poll cap while the execution deadline allows', async () => {
+    const fixture = createFixture({ maxAttempts: 1 });
+    const secondSlot: ReviewWorkSlotPlan = {
+      ...fixture.command.workSlots[0]!,
+      workSlotId: 'slot-2',
+      shardKey: 'batch-2',
+    };
+    const workSlots = [...fixture.command.workSlots, secondSlot];
+    const command = {
+      ...fixture.command,
+      workSlots,
+      workSlotsCanonicalJson: canonicalizeReviewWorkSlots(workSlots),
+    };
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue(revisionOf(command));
+    fixture.controlPlane.restoreExecution
+      .mockReset()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        ...restoredAdmission(command, {
+          state: RestoredReviewWorkSlotState.Pending,
+          acceptedObservationRefId: null,
+        }).restoredExecution,
+        version: '2',
+        streamVersion: '2',
+      });
+    fixture.controlPlane.acquireInvocationLease
+      .mockResolvedValueOnce({
+        status: ReviewInvocationLeaseAcquireOutcomeStatus.Busy,
+      })
+      .mockResolvedValueOnce({
+        status: ReviewInvocationLeaseAcquireOutcomeStatus.Busy,
+      })
+      .mockResolvedValue({
+        status: ReviewInvocationLeaseAcquireOutcomeStatus.Acquired,
+        lease,
+      });
+    Object.assign(fixture.dependencies, {
+      executionDeadline: orchestrationDeadline(
+        600_000,
+        fixture.dependencies.clock.monotonicNowMs
+      ),
+    });
+    const useCase = new RunT0ReviewOrchestration(fixture.dependencies, 30, 1);
+
+    const result = await useCase.execute(command);
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      4
+    );
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(2);
   });
 
   it('treats a server-side attempt budget exhaustion as an exhausted slot', async () => {

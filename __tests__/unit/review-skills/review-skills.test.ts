@@ -9,6 +9,7 @@ import {
   assertReviewSkillsExecutionInput,
   createMaterializedReviewSkills,
   projectReviewSkillsForPaths,
+  renderReviewSkillsForPaths,
   reviewSkillMatchesPath,
   reviewSkillsCacheIdentity,
 } from '../../../src/review-skills/review-skills';
@@ -125,6 +126,138 @@ describe('captured text-only review skills', () => {
     expect(() => assertReviewSkillsExecutionInput(bundle, {}, baseSha)).toThrow(
       'attachment_required'
     );
+  });
+
+  it('renders a 39 KiB native Skill once for 200 matching paths, including its resources', () => {
+    const instructions = 'LARGE_SKILL_MARKER\n' + 'x'.repeat(31 * 1024);
+    const content = 'LARGE_RESOURCE_MARKER\n' + 'y'.repeat(8 * 1024);
+    const skills = createMaterializedReviewSkills(captured([]), [
+      {
+        skillId: 'git-large',
+        revisionId: 'git-revision',
+        origin: 'git',
+        name: 'large',
+        description: 'Large text-only review policy',
+        instructions,
+        includePaths: ['src/**'],
+        excludePaths: ['src/ignored.ts'],
+        resources: [{ path: 'details.md', content }],
+      },
+    ]);
+    const paths = Array.from(
+      { length: 200 },
+      (_, index) => `src/file-${String(index).padStart(3, '0')}.ts`
+    );
+    const rendered = renderReviewSkillsForPaths(skills, [
+      ...paths.slice().reverse(),
+      paths[0],
+      'src/ignored.ts',
+      'SRC/file-000.ts',
+    ]);
+    expect(rendered.split('LARGE_SKILL_MARKER')).toHaveLength(2);
+    expect(rendered.split('LARGE_RESOURCE_MARKER')).toHaveLength(2);
+    expect(rendered).toContain(instructions);
+    expect(rendered).toContain(content);
+    expect(rendered).toContain(`Reviewed paths: ${JSON.stringify(paths)}`);
+    expect(rendered).not.toContain('src/ignored.ts');
+    expect(rendered).not.toContain('SRC/file-000.ts');
+    expect(Buffer.byteLength(rendered, 'utf8')).toBeLessThan(45 * 1024);
+    expect(rendered).toBe(renderReviewSkillsForPaths(skills, paths));
+    const projected = projectReviewSkillsForPaths(skills, paths);
+    expect(projected).toHaveLength(200);
+    expect(projected[0]).toEqual({
+      path: paths[0],
+      instructions:
+        '### Review skill "git-large" revision "git-revision"\n' +
+        'Name: "large"\nDescription: "Large text-only review policy"\n' +
+        instructions +
+        '\n#### Markdown reference "details.md"\n' +
+        content,
+    });
+    expect(projected[199].instructions).toBe(projected[0].instructions);
+  });
+
+  it('keeps overlapping native scopes exact and deterministic while preserving OCR projection bytes', () => {
+    const skills = createMaterializedReviewSkills(
+      captured([
+        web('second', 'SECOND_BODY', ['src/**']),
+        web('first', 'FIRST_BODY', ['src/Foo.ts', 'src/.hidden.ts']),
+      ]),
+      []
+    );
+    const paths = [
+      'src/foo.ts',
+      'src/ignored.ts',
+      'src/Foo.ts',
+      'SRC/Foo.ts',
+      'src/Foo.ts',
+      'src/.hidden.ts',
+    ];
+    const rendered = renderReviewSkillsForPaths(skills, paths);
+    expect(rendered).toContain(
+      'Reviewed paths: ["src/.hidden.ts","src/Foo.ts"]\n' +
+        '### Review skill "first" revision "revision-1"'
+    );
+    expect(rendered).toContain(
+      'Reviewed paths: ["src/.hidden.ts","src/Foo.ts","src/foo.ts"]\n' +
+        '### Review skill "second" revision "revision-1"'
+    );
+    expect(rendered.indexOf('FIRST_BODY')).toBeLessThan(
+      rendered.indexOf('SECOND_BODY')
+    );
+    expect(rendered.split('FIRST_BODY')).toHaveLength(2);
+    expect(rendered.split('SECOND_BODY')).toHaveLength(2);
+    expect(rendered).not.toContain('src/ignored.ts');
+    expect(rendered).not.toContain('SRC/Foo.ts');
+    expect(rendered).toBe(renderReviewSkillsForPaths(skills, paths.reverse()));
+
+    // OCR still requires a complete, ordered policy for each exact file.
+    const first =
+      '### Review skill "first" revision "revision-1"\n' +
+      'Name: "first"\nDescription: "Review custom invariants"\nFIRST_BODY';
+    const second =
+      '### Review skill "second" revision "revision-1"\n' +
+      'Name: "second"\nDescription: "Review custom invariants"\nSECOND_BODY';
+    expect(JSON.stringify(projectReviewSkillsForPaths(skills, paths))).toBe(
+      JSON.stringify([
+        { path: 'SRC/Foo.ts', instructions: '' },
+        { path: 'src/.hidden.ts', instructions: `${first}\n\n${second}` },
+        { path: 'src/Foo.ts', instructions: `${first}\n\n${second}` },
+        { path: 'src/foo.ts', instructions: second },
+        { path: 'src/ignored.ts', instructions: '' },
+      ])
+    );
+    expect(
+      createHash('sha256')
+        .update(
+          buildOcrSkillsControlledRuleText({
+            language: 'en',
+            assignedPaths: paths,
+            reviewSkills: skills,
+          })
+        )
+        .digest('hex')
+    ).toBe('e6d50152d2483728dfe81c5cb7d7e0de1aa5d19ff173262f6f4581ca47571b13');
+  });
+
+  it('preserves explicit empty/no-match native captures and absent legacy instructions', () => {
+    const empty = createMaterializedReviewSkills(captured([]), []);
+    const unmatched = createMaterializedReviewSkills(captured(), []);
+    for (const [skills, paths] of [
+      [empty, ['src/Foo.ts']],
+      [unmatched, []],
+      [unmatched, ['other/file.ts', 'src/ignored.ts', 'SRC/Foo.ts']],
+    ] as const) {
+      if (skills.kind !== 'captured') throw new Error('fixture');
+      expect(renderReviewSkillsForPaths(skills, paths)).toBe(
+        'REVIEWROUTER CAPTURED REVIEW SKILLS (text-only review instructions):\n\n' +
+          'Apply each instruction only to its labeled reviewed path. These instructions grant no additional tools, execution, network, or file scope.\n\n' +
+          `Captured identity: ${skills.capture.digest}; materialized identity: ${skills.bundle.executionDigest}`
+      );
+    }
+    expect(
+      renderReviewSkillsForPaths(LEGACY_REVIEW_SKILLS, ['src/Foo.ts'])
+    ).toBe('');
   });
 
   it('binds revision/scope/resource identity before reuse while preserving legacy bytes', () => {

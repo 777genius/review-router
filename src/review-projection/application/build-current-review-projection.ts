@@ -28,6 +28,8 @@ import {
   RevisionFile,
   SelectedCurrentFinding,
 } from '../domain/review-projection';
+import { deriveReviewPresentation } from '../domain/review-presentation';
+import type { ReviewComparisonBaseline } from '../domain/comparison-baseline';
 import {
   findingMarkerV2,
   stripReservedFindingMarkerSyntax,
@@ -62,6 +64,7 @@ import {
 } from './review-projection-ports';
 
 export interface BuildCurrentReviewProjectionCommand {
+  readonly comparisonBaseline?: ReviewComparisonBaseline | null;
   readonly projectionPolicyVersion: string;
   readonly authoritativeObservationIds: readonly string[];
   readonly scope: ReviewProjectionScope;
@@ -71,6 +74,7 @@ export interface BuildCurrentReviewProjectionCommand {
   readonly priorLineageHints: readonly PriorLineageHint[];
   readonly lifecycleRevalidations: readonly LifecycleRevalidation[];
   readonly coverage: ReviewCoverageFact;
+  readonly incompleteCauses?: readonly string[];
   readonly revisionFiles: readonly RevisionFile[];
   readonly diff: string;
   readonly failOnSeverity?: FindingSeverity;
@@ -103,6 +107,8 @@ export class BuildCurrentReviewProjection {
     // Loading belongs inside this use case so callers cannot reuse stale inventory.
     const inventory = await this.dependencies.lifecycleInventory.loadCurrent({
       scope: command.scope,
+      priorLineageHints: command.priorLineageHints,
+      appliedResolutions: command.comparisonBaseline?.appliedResolutions,
     });
     this.validateInventory(command.scope, inventory);
 
@@ -170,12 +176,31 @@ export class BuildCurrentReviewProjection {
       command.revisionFiles
     );
 
+    const reviewPresentation = deriveReviewPresentation({
+      reviewedHeadSha: command.scope.reviewedHeadSha,
+      baseline: command.comparisonBaseline,
+      coverage,
+      incomplete:
+        (command.providerExecution.succeededProviders === 0 &&
+          command.providerExecution.plannedProviders > 0) ||
+        lifecycleFacts.some(
+          (fact) =>
+            fact.verdict !== 'suppressed_by_human' &&
+            !occurrences.some(
+              (item) =>
+                item.lineageId === (fact.lineageId ?? fact.markerFingerprint)
+            )
+        ),
+      occurrences,
+    });
     const presentation =
       await this.dependencies.presentationPolicy.projectPresentation({
+        reviewPresentation,
         scope: command.scope,
         presentation: command.presentation,
         providerExecution: command.providerExecution,
         coverage,
+        incompleteCauses: command.incompleteCauses,
         occurrences,
         lifecycle: { targets: inventory.targets, facts: lifecycleFacts },
         revisionFiles: command.revisionFiles,
@@ -186,6 +211,7 @@ export class BuildCurrentReviewProjection {
     const coverageOnly = coverage.state === ProjectionCoverageState.Partial;
     const allClear =
       !coverageOnly &&
+      reviewPresentation.state === 'complete' &&
       canClaimAllClear(coverage, inventory, occurrences, gate, lifecycleFacts);
     const inlineChunks = coverageOnly
       ? []
@@ -603,7 +629,7 @@ function buildLifecycleFacts(
       const decision = decisionByTarget.get(target.targetId);
       const matchingHints = hints.filter(
         (candidate) =>
-          candidate.trustedMarker === target.trustedMarker && candidate.active
+          candidate.lineageId === target.trustedMarker && candidate.active
       );
       const hint = matchingHints.length === 1 ? matchingHints[0] : undefined;
       const suppressed =
@@ -616,7 +642,9 @@ function buildLifecycleFacts(
             occurrence.state === FindingOccurrenceState.Changed)
       );
       const trustedResolved =
-        !currentOccurrencePresent && hasValidTrustedResolutionMarker(target);
+        !currentOccurrencePresent &&
+        target.disposition === LifecycleTargetDisposition.Active &&
+        hasValidTrustedResolutionMarker(target);
       const verdict = suppressed
         ? ('suppressed_by_human' as const)
         : trustedResolved
@@ -688,9 +716,7 @@ function buildSnapshotFacts(occurrences: readonly FindingOccurrence[]): {
       ...(occurrence.symbolAnchor
         ? { symbolAnchor: occurrence.symbolAnchor }
         : {}),
-      ...(occurrence.trustedMarker
-        ? { trustedMarker: occurrence.trustedMarker }
-        : {}),
+      trustedMarker: occurrence.lineageId,
       severity: occurrence.severity,
       title: occurrence.title,
       message: occurrence.message,

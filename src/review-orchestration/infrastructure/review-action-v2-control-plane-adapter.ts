@@ -23,6 +23,8 @@ import {
   ReviewPublicationRequestResultStatus,
   ReviewPublicationStatusResultStatus,
   ReviewRunAuthorizationResultStatus,
+  ReviewSnapshotRestorePurpose,
+  ReviewSnapshotRestoreResultStatus,
   ReviewActionV2ProtocolErrorCode,
   type ReviewEvidenceLookupResult,
   type ReviewExecutionStartResult,
@@ -61,6 +63,7 @@ import { ReviewActionV2RetryClass } from '../../control-plane/generated/review-a
 import { logger } from '../../utils/logger';
 import { emitReviewInvestigationTelemetry } from './review-investigation-telemetry';
 import { createFailedContextGatewaySealPayload } from './context-gateway-failed-seal';
+import { parseReviewComparisonBaseline } from '../../review-projection/domain';
 
 /** Projects an actual native receipt without issuing a second authorize call. */
 export function projectReviewRunAuthorization(
@@ -445,6 +448,35 @@ export class ReviewActionV2ControlPlaneAdapter
       .catch((error: unknown) => {
         throw controlPlaneFailure(error);
       });
+  }
+
+  async restoreComparisonBaseline(input: {
+    readonly authorization: ReviewRunAuthorization;
+    readonly reviewRevisionHash: string;
+  }) {
+    const request = {
+      authorizationToken: input.authorization.authorizationToken,
+      reviewRevisionHash: input.reviewRevisionHash,
+      purpose: ReviewSnapshotRestorePurpose.ComparisonBaselineV1,
+    };
+    const result = await this.client
+      .execute(ReviewActionV2OperationId.ReviewSnapshotRestore, request)
+      .catch((error: unknown) => {
+        throw controlPlaneFailure(error);
+      });
+    if (
+      result.status !== ReviewSnapshotRestoreResultStatus.Found ||
+      result.restoreMode !== 'comparison_baseline.v1'
+    )
+      return null;
+    const baseline = parseReviewComparisonBaseline(result.payloadCanonicalJson);
+    if (
+      !baseline ||
+      baseline.snapshotVersion !== result.snapshotVersion ||
+      baseline.sourceExecutionGeneration !== result.sourceExecutionGeneration
+    )
+      return null;
+    return baseline;
   }
 
   async restoreExecution(input: {

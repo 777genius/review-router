@@ -144,6 +144,11 @@ export function buildOcrManagedConfigJson(input: {
   readonly limits: OcrManagedLimits;
   readonly modelReasoningEffort: string | null;
   readonly language: string | null;
+  readonly contextTools?: Readonly<{
+    url: string;
+    capability: string;
+    tools: readonly string[];
+  }>;
 }): string {
   if (!/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(input.baseUrl)) {
     throw new Error('review_action_v2_ocr_config_base_url_invalid');
@@ -169,6 +174,25 @@ export function buildOcrManagedConfigJson(input: {
     custom_providers: { reviewrouter: provider },
     telemetry: { enabled: false },
   };
+  if (input.contextTools) {
+    const mcp = input.contextTools;
+    if (
+      !/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}\/mcp$/.test(mcp.url) ||
+      !/^[a-f0-9]{64}$/.test(mcp.capability) ||
+      !mcp.tools.length ||
+      new Set(mcp.tools).size !== mcp.tools.length ||
+      mcp.tools.some((name) => !/^[A-Za-z0-9_]{1,64}$/.test(name))
+    )
+      throw new Error('context_tools_managed_config_invalid');
+    config.mcp_servers = {
+      reviewrouter_context: {
+        type: 'remote',
+        url: mcp.url,
+        headers: { Authorization: `Bearer ${mcp.capability}` },
+        tools: [...mcp.tools],
+      },
+    };
+  }
   if (input.language !== null) config.language = input.language;
   return `${JSON.stringify(config, null, 2)}\n`;
 }

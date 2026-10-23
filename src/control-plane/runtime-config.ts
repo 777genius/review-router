@@ -1,3 +1,6 @@
+import { tmpdir } from 'os';
+import { UsageDelivery, type UsageGrant } from '../provider-usage/delivery';
+import { uploadUsageArtifact } from '../provider-usage/github-artifact';
 import packageJson from '../../package.json';
 import { readApprovedReviewAgent } from './approved-review-agent';
 import {
@@ -82,6 +85,8 @@ export type RuntimeConfigResult =
       readonly configVersion: number;
       readonly sessionToken: string;
       readonly reasoningEffort?: string;
+      readonly usageDeliveries?: readonly UsageDelivery[];
+      readonly usageAuthMode?: string;
     }
   | { readonly status: 'fallback'; readonly reason: string };
 
@@ -91,6 +96,7 @@ export async function applyControlPlaneRuntimeConfig(
     readonly fetchImpl?: RuntimeConfigFetch;
     readonly logger?: RuntimeConfigLogger;
     readonly actionVersion?: string;
+    readonly registerProviderUsage?: boolean;
     readonly oidc?: { requestToken(audience: string): Promise<string> };
   } = {}
 ): Promise<RuntimeConfigResult> {
@@ -111,10 +117,20 @@ export async function applyControlPlaneRuntimeConfig(
         fetchImpl: input.fetchImpl ?? fetch,
       });
     const oidcToken = await oidc.requestToken(audience);
+    let usageRegistration:
+      | ReturnType<typeof UsageDelivery.prepareRegistration>
+      | undefined;
+    try {
+      if (input.registerProviderUsage)
+        usageRegistration = UsageDelivery.prepareRegistration();
+    } catch {
+      /* Telemetry never blocks configuration. */
+    }
     const session = await exchangeActionSession({
       apiUrl,
       audience,
       oidcToken,
+      usagePublicKey: usageRegistration?.publicKey,
       fetchImpl: input.fetchImpl ?? fetch,
     });
     const actionVersion = input.actionVersion ?? resolveActionVersion(env);
@@ -125,6 +141,28 @@ export async function applyControlPlaneRuntimeConfig(
       fetchImpl: input.fetchImpl ?? fetch,
     });
 
+    const usageDeliveries: UsageDelivery[] = [];
+    if (usageRegistration) {
+      for (const grant of session.providerUsageGrants ?? []) {
+        try {
+          usageDeliveries.push(
+            usageRegistration.acceptGrant(
+              {
+                apiUrl,
+                executionToken: '',
+                invocationId: grant.scope.invocationId,
+                temporaryDirectory: env.RUNNER_TEMP || tmpdir(),
+                fetchImpl: input.fetchImpl,
+                uploadArtifact: uploadUsageArtifact,
+              },
+              grant
+            )
+          );
+        } catch {
+          /* Unsupported or invalid telemetry grants cannot break review. */
+        }
+      }
+    }
     applyRuntimeEnv(config.runtimeEnv, env);
     applyUltraRuntimeTimeoutFallback(config.runtimeEnv, env);
     if (config.ignoredRuntimeEnvKeys.length > 0) {
@@ -137,6 +175,8 @@ export async function applyControlPlaneRuntimeConfig(
     );
     return {
       status: 'applied',
+      usageDeliveries,
+      usageAuthMode: config.runtimeEnv.REVIEW_AUTH_MODE,
       apiUrl,
       actionVersion,
       configVersion: config.configVersion,
@@ -188,13 +228,25 @@ async function exchangeActionSession(input: {
   readonly apiUrl: string;
   readonly audience: string;
   readonly oidcToken: string;
+  readonly usagePublicKey?: string;
   readonly fetchImpl: RuntimeConfigFetch;
-}): Promise<{ readonly sessionToken: string }> {
+}): Promise<{
+  readonly sessionToken: string;
+  readonly providerUsageGrants?: readonly UsageGrant[];
+}> {
+  const usageKeyHeader = input.usagePublicKey
+    ? Buffer.from(input.usagePublicKey, 'utf8').toString('base64url')
+    : undefined;
   const response = await input.fetchImpl(
     joinApiPath(input.apiUrl, '/api/action/v1/session/exchange'),
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(usageKeyHeader && usageKeyHeader.length <= 2048
+          ? { 'x-reviewrouter-usage-public-key': usageKeyHeader }
+          : {}),
+      },
       body: JSON.stringify({
         oidcToken: input.oidcToken,
         audience: input.audience,
@@ -208,11 +260,24 @@ async function exchangeActionSession(input: {
     );
   }
 
-  const body = (await response.json()) as { sessionToken?: unknown };
+  const body = (await response.json()) as {
+    sessionToken?: unknown;
+    providerUsageGrants?: unknown;
+  };
   if (typeof body.sessionToken !== 'string' || body.sessionToken.length === 0) {
     throw new Error('action_session_invalid_response');
   }
-  return { sessionToken: body.sessionToken };
+  return {
+    sessionToken: body.sessionToken,
+    ...(Array.isArray(body.providerUsageGrants)
+      ? {
+          providerUsageGrants: body.providerUsageGrants.slice(
+            0,
+            16
+          ) as UsageGrant[],
+        }
+      : {}),
+  };
 }
 
 async function fetchRuntimeConfig(input: {

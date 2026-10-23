@@ -17,6 +17,19 @@ describe('createExecutionDeadlineFromEnvironment', () => {
     expect(deadline.canStartBatch()).toBe(false);
   });
 
+  it('bounds runs with a default budget when no deadline epoch is configured', () => {
+    let now = 1_000;
+    const deadline = createExecutionDeadlineFromEnvironment(
+      {},
+      { now: () => now }
+    );
+
+    expect(deadline.remainingMs()).toBe(235 * 60_000);
+    expect(deadline.canStartBatch()).toBe(true);
+    now += 235 * 60_000;
+    expect(deadline.canStartBatch()).toBe(false);
+  });
+
   it('rejects an invalid configured epoch', () => {
     expect(() =>
       createExecutionDeadlineFromEnvironment({

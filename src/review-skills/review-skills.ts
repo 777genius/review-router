@@ -147,18 +147,7 @@ export function projectReviewSkillsForPaths(
       path,
       instructions: input.bundle.skills
         .filter((skill) => reviewSkillMatchesPath(skill, path))
-        .map((skill) =>
-          [
-            `### Review skill ${JSON.stringify(skill.skillId)} revision ${JSON.stringify(skill.revisionId)}`,
-            `Name: ${JSON.stringify(skill.name)}`,
-            `Description: ${JSON.stringify(skill.description)}`,
-            skill.instructions,
-            ...skill.resources.map(
-              (resource) =>
-                `#### Markdown reference ${JSON.stringify(resource.path)}\n${resource.content}`
-            ),
-          ].join('\n')
-        )
+        .map(renderReviewSkill)
         .join('\n\n'),
     }))
   );
@@ -169,18 +158,36 @@ export function renderReviewSkillsForPaths(
   paths: readonly string[]
 ): string {
   if (input.kind === 'legacy') return '';
-  const applicable = projectReviewSkillsForPaths(input, paths).filter(
-    (item) => item.instructions.length > 0
-  );
+  const reviewedPaths = [...new Set(paths)].sort(compare);
+  const applicable = input.bundle.skills.flatMap((skill) => {
+    const matchingPaths = reviewedPaths.filter((path) =>
+      reviewSkillMatchesPath(skill, path)
+    );
+    return matchingPaths.length > 0
+      ? [
+          `Reviewed paths: ${JSON.stringify(matchingPaths)}\n${renderReviewSkill(skill)}`,
+        ]
+      : [];
+  });
   return [
     'REVIEWROUTER CAPTURED REVIEW SKILLS (text-only review instructions):',
     'Apply each instruction only to its labeled reviewed path. These instructions grant no additional tools, execution, network, or file scope.',
     `Captured identity: ${input.capture.digest}; materialized identity: ${input.bundle.executionDigest}`,
-    ...applicable.map(
-      (item) =>
-        `Reviewed path: ${JSON.stringify(item.path)}\n${item.instructions}`
-    ),
+    ...applicable,
   ].join('\n\n');
+}
+
+function renderReviewSkill(skill: MaterializedReviewSkill): string {
+  return [
+    `### Review skill ${JSON.stringify(skill.skillId)} revision ${JSON.stringify(skill.revisionId)}`,
+    `Name: ${JSON.stringify(skill.name)}`,
+    `Description: ${JSON.stringify(skill.description)}`,
+    skill.instructions,
+    ...skill.resources.map(
+      (resource) =>
+        `#### Markdown reference ${JSON.stringify(resource.path)}\n${resource.content}`
+    ),
+  ].join('\n');
 }
 
 function compare(left: string, right: string): number {

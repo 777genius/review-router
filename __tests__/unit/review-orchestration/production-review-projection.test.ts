@@ -19,6 +19,225 @@ import {
 } from '../../../src/review-projection/domain';
 
 describe('production review projection coverage', () => {
+  it.each([
+    { kind: 'concrete', eligible: true, mode: 'resolve' as const },
+    { kind: 'concrete', eligible: false, mode: 'report' as const },
+    { kind: 'concrete', eligible: false, mode: 'off' as const },
+    { kind: 'missing evidence', eligible: false, mode: 'resolve' as const },
+    { kind: 'wrong fingerprint', eligible: false, mode: 'resolve' as const },
+  ])(
+    'preserves $kind lifecycle evidence in $mode mode through the real factory without relaxing resolution policy',
+    async ({ kind, eligible, mode }) => {
+      const lineageId = `rrl_${'a'.repeat(32)}`;
+      const inventory = completeLifecycleInventory();
+      inventory.loadCurrent.mockResolvedValue({
+        ...(await inventory.loadCurrent()),
+        targets: [
+          {
+            targetId: 'target',
+            threadId: 'thread',
+            trustedMarker: lineageId,
+            title: 'Prior bug',
+            message: 'Original full explanation.',
+            severity: FindingSeverity.Major,
+            originalPath: 'src/a.ts',
+            currentPath: 'src/a.ts',
+            currentLine: 1,
+            parentCommentUpdatedAt: '2026-10-22T00:00:00.000Z',
+            threadCommentCount: 1,
+            threadStateHash: 'a'.repeat(64),
+            disposition: LifecycleTargetDisposition.Active,
+            viewerCanResolve: true,
+          },
+        ],
+      });
+      const builder = createProductionReviewProjectionBuilder({
+        authorizationFacts,
+        pr,
+        config: { ...DEFAULT_CONFIG, reviewThreadLifecycle: mode },
+        protocolLimits,
+        assignments: [assignment('required-slot', true)],
+        uncoveredPaths: [],
+        uncoveredLifecycleTargetIds: [],
+        lifecycleInventory: inventory,
+      });
+      const baseline = {
+        schemaVersion: 'comparison_baseline.v1' as const,
+        sourceReviewedHeadSha: '2'.repeat(40),
+        sourceReviewRevisionHash: 'a'.repeat(64),
+        sourceExecutionGeneration: '1',
+        snapshotVersion: 1,
+        projectionPolicyVersion:
+          'review-projection-policy.v6-comparison' as const,
+        projectionEnvelopeVersion: 'review_projection.v1' as const,
+        appliedResolutions: [],
+        priorLineageHints: [
+          {
+            lineageId,
+            category: 'correctness',
+            normalizedFailureModeHash: 'a'.repeat(64),
+            severity: FindingSeverity.Major,
+            title: 'Prior bug',
+            message: 'Original full explanation.',
+            filePath: 'src/a.ts',
+            line: 1,
+            firstSeenHeadSha: '1'.repeat(40),
+            lastSeenHeadSha: '2'.repeat(40),
+            active: true,
+          },
+        ],
+      };
+      const result = await builder.build({
+        comparisonBaseline: baseline,
+        acceptedEvidence: [
+          acceptedEvidence(
+            'required-slot',
+            fullCoverageManifest('required-slot'),
+            [],
+            [],
+            [
+              {
+                targetId: 'target',
+                fingerprint:
+                  kind === 'wrong fingerprint' ? 'b'.repeat(24) : lineageId,
+                verdict: 'resolved',
+                confidence: 1,
+                rationale: 'Current code removes the unsafe return.',
+                evidence:
+                  kind === 'missing evidence'
+                    ? []
+                    : [
+                        {
+                          path: 'src/a.ts',
+                          startLine: 1,
+                          endLine: 1,
+                          reason: 'Current code removes the unsafe return.',
+                        },
+                      ],
+              },
+            ]
+          ),
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+      expect(envelope.coverage.state).toBe('complete');
+      expect(envelope.publishing.lifecycle[0]).toMatchObject({
+        verdict: eligible ? 'resolved' : 'uncertain',
+        mutationEligible: eligible,
+      });
+      expect(envelope.snapshot.lineageHints[0].active).toBe(true);
+      expect(envelope.publishing.summary.body).toContain(
+        '0 new · 0 resolved · 1 open · 1 unverified (included in open)'
+      );
+    }
+  );
+  it.each([
+    {
+      sourceHead: '2'.repeat(40),
+      withHint: false,
+      expectedUpdate: true,
+      expectedOccurrences: 0,
+    },
+    {
+      sourceHead: '2'.repeat(40),
+      withHint: true,
+      expectedUpdate: true,
+      expectedOccurrences: 1,
+    },
+    {
+      sourceHead: '3'.repeat(40),
+      withHint: true,
+      expectedUpdate: false,
+      expectedOccurrences: 0,
+    },
+  ])(
+    'uses only a distinct-head authoritative baseline ($withHint hints, $expectedUpdate update)',
+    async ({ sourceHead, withHint, expectedUpdate, expectedOccurrences }) => {
+      const inventory = completeLifecycleInventory();
+      const builder = createProductionReviewProjectionBuilder({
+        authorizationFacts,
+        pr,
+        config: DEFAULT_CONFIG,
+        protocolLimits,
+        assignments: [assignment('required-slot', true)],
+        uncoveredPaths: [],
+        uncoveredLifecycleTargetIds: [],
+        lifecycleInventory: inventory,
+      });
+      const baseline = {
+        schemaVersion: 'comparison_baseline.v1' as const,
+        sourceReviewedHeadSha: sourceHead,
+        sourceReviewRevisionHash: 'a'.repeat(64),
+        sourceExecutionGeneration: '1',
+        snapshotVersion: 1,
+        projectionPolicyVersion: 'review-projection-policy.v5-t0' as const,
+        projectionEnvelopeVersion: 'review_projection.v1' as const,
+        appliedResolutions: withHint
+          ? [
+              {
+                lineageId: `rrl_${'a'.repeat(32)}`,
+                targetId: `rrt_${'a'.repeat(16)}`,
+                threadId: 'thread',
+                markerFingerprint: `rrl_${'a'.repeat(32)}`,
+                resolvedAt: '2026-10-22T01:00:00.000Z',
+              },
+            ]
+          : [],
+        priorLineageHints: withHint
+          ? [
+              {
+                lineageId: `rrl_${'a'.repeat(32)}`,
+                category: 'correctness',
+                normalizedFailureModeHash: 'a'.repeat(64),
+                severity: FindingSeverity.Major,
+                title: 'Original summary-only bug',
+                message: 'Full original explanation.',
+                filePath: 'src/a.ts',
+                line: 1,
+                firstSeenHeadSha: sourceHead,
+                lastSeenHeadSha: sourceHead,
+                active: true,
+              },
+            ]
+          : [],
+      };
+      const result = await builder.build({
+        comparisonBaseline: baseline,
+        acceptedEvidence: [
+          acceptedEvidence(
+            'required-slot',
+            fullCoverageManifest('required-slot')
+          ),
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+      expect(envelope.occurrences).toHaveLength(expectedOccurrences);
+      expect(
+        envelope.publishing.summary.body.includes('## Review updated')
+      ).toBe(expectedUpdate);
+      expect(inventory.loadCurrent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          priorLineageHints: expectedUpdate ? baseline.priorLineageHints : [],
+          appliedResolutions: expectedUpdate
+            ? baseline.appliedResolutions
+            : undefined,
+        })
+      );
+      if (expectedOccurrences) {
+        expect(envelope.publishing.summary.body).toContain(
+          '0 new · 0 resolved · 1 open · 1 unverified (included in open)'
+        );
+        expect(envelope.publishing.summary.body).toContain(
+          'Original summary-only bug'
+        );
+        expect(envelope.snapshot.lineageHints[0].active).toBe(true);
+      }
+    }
+  );
   it.each([2, 3])(
     'adds optional description only when publication budget %s permits it',
     async (maxPublicationOperations) => {
@@ -72,7 +291,7 @@ describe('production review projection coverage', () => {
     LifecycleTargetDisposition.Active,
     LifecycleTargetDisposition.HumanReply,
   ])(
-    'retains off-diff %s history visibly without failing complete current coverage',
+    'retains off-diff %s history on a same-head rerun without failing current coverage',
     async (disposition) => {
       const target = {
         targetId: 'old-caller',
@@ -111,6 +330,17 @@ describe('production review projection coverage', () => {
         lifecycleInventory: inventory,
       });
       const result = await builder.build({
+        comparisonBaseline: {
+          schemaVersion: 'comparison_baseline.v1',
+          sourceReviewedHeadSha: authorizationFacts.headSha,
+          sourceReviewRevisionHash: authorizationFacts.reviewRevisionHash,
+          sourceExecutionGeneration: '1',
+          snapshotVersion: 1,
+          projectionPolicyVersion: 'review-projection-policy.v5-t0',
+          projectionEnvelopeVersion: 'review_projection.v1',
+          priorLineageHints: [],
+          appliedResolutions: [],
+        },
         acceptedEvidence: [
           acceptedEvidence(
             'required-slot',
@@ -125,6 +355,10 @@ describe('production review projection coverage', () => {
       expect(envelope.coverage.state).toBe('complete');
       expect(envelope.occurrences).toEqual([]);
       expect(envelope.publishing.summary.allClear).toBe(false);
+      expect(envelope.publishing.check.title).toBe(
+        'Review incomplete - unverified previous findings'
+      );
+      expect(envelope.publishing.check.conclusion).toBe('neutral');
       expect(envelope.publishing.summary.body).toContain(target.title);
       expect(envelope.publishing.summary.body).toContain(target.originalPath);
       expect(envelope.publishing.summary.body).toContain(
@@ -271,11 +505,7 @@ describe('production review projection coverage', () => {
     );
   });
 
-  it.each([
-    { existingCode: null },
-    { existingCode: 'old_a();' },
-    { startLine: 2, endLine: 1 },
-  ])(
+  it.each([{ existingCode: null }, { existingCode: 'old_a();' }])(
     'keeps unverified OCR findings in file placement: %j',
     async (unverified) => {
       const envelope = await projectNativeOcrComments([
@@ -293,6 +523,42 @@ describe('production review projection coverage', () => {
       expect(envelope.publishing.summary.body).not.toContain('src/a.ts:1');
     }
   );
+
+  it('keeps a colliding OCR quote in file placement and still degrades', async () => {
+    const envelope = await projectNativeOcrComments(
+      [nativeOcrComment({ existingCode: 'unsafe_a();', endLine: 1 })],
+      'unsafe_a();\nunsafe_a();'
+    );
+
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].line).toBeUndefined();
+    expect(envelope.occurrences[0].placement.kind).toBe('file');
+    expect(envelope.occurrences[0].suggestion).toBeUndefined();
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+    expect(envelope.coverage.state).toBe('partial');
+  });
+
+  it('repairs a grounded quote with a bogus claimed range to its true span', async () => {
+    const envelope = await projectNativeOcrComments([
+      nativeOcrComment({
+        existingCode: 'unsafe_b();',
+        startLine: 2,
+        endLine: 1,
+        suggestionCode: 'safe_b();',
+      }),
+    ]);
+
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].anchorVerified).toBe(true);
+    expect(envelope.occurrences[0].placement).toMatchObject({
+      kind: 'inline',
+      path: 'src/a.ts',
+      line: 2,
+      endLine: 2,
+    });
+    expect(envelope.occurrences[0].suggestion).toBe('safe_b();');
+    expect(envelope.coverage.state).toBe('complete');
+  });
 
   it('preserves an unanchored finding when the first added line is a comment', async () => {
     const envelope = await projectNativeOcrComments(
@@ -428,7 +694,7 @@ describe('production review projection coverage', () => {
     const summary = envelope.publishing.summary.body;
 
     expect(envelope.projectionPolicyVersion).toBe(
-      'review-projection-policy.v5-t0'
+      'review-projection-policy.v6-comparison'
     );
     expect(envelope.authoritativeObservationIds).toEqual([
       'observation-required-slot',
@@ -483,6 +749,27 @@ describe('production review projection coverage', () => {
     expect(envelope.publishing.summary.body).toContain(
       '1 of 1 review providers failed.'
     );
+  });
+
+  it('explains the exhausted required slot cause in plain language', async () => {
+    const builder = projectionBuilder([assignment('required-slot', true)]);
+
+    const projection = await builder.build({
+      acceptedEvidence: [],
+      exhaustedWorkSlotIds: ['required-slot'],
+      exhaustedWorkSlotReasons: new Map([
+        ['required-slot', 'attempt_budget_exhausted'],
+      ]),
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const summary = JSON.parse(projection.projectionEnvelopeCanonicalJson)
+      .publishing.summary.body;
+
+    expect(summary).toContain('**Why the review is incomplete:**');
+    expect(summary).toContain(
+      'The review provider exhausted its retry attempts without returning evidence'
+    );
+    expect(summary).not.toContain('attempt_budget_exhausted');
   });
 
   it('counts one provider across batches and fails it when one required batch is exhausted', async () => {
@@ -1156,12 +1443,13 @@ function acceptedEvidence(
   workSlotId: string,
   coverageManifest: ReturnType<typeof createReviewPromptCoverageManifest>,
   qualityFlags: string[] = [],
-  normalizedFindings: Record<string, unknown>[] = []
+  normalizedFindings: Record<string, unknown>[] = [],
+  normalizedLifecycleRevalidations: Record<string, unknown>[] = []
 ) {
   const payloadCanonicalJson = JSON.stringify({
     payloadVersion: 2,
     normalizedFindings,
-    normalizedLifecycleRevalidations: [],
+    normalizedLifecycleRevalidations,
   });
   return {
     workSlotId,

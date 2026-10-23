@@ -4,6 +4,7 @@ import {
   type BuildCurrentReviewProjectionCommand,
 } from '../../review-projection/application';
 import { ProjectionCoverageState } from '../../review-projection/domain';
+import type { ReviewComparisonBaseline } from '../../review-projection/domain';
 import {
   canonicalizeReviewProjection,
   hashReviewProjectionCanonicalJson,
@@ -17,8 +18,10 @@ import type {
 
 export interface ReviewProjectionCommandFactoryPort {
   create(input: {
+    readonly comparisonBaseline?: ReviewComparisonBaseline | null;
     readonly acceptedEvidence: readonly AcceptedReviewWorkSlotEvidence[];
     readonly exhaustedWorkSlotIds: readonly string[];
+    readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
     readonly reviewRevisionHash: string;
   }): Promise<BuildCurrentReviewProjectionCommand>;
 }

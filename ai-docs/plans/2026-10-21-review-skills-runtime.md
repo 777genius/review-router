@@ -119,3 +119,67 @@ four neighboring tests deliberately filtered). Local receipts are
 `tmp/skills-unified-main-{build,typecheck,tests}.log` in this repository and
 `tmp/skills-unified-main-paired-http.log` in the paired SaaS worktree. New-head
 remote CI remains separate from these completed local gates.
+
+## October 23 main integration and official export checkpoint
+
+The runtime working tree now combines main `ea3759a` with the Skills branch
+based on published runtime `1381fa481bfba3755bf9135b243486505b5c2563`.
+The source commits, handoff digests, generated-file counts and verification
+results in the preceding sections are historical checkpoints. The current
+official source export is SaaS `7900c92cde056d3f4320beec13c8f7a84cb79d16`,
+generated for that published runtime base through the canonical SaaS export
+command. The entire official directory was installed byte-for-byte: **58
+canonical files plus `handoff-manifest.json`, 59 files total**. Its handoff
+SHA256 is `560c6b7986cad36e1c1c57c59e077b7fc6f4bf5bb8c653896afd7271ad5dfe6a`.
+Every generated-file digest and the exact file inventory were independently
+verified after installation; no generated content was edited by hand.
+
+The integration retains main's context-tool and deadline behavior, optional
+PR-description execution, and the Skills authorization, capture and identity
+boundaries. A native prompt-size defect found during integration was corrected:
+the same captured Skill and its resources are rendered once with the exact
+applicable path set, rather than repeating the body for every matching path.
+The regression includes a 39 KiB Skill covering 200 paths, overlapping scopes,
+case-sensitive paths, dotfiles, explicit empty/no-match captures and legacy
+absence. OCR's existing per-path projection bytes are preserved.
+
+The following local gates completed; separate rows describe separate runs and
+must not be added together as a unique-test count:
+
+| Verification | Result |
+| --- | --- |
+| Focused merged runtime batch: parent runner, native/OCR adapters, Skills, optional descriptions, release workflow, context tools and execution deadlines | **193/193 passed across nine suites** |
+| Final native Skills rendering regression suite | **15/15 passed** |
+| Official managed OCR rr.4 build and complete qualification manifest comparison | Passed with Go `1.26.9`; binary SHA256 `0553daafe39d7a9d7608f0d37b26d55c11d07b9d5bbfc5b36b0778f9cd9f3df5` |
+| Required actual OCR CLI plus Skills unit suite | **25/25 passed across two suites**, including ten actual CLI cases and fifteen Skills cases, with `REVIEWROUTER_OCR_REQUIRED=1` and no skips |
+| Native MCP invocation/result-reuse qualifier using the exact CI-approved rr.3 release | **2/2 passed**; release binary SHA256 `2f62d6fbb326e74d0fe9377f0224f1b56520bcefee688c58073fa1a30e45f1c9` |
+| Normal Action/CLI build after installing the current official export | Passed |
+| Final post-export generated-contract, production-bundle/source-map, executed production-entrypoint and gateway-release artifact gates | **25/25 passed across four suites** |
+| Final post-export full TypeScript check | Passed |
+| Final context-gateway release-metadata check | Passed; bundle SHA256 remains `37f54bbd18d5348221e4d4bad29eaa455e1f97fd4372ea9ba07ad42358425d2e` |
+
+The required OCR cases use the actual pinned binary, disposable Git fixtures
+and deterministic loopback Responses servers. They inspect Skills and built-in
+instructions in main/plan requests and enforce the exact assigned inventory.
+The native MCP qualifier uses the normal CI setting with optional public-server
+checks disabled. A sandboxed repeat initially stopped in fixture setup with
+`spawnSync git EPERM`; an independent `git --version` child-process probe
+reproduced that environment error, and the approved unrestricted repeat passed
+all 25 cases. No source change was needed to resolve that execution restriction.
+
+The pinned upstream rule loader and qualified CLI were also rechecked:
+repository-root/global/custom JSON rules and embedded rules are supported;
+automatic `AGENTS.md`/`agent.md` or per-folder Skill inheritance is absent.
+Upstream `system_rules.go` lines 405–409 explicitly exclude subproject-local
+rule discovery, and its agent-Skill guide identifies `SKILL.md` as a prompt
+loaded by the calling host agent. ReviewRouter continues to supply captured,
+composed rules through `--rule`.
+
+Local receipts are `tmp/runtime-restore-focused-unrestricted.log`,
+`tmp/runtime-restore-skills-final.log`, `tmp/runtime-ocr-official-build.log`,
+`tmp/runtime-ocr-required-final-escalated.log`, `tmp/runtime-ocr-native-mcp.log`,
+and `tmp/runtime-final-official-export-{artifacts,typecheck,gateway-check}.log`.
+The normal build receipt is `/tmp/review-skills-oct23-runtime-build.log`.
+This checkpoint describes the verified local merged working tree and current
+official handoff. It does not assign an unpublished final runtime commit SHA;
+new-head remote CI, release publication and deployment remain separate results.

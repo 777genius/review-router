@@ -56,9 +56,13 @@ glob resolver remains available for legacy profiles. Upstream `include` is a
 force-include feature, and is not used as an allowlist.
 
 The native finding and investigation prompts receive the same captured policy
-with explicit path labels. Skills grant no additional tools, commands, network
-access or file scope. Provenance means the instructions were supplied; it does
-not certify that a model performed each requested check.
+with exact path labels. Native prompts include each applicable Skill body and
+its Markdown resources once, labeled with its sorted, unique matching reviewed
+paths; overlapping Skills each retain their own path list.
+OCR retains a complete composed rule for every exact reviewed path. Skills grant
+no additional tools, commands, network access or file scope. Provenance means the
+instructions were supplied; it does not certify that a model performed each
+requested check.
 
 ## OCR rules and agent integrations
 

@@ -16,8 +16,9 @@ import type { OcrNativeComment } from './ocr-review-outcome-contract';
 /**
  * Bounds of the current consumer evidence contract (plan 56, §8.2):
  * payload 512 KiB, 200 findings, path 1024, message 16384 characters,
- * maxTitleLength 512. The payload bound is checked exactly by the adapter
- * after the existing normalizer serializes the observation.
+ * category 128, suggestion 16384, maxTitleLength 512. The payload bound is
+ * checked exactly by the adapter after the existing normalizer serializes
+ * the observation.
  */
 export const OCR_NORMALIZATION_LIMITS = Object.freeze({
   maxPayloadBytes: 512 * 1024,
@@ -25,11 +26,12 @@ export const OCR_NORMALIZATION_LIMITS = Object.freeze({
   maxPathChars: 1024,
   maxMessageChars: 16384,
   maxTitleChars: 512,
+  maxCategoryChars: 128,
+  maxSuggestionChars: 16384,
 });
 
 export type OcrSpanUnverifiedReason =
   | 'missing_existing_code'
-  | 'invalid_range'
   | 'content_mismatch'
   | 'ambiguous_match'
   | 'outside_diff';
@@ -44,10 +46,12 @@ function normalizeEol(value: string): string[] {
 
 /**
  * Verify a native existing_code span against authorized HEAD content.
- * Verified only when the range is valid, the HEAD content of exactly that
- * range equals existing_code, the block occurs unambiguously in the file and
- * every line is a valid current PR diff position. A single matching line
- * number does not prove the span.
+ * The quoted block grounds itself: its unique occurrence in the file decides
+ * the true span, so a wrong model range or a code fragment is repaired to the
+ * grounded span instead of rejected. Verified only when the quote occurs
+ * exactly once and every line of the grounded span is a valid current PR diff
+ * position. A quote matching no HEAD content stays unverified; a colliding
+ * quote stays ambiguous.
  */
 export function verifyOcrSpan(input: {
   readonly comment: Pick<
@@ -57,46 +61,53 @@ export function verifyOcrSpan(input: {
   readonly headContent: string;
   readonly diffPositions?: ReadonlyMap<number, number>;
 }): OcrSpanVerification {
-  const { existingCode, startLine, endLine } = input.comment;
-  if (existingCode === null)
+  const { existingCode } = input.comment;
+  const quote = existingCode === null ? '' : existingCode.replace(/\s+$/u, '');
+  if (quote.length === 0) {
     return { verified: false, reason: 'missing_existing_code' };
-  if (startLine === null || endLine === null || endLine < startLine) {
-    return { verified: false, reason: 'invalid_range' };
   }
   const fileLines = normalizeEol(input.headContent);
-  if (startLine < 1 || endLine > fileLines.length) {
-    return { verified: false, reason: 'invalid_range' };
+  const haystack = fileLines.join('\n');
+  const needle = normalizeEol(quote).join('\n');
+  const lineStarts: number[] = [];
+  let lineStart = 0;
+  for (const line of fileLines) {
+    lineStarts.push(lineStart);
+    lineStart += line.length + 1;
   }
-  const blockLines = normalizeEol(existingCode.replace(/\s+$/u, ''));
-  const headBlock = fileLines.slice(startLine - 1, endLine);
-  if (
-    blockLines.length !== headBlock.length ||
-    blockLines.some((line, index) => line !== headBlock[index])
-  ) {
-    return { verified: false, reason: 'content_mismatch' };
-  }
-  // The matched block must occur exactly once in the file (unambiguous).
-  let occurrences = 0;
-  for (let index = 0; index + blockLines.length <= fileLines.length; index++) {
-    let matches = true;
-    for (let offset = 0; offset < blockLines.length; offset++) {
-      if (fileLines[index + offset] !== blockLines[offset]) {
-        matches = false;
-        break;
-      }
+  const lineAt = (position: number): number => {
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (lineStarts[mid] <= position) low = mid;
+      else high = mid - 1;
     }
-    if (matches) occurrences++;
-    if (occurrences > 1) break;
+    return low + 1;
+  };
+  const spans: { startLine: number; endLine: number }[] = [];
+  for (
+    let at = haystack.indexOf(needle);
+    at >= 0;
+    at = haystack.indexOf(needle, at + 1)
+  ) {
+    spans.push({
+      startLine: lineAt(at),
+      endLine: lineAt(at + needle.length - 1),
+    });
   }
-  if (occurrences !== 1) return { verified: false, reason: 'ambiguous_match' };
+  if (spans.length === 0)
+    return { verified: false, reason: 'content_mismatch' };
+  if (spans.length > 1) return { verified: false, reason: 'ambiguous_match' };
+  const span = spans[0];
   if (input.diffPositions) {
-    for (let line = startLine; line <= endLine; line++) {
+    for (let line = span.startLine; line <= span.endLine; line++) {
       if (!input.diffPositions.has(line)) {
         return { verified: false, reason: 'outside_diff' };
       }
     }
   }
-  return { verified: true, startLine, endLine };
+  return { verified: true, startLine: span.startLine, endLine: span.endLine };
 }
 
 export type OcrFindingSkipReason = 'invalid_native_finding';
@@ -152,13 +163,21 @@ function plainTitleLine(content: string): string {
   const firstLine =
     content
       .split(/\r\n|\r|\n/u)
-      .map((line) => line.replace(/[^\P{Z}\u00a0]/gu, ' ').trim())
+      .map((line) => {
+        const title = line
+          .replace(/[^\P{Z}\u00a0]/gu, ' ')
+          .replace(/^\s*#{1,6}(?:\s+|$)/u, '')
+          .replace(
+            /(^|[\s([{])(\*\*|__|\*|_|~~)(?=\S)(.*?\S)\2(?=$|[\s.,!?;:)\]}])/gu,
+            '$1$3'
+          )
+          .replace(/(`+)(.+?)\1/gu, '$2')
+          .replace(/\s+/gu, ' ')
+          .trim();
+        return /^[`#>*_~[\]\s-]+$/u.test(title) ? '' : title;
+      })
       .find((line) => line.length > 0) ?? '';
-  return firstLine
-    .replace(/[`#>*_~[\]]/gu, '')
-    .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
+  return firstLine.slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
 }
 
 /**
@@ -198,6 +217,15 @@ export function normalizeOcrFindings(input: {
     if (content.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
       throw new OcrOutputTooLargeError('message');
     }
+    const title = plainTitleLine(content);
+    if (title.length === 0) {
+      skipped.push({ index, reason: 'invalid_native_finding' });
+      return;
+    }
+    const category = comment.category ?? 'correctness';
+    if (category.length > OCR_NORMALIZATION_LIMITS.maxCategoryChars) {
+      throw new OcrOutputTooLargeError('category');
+    }
 
     const headContent = input.headFiles.get(path);
     const span =
@@ -209,8 +237,15 @@ export function normalizeOcrFindings(input: {
               ? { diffPositions: input.diffPositions.get(path) }
               : {}),
           })
-        : ({ verified: false, reason: 'invalid_range' } as const);
-    if (!span.verified && span.reason !== 'missing_existing_code') {
+        : ({ verified: false, reason: 'content_mismatch' } as const);
+    // Only ungroundable (content_mismatch) or colliding (ambiguous_match)
+    // quotes degrade the review. Grounded content is real context evidence
+    // even when the model's range math is wrong or the span is outside the
+    // current diff: those degrade to file placement only (plan 56, §8.2).
+    if (
+      !span.verified &&
+      (span.reason === 'content_mismatch' || span.reason === 'ambiguous_match')
+    ) {
       reasons.add('unverified_native_span');
     }
 
@@ -221,6 +256,15 @@ export function normalizeOcrFindings(input: {
     if (mappedSeverity === undefined) {
       // Explicit conservative adapter fallback (§8.2), never a blocker.
       reasons.add('unclassified_native_severity');
+    }
+
+    if (
+      span.verified &&
+      comment.suggestionCode !== null &&
+      comment.suggestionCode.length >
+        OCR_NORMALIZATION_LIMITS.maxSuggestionChars
+    ) {
+      throw new OcrOutputTooLargeError('suggestion');
     }
 
     findings.push({
@@ -237,9 +281,9 @@ export function normalizeOcrFindings(input: {
             line: 0,
           }),
       severity,
-      title: plainTitleLine(content),
+      title,
       message: content,
-      category: comment.category ?? 'correctness',
+      category,
       ...(span.verified && comment.suggestionCode !== null
         ? { suggestion: comment.suggestionCode }
         : {}),

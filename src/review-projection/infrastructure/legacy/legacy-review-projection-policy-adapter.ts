@@ -231,7 +231,8 @@ export class LegacyReviewProjectionPolicyAdapter
       );
     const providerResults = lifecycleProviderResults(query);
     const lifecycle = new ThreadLifecycleAggregator().aggregate({
-      mode: 'report',
+      mode:
+        this.config.reviewThreadLifecycle === 'resolve' ? 'resolve' : 'report',
       targets,
       plannedProviders: providerResults.map((result) => result.name),
       providerResults,
@@ -267,6 +268,7 @@ export class LegacyReviewProjectionPolicyAdapter
     collect(
       [
         ...lifecycle.previousUncertain,
+        ...lifecycle.mutationSkipped,
         ...lifecycle.manualAttention,
         ...lifecycle.skipped,
       ],
@@ -311,7 +313,9 @@ export class LegacyReviewProjectionPolicyAdapter
       )
     );
     const incomplete = isReviewerSummaryIncomplete({
-      incomplete: query.coverage.state === ProjectionCoverageState.Partial,
+      incomplete:
+        query.coverage.state === ProjectionCoverageState.Partial ||
+        query.reviewPresentation?.state === 'incomplete',
       metrics: review.metrics,
     });
     const summaryBody = limitReviewerPostedMarkdown(
@@ -326,11 +330,13 @@ export class LegacyReviewProjectionPolicyAdapter
             }
           : {}),
         language: this.config.outputLanguage,
+        reviewPresentation: query.reviewPresentation,
         findings: currentOccurrences
           .map(toLegacyFinding)
           .map(toReviewerSummaryFinding),
         metrics: review.metrics,
         incomplete,
+        incompleteCauses: query.incompleteCauses,
         coverage: {
           complete: query.coverage.state === ProjectionCoverageState.Complete,
           totalFiles: query.coverage.totalFiles,
@@ -350,7 +356,10 @@ export class LegacyReviewProjectionPolicyAdapter
       checkTitle: incomplete
         ? query.coverage.state === ProjectionCoverageState.Partial
           ? 'Review incomplete - partial coverage'
-          : 'Review incomplete - no successful providers'
+          : review.metrics.providersUsed > 0 &&
+              review.metrics.providersSuccess === 0
+            ? 'Review incomplete - no successful providers'
+            : 'Review incomplete - unverified previous findings'
         : 'Review completed',
       checkSummary: summaryBody,
       checkConclusion: incomplete ? CheckConclusion.Neutral : undefined,
@@ -668,6 +677,12 @@ function lifecycleProviderResults(
       content: '',
       revalidations: revalidations.map((revalidation) => ({
         targetId: revalidation.targetId,
+        ...(revalidation.fingerprint
+          ? { fingerprint: revalidation.fingerprint }
+          : {}),
+        ...(revalidation.evidence
+          ? { evidence: revalidation.evidence.map((item) => ({ ...item })) }
+          : {}),
         verdict: revalidation.verdict,
         ...(revalidation.confidence !== undefined
           ? { confidence: revalidation.confidence }

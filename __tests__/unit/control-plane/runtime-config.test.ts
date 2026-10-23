@@ -1,3 +1,6 @@
+import { createServer } from 'node:http';
+import { createPublicKey } from 'node:crypto';
+import { z } from 'zod';
 import { applyControlPlaneRuntimeConfig } from '../../../src/control-plane/runtime-config';
 import { readProductionReviewInvestigationRolloutFlags } from '../../../src/review-orchestration/infrastructure/production-review-investigation-composition';
 
@@ -54,6 +57,8 @@ describe('applyControlPlaneRuntimeConfig', () => {
 
     expect(result).toEqual({
       status: 'applied',
+      usageDeliveries: [],
+      usageAuthMode: 'codex-oauth',
       apiUrl: 'https://app.reviewrouter.dev',
       actionVersion: 'v1.0.6',
       configVersion: 7,
@@ -91,31 +96,43 @@ describe('applyControlPlaneRuntimeConfig', () => {
     ['arbitrary', 'arbitrary'],
     ['', ''],
     [123, undefined],
-  ])('returns only the validated server effort %p, never inherited xhigh', async (serverEffort, expected) => {
-    const env: NodeJS.ProcessEnv = { ...baseEnv, CODEX_REASONING_EFFORT: 'xhigh' };
-    const fetchImpl = jest
-      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
-      .mockResolvedValueOnce(jsonResponse({ sessionToken: 'rr-session' }))
-      .mockResolvedValueOnce(jsonResponse({
-        protocolVersion: 1,
-        configVersion: 7,
-        runtimeEnv: serverEffort === undefined ? {} : { CODEX_REASONING_EFFORT: serverEffort },
-      }));
+  ])(
+    'returns only the validated server effort %p, never inherited xhigh',
+    async (serverEffort, expected) => {
+      const env: NodeJS.ProcessEnv = {
+        ...baseEnv,
+        CODEX_REASONING_EFFORT: 'xhigh',
+      };
+      const fetchImpl = jest
+        .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+        .mockResolvedValueOnce(jsonResponse({ sessionToken: 'rr-session' }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            protocolVersion: 1,
+            configVersion: 7,
+            runtimeEnv:
+              serverEffort === undefined
+                ? {}
+                : { CODEX_REASONING_EFFORT: serverEffort },
+          })
+        );
 
-    const result = await applyControlPlaneRuntimeConfig({
-      env,
-      fetchImpl,
-      oidc: { requestToken: async () => 'fixture-oidc' },
-    });
+      const result = await applyControlPlaneRuntimeConfig({
+        env,
+        fetchImpl,
+        oidc: { requestToken: async () => 'fixture-oidc' },
+      });
 
-    expect(result.status).toBe('applied');
-    if (result.status !== 'applied') throw new Error('expected applied config');
-    expect(result.reasoningEffort).toBe(expected);
-    if (expected === undefined) {
-      expect(result).not.toHaveProperty('reasoningEffort');
-      expect(env.CODEX_REASONING_EFFORT).toBe('xhigh');
+      expect(result.status).toBe('applied');
+      if (result.status !== 'applied')
+        throw new Error('expected applied config');
+      expect(result.reasoningEffort).toBe(expected);
+      if (expected === undefined) {
+        expect(result).not.toHaveProperty('reasoningEffort');
+        expect(env.CODEX_REASONING_EFFORT).toBe('xhigh');
+      }
     }
-  });
+  );
 
   it('applies the ultra timeout fallback after dynamic config resolution', async () => {
     const env: NodeJS.ProcessEnv = { ...baseEnv };
@@ -380,3 +397,86 @@ function jsonResponse(body: unknown, status = 200): Response {
     json: async () => body,
   } as Response;
 }
+
+it('keeps the real normal review exchange compatible with the old strict server without retry', async () => {
+  const oldSchema = z
+    .object({
+      oidcToken: z.string(),
+      audience: z.string(),
+      conflictDispatch: z.unknown().optional(),
+    })
+    .strict();
+  let exchanges = 0,
+    configurations = 0,
+    encodedKey: string | undefined;
+  const server = createServer(async (request, response) => {
+    response.setHeader('content-type', 'application/json');
+    if (
+      request.url === '/api/action/v1/session/exchange' &&
+      request.method === 'POST'
+    ) {
+      exchanges++;
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const parsed = oldSchema.safeParse(
+        JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      );
+      if (!parsed.success) {
+        response
+          .writeHead(400)
+          .end(JSON.stringify({ error: 'strict_body_rejected' }));
+        return;
+      }
+      encodedKey = request.headers['x-reviewrouter-usage-public-key'] as
+        | string
+        | undefined;
+      response.end(JSON.stringify({ sessionToken: 'old-session' }));
+      return;
+    }
+    if (
+      request.url === '/api/action/v1/config' &&
+      request.headers.authorization === 'Bearer old-session'
+    ) {
+      configurations++;
+      response.end(
+        JSON.stringify({
+          protocolVersion: 1,
+          configVersion: 1,
+          runtimeEnv: {
+            REVIEW_AUTH_MODE: 'claude-oauth',
+            REVIEW_PROVIDERS: 'claude/sonnet',
+          },
+        })
+      );
+      return;
+    }
+    response.writeHead(404).end('{}');
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string')
+    throw new Error('expected loopback');
+  try {
+    const result = await applyControlPlaneRuntimeConfig({
+      env: {
+        REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+        REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+        REVIEWROUTER_API_URL: `http://127.0.0.1:${address.port}`,
+      },
+      registerProviderUsage: true,
+      oidc: { requestToken: async () => 'verified-oidc' },
+    });
+    expect(result.status).toBe('applied');
+    expect(exchanges).toBe(1);
+    expect(configurations).toBe(1);
+    expect(encodedKey).toMatch(/^[A-Za-z0-9_-]{1,2048}$/);
+    expect(
+      createPublicKey(Buffer.from(encodedKey!, 'base64url').toString('utf8'))
+        .asymmetricKeyType
+    ).toBe('ed25519');
+    if (result.status === 'applied') expect(result.usageDeliveries).toEqual([]);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

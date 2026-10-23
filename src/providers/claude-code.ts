@@ -1,3 +1,5 @@
+import type { UsageDelivery } from '../provider-usage/delivery';
+import { startAnthropicUsageRelay } from '../provider-usage/anthropic-relay';
 import { Provider } from './base';
 import { Finding, ReviewResult } from '../types';
 import { logger } from '../utils/logger';
@@ -25,6 +27,7 @@ const CLAUDE_STDIN_LIMIT_BYTES = 10 * 1024 * 1024;
 const CLAUDE_CODE_OAUTH_TOKEN_ENV = 'CLAUDE_CODE_OAUTH_TOKEN';
 
 type ClaudeCodeProviderOptions = {
+  readonly usageDelivery?: UsageDelivery;
   readonly agenticContext?: boolean;
 };
 
@@ -296,8 +299,22 @@ export class ClaudeCodeProvider extends Provider {
     const promptFile = path.join(tmpDir, `prompt-${runId}.txt`);
     const claudeConfigDir = path.join(tmpDir, 'config');
     let fd: fs.FileHandle | undefined;
+    let usageRelay:
+      | Awaited<ReturnType<typeof startAnthropicUsageRelay>>
+      | undefined;
 
     try {
+      if (this.options.usageDelivery) {
+        try {
+          usageRelay = await startAnthropicUsageRelay(
+            this.options.usageDelivery,
+            this.model,
+            timeoutMs
+          );
+        } catch {
+          logger.warn('Claude usage telemetry unavailable');
+        }
+      }
       await fs.mkdir(claudeConfigDir, { mode: 0o700 });
       await fs.writeFile(promptFile, request.prompt, {
         encoding: 'utf8',
@@ -327,6 +344,7 @@ export class ClaudeCodeProvider extends Provider {
           env: this.buildExecutionEnv(request.environment, {
             claudeConfigDir: oauthToken ? claudeConfigDir : undefined,
             oauthToken,
+            usageBaseUrl: usageRelay?.baseUrl,
           }),
         });
 
@@ -384,6 +402,11 @@ export class ClaudeCodeProvider extends Provider {
       });
     } finally {
       try {
+        await usageRelay?.close();
+      } catch {
+        logger.warn('Claude usage relay cleanup unavailable');
+      }
+      try {
         if (fd) {
           await fd.close();
         }
@@ -403,7 +426,11 @@ export class ClaudeCodeProvider extends Provider {
 
   private buildExecutionEnv(
     baseEnvironment: Readonly<NodeJS.ProcessEnv>,
-    options: { claudeConfigDir?: string; oauthToken?: string } = {}
+    options: {
+      claudeConfigDir?: string;
+      oauthToken?: string;
+      usageBaseUrl?: string;
+    } = {}
   ): NodeJS.ProcessEnv {
     const environment: NodeJS.ProcessEnv = { ...baseEnvironment };
     if (options.claudeConfigDir) {
@@ -412,6 +439,8 @@ export class ClaudeCodeProvider extends Provider {
     if (options.oauthToken) {
       environment[CLAUDE_CODE_OAUTH_TOKEN_ENV] = options.oauthToken;
     }
+    if (options.usageBaseUrl)
+      environment.ANTHROPIC_BASE_URL = options.usageBaseUrl;
     return environment;
   }
 

@@ -1,6 +1,8 @@
 import { Finding, PRContext, Review, ReviewMetrics, Severity } from '../types';
 import { isLinkedCurrentFinding } from '../analysis/thread-lifecycle';
 import { coverageManifestFileStatusRank } from '../review-projection/domain';
+import { renderReviewBanner, reviewPresentationHeading } from './review-banner';
+import type { ReviewPresentation } from '../review-projection/domain/review-presentation';
 import { countMaxConsecutiveBackticks } from '../utils/suggestion-formatter';
 
 export const REVIEW_SUMMARY_STATUS_COMPLETE_MARKER =
@@ -26,12 +28,25 @@ export type ReviewerSummaryLocale =
   | 'ja'
   | 'ko';
 
+export type ReviewIncompleteCauseCode =
+  | 'attempt_budget_exhausted'
+  | 'not_runnable'
+  | 'provider_lane_busy'
+  | 'investigation_deferred'
+  | 'restored_terminal'
+  | 'deadline_reached'
+  | 'admission_limited';
+
 type ReviewerSummaryCopy = {
   readonly noFindingsHeading: string;
   readonly limitedNoFindingsHeading: string;
   readonly dismissedNote: (count: number) => string;
   readonly findingsHeading: (input: SeverityCounts) => string;
   readonly providerFailures: (failed: number, planned: number) => string;
+  readonly incompleteCauseHeading: string;
+  readonly incompleteCauses: Readonly<
+    Record<ReviewIncompleteCauseCode, string>
+  >;
   readonly location: string;
   readonly fix: string;
   readonly incompleteHeading: (count: number) => string;
@@ -209,6 +224,7 @@ export function reviewerSummarySourceFromPr(
 }
 
 export type ReviewerSummaryInput = ReviewerSummaryOptions & {
+  readonly reviewPresentation?: ReviewPresentation;
   readonly language: string | undefined;
   readonly findings: readonly ReviewerSummaryFinding[];
   readonly metrics: Pick<
@@ -221,6 +237,7 @@ export type ReviewerSummaryInput = ReviewerSummaryOptions & {
     | 'providersSuccess'
   >;
   readonly incomplete?: boolean;
+  readonly incompleteCauses?: readonly string[];
   readonly coverage?: {
     readonly complete: boolean;
     readonly totalFiles: number;
@@ -258,12 +275,14 @@ export type ReviewerSummaryInput = ReviewerSummaryOptions & {
 };
 
 export function isReviewerSummaryIncomplete(input: {
+  readonly reviewPresentation?: ReviewPresentation;
   readonly incomplete?: boolean;
   readonly coverage?: { readonly complete: boolean };
   readonly metrics: Pick<ReviewMetrics, 'providersUsed' | 'providersSuccess'>;
 }): boolean {
   return (
     input.incomplete === true ||
+    input.reviewPresentation?.state === 'incomplete' ||
     input.coverage?.complete === false ||
     (input.metrics.providersUsed > 0 && input.metrics.providersSuccess === 0)
   );
@@ -276,12 +295,18 @@ export function renderReviewerSummaryMarkdown(
   const copy = reviewerSummaryCopy(input.language);
   const labels = sectionCopy[locale];
   const counts: SeverityCounts = {
-    total: input.metrics.totalFindings,
-    critical: input.metrics.critical,
-    major: input.metrics.major,
-    minor: input.metrics.minor,
+    total: input.reviewPresentation
+      ? Object.values(input.reviewPresentation.severity).reduce(
+          (sum, value) => sum + value,
+          0
+        )
+      : input.metrics.totalFindings,
+    critical:
+      input.reviewPresentation?.severity.critical ?? input.metrics.critical,
+    major: input.reviewPresentation?.severity.major ?? input.metrics.major,
+    minor: input.reviewPresentation?.severity.minor ?? input.metrics.minor,
   };
-  const previous = input.previousCounts;
+  const previous = input.reviewPresentation ? undefined : input.previousCounts;
   const historical =
     (input.lifecycle?.length ?? 0) > 0 || input.lifecycleAttention;
   const incomplete = isReviewerSummaryIncomplete(input);
@@ -301,18 +326,22 @@ export function renderReviewerSummaryMarkdown(
     })
     .filter(Boolean)
     .join(' · ');
-  const heading = incomplete
-    ? copy.incompleteHeading(counts.total)
-    : severityLine ||
-      (counts.total > 0
-        ? copy.findingsHeading(counts)
-        : historical
-          ? `## ${labels.previous}`
-          : input.dismissedFindings
-            ? `## ${labels.dismissed}`
-            : limitedScope
-              ? copy.limitedNoFindingsHeading
-              : copy.noFindingsHeading);
+  const heading =
+    (input.reviewPresentation
+      ? reviewPresentationHeading(input.reviewPresentation)
+      : '') ||
+    (incomplete
+      ? copy.incompleteHeading(counts.total)
+      : severityLine ||
+        (counts.total > 0
+          ? copy.findingsHeading(counts)
+          : historical
+            ? `## ${labels.previous}`
+            : input.dismissedFindings
+              ? `## ${labels.dismissed}`
+              : limitedScope
+                ? copy.limitedNoFindingsHeading
+                : copy.noFindingsHeading));
   const lines = [
     incomplete
       ? REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER
@@ -322,9 +351,19 @@ export function renderReviewerSummaryMarkdown(
     heading,
   ];
   if (incomplete) lines.push('', copy.incompleteNote);
+  const incompleteCauseCodes = (input.incompleteCauses ?? []).filter(
+    (code): code is ReviewIncompleteCauseCode =>
+      Object.hasOwn(copy.incompleteCauses, code)
+  );
+  if (incomplete && incompleteCauseCodes.length > 0) {
+    lines.push('', copy.incompleteCauseHeading);
+    for (const code of incompleteCauseCodes) {
+      lines.push(`- ${copy.incompleteCauses[code]}`);
+    }
+  }
   if (incomplete && severityLine) lines.push('', severityLine);
   const chrome = compactCopy[locale];
-  const banner = renderReviewerBanner(input, locale, incomplete, counts);
+  const banner = renderReviewerBanner(input, incomplete, counts);
   if (banner) lines.push('', banner);
   let omitted = false;
   // Allocate before optional bodies: state and actionable warnings can never be
@@ -352,7 +391,9 @@ export function renderReviewerSummaryMarkdown(
       '',
       `**${labels.scope}: ${input.coverage.reviewedFiles}/${input.coverage.totalFiles} · ${labels.unreviewed}: ${input.coverage.unreviewedFiles}**`
     );
-    for (const warning of input.coverage.limitations.slice(0, 3))
+    for (const warning of input.coverage.limitations
+      .filter((value) => !isRawLimitationToken(value))
+      .slice(0, 3))
       pushWarning(escapeMarkdownText(warning));
   }
   if (input.lifecycleAttention) {
@@ -370,7 +411,7 @@ export function renderReviewerSummaryMarkdown(
     lines.push('', `**${labels.previous} (${visibleLifecycle.length})**`);
     for (const line of visibleLifecycle) {
       pushWarning(
-        `- **${copy.lifecycle[line.kind]}** · ${escapeMarkdownText(line.title)} · ${escapeCoverageManifestPath(line.locationLabel)}`
+        `- **${copy.lifecycle[line.kind]}** · ${escapeMarkdownText(compactFindingPresentation(line, locale).title)} · ${escapeCoverageManifestPath(line.locationLabel)}`
       );
     }
   }
@@ -422,7 +463,9 @@ export function renderReviewerSummaryMarkdown(
     diagnostics.push('');
     if (!coverage.complete) diagnostics.push(copy.coverageHeading, '');
     diagnostics.push(
-      ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
+      ...coverage.limitations
+        .filter((value) => !isRawLimitationToken(value))
+        .map((value) => `- ${escapeMarkdownText(value)}`)
     );
     const manifestFiles = incomplete
       ? [...(coverage.files ?? [])].sort(compareCoverageManifestFiles)
@@ -563,12 +606,23 @@ export function renderReviewerSummaryMarkdown(
   };
   const findings = [...input.findings].sort(compareSummaryFindings);
   for (const finding of findings) {
-    const overview = compactFindingLine(finding, input.source);
-    const excerpt =
-      findings.length <= 3 ? findingExcerpt(finding.message, locale) : '';
+    const presentation = compactFindingPresentation(finding, locale);
+    const overview = compactFindingLine(
+      finding,
+      presentation.title,
+      input.source
+    );
+    const excerpt = findings.length <= 3 ? presentation.excerpt : '';
     const preview = [
       overview,
-      ...(excerpt ? ['', escapeMarkdownText(excerpt)] : []),
+      ...(excerpt
+        ? [
+            '',
+            escapeMarkdownText(excerpt)
+              .replace(/^([#+-])/, '\\$1')
+              .replace(/^(\d+)([.)])(?=\s)/, '$1\\$2'),
+          ]
+        : []),
     ].join('\n');
     const details = renderFindingDetails(copy, finding, chrome);
     if (!append(`${preview}\n\n${details}`, maxSummaryBytes - 6_000)) {
@@ -748,7 +802,7 @@ export function renderReviewerLifecycleMarkdown(input: {
   const blocks = input.lines.map((line) => {
     const label = copy.lifecycle[line.kind];
     const summary = escapeHtml(
-      `${label} · ${line.locationLabel} · ${line.title}`.trim()
+      `${label} · ${line.locationLabel} · ${compactFindingPresentation(line, resolveReviewerSummaryLocale(input.language)).title}`.trim()
     );
     const body = [
       safeFindingBody(line.message.trimEnd()),
@@ -788,9 +842,11 @@ export function markReviewSummaryIncomplete(input: {
     )
     .replace(new RegExp(`${status}[^\\n]+`), `${status}${heading}`)
     .replace(
-      /(\/review-banner\/v1\.svg\?state=)complete(?=&amp;|&)/g,
+      /(\/review-banner\/v[12]\.svg\?state=)complete(?=&amp;|&)/g,
       '$1incomplete'
-    );
+    )
+    .replace('alt="Review complete"', 'alt="Review incomplete"')
+    .replace('alt="Review updated"', 'alt="Review incomplete"');
   if (rewritten.includes(copy.incompleteNote)) {
     return rewritten;
   }
@@ -880,11 +936,12 @@ function renderFindingDetails(
 
 function compactFindingLine(
   finding: ReviewerSummaryFinding,
+  title: string,
   source?: ReviewerSummaryOptions['source']
 ): string {
   const location = escapeCoverageManifestPath(findingLocationLabel(finding));
   const url = findingSourceUrl(finding, source);
-  return `- **${finding.severity} · ${escapeMarkdownText(singleLineText(finding.title).trim())}** · ${url ? `[${location}](${url})` : location}`;
+  return `- **${finding.severity} · ${escapeMarkdownText(title)}** · ${url ? `[${location}](${url})` : location}`;
 }
 
 function findingSourceUrl(
@@ -1004,6 +1061,21 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} ${count === 1 ? 'finding' : 'findings'} dismissed by maintainer/admin \`/rr skip\` ${count === 1 ? 'override' : 'overrides'}.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${englishFindingWord(counts.total)} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Why the review is incomplete:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'The review provider exhausted its retry attempts without returning evidence.',
+      not_runnable: 'A required review unit could not be run at all.',
+      provider_lane_busy:
+        'The review provider stayed unavailable (busy or at capacity) for the entire run.',
+      investigation_deferred:
+        'A context investigation was deferred, so the review could not cover everything.',
+      restored_terminal:
+        'This run resumed a previous attempt that already ended without evidence.',
+      deadline_reached: 'The review ran out of its execution time budget.',
+      admission_limited:
+        'Admission policy limited this review before it could finish.',
+    },
     providerFailures: (failed, planned) =>
       `${failed} of ${planned} review providers failed.`,
     location: 'Location',
@@ -1033,6 +1105,21 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `Замечаний отклонено: ${count}. Причина — команда \`/rr skip\` сопровождающего или администратора.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${slavicFindingWord(counts.total, ['замечание', 'замечания', 'замечаний'])} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Почему ревью не завершено:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'Провайдер ревью исчерпал попытки, не получив результатов.',
+      not_runnable: 'Обязательный блок ревью не удалось запустить вообще.',
+      provider_lane_busy:
+        'Провайдер ревью был недоступен (занят или на пределе мощности) весь запуск.',
+      investigation_deferred:
+        'Расследование контекста было отложено, поэтому ревью не смогло покрыть всё.',
+      restored_terminal:
+        'Этот запуск продолжил предыдущую попытку, уже завершившуюся без результатов.',
+      deadline_reached: 'У ревью закончился временной бюджет выполнения.',
+      admission_limited:
+        'Политика допуска ограничила это ревью до его завершения.',
+    },
     providerFailures: (failed, planned) =>
       `Не сработали ${failed} из ${planned} провайдеров ревью.`,
     location: 'Место',
@@ -1062,6 +1149,21 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `Відхилено зауважень: ${count}. Причина — команда \`/rr skip\` супроводжувача або адміністратора.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${slavicFindingWord(counts.total, ['зауваження', 'зауваження', 'зауважень'])} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: "**Чому рев'ю не завершено:**",
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        "Провайдер рев'ю вичерпав спроби, не отримавши результатів.",
+      not_runnable: "Обов'язковий блок рев'ю не вдалося запустити взагалі.",
+      provider_lane_busy:
+        "Провайдер рев'ю був недоступний (зайнятий або на межі потужності) весь запуск.",
+      investigation_deferred:
+        "Дослідження контексту було відкладено, тому рев'ю не змогло охопити все.",
+      restored_terminal:
+        'Цей запуск продовжив попередню спробу, яка вже завершилася без результатів.',
+      deadline_reached: "У рев'ю закінчився часовий бюджет виконання.",
+      admission_limited:
+        "Політика допуску обмежила це рев'ю до його завершення.",
+    },
     providerFailures: (failed, planned) =>
       `Не спрацювали ${failed} з ${planned} провайдерів рев’ю.`,
     location: 'Місце',
@@ -1091,6 +1193,23 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} hallazgos descartados por la orden \`/rr skip\` de un mantenedor o administrador.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'hallazgo' : 'hallazgos'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Por qué la revisión no está completa:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'El proveedor de revisión agotó sus intentos sin devolver evidencia.',
+      not_runnable:
+        'No se pudo ejecutar en absoluto una unidad de revisión obligatoria.',
+      provider_lane_busy:
+        'El proveedor de revisión estuvo indisponible (ocupado o al límite de capacidad) durante toda la ejecución.',
+      investigation_deferred:
+        'Se aplazó una investigación de contexto, así que la revisión no pudo cubrirlo todo.',
+      restored_terminal:
+        'Esta ejecución reanudó un intento anterior que ya había terminado sin evidencia.',
+      deadline_reached:
+        'La revisión agotó su presupuesto de tiempo de ejecución.',
+      admission_limited:
+        'La política de admisión limitó esta revisión antes de que pudiera completarse.',
+    },
     providerFailures: (failed, planned) =>
       `Fallaron ${failed} de ${planned} proveedores de revisión.`,
     location: 'Ubicación',
@@ -1120,6 +1239,22 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} achados dispensados pelo comando \`/rr skip\` de um mantenedor ou administrador.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'achado' : 'achados'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Por que a revisão não está completa:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'O provedor de revisão esgotou suas tentativas sem retornar evidência.',
+      not_runnable:
+        'Não foi possível executar uma unidade de revisão obrigatória.',
+      provider_lane_busy:
+        'O provedor de revisão ficou indisponível (ocupado ou no limite de capacidade) durante toda a execução.',
+      investigation_deferred:
+        'Uma investigação de contexto foi adiada, então a revisão não conseguiu cobrir tudo.',
+      restored_terminal:
+        'Esta execução retomou uma tentativa anterior que já havia terminado sem evidência.',
+      deadline_reached: 'A revisão esgotou seu orçamento de tempo de execução.',
+      admission_limited:
+        'A política de admissão limitou esta revisão antes que ela pudesse ser concluída.',
+    },
     providerFailures: (failed, planned) =>
       `${failed} de ${planned} provedores de revisão falharam.`,
     location: 'Local',
@@ -1149,6 +1284,22 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} anomalies écartées par la commande \`/rr skip\` d’un responsable ou administrateur.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'anomalie' : 'anomalies'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Pourquoi la revue est incomplète :**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'Le fournisseur de revue a épuisé ses tentatives sans renvoyer de preuve.',
+      not_runnable:
+        "Une unité de revue obligatoire n'a pas pu être exécutée du tout.",
+      provider_lane_busy:
+        "Le fournisseur de revue est resté indisponible (occupé ou à saturation) pendant toute l'exécution.",
+      investigation_deferred:
+        "Une investigation de contexte a été reportée, la revue n'a donc pas pu tout couvrir.",
+      restored_terminal:
+        'Cette exécution a repris une tentative précédente déjà terminée sans preuve.',
+      deadline_reached: "La revue a épuisé son budget de temps d'exécution.",
+      admission_limited:
+        "La politique d'admission a limité cette revue avant qu'elle ne puisse se terminer.",
+    },
     providerFailures: (failed, planned) =>
       `${failed} fournisseur(s) de revue sur ${planned} ont échoué.`,
     location: 'Emplacement',
@@ -1178,6 +1329,23 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} Befunde durch den Befehl \`/rr skip\` eines Maintainers oder Administrators verworfen.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'Befund' : 'Befunde'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Warum die Prüfung unvollständig ist:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'Der Prüfanbieter hat seine Versuche aufgebraucht, ohne Ergebnisse zurückzugeben.',
+      not_runnable:
+        'Eine erforderliche Prüfeinheit konnte überhaupt nicht ausgeführt werden.',
+      provider_lane_busy:
+        'Der Prüfanbieter war während des gesamten Laufs nicht verfügbar (ausgelastet oder an der Kapazitätsgrenze).',
+      investigation_deferred:
+        'Eine Kontextuntersuchung wurde verschoben, daher konnte die Prüfung nicht alles abdecken.',
+      restored_terminal:
+        'Dieser Lauf hat einen früheren Versuch fortgesetzt, der bereits ohne Ergebnisse endete.',
+      deadline_reached:
+        'Der Prüfung ist ihr Ausführungszeitbudget ausgegangen.',
+      admission_limited:
+        'Die Zulassungsrichtlinie hat diese Prüfung begrenzt, bevor sie abschließen konnte.',
+    },
     providerFailures: (failed, planned) =>
       `${failed} von ${planned} Review-Providern sind fehlgeschlagen.`,
     location: 'Stelle',
@@ -1209,6 +1377,23 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} riscontri esclusi dal comando \`/rr skip\` di un manutentore o amministratore.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'rilievo' : 'rilievi'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Perché la revisione è incompleta:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'Il fornitore della revisione ha esaurito i tentativi senza restituire evidenze.',
+      not_runnable:
+        "Non è stato possibile eseguire affatto un'unità di revisione obbligatoria.",
+      provider_lane_busy:
+        "Il fornitore della revisione è rimasto non disponibile (occupato o al limite della capacità) per tutta l'esecuzione.",
+      investigation_deferred:
+        "Un'indagine sul contesto è stata rinviata, quindi la revisione non ha potuto coprire tutto.",
+      restored_terminal:
+        'Questa esecuzione ha ripreso un tentativo precedente già concluso senza evidenze.',
+      deadline_reached:
+        'La revisione ha esaurito il suo budget di tempo di esecuzione.',
+      admission_limited:
+        'La politica di ammissione ha limitato questa revisione prima che potesse concludersi.',
+    },
     providerFailures: (failed, planned) =>
       `${failed} di ${planned} provider di review non sono riusciti.`,
     location: 'Posizione',
@@ -1238,6 +1423,17 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} 个问题由维护者或管理员通过 \`/rr skip\` 命令忽略。`,
     findingsHeading: (counts) =>
       `## ${counts.total} 个问题（${formatSeverityCounts(counts)}）`,
+    incompleteCauseHeading: '**为什么本次审查未完成：**',
+    incompleteCauses: {
+      attempt_budget_exhausted: '审查提供方用尽了重试次数仍未返回证据。',
+      not_runnable: '一个必需的审查单元根本无法运行。',
+      provider_lane_busy:
+        '整个运行期间审查提供方一直不可用（繁忙或达到容量上限）。',
+      investigation_deferred: '上下文调查被推迟，因此审查无法覆盖全部内容。',
+      restored_terminal: '本次运行接续了之前一次已经无证据结束的尝试。',
+      deadline_reached: '审查的执行时间预算已用尽。',
+      admission_limited: '准入策略在审查完成之前对其进行了限制。',
+    },
     providerFailures: (failed, planned) =>
       `${planned} 个审查提供方中有 ${failed} 个失败。`,
     location: '位置',
@@ -1263,6 +1459,21 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} 件の指摘がメンテナーまたは管理者の \`/rr skip\` コマンドにより除外されました。`,
     findingsHeading: (counts) =>
       `## 指摘 ${counts.total} 件（${formatSeverityCounts(counts)}）`,
+    incompleteCauseHeading: '**レビューが完了しなかった理由:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'レビュー提供者が証拠を返さずに再試行を使い切りました。',
+      not_runnable: '必須のレビュー単元をまったく実行できませんでした。',
+      provider_lane_busy:
+        '実行全体を通じてレビュー提供者が利用不能でした（混雑または容量上限）。',
+      investigation_deferred:
+        'コンテキスト調査が先送りされたため、レビューが全体をカバーできませんでした。',
+      restored_terminal:
+        'この実行は、証拠なしで終了した以前の試行を再開したものです。',
+      deadline_reached: 'レビューの実行時間予算が尽きました。',
+      admission_limited:
+        '採用ポリシーにより、レビューが完了する前に制限されました。',
+    },
     providerFailures: (failed, planned) =>
       `レビュープロバイダー ${planned} 件中 ${failed} 件が失敗しました。`,
     location: '場所',
@@ -1291,6 +1502,20 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `유지관리자 또는 관리자의 \`/rr skip\` 명령으로 이슈 ${count}개를 제외했습니다.`,
     findingsHeading: (counts) =>
       `## 이슈 ${counts.total}개 (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**리뷰가 완료되지 않은 이유:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        '리뷰 제공자가 증거를 반환하지 못한 채 재시도를 모두 소진했습니다.',
+      not_runnable: '필수 리뷰 단위를 전혀 실행할 수 없었습니다.',
+      provider_lane_busy:
+        '실행 내내 리뷰 제공자를 사용할 수 없었습니다(혼잡 또는 용량 한계).',
+      investigation_deferred:
+        '컨텍스트 조사가 연기되어 리뷰가 전체를 다루지 못했습니다.',
+      restored_terminal:
+        '이 실행은 증거 없이 끝난 이전 시도를 재개한 것입니다.',
+      deadline_reached: '리뷰의 실행 시간 예산이 소진되었습니다.',
+      admission_limited: '채택 정책이 리뷰가 끝나기 전에 제한했습니다.',
+    },
     providerFailures: (failed, planned) =>
       `리뷰 제공자 ${planned}개 중 ${failed}개가 실패했습니다.`,
     location: '위치',
@@ -1781,6 +2006,10 @@ function compareCoverageManifestFiles(
   return 0;
 }
 
+function isRawLimitationToken(value: string): boolean {
+  return /^[a-z_]+:/.test(value);
+}
+
 function escapeMarkdownText(value: string): string {
   return neutralizeDetailsMarkup(escapeHtml(value)).replace(
     /[\\`*_{}[\]()|]/g,
@@ -1817,15 +2046,12 @@ function limitUtf8(value: string, maxBytes: number): string {
   const retained: string[] = [];
   let block: string[] = [];
   let depth = 0;
-  let fence: string | undefined;
-  for (const line of value.split('\n')) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) fence = match[1];
-    else if (
-      fence &&
-      new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line)
-    )
-      fence = undefined;
+  let fence: MarkdownFence | undefined;
+  for (const original of value.split('\n')) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
+    if (next.closing) block.push(next.closing);
+    fence = next.fence;
     if (!fence) {
       depth += (line.match(/<details\b[^>]*>/gi) ?? []).length;
       depth -= (line.match(/<\/details>/gi) ?? []).length;
@@ -2016,10 +2242,74 @@ function plainExcerpt(
   return boundary > 0 ? `${value.slice(0, boundary).trimEnd()}…` : '';
 }
 
-function findingExcerpt(
-  message: string,
+function compactFindingPresentation(
+  finding: Pick<ReviewerSummaryFinding, 'title' | 'message'>,
   locale: ReviewerSummaryLocale
-): string {
+): { readonly title: string; readonly excerpt: string } {
+  const paragraph = plainInlineCode(findingParagraph(finding.message));
+  const originalTitle = plainInlineCode(singleLineText(finding.title).trim());
+  const firstSentence = (value: string) => {
+    const sentences = new Intl.Segmenter(locale, {
+      granularity: 'sentence',
+    }).segment(value);
+    return sentences[Symbol.iterator]().next().value?.segment.trim() ?? value;
+  };
+  // Some adapters derive a title from the message, stripping Markdown and
+  // truncating at their wire limit. Compare content without punctuation so
+  // display can recover operators from the intact body without changing IDs.
+  const comparable = (value: string) => value.replace(/[^\p{L}\p{N}]/gu, '');
+  const titleKey = comparable(originalTitle);
+  const paragraphKey = comparable(paragraph);
+  const firstLineKey = comparable(
+    finding.message.split(/\r\n|\r|\n/u).find((line) => line.trim()) ?? ''
+  );
+  const derived =
+    titleKey.length > 0 &&
+    (titleKey === paragraphKey ||
+      titleKey === comparable(firstSentence(paragraph)) ||
+      (titleKey === firstLineKey && paragraphKey.startsWith(titleKey)) ||
+      (Array.from(originalTitle).length > 120 &&
+        paragraphKey.startsWith(titleKey)));
+  const title =
+    plainExcerpt(
+      firstSentence(derived ? paragraph : originalTitle),
+      120,
+      locale
+    ) || '…';
+  const consumed = title.endsWith('…') ? title.slice(0, -1) : title;
+  const remaining =
+    derived && paragraph.startsWith(consumed)
+      ? paragraph.slice(consumed.length).trimStart()
+      : paragraph;
+  return { title, excerpt: plainExcerpt(remaining, 320, locale) };
+}
+
+/** Plain preview text: remove matched code delimiters, retaining operators. */
+function plainInlineCode(value: string): string {
+  const ticks = Array.from(value.matchAll(/`+/g));
+  let result = '';
+  let cursor = 0;
+  for (let index = 0; index < ticks.length; index++) {
+    const opening = ticks[index]!;
+    let slashes = 0;
+    for (let at = opening.index! - 1; at >= 0 && value[at] === '\\'; at--)
+      slashes++;
+    if (slashes % 2) continue;
+    const closing = ticks.findIndex(
+      (tick, candidate) =>
+        candidate > index && tick[0].length === opening[0].length
+    );
+    if (closing < 0) continue;
+    result +=
+      value.slice(cursor, opening.index!) +
+      value.slice(opening.index! + opening[0].length, ticks[closing]!.index!);
+    cursor = ticks[closing]!.index! + ticks[closing]![0].length;
+    index = closing;
+  }
+  return result + value.slice(cursor);
+}
+
+function findingParagraph(message: string): string {
   const first =
     message
       .replace(/^(?:[ \t]*\r?\n)+/, '')
@@ -2028,32 +2318,106 @@ function findingExcerpt(
   if (
     /^(?: {4}|\t|\s*(?:`{3}|~{3}|<|\||#{1,6}\s|>|[-*+]\s|\d+[.)]\s))/.test(
       first
-    ) ||
-    /\n\s*\|?\s*:?-{3}/.test(first)
+    )
   )
     return '';
-  return plainExcerpt(first.replace(/\s+/g, ' ').trim(), 320, locale);
+  const lines = first.split(/\r?\n/);
+  const paragraph: string[] = [];
+  for (const line of lines) {
+    // Setext headings and table headers are not ordinary paragraphs. Only
+    // inspect paragraph lines, never delimiters inside the following block.
+    if (/^ {0,3}(?:=+[ \t]*$|-+[ \t]*$|\|?\s*:?-{3})/.test(line)) return '';
+    // Block constructs can interrupt a paragraph without a preceding blank
+    // line. Keep soft-wrapped prose together, but never expose the next block.
+    if (markdownInterruptsParagraph(line)) break;
+    paragraph.push(line);
+  }
+  return paragraph.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function markdownInterruptsParagraph(line: string): boolean {
+  return (
+    !!readMarkdownFenceOpening(line) ||
+    /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
+      line
+    ) ||
+    htmlInterruptsParagraph(line)
+  );
+}
+
+function htmlInterruptsParagraph(line: string): boolean {
+  // CommonMark HTML block types 1-6 interrupt paragraphs. Inline/custom tags,
+  // autolinks and comparisons starting with < remain ordinary continuations.
+  return /^ {0,3}<(?:!--|\?|!\[CDATA\[|![A-Z]|\/?(?:script|pre|style|textarea|address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t]|\/?>|$))/i.test(
+    line
+  );
+}
+
+type MarkdownFence = { readonly delimiter: string; readonly indent: number };
+
+function readMarkdownFenceOpening(line: string): MarkdownFence | undefined {
+  const match = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match || (match[2][0] === '`' && match[3].includes('`')))
+    return undefined;
+  return { delimiter: match[2], indent: match[1].length };
+}
+
+function closeMarkdownFence(fence: MarkdownFence): string {
+  return ' '.repeat(fence.indent) + fence.delimiter;
+}
+
+function advanceMarkdownFence(
+  line: string,
+  fence: MarkdownFence | undefined
+): {
+  readonly fence?: MarkdownFence;
+  readonly closing?: string;
+  readonly normalized?: string;
+} {
+  if (fence) {
+    const closer = /^( *)(`{3,}|~{3,})[ \t]*\r?$/.exec(line);
+    if (
+      closer &&
+      closer[2][0] === fence.delimiter[0] &&
+      closer[2].length >= fence.delimiter.length &&
+      closer[1].length <= fence.indent + 3
+    )
+      // Wider or dedented closers may cross a container boundary. Normalize
+      // the physical line too, so GFM and our fence state cannot disagree.
+      return {
+        normalized:
+          closer[1].length < fence.indent || closer[1].length > 3
+            ? closeMarkdownFence(fence)
+            : undefined,
+      };
+    // A container can end at a dedent even though a top-level fence would
+    // continue. Close conservatively at the original indent before prose.
+    if (!line.trim() || line.match(/^ */)![0].length >= fence.indent)
+      return { fence };
+    return {
+      fence: readMarkdownFenceOpening(line),
+      closing: closeMarkdownFence(fence),
+    };
+  }
+  return { fence: readMarkdownFenceOpening(line) };
 }
 
 /** Split only at paragraph boundaries outside code fences. */
 function markdownBlocks(value: string): string[] {
   const blocks: string[] = [];
   let lines: string[] = [];
-  let fence: { char: string; length: number } | undefined;
-  for (const line of value.split('\n')) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) fence = { char: match[1][0], length: match[1].length };
-    else if (
-      fence &&
-      new RegExp(`^\\s{0,3}${fence.char}{${fence.length},}\\s*$`).test(line)
-    )
-      fence = undefined;
+  let fence: MarkdownFence | undefined;
+  for (const original of value.split('\n')) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
+    if (next.closing) lines.push(next.closing);
+    fence = next.fence;
     if (!line.trim() && !fence) {
       if (lines.length) blocks.push(lines.join('\n'));
       lines = [];
     } else lines.push(line);
   }
-  if (fence) lines.push(fence.char.repeat(fence.length));
+  if (fence) lines.push(closeMarkdownFence(fence));
   if (lines.length) blocks.push(lines.join('\n'));
   return blocks;
 }
@@ -2073,71 +2437,100 @@ function hasControlCharacters(value: string): boolean {
 }
 
 function safeFindingBody(value: string): string {
-  // Escape prose HTML, preserve fenced source, and neutralize attempts to close
-  // the generated disclosures. The original body remains in the JSON artifact.
-  let fence: string | undefined;
-  const lines = neutralizeDetailsMarkup(value)
-    .split('\n')
-    .map((line) => {
-      const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-      if (match && !fence) {
-        fence = match[1];
-        return line;
-      }
-      if (fence) {
-        if (
-          new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line)
-        )
-          fence = undefined;
-        return line;
-      }
-      return line.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-    });
+  // Escape prose HTML, preserve code, and neutralize attempts to close the
+  // generated disclosures. The original body remains in the JSON artifact.
+  let fence: MarkdownFence | undefined;
+  const lines: string[] = [];
+  let prose: string[] = [];
+  const flush = () => {
+    if (prose.length) lines.push(escapeHtmlOutsideCodeSpans(prose.join('\n')));
+    prose = [];
+  };
+  for (const line of neutralizeDetailsMarkup(value).split('\n')) {
+    const previous = fence;
+    const next = advanceMarkdownFence(line, fence);
+    fence = next.fence;
+    if (previous && !next.closing) {
+      lines.push(next.normalized ?? line);
+      continue;
+    }
+    if (next.closing) lines.push(next.closing);
+    if (fence) {
+      flush();
+      lines.push(line);
+    } else if (markdownInterruptsParagraph(line)) {
+      // A block interruptor ends a paragraph even without a blank line. Never
+      // preserve raw HTML through backticks that GFM cannot match across it.
+      flush();
+      lines.push(escapeHtmlOutsideCodeSpans(line));
+    } else prose.push(line);
+  }
+  flush();
   return markdownBlocks(lines.join('\n')).join('\n\n');
+}
+
+function escapeHtmlOutsideCodeSpans(value: string): string {
+  const escape = (text: string) =>
+    text.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  // Code spans can cross soft breaks, but never a paragraph or fenced block.
+  return value
+    .split(/(\r?\n[ \t]*\r?\n)/)
+    .map((paragraph) => {
+      const ticks = Array.from(paragraph.matchAll(/`+/g));
+      let result = '';
+      let cursor = 0;
+      for (let index = 0; index < ticks.length; index++) {
+        const opening = ticks[index]!;
+        let slashes = 0;
+        for (
+          let position = opening.index! - 1;
+          position >= 0 && paragraph[position] === '\\';
+          position--
+        )
+          slashes++;
+        const start = opening.index! + (slashes % 2);
+        const delimiterLength = opening[0].length - (slashes % 2);
+        if (delimiterLength === 0) continue;
+        const closing = ticks.findIndex(
+          (tick, candidate) =>
+            candidate > index && tick[0].length === delimiterLength
+        );
+        if (closing < 0) continue;
+        const end = ticks[closing]!.index! + ticks[closing]![0].length;
+        result +=
+          escape(paragraph.slice(cursor, start)) + paragraph.slice(start, end);
+        cursor = end;
+        index = closing;
+      }
+      return result + escape(paragraph.slice(cursor));
+    })
+    .join('');
 }
 
 function renderReviewerBanner(
   input: ReviewerSummaryInput,
-  locale: ReviewerSummaryLocale,
   incomplete: boolean,
   counts: SeverityCounts
 ): string {
-  if (!input.bannerBaseUrl) return '';
-  const displayed = {
-    critical: counts.critical + (input.previousCounts?.critical ?? 0),
-    major: counts.major + (input.previousCounts?.major ?? 0),
-    minor: counts.minor + (input.previousCounts?.minor ?? 0),
-    info: 0,
-  };
-  if (
-    !Object.values(displayed).every(
-      (value) => Number.isSafeInteger(value) && value >= 0 && value <= 9999
-    )
-  )
-    return '';
-  try {
-    const base = new URL(input.bannerBaseUrl);
-    if (
-      base.protocol !== 'https:' ||
-      base.username ||
-      base.password ||
-      base.search ||
-      base.hash ||
-      base.pathname !== '/'
-    )
-      return '';
-    const url = new URL('/review-banner/v1.svg', base);
-    url.search = new URLSearchParams({
+  return renderReviewBanner(
+    input.bannerBaseUrl,
+    input.reviewPresentation ?? {
+      variant: 'first',
       state: incomplete ? 'incomplete' : 'complete',
-      ...Object.fromEntries(
-        Object.entries(displayed).map(([key, value]) => [key, String(value)])
-      ),
-      lang: locale,
-    }).toString();
-    const light = escapeHtml(`${url}&theme=light`);
-    const dark = escapeHtml(`${url}&theme=dark`);
-    return `<picture>\n<source media="(prefers-color-scheme: dark)" srcset="${dark}">\n<source media="(prefers-color-scheme: light)" srcset="${light}">\n<img src="${light}" alt="ReviewRouter" width="640" height="110">\n</picture>`;
-  } catch {
-    return '';
-  }
+      severity: {
+        critical: counts.critical + (input.previousCounts?.critical ?? 0),
+        major: counts.major + (input.previousCounts?.major ?? 0),
+        minor: counts.minor + (input.previousCounts?.minor ?? 0),
+        info: 0,
+      },
+      ...(input.coverage
+        ? {
+            coverage: {
+              reviewed: input.coverage.reviewedFiles,
+              total: input.coverage.totalFiles,
+            },
+          }
+        : {}),
+    }
+  );
 }

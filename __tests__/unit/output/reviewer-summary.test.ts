@@ -6,6 +6,7 @@ import {
   resolveReviewerSummaryLocale,
   reviewerSummaryCopy,
 } from '../../../src/output/reviewer-summary';
+import { normalizeOcrFindings } from '../../../src/review-orchestration/infrastructure/ocr-review-normalization';
 
 describe('reviewer summary markdown', () => {
   const metrics = {
@@ -199,6 +200,84 @@ describe('reviewer summary markdown', () => {
           .split('<!-- reviewrouter:summary-status -->')[0]
       );
     }
+  });
+
+  it('explains the concrete cause of an incomplete review in plain language', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics: {
+        totalFindings: 0,
+        critical: 0,
+        major: 0,
+        minor: 0,
+        providersUsed: 1,
+        providersSuccess: 0,
+      },
+      findings: [],
+      incomplete: true,
+      incompleteCauses: ['attempt_budget_exhausted', 'deadline_reached'],
+    });
+
+    expect(markdown).toContain('**Why the review is incomplete:**');
+    expect(markdown).toContain(
+      'The review provider exhausted its retry attempts without returning evidence'
+    );
+    expect(markdown).toContain(
+      'The review ran out of its execution time budget'
+    );
+    expect(markdown).not.toContain('attempt_budget_exhausted');
+  });
+
+  it('keeps the attempt-budget explanation cause-neutral in every locale', () => {
+    for (const language of [
+      'en',
+      'ru',
+      'uk',
+      'es',
+      'pt',
+      'fr',
+      'de',
+      'it',
+      'zh',
+      'ja',
+      'ko',
+    ]) {
+      const copy = reviewerSummaryCopy(language);
+      expect(copy.incompleteCauses.attempt_budget_exhausted).not.toMatch(
+        /usually|обычно|зазвичай|normalmente|général|normalerweise|di solito|通常|보통/i
+      );
+    }
+  });
+
+  it('keeps machine limitation tokens out of the posted summary', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      incomplete: true,
+      incompleteCauses: ['deadline_reached'],
+      coverage: {
+        complete: false,
+        totalFiles: 2,
+        reviewedFiles: 1,
+        unreviewedFiles: 1,
+        mode: 'full',
+        limitations: [
+          'work_slot_exhausted:slot-1',
+          'coverage_manifest_missing:slot-2',
+          'A required file was not reviewed.',
+        ],
+        fullDiffFiles: 1,
+        compactedFiles: 0,
+        metadataOnlyFiles: 0,
+        skippedFiles: 1,
+        agenticContext: true,
+      },
+    });
+
+    expect(markdown).not.toMatch(/work\\?_slot\\?_exhausted/);
+    expect(markdown).not.toMatch(/coverage\\?_manifest\\?_missing/);
+    expect(markdown).toContain('A required file was not reviewed.');
   });
 
   it('finishes the scope table before incomplete coverage details', () => {
@@ -553,6 +632,150 @@ describe('compact summary publication contract', () => {
   const outsideDetails = (markdown: string) =>
     markdown.replace(/<details>[\s\S]*?<\/details>/g, '');
 
+  it('compacts an OCR paragraph-derived title without repeating it or changing the finding', () => {
+    const message =
+      'The `* line.quantity` factor was dropped, so the subtotal only sums unit prices. ' +
+      'Any cart line with `quantity > 1` will be undercharged. ' +
+      'Restore the multiplier so `total + line.price * line.quantity` preserves the cart contract. ' +
+      'The existing test expects two units at twelve and three units at five to total thirty-nine. '.repeat(
+        5
+      );
+    const normalized = normalizeOcrFindings({
+      comments: [
+        {
+          path: 'src/cart.js',
+          content: message,
+          severity: 'critical',
+          category: 'correctness',
+          existingCode: null,
+          suggestionCode: null,
+          startLine: null,
+          endLine: null,
+        },
+      ],
+      headFiles: new Map(),
+    }).findings[0];
+    const original = JSON.stringify(normalized);
+    expect(normalized.title).toHaveLength(512);
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [normalized],
+    });
+    const visible = outsideDetails(markdown);
+    const headline = visible
+      .split('\n')
+      .find((line) => line.startsWith('- **critical'))!;
+    expect(headline).toContain(
+      'The \\* line.quantity factor was dropped, so the subtotal only sums unit prices.'
+    );
+    expect(headline).not.toContain('undercharged');
+    expect(visible.match(/factor was dropped/g)).toHaveLength(1);
+    expect(visible).toContain(
+      'Any cart line with quantity &gt; 1 will be undercharged.'
+    );
+    expect(visible).toContain('total + line.price \\* line.quantity');
+    expect(visible).not.toContain('`');
+    expect(markdown).toContain(normalized.message);
+    expect(JSON.stringify(normalized)).toBe(original);
+  });
+
+  it.each(['en', 'zh'])(
+    'bounds independent long titles at word boundaries in %s without dropping the body',
+    (language) => {
+      const title =
+        language === 'zh'
+          ? '安全检查'.repeat(80)
+          : 'Check the authorization boundary before reading tenant data '.repeat(
+              8
+            );
+      const markdown = renderReviewerSummaryMarkdown({
+        language,
+        metrics,
+        findings: [{ ...finding, title }],
+      });
+      const headline = outsideDetails(markdown)
+        .split('\n')
+        .find((line) => line.startsWith('- **critical'))!;
+      const displayed = headline.split('critical · ')[1].split('**')[0];
+      expect(Array.from(displayed).length).toBeLessThanOrEqual(120);
+      expect(displayed).toMatch(/…$/);
+      expect(title.startsWith(displayed.slice(0, -1))).toBe(true);
+      if (language === 'en') expect(title[displayed.length - 1]).toMatch(/\s/);
+      expect(outsideDetails(markdown)).toContain(finding.message);
+      const lifecycleLine = {
+        kind: 'carried' as const,
+        title,
+        message: finding.message,
+        locationLabel: 'src/auth.ts:44',
+      };
+      const carried = renderReviewerSummaryMarkdown({
+        language,
+        metrics,
+        findings: [],
+        lifecycle: [lifecycleLine],
+      });
+      expect(outsideDetails(carried)).not.toContain(title);
+      expect(carried).toContain(title);
+      expect(
+        renderReviewerLifecycleMarkdown({ language, lines: [lifecycleLine] })
+      ).toContain(displayed);
+    }
+  );
+
+  it('recognizes a title derived from the first physical line of soft-wrapped prose', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [
+        {
+          ...finding,
+          title: 'The quantity multiplier was dropped',
+          message:
+            'The quantity multiplier was dropped\nfrom the subtotal calculation. Restore it for multi-unit carts.',
+        },
+      ],
+    });
+    const visible = outsideDetails(markdown);
+    expect(visible.match(/quantity multiplier was dropped/g)).toHaveLength(1);
+    expect(visible).toContain('calculation.**');
+    expect(visible).toContain('\n\nRestore it for multi-unit carts.');
+  });
+
+  it('keeps preview code operators readable while escaping HTML and unmatched delimiters', () => {
+    const message =
+      'Use `Promise<void>` and ``a`b`` when `total * quantity > 1 && ready`. Escape <img src=x> and unmatched ` safely.';
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    const visible = outsideDetails(markdown);
+    expect(visible).toContain('Use Promise&lt;void&gt; and a\\`b when total');
+    expect(visible).toContain('Promise&lt;void&gt;');
+    expect(visible).toContain('a\\`b');
+    expect(visible).toContain('total \\* quantity &gt; 1 &amp;&amp; ready');
+    expect(visible).toContain('unmatched \\` safely');
+    expect(visible).not.toContain('<img');
+    expect(markdown).toContain('`Promise<void>`');
+  });
+
+  it.each([
+    ['# injected heading', '\\# injected heading'],
+    ['---', '\\---'],
+    ['1. injected list', '1\\. injected list'],
+  ])(
+    'keeps code-only preview text from becoming a Markdown block: %s',
+    (code, escaped) => {
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message: `\`${code}\`` }],
+      });
+      expect(outsideDetails(markdown)).toContain(`\n\n${escaped}`);
+    }
+  );
+
   it('shows a bounded ordinary paragraph and retains the full original body and fix', () => {
     const paragraph =
       'A request can cross tenant boundaries without this filter. '
@@ -633,6 +856,220 @@ describe('compact summary publication contract', () => {
     });
     expect(lifecycle).toContain(`\n\n${code}\n\n<code>`);
   });
+
+  it.each([
+    'Use `Promise<void>` and `<T>` with `a & b`.',
+    'Use ``a`<T>`` with an exact two-backtick delimiter.',
+    'Use \\```Promise<void>`` with an escaped leading backtick.',
+    'Treat `<img src=x>` as literal source.',
+    'Use `Promise<\nvoid>` across a soft line break.',
+  ])('preserves HTML characters inside matched inline code: %s', (message) => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message: `${message}\n\n<b>Outside HTML</b>` }],
+    });
+    expect(markdown).toContain(message);
+    expect(markdown).toContain('&lt;b&gt;Outside HTML&lt;/b&gt;');
+    const lifecycle = renderReviewerLifecycleMarkdown({
+      language: 'en',
+      lines: [
+        {
+          kind: 'active',
+          title: finding.title,
+          locationLabel: 'src/<T>.ts:1',
+          message,
+        },
+      ],
+    });
+    expect(lifecycle).toContain(message);
+    expect(lifecycle).toContain('<code>src/&lt;T&gt;.ts:1</code>');
+  });
+
+  it.each([
+    '`unmatched<T> with ``another<U>',
+    '\\`<b>escaped backticks</b>\\`',
+    '`first<T>\n\nsecond<U>`',
+    '`before\n<div>unsafe token</div>\nafter`',
+    '`before\n# Heading <b>unsafe token</b>\nafter`',
+    '`before<T>\n===\nafter`',
+  ])('escapes HTML outside valid inline code spans: %s', (message) => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    const details = markdown.slice(markdown.indexOf('<details>'));
+    expect(details).not.toMatch(/<(?:T|U|b|div)>/);
+    expect(details).toContain('&lt;');
+  });
+
+  it('keeps disclosure neutralization and fenced code safety around inline code', () => {
+    const message =
+      'Use `Promise<void>` and `</details>`.\n\n```ts\nconst value: Promise<void> = task();\n```';
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    expect(markdown).toContain('Use `Promise<void>` and `&lt;/details&gt;`.');
+    expect(markdown).toContain(
+      '```ts\nconst value: Promise<void> = task();\n```'
+    );
+    expect(markdown.match(/<details>/g)?.length).toBe(
+      markdown.match(/<\/details>/g)?.length
+    );
+  });
+
+  it.each([
+    '```bad`info\n<img src=x alt=unsafeBoundary>\n```',
+    '- container\n  ```html\n  code\n<img src=x alt=unsafeBoundary>\n  ```',
+    '\t```html\n<img src=x alt=unsafeBoundary>\n```',
+    '- container\n  ```html\n  code\n    ```\n  <img src=x alt=unsafeBoundary>',
+    '  ```html\n  code\n    ```\n  <img src=x alt=unsafeBoundary>',
+    '- container\n  ```html\n  code\n```\nAfter fence <img src=x alt=unsafeBoundary>',
+    '  ```html\n  code\n```\nAfter fence <img src=x alt=unsafeBoundary>',
+  ])('escapes HTML beyond an invalid or dedented fence: %s', (message) => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    expect(markdown).not.toContain('<img src=x alt=unsafeBoundary>');
+    expect(markdown).toContain('&lt;img src=x alt=unsafeBoundary&gt;');
+    if (message.includes('\n```\nAfter fence'))
+      expect(markdown).toContain('  code\n  ```\nAfter fence');
+    if (message.includes('\n    ```\n')) {
+      expect(markdown).toContain('  code\n  ```\n  &lt;img');
+      const limited = limitReviewerPostedMarkdown(markdown, 350);
+      expect(limited.match(/<details>/g)?.length ?? 0).toBe(
+        limited.match(/<\/details>/g)?.length ?? 0
+      );
+      expect(Buffer.byteLength(limited)).toBeLessThanOrEqual(350);
+    }
+    expect(markdown.match(/<details>/g)?.length).toBe(
+      markdown.match(/<\/details>/g)?.length
+    );
+  });
+
+  it.each(['```ts', '~~~info`allowed'])(
+    'preserves valid zero-indent fences and inline code: %s',
+    (opener) => {
+      const closer = opener.startsWith('`') ? '```' : '~~~';
+      const message = `Use \`Promise<void>\`.\n\n${opener}\nconst html = '<img src=x>';\n${closer}`;
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message }],
+      });
+      expect(markdown).toContain(message);
+    }
+  );
+
+  it('closes container fences at their original indent before dedents and at EOF', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [
+        {
+          ...finding,
+          message:
+            '- container\n  ~~~html\n  <b>inside</b>\n<img src=x>\n  ~~~text\n  remaining code',
+        },
+      ],
+    });
+    expect(markdown).toContain('  <b>inside</b>\n  ~~~\n&lt;img src=x&gt;');
+    expect(markdown).toContain('  remaining code\n  ~~~\n\n**Location:**');
+    const limited = limitReviewerPostedMarkdown(markdown, 350);
+    expect(limited.match(/<details>/g)?.length ?? 0).toBe(
+      limited.match(/<\/details>/g)?.length ?? 0
+    );
+    expect(Buffer.byteLength(limited)).toBeLessThanOrEqual(350);
+  });
+
+  it.each([
+    '```ts\nconst hiddenBlock = true;\n```',
+    '~~~ts\nconst hiddenBlock = true;\n~~~',
+    '   ```ts\n   const hiddenBlock = true;\n   ```',
+    '```text\n---\nhiddenBlock\n```',
+    '<div>hiddenBlock</div>',
+    '<!-- hiddenBlock -->',
+    '<script>hiddenBlock</script>',
+    '<?hiddenBlock?>',
+    '<![CDATA[hiddenBlock]]>',
+    '<!DOCTYPE hiddenBlock>',
+    '</section>hiddenBlock',
+    '# hiddenBlock',
+    '> hiddenBlock',
+    '- hiddenBlock',
+    '1. hiddenBlock',
+    '***\nhiddenBlock',
+  ])(
+    'stops the prose preview before an adjacent Markdown block: %s',
+    (block) => {
+      const prose = 'Requests can cross the tenant boundary.';
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message: `${prose}\n${block}` }],
+      });
+      const visible = outsideDetails(markdown);
+      expect(visible).toContain(prose);
+      expect(visible).not.toContain('hiddenBlock');
+      expect(markdown).toContain('hiddenBlock');
+      if (block.includes('```') || block.includes('~~~'))
+        expect(markdown).toContain(`${prose}\n${block}`);
+    }
+  );
+
+  it.each(['===', '---', '|---|---|'])(
+    'does not preview text that belongs to an adjacent heading or table: %s',
+    (delimiter) => {
+      const message = `Non-prose block title\n${delimiter}\nhiddenBlock`;
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message }],
+      });
+      expect(outsideDetails(markdown)).not.toContain('Non-prose block title');
+      expect(outsideDetails(markdown)).not.toContain('hiddenBlock');
+      expect(markdown).toContain(message);
+    }
+  );
+
+  it('keeps soft-wrapped prose and URLs together before an adjacent block', () => {
+    const prose =
+      'Read the tenant contract at\nhttps://example.com/tenant-boundary';
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message: `${prose}\n~~~ts\nhiddenBlock\n~~~` }],
+    });
+    expect(outsideDetails(markdown)).toContain(prose.replace('\n', ' '));
+    expect(outsideDetails(markdown)).not.toContain('hiddenBlock');
+    expect(markdown).toContain(prose);
+  });
+
+  it.each([
+    '<https://example.com/report>',
+    '< 10 requests per second',
+    '<custom-note>tenant evidence</custom-note>',
+  ])(
+    'keeps an inline angle-bracket continuation in prose: %s',
+    (continuation) => {
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [
+          { ...finding, message: `Check the limit:\n${continuation}` },
+        ],
+      });
+      const visible = outsideDetails(markdown);
+      expect(visible).toContain(
+        `Check the limit: ${continuation.replaceAll('<', '&lt;').replaceAll('>', '&gt;')}`
+      );
+    }
+  );
 
   it('uses word boundaries for a CJK paragraph without spaces', () => {
     const message = '安全检查'.repeat(100);
@@ -846,6 +1283,58 @@ describe('compact summary publication contract', () => {
     }
   );
 
+  it('renders truthful update counters and responsive images from the same presentation', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [finding],
+      bannerBaseUrl: 'https://reviewrouter.org',
+      reviewPresentation: {
+        variant: 'update',
+        state: 'incomplete',
+        severity: { critical: 1, major: 1, minor: 0, info: 0 },
+        coverage: { reviewed: 2, total: 3 },
+        changes: { new: 1, resolved: 2, open: 2, unverified: 1 },
+      },
+    });
+    expect(markdown).toContain(
+      '<!-- reviewrouter:review-status:incomplete -->'
+    );
+    expect(markdown).toContain('## Review incomplete');
+    expect(markdown).toContain(
+      '1 new · 2 resolved · 2 open · 1 unverified (included in open)'
+    );
+    expect(markdown).toContain('width="100%"');
+    expect(markdown).not.toMatch(/height=|width="640"/);
+    expect(markdown.match(/<source /g)).toHaveLength(1);
+    expect(markdown).toContain('media="(max-width: 600px)"');
+    expect(markdown).not.toContain('prefers-color-scheme');
+    const urls = [...markdown.matchAll(/(?:src|srcset)="([^"]+)"/g)].map(
+      (match) => new URL(match[1].replaceAll('&amp;', '&'))
+    );
+    expect(urls.map((url) => url.searchParams.get('layout'))).toEqual([
+      'compact',
+      'wide',
+    ]);
+    for (const url of urls) {
+      expect(url.pathname).toBe('/review-banner/v1.svg');
+      expect(Object.fromEntries(url.searchParams)).toEqual(
+        expect.objectContaining({
+          variant: 'update',
+          state: 'incomplete',
+          reviewed: '2',
+          total: '3',
+          new: '1',
+          resolved: '2',
+          open: '2',
+          unverified: '1',
+          theme: 'auto',
+        })
+      );
+    }
+    expect(outsideDetails(markdown)).toContain('Guard the tenant boundary');
+  });
+
   it('uses only public count/enumeration parameters in optional theme banners and rewrites their incomplete state', () => {
     const markdown = renderReviewerSummaryMarkdown({
       language: 'Russian',
@@ -857,27 +1346,27 @@ describe('compact summary publication contract', () => {
     const urls = [...markdown.matchAll(/(?:src|srcset)="([^"]+)"/g)].map(
       (match) => new URL(match[1].replaceAll('&amp;', '&'))
     );
-    expect(urls).toHaveLength(3);
+    expect(urls).toHaveLength(2);
     for (const url of urls) {
       expect(url.pathname).toBe('/review-banner/v1.svg');
       expect([...url.searchParams.keys()]).toEqual([
         'state',
+        'variant',
         'critical',
         'major',
         'minor',
         'info',
-        'lang',
         'theme',
+        'layout',
       ]);
       expect(url.searchParams.get('critical')).toBe('3');
-      expect(url.searchParams.get('lang')).toBe('ru');
+      expect(url.searchParams.get('variant')).toBe('first');
       expect(url.searchParams.get('state')).toBe('complete');
       expect(url.href).not.toContain('auth');
     }
     expect(urls.map((url) => url.searchParams.get('theme'))).toEqual([
-      'dark',
-      'light',
-      'light',
+      'auto',
+      'auto',
     ]);
     const revised = markReviewSummaryIncomplete({
       summary: markdown,
@@ -885,7 +1374,7 @@ describe('compact summary publication contract', () => {
       preliminaryFindingCount: 1,
     });
     expect(revised).not.toContain('state=complete');
-    expect(revised.match(/state=incomplete/g)).toHaveLength(3);
+    expect(revised.match(/state=incomplete/g)).toHaveLength(2);
     expect(outsideDetails(revised)).toContain('Guard the tenant boundary');
     expect(
       renderReviewerSummaryMarkdown({

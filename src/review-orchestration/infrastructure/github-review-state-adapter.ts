@@ -18,9 +18,11 @@ import {
   LifecycleResolutionMarkerTrust,
   LifecycleTargetDisposition,
   type CurrentLifecycleInventory,
-  type ReviewProjectionScope,
 } from '../../review-projection/domain';
-import type { CurrentLifecycleInventoryPort } from '../../review-projection/application';
+import type {
+  CurrentLifecycleInventoryPort,
+  LoadCurrentLifecycleInventoryQuery,
+} from '../../review-projection/application';
 
 export type CanonicalReviewRevisionScope = {
   readonly workspaceId: string;
@@ -155,11 +157,15 @@ export class FreshGitHubLifecycleInventory implements CurrentLifecycleInventoryP
     );
   }
 
-  async loadCurrent(query: {
-    readonly scope: ReviewProjectionScope;
-  }): Promise<CurrentLifecycleInventory> {
+  async loadCurrent(
+    query: LoadCurrentLifecycleInventoryQuery
+  ): Promise<CurrentLifecycleInventory> {
     const [raw, ledger] = await Promise.all([
-      this.loader.load(query.scope.pullRequestNumber),
+      this.loader.load(
+        query.scope.pullRequestNumber,
+        query.priorLineageHints,
+        query.appliedResolutions
+      ),
       this.ledger.load(query.scope.pullRequestNumber),
     ]);
     return mapFreshInventory(raw, query.scope.reviewedHeadSha, ledger);
@@ -283,6 +289,7 @@ function mapFreshInventory(
     complete: true,
     warnings: Object.freeze(warnings),
     targets: Object.freeze(targets),
+    resolvedObservations: Object.freeze(raw.resolvedObservations ?? []),
   });
 }
 

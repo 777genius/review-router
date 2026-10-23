@@ -276,7 +276,11 @@ export class RunT0ReviewOrchestration {
         );
       }
 
-      const [, restoredExecution] = await Promise.all([
+      const comparisonBaselineRequest = {
+        authorization,
+        reviewRevisionHash: command.reviewRevisionHash,
+      };
+      const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
           reviewRevisionHash: command.reviewRevisionHash,
@@ -285,6 +289,17 @@ export class RunT0ReviewOrchestration {
           authorization,
           reviewRevisionHash: command.reviewRevisionHash,
         }),
+        Promise.resolve()
+          .then(
+            () =>
+              this.dependencies.controlPlane.restoreComparisonBaseline?.(
+                comparisonBaselineRequest
+              ) ?? null
+          )
+          .catch(() => {
+            this.dependencies.signal?.throwIfAborted();
+            return null;
+          }),
       ]);
 
       execution = await this.dependencies.controlPlane.startExecution({
@@ -378,8 +393,9 @@ export class RunT0ReviewOrchestration {
         }
         if (
           restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied &&
-          (busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ??
-            0) >= this.maxBusyPollsPerProviderLane
+          this.providerLaneBusyBudgetExhausted(
+            busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0
+          )
         ) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
@@ -538,8 +554,10 @@ export class RunT0ReviewOrchestration {
           })
         : undefined;
       const projection = await this.dependencies.projectionBuilder.build({
+        comparisonBaseline,
         acceptedEvidence,
         exhaustedWorkSlotIds,
+        exhaustedWorkSlotReasons,
         reviewRevisionHash: command.reviewRevisionHash,
         ...(prDescription ? { prDescription } : {}),
       });
@@ -1117,7 +1135,7 @@ export class RunT0ReviewOrchestration {
           input.busyPollsByProviderLane.get(
             input.workSlot.providerVoteIdentityHash
           ) ?? 0;
-        if (providerLaneBusyPollCount >= this.maxBusyPollsPerProviderLane) {
+        if (this.providerLaneBusyBudgetExhausted(providerLaneBusyPollCount)) {
           input.onEvent({
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: input.workSlot.workSlotId,
@@ -1460,9 +1478,10 @@ export class RunT0ReviewOrchestration {
       input.workSlot.workSlotId,
       input.manifest.providerInvocationKey,
     ]);
+    const busyPollBudget = this.providerLaneBusyPollBudget();
     for (
       let busyPollCount = 0;
-      busyPollCount < this.maxBusyPollsPerProviderLane;
+      busyPollCount < busyPollBudget;
       busyPollCount += 1
     ) {
       await this.assertRevisionCurrent(input.revision);
@@ -2086,25 +2105,69 @@ export class RunT0ReviewOrchestration {
         input.workSlot.workSlotId,
         manifest.providerInvocationKey,
       ]);
-      const acquired =
-        await this.dependencies.controlPlane.acquireInvocationLease({
-          authorization: input.authorization,
-          idempotencyKey: this.idempotencyKey('description-lease-acquire', [
+      const waitStartedAt = this.dependencies.clock.monotonicNowMs();
+      let busyPollCount = 0;
+      let waitedMs = 0;
+      while (!lease) {
+        this.dependencies.signal?.throwIfAborted();
+        if (!this.canStartInvocation(2)) {
+          generator.unavailable();
+          return undefined;
+        }
+        if (busyPollCount > 0) {
+          const waitRemainingMs = Math.min(
+            5_000 - waitedMs,
+            5_000 - (this.dependencies.clock.monotonicNowMs() - waitStartedAt)
+          );
+          const delayMs = this.clampProviderDelay(
+            Math.min(500 * 2 ** Math.min(busyPollCount - 1, 4), waitRemainingMs)
+          );
+          if (delayMs <= 0) {
+            generator.unavailable();
+            return undefined;
+          }
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
+          waitedMs += delayMs;
+          this.dependencies.signal?.throwIfAborted();
+          await this.assertRevisionCurrent(input.command);
+          if (
+            waitedMs >= 5_000 ||
+            this.dependencies.clock.monotonicNowMs() - waitStartedAt >= 5_000 ||
+            !this.canStartInvocation(2)
+          ) {
+            generator.unavailable();
+            return undefined;
+          }
+        }
+        const acquired =
+          await this.dependencies.controlPlane.acquireInvocationLease({
+            authorization: input.authorization,
+            idempotencyKey: this.idempotencyKey('description-lease-acquire', [
+              acquireRequestId,
+            ]),
+            execution: input.execution,
+            workSlot: input.workSlot,
+            manifest,
             acquireRequestId,
-          ]),
-          execution: input.execution,
-          workSlot: input.workSlot,
-          manifest,
-          acquireRequestId,
-          ownerIdHash: input.command.ownerIdHash,
-        });
-      if (
-        acquired.status !== ReviewInvocationLeaseAcquireOutcomeStatus.Acquired
-      ) {
-        generator.unavailable();
-        return undefined;
+            ownerIdHash: input.command.ownerIdHash,
+          });
+        if (
+          acquired.status === ReviewInvocationLeaseAcquireOutcomeStatus.Busy
+        ) {
+          busyPollCount += 1;
+          continue;
+        }
+        if (
+          acquired.status !== ReviewInvocationLeaseAcquireOutcomeStatus.Acquired
+        ) {
+          generator.unavailable();
+          return undefined;
+        }
+        lease = acquired.lease;
       }
-      lease = acquired.lease;
       description = await this.dependencies.leaseSupervisor.run({
         lease,
         renew: async () => {
@@ -2170,6 +2233,18 @@ export class RunT0ReviewOrchestration {
       return undefined;
     }
     return description;
+  }
+
+  private providerLaneBusyPollBudget(): number {
+    // A finite execution deadline bounds the wait itself; the poll cap is
+    // only the fallback bound for runs configured without a deadline.
+    return Number.isFinite(this.executionDeadlineRemainingMs())
+      ? Number.POSITIVE_INFINITY
+      : this.maxBusyPollsPerProviderLane;
+  }
+
+  private providerLaneBusyBudgetExhausted(busyPollCount: number): boolean {
+    return busyPollCount >= this.providerLaneBusyPollBudget();
   }
 
   private canStartBatch(): boolean {

@@ -8,11 +8,14 @@ import {
   stripInlineFingerprintMarkers,
 } from './comment-fingerprint';
 import { logger } from '../utils/logger';
+import { REVIEW_PROJECTION_ABSOLUTE_LIMITS } from '../review-projection/domain/review-projection-limits';
 import {
   FindingMarkerParseKind,
   hashReviewLifecycleThreadState,
   isReviewLifecycleMarkerFingerprint,
   parseFindingMarker,
+  type PriorLineageHint,
+  type AppliedReviewResolution,
 } from '../review-projection/domain';
 
 export const DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS = ['review-router-ai[bot]'];
@@ -48,6 +51,11 @@ export interface ReviewThreadInventory {
   dedupeComments: InlineCommentReference[];
   warnings: string[];
   failed: boolean;
+  resolvedObservations?: {
+    readonly lineageId: string;
+    readonly trustedMarker: string;
+    readonly confirmed: boolean;
+  }[];
 }
 
 export interface ReviewThreadMarkerIssue {
@@ -185,7 +193,11 @@ export class ReviewThreadInventoryLoader {
     private readonly observationAuthors: readonly string[] = []
   ) {}
 
-  async load(prNumber: number): Promise<ReviewThreadInventory> {
+  async load(
+    prNumber: number,
+    priorLineageHints: readonly PriorLineageHint[] = [],
+    appliedResolutions: readonly AppliedReviewResolution[] = []
+  ): Promise<ReviewThreadInventory> {
     const inventory: ReviewThreadInventory = {
       candidates: [],
       manualAttention: [],
@@ -193,6 +205,7 @@ export class ReviewThreadInventoryLoader {
       dedupeComments: [],
       warnings: [],
       failed: false,
+      resolvedObservations: [],
     };
 
     try {
@@ -230,7 +243,12 @@ export class ReviewThreadInventoryLoader {
           throw new Error('pull request review thread nodes were missing');
         }
         for (const thread of threads.nodes || []) {
-          await this.classifyThread(thread, inventory);
+          await this.classifyThread(
+            thread,
+            inventory,
+            priorLineageHints,
+            appliedResolutions
+          );
         }
         if (threads.pageInfo.hasNextPage) {
           if (!threads.pageInfo.endCursor) {
@@ -248,6 +266,7 @@ export class ReviewThreadInventoryLoader {
       if (inventory.failed) {
         inventory.candidates = [];
         inventory.dedupeComments = [];
+        inventory.resolvedObservations = [];
       }
     } catch (error) {
       logger.warn(
@@ -259,6 +278,7 @@ export class ReviewThreadInventoryLoader {
       inventory.manualAttentionIssues = [];
       inventory.dedupeComments = [];
       inventory.failed = true;
+      inventory.resolvedObservations = [];
       inventory.warnings.push('review thread lifecycle inventory failed');
     }
 
@@ -267,17 +287,32 @@ export class ReviewThreadInventoryLoader {
 
   private async classifyThread(
     thread: GraphQLThread,
-    inventory: ReviewThreadInventory
+    inventory: ReviewThreadInventory,
+    priorLineageHints: readonly PriorLineageHint[],
+    appliedResolutions: readonly AppliedReviewResolution[]
   ): Promise<void> {
-    if (thread.isResolved) {
-      return;
-    }
+    // Closed threads are observed only for known prior lineages, never queued
+    // for provider revalidation or lifecycle mutations.
+    if (thread.isResolved && priorLineageHints.length === 0) return;
 
     if (!thread.comments || !Array.isArray(thread.comments.nodes)) {
       throw new Error(`thread ${thread.id} comments connection was missing`);
     }
 
     let comments = thread.comments.nodes;
+    if (thread.isResolved) {
+      const parent = comments[0];
+      const marker = parseFindingMarker(parent?.body ?? '');
+      if (
+        !parent ||
+        !this.isTrustedAuthor(parent.author) ||
+        marker.kind !== FindingMarkerParseKind.Valid ||
+        !priorLineageHints.some(
+          (hint) => hint.active && hint.lineageId === marker.fingerprint
+        )
+      )
+        return;
+    }
     if (thread.comments.pageInfo.hasNextPage) {
       comments = await this.loadRemainingThreadComments(
         thread.id,
@@ -303,6 +338,14 @@ export class ReviewThreadInventoryLoader {
       );
     const marker = parseFindingMarker(parent.body ?? '');
     if (
+      thread.isResolved &&
+      (marker.kind !== FindingMarkerParseKind.Valid ||
+        !priorLineageHints.some(
+          (hint) => hint.active && hint.lineageId === marker.fingerprint
+        ))
+    )
+      return;
+    if (
       marker.kind === FindingMarkerParseKind.Conflict ||
       marker.kind === FindingMarkerParseKind.Malformed
     ) {
@@ -325,6 +368,53 @@ export class ReviewThreadInventoryLoader {
       return;
     }
     if (marker.kind === FindingMarkerParseKind.Absent) {
+      return;
+    }
+    if (thread.isResolved) {
+      if (
+        (inventory.resolvedObservations?.length ?? 0) >=
+        REVIEW_PROJECTION_ABSOLUTE_LIMITS.maxLifecycleTargets
+      )
+        throw new Error('closed review observation limit exceeded');
+      const matching = priorLineageHints.filter(
+        (hint) => hint.active && hint.lineageId === marker.fingerprint
+      );
+      if (matching.length !== 1 || !trustedAuthor) return;
+      const targetId = targetIdFor(thread.id, parent.id, marker.fingerprint);
+      const resolution = findTrustedResolutionMarker({
+        comments,
+        targetId,
+        fingerprint: marker.fingerprint,
+        expectedAuthor: parent.author,
+        isTrustedAuthor: (author) => this.isTrustedAuthor(author),
+      });
+      // Server receipts attest a successful native resolve in the source
+      // publication. Fresh GitHub closure, exact identity, and interaction guards
+      // are still required; receipts never authorize mutations here.
+      const receipts = appliedResolutions.filter(
+        (item) =>
+          item.lineageId === matching[0].lineageId &&
+          item.targetId === targetId &&
+          item.threadId === thread.id &&
+          item.markerFingerprint === marker.fingerprint
+      );
+      const resolvedAt =
+        receipts.length === 1
+          ? receipts[0].resolvedAt
+          : resolution?.commentUpdatedAt;
+      const humanInteraction = comments
+        .slice(1)
+        .some((comment) => !this.isTrustedAuthor(comment.author));
+      inventory.resolvedObservations?.push({
+        lineageId: matching[0].lineageId,
+        trustedMarker: marker.fingerprint,
+        confirmed:
+          resolvedAt !== undefined &&
+          !humanInteraction &&
+          normalizeCommentTimestamp(
+            parent.updatedAt ?? requireCommentTimestamp(parent.createdAt)
+          ) <= resolvedAt,
+      });
       return;
     }
 

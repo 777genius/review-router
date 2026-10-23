@@ -193,12 +193,27 @@ describe('production reusable workflows', () => {
 
   it('accepts the installed ABI and rejects incompatible input or permission changes', () => {
     const original = readRepoFile('.github/workflows/reviewrouter-runtime.yml');
+    const runtimeStep = parseWorkflow(
+      '.github/workflows/reviewrouter-runtime.yml'
+    ).jobs?.review?.steps?.find((step) => step.name === 'Run ReviewRouter');
+    expect(runtimeStep?.env).toMatchObject({
+      REVIEW_ROUTER_MODE: 'account-gateway',
+      REVIEW_ROUTER_REVIEW_BANNER: '${{ vars.REVIEW_ROUTER_REVIEW_BANNER }}',
+    });
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-channel-abi-'));
     try {
       const candidate = path.join(temp, 'workflow.yml');
       for (const [source, expected] of [
         [original, 0],
         [original.replace('contents: read', 'contents: write'), 1],
+        [original.replace('mcp_secrets_json:', 'unexpected_secret:'), 1],
+        [
+          original.replace(
+            /(mcp_secrets_json:[\s\S]*?required:) false/,
+            '$1 true'
+          ),
+          1,
+        ],
         [original.replace('required: false', 'required: true'), 1],
         [
           original.replace(
@@ -1262,4 +1277,88 @@ describe('production reusable workflows', () => {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   });
+});
+
+describe('immutable Secrets runtime producer', () => {
+  it('binds checkout to the owning workflow SHA and runs the existing OIDC engine', () => {
+    const document = yaml.load(
+      readRepoFile('.github/workflows/reviewrouter-secrets-runtime.yml')
+    ) as WorkflowDocument;
+    const review = document.jobs!.review!;
+    const steps = review.steps!;
+    const checkout = steps.find(
+      (step) => step.name === 'Checkout immutable producer runtime'
+    )!;
+    expect(checkout.with).toMatchObject({
+      repository: '777genius/review-router',
+      ref: '${{ job.workflow_sha }}',
+      path: '.reviewrouter-runtime',
+      'persist-credentials': false,
+    });
+    expect(review.env).toMatchObject({
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+    });
+    expect(
+      steps.some(
+        (step) =>
+          step.run === 'node .reviewrouter-runtime/dist/index.js' &&
+          step.env?.REVIEW_ROUTER_MODE === 'review'
+      )
+    ).toBe(true);
+    const guard = steps.find(
+      (step) => step.name === 'Validate immutable producer identity'
+    )!.run!;
+    const script = guard.split("<<'NODE'\n")[1]!.replace(/\nNODE\s*$/, '');
+    const run = (sha: string, repository = '777genius/review-router') =>
+      runInNewContext(script, {
+        process: {
+          env: {
+            RR_WORKFLOW_SHA: sha,
+            RR_WORKFLOW_REPOSITORY: repository,
+            GITHUB_REPOSITORY_ID: '123',
+          },
+        },
+      });
+    expect(() => run('a'.repeat(40))).not.toThrow();
+    expect(() => run('main')).toThrow('producer_identity_invalid');
+    expect(() => run('a'.repeat(40), 'foreign/producer')).toThrow(
+      'producer_identity_invalid'
+    );
+  });
+});
+
+test('forwards only the explicitly named MCP secret to the trusted parent runner entrypoints', () => {
+  const runtime = parseWorkflow('.github/workflows/reviewrouter-runtime.yml');
+  const t0 = parseWorkflow('.github/workflows/reviewrouter-t0-reusable.yml');
+  const execution = parseWorkflow(
+    '.github/workflows/reviewrouter-execution-reusable.yml'
+  );
+  for (const workflow of [runtime, t0, execution])
+    expect(workflow.on?.workflow_call?.secrets?.mcp_secrets_json).toEqual(
+      expect.objectContaining({ required: false })
+    );
+  expect(
+    Object.values(t0.jobs ?? {}).some(
+      (job) =>
+        job.secrets?.mcp_secrets_json === '${{ secrets.mcp_secrets_json }}'
+    )
+  ).toBe(true);
+  expect(
+    traceSecretEnvBindings(runtime, 'mcp_secrets_json').map((binding) => [
+      binding.step,
+      binding.environmentVariable,
+    ])
+  ).toEqual([['Run ReviewRouter', 'REVIEWROUTER_MCP_CREDENTIALS_JSON']]);
+  expect(
+    traceSecretEnvBindings(execution, 'mcp_secrets_json').map((binding) => [
+      binding.step,
+      binding.environmentVariable,
+    ])
+  ).toEqual([
+    [
+      'Run ReviewRouter T0 account gateway',
+      'REVIEWROUTER_MCP_CREDENTIALS_JSON',
+    ],
+  ]);
 });

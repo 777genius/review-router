@@ -6,6 +6,11 @@ on:
   push:
     branches: [main, ts-rewrite]
   workflow_dispatch:
+    inputs:
+      live_mcp:
+        description: Exercise real anonymous DeepWiki, Microsoft Learn and Cloudflare MCP through OCR
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -52,6 +57,19 @@ jobs:
           REVIEWROUTER_OCR_REQUIRED: '1'
           REVIEWROUTER_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview
         run: npm run test -- --maxWorkers=2 --detectOpenHandles --testTimeout=20000
+      - name: Qualify native OCR MCP invocation and result reuse
+        timeout-minutes: 6
+        env:
+          REVIEWROUTER_TEST_LIVE_MCP: ${{ github.event_name == 'workflow_dispatch' && inputs.live_mcp && '1' || '0' }}
+        run: |
+          mkdir -p tmp/native-mcp-ci
+          curl --fail --silent --show-error --location \
+            https://github.com/777genius/review-router/releases/download/ocr-v1.13.1-rr.3/opencodereview-linux-amd64 \
+            --output tmp/native-mcp-ci/opencodereview
+          echo '2f62d6fbb326e74d0fe9377f0224f1b56520bcefee688c58073fa1a30e45f1c9  tmp/native-mcp-ci/opencodereview' | sha256sum --check --strict
+          chmod 700 tmp/native-mcp-ci/opencodereview
+          REVIEWROUTER_TEST_APPROVED_OCR_BINARY="$PWD/tmp/native-mcp-ci/opencodereview" \
+            npm test -- __tests__/unit/context-tools/ocr-native.test.ts --runInBand
       - run: npm run build
       - name: Verify committed runtime artifacts
         run: |

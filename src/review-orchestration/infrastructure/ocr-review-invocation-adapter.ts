@@ -2,6 +2,15 @@ import {
   projectReviewSkillsForPaths,
   type ReviewSkillsExecutionInput,
 } from '../../review-skills/review-skills';
+import { CONTEXT_TOOLS_PROFILE } from '../../context-tools/contract';
+import {
+  ReviewInvocationConfigurationMismatchError,
+  ReviewInvocationConfigurationMismatchReason,
+} from '../application/review-invocation-failure';
+import type {
+  ContextToolsBroker,
+  ContextToolsReceipt,
+} from '../../context-tools/broker';
 /**
  * Managed OCR invocation adapter (plan 56, §4.2-4.3, §5.1, §8.2-8.4).
  *
@@ -156,6 +165,8 @@ export type OcrReviewInvocationOptions = Readonly<{
   processRunner: OcrReviewProcessRunner;
   previewRunner: OcrPreviewRunner;
   acceptanceDiagnostic?: (diagnostic: OcrReviewAcceptanceDiagnostic) => void;
+  contextTools?: Pick<ContextToolsBroker, 'receipt' | 'beginNativeSession'>;
+  contextToolsReceipt?: (receipt: ContextToolsReceipt) => void;
 }>;
 
 export type OcrPreparedReviewInvocation = PreparedReviewInvocation & {
@@ -260,6 +271,39 @@ export function buildOcrSkillsControlledRuleText(input: {
 }
 
 /**
+ * Upstream OCR hard-aborts when --background-file content exceeds 8000
+ * characters ("background content is N characters, exceeding the hard limit
+ * of 8000 (aborting)"), so bound the background before it reaches the
+ * semantic identity preimage and the background file. Verified boundary:
+ * 8000 characters continue, 8001 abort.
+ */
+export const OCR_BACKGROUND_HARD_CHAR_LIMIT = 8000;
+
+export function boundOcrBackgroundText(
+  backgroundText: string | null
+): string | null {
+  if (
+    backgroundText === null ||
+    backgroundText.length <= OCR_BACKGROUND_HARD_CHAR_LIMIT
+  ) {
+    return backgroundText;
+  }
+  const kept: string[] = [];
+  let utf16Length = 0;
+  for (const char of backgroundText) {
+    if (
+      kept.length + 1 > OCR_BACKGROUND_HARD_CHAR_LIMIT ||
+      utf16Length + char.length > OCR_BACKGROUND_HARD_CHAR_LIMIT
+    ) {
+      break;
+    }
+    kept.push(char);
+    utf16Length += char.length;
+  }
+  return kept.join('');
+}
+
+/**
  * §8.3 semantic identity preimage: refs/trees, engine + binary identity,
  * rules/background, model, effort, budgets and output contract. Excludes URL,
  * capability token, temp paths, session ids and loopback ports entirely; those
@@ -280,9 +324,17 @@ export function buildOcrSemanticInvocationPreimage(input: {
   readonly modelReasoningEffort: string | null;
   readonly language: string | null;
   readonly limits: OcrManagedLimits;
+  readonly contextToolsPolicy?: Readonly<{
+    planDigest: string;
+    schemaDigest: string;
+    tools: readonly string[];
+  }>;
 }): string {
   return canonicalJson({
     contract: 'ocr-semantic-identity.v1',
+    ...(input.contextToolsPolicy
+      ? { contextToolsPolicy: input.contextToolsPolicy }
+      : {}),
     revision: {
       baseSha: input.revision.baseSha.toLowerCase(),
       mergeBaseSha: input.revision.mergeBaseSha.toLowerCase(),
@@ -545,13 +597,23 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       throw new Error('review_action_v2_ocr_nothing_to_review');
     }
     const ruleText = this.options.ruleText;
-    const backgroundText = this.options.backgroundText;
+    const backgroundText = boundOcrBackgroundText(this.options.backgroundText);
     const revision: OcrNativeManifestAdmission = Object.freeze({
       baseSha: assignment.context.baseSha,
       mergeBaseSha: assignment.mergeBaseSha,
       headSha: assignment.context.headSha,
     });
+    const contextReceipt = this.options.contextTools?.receipt();
+    const contextToolsPolicy = contextReceipt
+      ? {
+          profile: CONTEXT_TOOLS_PROFILE,
+          planDigest: contextReceipt.planDigest,
+          schemaDigest: contextReceipt.schemaDigest,
+          tools: contextReceipt.availableTools,
+        }
+      : undefined;
     const semanticPreimage = buildOcrSemanticInvocationPreimage({
+      ...(contextToolsPolicy ? { contextToolsPolicy } : {}),
       revision,
       assignedPaths,
       ruleText,
@@ -703,10 +765,19 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         network: 'loopback-only',
         workspaceMutation: false,
         builtinTools: 'native_embedded',
+        ...(contextToolsPolicy
+          ? {
+              contextToolsPolicy,
+              parentContextNetwork: 'approved_https_pinned',
+            }
+          : {}),
         concurrency: 1,
       }),
       environmentContractHash: canonicalJson({
         credentialKeys: ['REVIEWROUTER_LOCAL_MODEL_TOKEN'],
+        ...(contextToolsPolicy
+          ? { contextToolsPolicy, parentCredentialIsolation: true }
+          : {}),
         gitConfigGlobal: '/dev/null',
         gitConfigNoSystem: '1',
         homeMode: '0700',
@@ -852,18 +923,38 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       limits: this.options.limits,
       preview: false,
     });
-    const processResult = await this.options.processRunner({
-      binaryPath: this.options.binaryPath,
-      argv,
-      env: buildOcrChildEnvironment({
-        homeDirectory: this.options.run.homeDirectory,
-        capabilityAuthorization: this.options.bridge.capabilityAuthorization,
-        path: process.env.PATH,
-      }),
-      cwd: this.options.run.runDirectory,
-      signal: input.signal,
-    });
+    this.options.contextTools?.beginNativeSession();
+    let processResult: OcrReviewProcessResult;
+    try {
+      processResult = await this.options.processRunner({
+        binaryPath: this.options.binaryPath,
+        argv,
+        env: buildOcrChildEnvironment({
+          homeDirectory: this.options.run.homeDirectory,
+          capabilityAuthorization: this.options.bridge.capabilityAuthorization,
+          path: process.env.PATH,
+        }),
+        cwd: this.options.run.runDirectory,
+        signal: input.signal,
+      });
+    } finally {
+      const receipt = this.options.contextTools?.receipt();
+      if (receipt)
+        try {
+          this.options.contextToolsReceipt?.(receipt);
+        } catch {
+          /* Diagnostics never change settlement. */
+        }
+    }
     assertOcrInvocationLive(input);
+    const contextReceipt = this.options.contextTools?.receipt();
+    if (
+      contextReceipt &&
+      (!contextReceipt.nativeConnected || contextReceipt.hadFailure)
+    )
+      throw new ReviewInvocationConfigurationMismatchError(
+        ReviewInvocationConfigurationMismatchReason.RequiredContextToolsUnavailable
+      );
     // Step 3 gate first: a failed process keeps any JSON local diagnostics.
     const failedProcess =
       processResult.spawnError !== undefined ||

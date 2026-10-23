@@ -140564,12 +140564,10 @@ function renderReviewBanner(baseUrl2, presentation) {
         Object.entries(numeric2).map(([key, value]) => [key, String(value)])
       )
     }).toString();
-    const source = (theme, layout) => `${url3}&theme=${theme}&layout=${layout}`.replaceAll("&", "&amp;");
+    const source = (layout) => `${url3}&theme=auto&layout=${layout}`.replaceAll("&", "&amp;");
     return `<picture>
-<source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="${source("dark", "compact")}">
-<source media="(max-width: 600px)" srcset="${source("light", "compact")}">
-<source media="(prefers-color-scheme: dark)" srcset="${source("dark", "wide")}">
-<img src="${source("light", "wide")}" alt="${presentation.state === "incomplete" ? "Review incomplete" : presentation.variant === "update" ? "Review updated" : "Review complete"}" width="100%">
+<source media="(max-width: 600px)" srcset="${source("compact")}">
+<img src="${source("wide")}" alt="${presentation.state === "incomplete" ? "Review incomplete" : presentation.variant === "update" ? "Review updated" : "Review complete"}" width="100%">
 </picture>`;
   } catch {
     return "";
@@ -162817,7 +162815,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.206",
+  version: "1.0.207",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

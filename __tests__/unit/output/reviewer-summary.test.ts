@@ -1306,16 +1306,14 @@ describe('compact summary publication contract', () => {
     );
     expect(markdown).toContain('width="100%"');
     expect(markdown).not.toMatch(/height=|width="640"/);
-    expect(markdown).toContain(
-      'media="(max-width: 600px) and (prefers-color-scheme: dark)"'
-    );
+    expect(markdown.match(/<source /g)).toHaveLength(1);
+    expect(markdown).toContain('media="(max-width: 600px)"');
+    expect(markdown).not.toContain('prefers-color-scheme');
     const urls = [...markdown.matchAll(/(?:src|srcset)="([^"]+)"/g)].map(
       (match) => new URL(match[1].replaceAll('&amp;', '&'))
     );
     expect(urls.map((url) => url.searchParams.get('layout'))).toEqual([
       'compact',
-      'compact',
-      'wide',
       'wide',
     ]);
     for (const url of urls) {
@@ -1330,6 +1328,7 @@ describe('compact summary publication contract', () => {
           resolved: '2',
           open: '2',
           unverified: '1',
+          theme: 'auto',
         })
       );
     }
@@ -1347,7 +1346,7 @@ describe('compact summary publication contract', () => {
     const urls = [...markdown.matchAll(/(?:src|srcset)="([^"]+)"/g)].map(
       (match) => new URL(match[1].replaceAll('&amp;', '&'))
     );
-    expect(urls).toHaveLength(4);
+    expect(urls).toHaveLength(2);
     for (const url of urls) {
       expect(url.pathname).toBe('/review-banner/v1.svg');
       expect([...url.searchParams.keys()]).toEqual([
@@ -1366,10 +1365,8 @@ describe('compact summary publication contract', () => {
       expect(url.href).not.toContain('auth');
     }
     expect(urls.map((url) => url.searchParams.get('theme'))).toEqual([
-      'dark',
-      'light',
-      'dark',
-      'light',
+      'auto',
+      'auto',
     ]);
     const revised = markReviewSummaryIncomplete({
       summary: markdown,
@@ -1377,7 +1374,7 @@ describe('compact summary publication contract', () => {
       preliminaryFindingCount: 1,
     });
     expect(revised).not.toContain('state=complete');
-    expect(revised.match(/state=incomplete/g)).toHaveLength(4);
+    expect(revised.match(/state=incomplete/g)).toHaveLength(2);
     expect(outsideDetails(revised)).toContain('Guard the tenant boundary');
     expect(
       renderReviewerSummaryMarkdown({

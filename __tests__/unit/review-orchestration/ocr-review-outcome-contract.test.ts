@@ -384,6 +384,91 @@ describe('classifyOcrReviewOutcome (§8.2 mapping invariant)', () => {
     expect(classification.filterCommentsPreserved).toBe(false);
   });
 
+  const preservedFilterGroup = (overrides: Record<string, unknown> = {}) =>
+    validGroup({
+      phases: {
+        plan: validPhase,
+        compression: validPhase,
+        relocation: validPhase,
+        filter: { state: 'failed', reason: 'invalid_arguments' },
+      },
+      filter_decision_valid: false,
+      ...overrides,
+    });
+
+  // Each disqualifier alone must keep the full partial tier: a false tier-down
+  // would let a real inspection gap pass the coverage gate.
+  it.each<[string, Record<string, unknown>]>([
+    [
+      'a run stop cause',
+      { run_stop_cause: 'token_budget', groups: [preservedFilterGroup()] },
+    ],
+    [
+      'a grouping fallback',
+      {
+        grouping: { state: 'failed', reason: 'provider_error' },
+        groups: [preservedFilterGroup()],
+      },
+    ],
+    [
+      'an incomplete main without a late round',
+      {
+        groups: [
+          preservedFilterGroup({
+            main_completed: false,
+            stop_cause: 'max_rounds',
+            rounds: { configured: 2, started: 1, completed: 1 },
+          }),
+        ],
+      },
+    ],
+    [
+      'a late round stop after main completion',
+      {
+        groups: [
+          preservedFilterGroup({
+            rounds: { configured: 3, started: 2, completed: 1 },
+          }),
+        ],
+      },
+    ],
+    [
+      'a failed filter whose decisions all parsed',
+      { groups: [preservedFilterGroup({ filter_decision_valid: true })] },
+    ],
+    [
+      'a second group with an incomplete main',
+      {
+        groups: [
+          preservedFilterGroup(),
+          validGroup({
+            paths: ['other.ts'],
+            main_completed: false,
+            stop_cause: 'deadline',
+            rounds: { configured: 2, started: 1, completed: 1 },
+          }),
+        ],
+      },
+    ],
+  ])('keeps the full partial tier for %s', (_label, overrides) => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(validOutcome(overrides))
+    );
+    expect(classification.partial).toBe(true);
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
+  it('tiers preserved filter decisions next to otherwise clean groups', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [preservedFilterGroup(), validGroup({ paths: ['other.ts'] })],
+        })
+      )
+    );
+    expect(classification.filterCommentsPreserved).toBe(true);
+  });
+
   it('reports no preserved-filter tier on a natural completed run', () => {
     const classification = classifyOcrReviewOutcome(
       parseOcrReviewOutcome(validOutcome())

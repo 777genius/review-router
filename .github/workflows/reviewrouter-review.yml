@@ -17,7 +17,7 @@ jobs:
       contents: read
       pull-requests: read
       id-token: write
-    uses: 777genius/review-router/.github/workflows/reviewrouter-runtime.yml@workflow-v1
+    uses: ./.github/workflows/reviewrouter-runtime.yml
     with:
       review_request_id: ${{ inputs.review_request_id }}
       pr_number: ${{ inputs.pr_number }}

@@ -141,6 +141,9 @@ export type LocalGatewayModelTransport = Readonly<{
    * requests, so acceptance reads this instead of guessing from exit status. */
   requestCount?(): number;
   failureFact(): GatewayFailureFact | undefined;
+  /** Releases only positively proven unpaid pre-dispatch denials; false keeps
+   * the inference fence for unknown/paid effects. */
+  releaseRetrySafeFailure?(): boolean;
   setContextToolsGuard?(guard: (() => void) | undefined): void;
   /** Trusted parent only; its receipt never contributes review-engine evidence. */
   generatePrDescription?(input: {
@@ -218,6 +221,24 @@ export class AccountGatewayModelTransport {
   }
   get lastRequestRef(): string | undefined {
     return this.requestRef;
+  }
+
+  /** Positively proven pre-dispatch denial (closed relay_saturated/lane_saturated
+   * envelope, no request reference) paid nothing: a fresh dispatch may proceed.
+   * Unknown/paid effects keep denying inference for this consumer. */
+  releaseRetrySafeFailure(): boolean {
+    const failure = this.failure;
+    if (
+      this.terminal ||
+      !failure ||
+      failure.requestRef !== undefined ||
+      failure.effect !== 'not_dispatched' ||
+      (failure.code !== 'relay_saturated' && failure.code !== 'lane_saturated')
+    )
+      return false;
+    this.failure = undefined;
+    this.inferenceDenied = false;
+    return true;
   }
   get actualModel(): string | undefined {
     return this.inferenceDenied || this.modelUncertain
@@ -954,6 +975,7 @@ export async function startLocalGatewayModelTransport(
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
     failureFact: () => contextToolsFailure ?? transport.lastFailure,
+    releaseRetrySafeFailure: () => transport.releaseRetrySafeFailure(),
     setContextToolsGuard: (guard: (() => void) | undefined) => {
       contextToolsGuard = guard;
     },

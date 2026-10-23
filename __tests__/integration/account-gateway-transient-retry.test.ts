@@ -72,6 +72,8 @@ async function drain(response: Readable): Promise<string> {
 
 type ProbeMode =
   | 'positive-denial-recovery'
+  | 'proven-denial-release'
+  | 'unknown-effect-release-denied'
   | 'accepted-socket-loss-terminal'
   | 'unreferenced-timeout-terminal'
   | 'referenced-rejection-terminal'
@@ -95,7 +97,11 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
         assert.equal(Buffer.concat(chunks).toString('utf8'), body);
-        if (mode === 'accepted-socket-loss-terminal' && requests === 1) {
+        if (
+          (mode === 'accepted-socket-loss-terminal' ||
+            mode === 'unknown-effect-release-denied') &&
+          requests === 1
+        ) {
           request.socket.destroy();
           return;
         }
@@ -126,7 +132,11 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
           reply.end('synthetic proxy timeout after dispatch');
           return;
         }
-        if (mode === 'positive-denial-recovery' && requests === 1) {
+        if (
+          (mode === 'positive-denial-recovery' ||
+            mode === 'proven-denial-release') &&
+          requests === 1
+        ) {
           reply.writeHead(503, { 'content-type': 'application/json' });
           reply.end(
             '{"error":{"code":"relay_saturated","effect":"not_dispatched"}}'
@@ -157,7 +167,9 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
       () => token,
       (diagnostic) => {
         diagnostics.push(diagnostic);
-      }
+      },
+      undefined,
+      mode === 'proven-denial-release'
     );
     if (mode === 'accepted-socket-loss-terminal') {
       await assert.rejects(
@@ -171,11 +183,74 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
       assert.equal(transport.lastFailure?.effect, 'effect_unknown');
       return;
     }
+    if (mode === 'unknown-effect-release-denied') {
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'unknown-effect-loss')
+      );
+      assert.equal(requests, 1);
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      assert.equal(
+        transport.releaseRetrySafeFailure(),
+        false,
+        'an unknown effect is never positively proven unpaid'
+      );
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'unknown-effect-deny'),
+        /account_gateway_inference_denied/u
+      );
+      assert.equal(requests, 1, 'an unknown effect is never re-dispatched');
+      return;
+    }
     const response = await bounded(
       transport.responses(Buffer.from(body)),
       'transient-responses'
     );
     const text = await bounded(drain(response.body), 'transient-drain');
+    if (mode === 'proven-denial-release') {
+      assert.equal(response.httpStatus, 503);
+      assert.equal(requests, 1);
+      assert.equal(
+        text,
+        '{"error":{"code":"relay_saturated","effect":"not_dispatched"}}'
+      );
+      const active = transport;
+      // The final non-stream response latches its failure fact after the
+      // bounded body drain completes.
+      await bounded(
+        (async () => {
+          while (active.lastFailure === undefined)
+            await new Promise((done) => setTimeout(done, 10));
+        })(),
+        'proven-failure-latch'
+      );
+      assert.equal(active.lastFailure?.effect, 'not_dispatched');
+      assert.equal(active.lastFailure?.requestRef, undefined);
+      assert.equal(
+        active.releaseRetrySafeFailure(),
+        true,
+        'a proven pre-dispatch denial paid nothing and may be released'
+      );
+      const retried = await bounded(
+        active.responses(Buffer.from(body)),
+        'released-redispatch'
+      );
+      const retriedText = await bounded(
+        drain(retried.body),
+        'released-redispatch-drain'
+      );
+      assert.equal(
+        requests,
+        2,
+        'a released proven denial permits exactly one fresh dispatch'
+      );
+      assert(retriedText.includes('"type":"response.completed"'));
+      assert.equal(
+        active.releaseRetrySafeFailure(),
+        false,
+        'nothing proven remains after a release'
+      );
+      return;
+    }
     if (mode === 'unreferenced-timeout-terminal') {
       assert.equal(response.httpStatus, 504);
       assert.equal(
@@ -251,6 +326,16 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
     { timeout: 20_000 },
     () => transientRetry('mid-stream-terminal')
   );
+  nodeTest(
+    'a released proven not-dispatched denial permits one fresh dispatch',
+    { timeout: 20_000 },
+    () => transientRetry('proven-denial-release')
+  );
+  nodeTest(
+    'an unknown effect is never released or re-dispatched',
+    { timeout: 20_000 },
+    () => transientRetry('unknown-effect-release-denied')
+  );
 } else {
   test('real TLS transient retry recovers only provable not-dispatched failures', async () => {
     const root = await mkdtemp(join(tmpdir(), 'reviewrouter-transient-retry-'));
@@ -321,8 +406,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 5\b/);
-      expect(result.stdout).toMatch(/# pass 5\b/);
+      expect(result.stdout).toMatch(/# tests 7\b/);
+      expect(result.stdout).toMatch(/# pass 7\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -85,7 +85,7 @@ function authorization(
     expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
     limits: {
       maxWorkSlots: 4,
-      maxAttemptsPerSlot: 1,
+      maxAttemptsPerSlot: 4,
       maxObservationBytes: 512 * 1024,
       maxObservationFindings: 200,
       maxProjectionBytes: 512 * 1024,
@@ -144,11 +144,23 @@ describe('planOcrReviewAssignments (§4.3 one slot, one vote identity)', () => {
     expect(slot.taskKind).toBe(ReviewTaskKind.FindingDiscovery);
     expect(slot.providerKind).toBe(ReviewExecutionProviderKind.Ocr);
     expect(slot.providerVoteIdentityHash).toBe(VOTE_IDENTITY);
-    // C9: exactly one attempt; no automatic replay after a paid request.
-    expect(slot.attemptBudget).toBe(1);
+    // C9: bounded retries only after positively proven unpaid denials; a
+    // paid/unknown effect never replays.
+    expect(slot.attemptBudget).toBe(3);
     expect(
       planned.assignments[0].context.files.map((file) => file.filename)
     ).toEqual(['calc.ts']);
+  });
+
+  it('clamps the bounded retry budget to the granted per-slot limit', () => {
+    const planned = planOcrReviewAssignments(
+      planInput({
+        authorization: authorization({
+          limits: { ...authorization().limits, maxAttemptsPerSlot: 1 },
+        }),
+      })
+    );
+    expect(planned.plan.assignments[0].workSlot.attemptBudget).toBe(1);
   });
 
   it('keeps in-scope lifecycle targets explicitly uncovered (OCR has no verdicts)', () => {
@@ -857,6 +869,55 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(failure).not.toBeNull();
     expect(failure?.message).toMatch(/review_action_v2_ocr_not_dispatched/u);
     expect(failure?.message).not.toMatch(/gateway_effect_unknown/u);
+    expect(processRunner.calls).toHaveLength(0);
+  });
+
+  it('re-dispatches after a proven not_dispatched denial is released', async () => {
+    // §8.4 step 2 retry-safe class: the proven pre-dispatch denial paid
+    // nothing, so releasing it must not fence the next attempt.
+    let effect: { effect: string } | undefined = { effect: 'not_dispatched' };
+    let released = 0;
+    const { bridge, requests } = bridgeFixture({
+      effectFacts: () => effect,
+      releaseRetrySafeFailure: () => {
+        if (effect?.effect !== 'not_dispatched') return false;
+        released += 1;
+        effect = undefined;
+        return true;
+      },
+    });
+    requests.count = 1;
+    const processRunner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunner.runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(released).toBe(1);
+    expect(processRunner.calls).toHaveLength(1);
+    expect(observation.transportAttemptCount).toBe(1);
+  });
+
+  it('keeps fencing an unknown effect and never consults the release seam', async () => {
+    // An unknown/paid effect is never released and never dispatches again.
+    const { bridge } = bridgeFixture({
+      effectFacts: () => ({ effect: 'effect_unknown' }),
+      releaseRetrySafeFailure: () => {
+        throw new Error('release must not run for unknown effects');
+      },
+    });
+    const processRunner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunner.runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.execute(executionInput(prepared))).rejects.toThrow(
+      /review_action_v2_ocr_gateway_effect_unknown/u
+    );
     expect(processRunner.calls).toHaveLength(0);
   });
 

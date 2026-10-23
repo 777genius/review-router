@@ -131269,6 +131269,17 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
   get lastRequestRef() {
     return this.requestRef;
   }
+  /** Positively proven pre-dispatch denial (closed relay_saturated/lane_saturated
+   * envelope, no request reference) paid nothing: a fresh dispatch may proceed.
+   * Unknown/paid effects keep denying inference for this consumer. */
+  releaseRetrySafeFailure() {
+    const failure = this.failure;
+    if (this.terminal || !failure || failure.requestRef !== void 0 || failure.effect !== "not_dispatched" || failure.code !== "relay_saturated" && failure.code !== "lane_saturated")
+      return false;
+    this.failure = void 0;
+    this.inferenceDenied = false;
+    return true;
+  }
   get actualModel() {
     return this.inferenceDenied || this.modelUncertain ? void 0 : this.observedModel;
   }
@@ -131837,6 +131848,7 @@ async function startLocalGatewayModelTransport(transport, observe, directOpenRou
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
     failureFact: () => contextToolsFailure ?? transport.lastFailure,
+    releaseRetrySafeFailure: () => transport.releaseRetrySafeFailure(),
     setContextToolsGuard: (guard) => {
       contextToolsGuard = guard;
     },
@@ -236971,7 +236983,8 @@ var import_child_process17 = require("child_process");
 var fs25 = __toESM(require("fs"));
 var path28 = __toESM(require("path"));
 var OCR_ADAPTER_CONTRACT_VERSION = "ocr-managed-review.v1";
-var OCR_RETRY_POLICY_VERSION = "ocr-managed-no-replay.v1";
+var OCR_RETRY_POLICY_VERSION = "ocr-managed-bounded-retry.v2";
+var OCR_ATTEMPT_BUDGET = 3;
 var OCR_ACCEPTANCE_DIAGNOSTIC_REASONS = [
   ...OCR_OUTCOME_DIAGNOSTIC_REASONS,
   "unverified_native_span",
@@ -237073,8 +237086,8 @@ function buildOcrSemanticInvocationPreimage(input) {
     },
     transportPolicy: "account-gateway-loopback-v1",
     outputContract: OCR_OUTCOME_SCHEMA_VERSION,
-    retryPolicyVersion: OCR_RETRY_POLICY_VERSION,
-    attemptBudget: 1
+    retryPolicyVersion: input.retryPolicyVersion,
+    attemptBudget: input.attemptBudget
   });
 }
 function planOcrReviewAssignments(input) {
@@ -237105,7 +237118,10 @@ function planOcrReviewAssignments(input) {
         providerKind: "ocr" /* Ocr */,
         providerVoteIdentityHash: ocrLanes[0].providerVoteIdentityHash,
         required: true,
-        attemptBudget: 1,
+        attemptBudget: Math.min(
+          OCR_ATTEMPT_BUDGET,
+          Math.max(1, input.authorization.limits.maxAttemptsPerSlot)
+        ),
         retryPolicyVersion: OCR_RETRY_POLICY_VERSION
       }
     ],
@@ -237233,7 +237249,7 @@ var OcrReviewInvocationAdapter = class {
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error("review_action_v2_assignment_missing");
     }
-    if (assignment.workSlot.attemptBudget !== 1 || assignment.workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */) {
+    if (assignment.workSlot.attemptBudget < 1 || assignment.workSlot.attemptBudget > OCR_ATTEMPT_BUDGET || assignment.workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */) {
       throw new Error("review_action_v2_ocr_slot_contract_invalid");
     }
     const assignedPaths = Object.freeze(
@@ -237271,7 +237287,9 @@ var OcrReviewInvocationAdapter = class {
       ocrEffort: this.options.ocrEffort,
       modelReasoningEffort: this.options.modelReasoningEffort,
       language: this.options.language,
-      limits: this.options.limits
+      limits: this.options.limits,
+      retryPolicyVersion: OCR_RETRY_POLICY_VERSION,
+      attemptBudget: assignment.workSlot.attemptBudget
     });
     fs25.writeFileSync(this.options.run.rulePath, ruleText, { mode: 384 });
     if (backgroundText !== null && this.options.run.backgroundPath !== null) {
@@ -237478,10 +237496,11 @@ var OcrReviewInvocationAdapter = class {
     assertOcrInvocationLive(input);
     const effectBefore = this.options.bridge.effectFacts?.();
     if (effectBefore && effectBefore.effect !== "none") {
-      if (effectBefore.effect === "not_dispatched") {
-        throw new Error("review_action_v2_ocr_not_dispatched");
+      if (effectBefore.effect !== "not_dispatched" || this.options.bridge.releaseRetrySafeFailure?.() !== true) {
+        throw new Error(
+          effectBefore.effect === "not_dispatched" ? "review_action_v2_ocr_not_dispatched" : "review_action_v2_ocr_gateway_effect_unknown"
+        );
       }
-      throw new Error("review_action_v2_ocr_gateway_effect_unknown");
     }
     const run3 = this.gate(() => this.runInvocation(input, assignment));
     return await run3;
@@ -240763,7 +240782,8 @@ var ProductionT0ReviewRunner = class {
             capabilityAuthorization,
             actualModel: () => modelTransport.actualModel(),
             requestCount: () => modelTransport.requestCount?.(),
-            effectFacts: input.ocr.effectFacts
+            effectFacts: input.ocr.effectFacts,
+            releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true
           };
           const invocationAdapter2 = new OcrReviewInvocationAdapter(
             planned2.assignments,

@@ -483,8 +483,9 @@ export function classifyOcrReviewOutcome(
     if (nonFilterFailed) {
       filterCommentsPreserved = false;
     } else if (filterFailed && group.filterDecisionValid !== false) {
-      // Without a preserved-decision proof (§7.3) the native fallback text
-      // parsing may have dropped comments; nothing is proven preserved.
+      // The engine documents "preserved comments" (§7.3) only for the
+      // malformed-decision case (filter_decision_valid === false). A failed
+      // filter without that proof keeps the full flag pair.
       filterCommentsPreserved = false;
     }
     if (group.filterDecisionValid === false) {

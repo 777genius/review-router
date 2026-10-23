@@ -53,9 +53,9 @@ export function renderReviewBanner(
         Object.entries(numeric).map(([key, value]) => [key, String(value)])
       ),
     }).toString();
-    const source = (theme: string, layout: string) =>
-      `${url}&theme=${theme}&layout=${layout}`.replaceAll('&', '&amp;');
-    return `<picture>\n<source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="${source('dark', 'compact')}">\n<source media="(max-width: 600px)" srcset="${source('light', 'compact')}">\n<source media="(prefers-color-scheme: dark)" srcset="${source('dark', 'wide')}">\n<img src="${source('light', 'wide')}" alt="${presentation.state === 'incomplete' ? 'Review incomplete' : presentation.variant === 'update' ? 'Review updated' : 'Review complete'}" width="100%">\n</picture>`;
+    const source = (layout: 'compact' | 'wide') =>
+      `${url}&theme=auto&layout=${layout}`.replaceAll('&', '&amp;');
+    return `<picture>\n<source media="(max-width: 600px)" srcset="${source('compact')}">\n<img src="${source('wide')}" alt="${presentation.state === 'incomplete' ? 'Review incomplete' : presentation.variant === 'update' ? 'Review updated' : 'Review complete'}" width="100%">\n</picture>`;
   } catch {
     return '';
   }

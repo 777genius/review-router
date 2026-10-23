@@ -958,6 +958,7 @@ describe('ReviewInteractionHandler', () => {
       commandResponses: [
         {
           status: 'processing',
+          suggestionId: 'mem_suggestion_natural',
           id: '12345678-1234-5234-8234-123456789abc',
           entryId: 'mem_confirmed',
           revision: '1',
@@ -1002,6 +1003,50 @@ describe('ReviewInteractionHandler', () => {
         ),
       })
     );
+  });
+
+  it('does not present a rejected suggestion as a newly created candidate when response includes suggestionId', async () => {
+    const { client, octokit } = makeClient();
+    const memoryClient = new CapturingMemoryClient({
+      commandResponses: [
+        {
+          kind: 'reject_suggestion',
+          status: 'published',
+          suggestionId: 'mem_suggestion_rejected',
+          id: '12345678-1234-5234-8234-123456789abc',
+        },
+      ],
+    });
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 180,
+        node_id: 'IC_fixture_180',
+        created_at: '2026-10-23T10:00:00Z',
+        updated_at: '2026-10-23T10:00:00Z',
+        body: '/rr reject-memory mem_suggestion_rejected',
+        user: { id: 11, login: 'maintainer', type: 'User' },
+      },
+      issue: { number: 123, pull_request: {} },
+      repository: {
+        id: 1234,
+        full_name: 'test-owner/test-repo',
+        private: true,
+      },
+    });
+    await new ReviewInteractionHandler(
+      client,
+      new ReviewLedger(client, 'test-secret'),
+      undefined,
+      client,
+      memoryClient
+    ).execute();
+    const notice = String(
+      octokit.rest.issues.createComment.mock.calls[0][0].body
+    );
+    expect(notice).toContain(
+      'Rejected memory suggestion `mem_suggestion_rejected`'
+    );
+    expect(notice).not.toContain('Created pending');
   });
 
   it.each(['queued', 'published'] as const)(

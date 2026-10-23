@@ -1593,12 +1593,10 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
   });
 
   it('maps atomic input_stale rejection separately from attempts and lifecycle failure', async () => {
-    const execute = jest
-      .fn()
-      .mockResolvedValue({
-        status: ReviewInvocationLeaseResultStatus.Rejected,
-        rejectionReason: 'input_stale',
-      });
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewInvocationLeaseResultStatus.Rejected,
+      rejectionReason: 'input_stale',
+    });
     await expect(
       createAdapter(execute).acquireInvocationLease(leaseAcquireInput())
     ).resolves.toEqual({

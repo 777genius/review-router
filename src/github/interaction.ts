@@ -935,7 +935,7 @@ function renderMemoryNoticeLine(result: MemoryNoticeResult): string {
   if (!response) {
     return `${result.label}: no response from memory service.`;
   }
-  if (response.suggestionId) {
+  if (!result.command && response.suggestionId) {
     return `Created pending ${result.requestedScope ?? 'repository'} memory suggestion \`${safeNoticeText(response.suggestionId)}\`. Confirm with \`/rr remember ${safeNoticeText(response.suggestionId)}\`.`;
   }
   const asyncResult = renderAsyncMemoryResult(result, response);

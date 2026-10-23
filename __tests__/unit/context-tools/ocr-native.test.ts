@@ -114,6 +114,7 @@ nativeTest.each(scenarios)(
     let requestCount = 0;
     let nativeDiagnostic = '';
     let sentContextCall = false;
+    let postCallRequestSeen = false;
     let stubModelRequests = 0;
     let resultUsed = false;
     const selectedTool = remote
@@ -149,9 +150,13 @@ nativeTest.each(scenarios)(
           tools?: Array<{ name?: string }>;
           input?: unknown;
         };
-        if (JSON.stringify(body.input).includes('MCP_NATIVE_CONTEXT_USED'))
-          resultUsed = true;
-        if (remote && sentContextCall) findToolOutput(body.input);
+        if (sentContextCall && !postCallRequestSeen) {
+          postCallRequestSeen = true;
+          resultUsed = JSON.stringify(body.input).includes(
+            'MCP_NATIVE_CONTEXT_USED'
+          );
+          if (remote) findToolOutput(body.input);
+        }
         const available =
           body.tools?.some((tool) => tool.name === selectedTool) ?? false;
         const name = available && !sentContextCall ? selectedTool : 'task_done';
@@ -314,6 +319,7 @@ nativeTest.each(scenarios)(
           );
         expect(nativeExitCode).toBe(0);
         expect(sentContextCall).toBe(true);
+        expect(postCallRequestSeen).toBe(true);
         if (remote) {
           // A connected server or tools/list alone cannot satisfy these assertions.
           // OCR flattens MCP text blocks into its function_call_output string.

@@ -96,7 +96,9 @@ CI runs the deterministic native scenarios on each build. To include the live
 HTTPS scenario, dispatch CI with the `live_mcp` input enabled.
 
 The live flag requires the binary; a missing binary fails rather than producing
-a skipped qualification. The binary SHA-256 must match the approved fixture.
+a skipped qualification. Before starting OCR, the test computes its binary SHA-256 and rejects any value
+that differs from the approved rr.3 fixture; the local command enforces the same
+binary identity as CI.
 This runs in disposable repositories and uses a synthetic model endpoint with
 no provider credentials or paid inference. The external server is real: OCR
 must call `rr_mcp_deepwiki_read_wiki_structure` for `microsoft/TypeScript`, receive

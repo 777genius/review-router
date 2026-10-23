@@ -977,6 +977,9 @@ function renderAsyncMemoryResult(
         ? `Forgot memory${entry}; provider cleanup completed.${operation}`
         : `Forget request for memory${entry} is published; cleanup status remains available.${operation}${check}`;
     }
+    if (result.command?.kind === 'update_memory') {
+      return `Updated memory${entry}; the corrected revision is ${response.status}.${operation}`;
+    }
     if (result.command?.kind === 'disable_memory') {
       return `Retired memory${entry}; it is excluded from new review context.${operation}`;
     }
@@ -1021,6 +1024,11 @@ function renderMemoryCommandResult(
     return response.status === 'updated'
       ? `Rejected memory suggestion \`${command.suggestionId}\`.`
       : `Could not reject memory suggestion \`${command.suggestionId}\`: ${safeNoticeText(response.reason || response.status)}.`;
+  }
+  if (command.kind === 'update_memory') {
+    return response.status === 'updated'
+      ? `Updated memory \`${command.memoryItemId}\`.`
+      : `Could not update memory \`${command.memoryItemId}\`: ${safeNoticeText(response.reason || response.status)}.`;
   }
   if (command.kind === 'disable_memory') {
     return response.status === 'updated'

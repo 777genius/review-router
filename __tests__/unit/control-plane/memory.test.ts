@@ -81,6 +81,66 @@ describe('ControlPlaneMemoryClient v2', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('updates the same entry with authorized CAS and uses the stable command ID when reading original retry preconditions', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ entryId: 'mem_existing', revision: '17' })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          results: [
+            {
+              kind: 'update_memory',
+              status: 'queued',
+              id: candidate.commandId,
+              entryId: 'mem_existing',
+              revision: '18',
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ entryId: 'mem_existing', revision: '17' })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          results: [
+            {
+              kind: 'update_memory',
+              status: 'published',
+              id: candidate.commandId,
+              entryId: 'mem_existing',
+              revision: '18',
+            },
+          ],
+        })
+      );
+    const client = new ControlPlaneMemoryClient(runtimeConfig, env, fetchImpl);
+    const command = {
+      kind: 'update_memory' as const,
+      memoryItemId: 'mem_existing',
+      body: 'Use UTC for stored times.',
+    };
+    await client.submitCommands([command], source);
+    await client.submitCommands([command], source);
+    const first = JSON.parse(String(fetchImpl.mock.calls[1][1].body));
+    const retry = JSON.parse(String(fetchImpl.mock.calls[3][1].body));
+    expect(retry).toEqual(first);
+    expect(first.commands[0]).toMatchObject({
+      ...command,
+      expectedRevision: '17',
+    });
+    expect(
+      new URL(String(fetchImpl.mock.calls[0][0])).searchParams.get('commandId')
+    ).toBe(first.commands[0].commandId);
+    expect(
+      new URL(String(fetchImpl.mock.calls[2][0])).searchParams.get(
+        'sourceNodeId'
+      )
+    ).toBe(source.nodeId);
+  });
+
   it('reads an authorized current revision before retire/forget and binds it as a precondition', async () => {
     const fetchImpl = jest
       .fn()

@@ -72,6 +72,11 @@ export type ActionMemoryCommand =
       readonly suggestionId: string;
       readonly reason?: string | null;
     }
+  | {
+      readonly kind: 'update_memory';
+      readonly memoryItemId: string;
+      readonly body: string;
+    }
   | { readonly kind: 'disable_memory'; readonly memoryItemId: string }
   | { readonly kind: 'forget_memory'; readonly memoryItemId: string }
   | { readonly kind: 'list_memory'; readonly view: 'active' | 'pending' }
@@ -171,27 +176,28 @@ export class ControlPlaneMemoryClient
   ): Promise<readonly ActionMemoryMutationResponse[]> {
     const wireCommands = [];
     for (const command of commands) {
+      const commandId = memoryCommandId({ command, source: source ?? null });
+      if (!source) throw new Error('memory_v2_source_required');
       if (
-        command.kind !== 'operation_status' &&
-        command.kind !== 'list_memory' &&
-        !source
-      )
-        throw new Error('memory_v2_source_required');
-      if (
+        command.kind === 'update_memory' ||
         command.kind === 'disable_memory' ||
         command.kind === 'forget_memory'
       ) {
         if (!source) throw new Error('memory_v2_source_required');
-        const detail = await this.getEntry(command.memoryItemId, source);
+        const detail = await this.getEntry(
+          command.memoryItemId,
+          source,
+          commandId
+        );
         wireCommands.push({
           ...command,
           expectedRevision: detail.revision,
-          commandId: memoryCommandId({ command, source }),
+          commandId,
         });
       } else {
         wireCommands.push({
           ...command,
-          commandId: memoryCommandId({ command, source: source ?? null }),
+          commandId,
         });
       }
     }
@@ -227,7 +233,8 @@ export class ControlPlaneMemoryClient
 
   private async getEntry(
     id: string,
-    source: ActionMemorySourceMetadata
+    source: ActionMemorySourceMetadata,
+    commandId: string
   ): Promise<{ revision: string }> {
     if (!this.isAvailable()) throw new Error('memory_runtime_unavailable');
     const runtimeConfig = this.runtimeConfig as AppliedRuntimeConfig;
@@ -235,6 +242,7 @@ export class ControlPlaneMemoryClient
       `/api/action/v2/memory/entries/${encodeURIComponent(id)}`,
       runtimeConfig.apiUrl
     );
+    url.searchParams.set('commandId', commandId);
     url.searchParams.set('sourceId', source.sourceId);
     url.searchParams.set('sourceNodeId', source.nodeId);
     url.searchParams.set('sourceRevision', source.revision ?? '');
@@ -395,6 +403,7 @@ function isActionMemoryCommandKind(
   return (
     value === 'confirm_suggestion' ||
     value === 'reject_suggestion' ||
+    value === 'update_memory' ||
     value === 'disable_memory' ||
     value === 'forget_memory' ||
     value === 'list_memory' ||

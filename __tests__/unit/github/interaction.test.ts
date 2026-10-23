@@ -9,6 +9,7 @@ import {
   ActionMemoryCommand,
   ActionMemoryInteractionPort,
   ActionMemoryMutationResponse,
+  ActionMemorySourceMetadata,
 } from '../../../src/control-plane/memory';
 import {
   ManualReviewRequestAvailability,
@@ -86,6 +87,7 @@ function makeClient(options: { parentBody?: string } = {}) {
 class CapturingMemoryClient implements ActionMemoryInteractionPort {
   public readonly candidates: ActionMemoryCandidateRequest[] = [];
   public readonly commands: ActionMemoryCommand[][] = [];
+  public readonly sources: (ActionMemorySourceMetadata | undefined)[] = [];
 
   constructor(
     private readonly options: {
@@ -113,9 +115,11 @@ class CapturingMemoryClient implements ActionMemoryInteractionPort {
   }
 
   async submitCommands(
-    commands: readonly ActionMemoryCommand[]
+    commands: readonly ActionMemoryCommand[],
+    source?: ActionMemorySourceMetadata
   ): Promise<readonly ActionMemoryMutationResponse[]> {
     this.commands.push([...commands]);
+    this.sources.push(source);
     return (
       this.options.commandResponses ?? [
         { status: 'updated', id: 'mem_confirmed', version: 2 },
@@ -999,6 +1003,72 @@ describe('ReviewInteractionHandler', () => {
       })
     );
   });
+
+  it.each(['queued', 'published'] as const)(
+    'corrects one existing entry from an explicit comment and reports %s honestly',
+    async (status) => {
+      const { client, octokit } = makeClient();
+      const memoryClient = new CapturingMemoryClient({
+        commandResponses: [
+          {
+            kind: 'update_memory',
+            status,
+            id: '12345678-1234-5234-8234-123456789abc',
+            entryId: 'mem_existing',
+            revision: '2',
+          },
+        ],
+      });
+      process.env.GITHUB_EVENT_PATH = writeEvent({
+        comment: {
+          id: 179,
+          node_id: 'IC_fixture_179',
+          created_at: '2026-10-23T10:00:00Z',
+          updated_at: '2026-10-23T10:00:00Z',
+          body: '/rr memory edit mem_existing Use UTC for stored timestamps.',
+          user: { id: 11, login: 'maintainer', type: 'User' },
+        },
+        issue: { number: 123, pull_request: {} },
+        repository: {
+          id: 1234,
+          full_name: 'test-owner/test-repo',
+          private: true,
+        },
+      });
+      await new ReviewInteractionHandler(
+        client,
+        new ReviewLedger(client, 'test-secret'),
+        undefined,
+        client,
+        memoryClient
+      ).execute();
+      expect(memoryClient.candidates).toHaveLength(0);
+      expect(memoryClient.commands).toEqual([
+        [
+          {
+            kind: 'update_memory',
+            memoryItemId: 'mem_existing',
+            body: 'Use UTC for stored timestamps.',
+          },
+        ],
+      ]);
+      expect(memoryClient.sources[0]).toMatchObject({
+        nodeId: 'IC_fixture_179',
+        sourceId: 'github-comment:179',
+        githubRepositoryId: '1234',
+        pullRequestNumber: 123,
+      });
+      expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining(
+            status === 'queued'
+              ? 'Memory request for edit mem_existing is queued.'
+              : 'Updated memory `mem_existing`; the corrected revision is published.'
+          ),
+        })
+      );
+    }
+  );
 
   it('ignores bot memory comments to prevent loops', async () => {
     const { client, octokit } = makeClient();

@@ -1221,6 +1221,21 @@ export class RunT0ReviewOrchestration {
             continue;
           }
           if (
+            acquire.status ===
+            ReviewInvocationLeaseAcquireOutcomeStatus.InputStale
+          ) {
+            // The server checked current memory before charging a durable
+            // attempt. No lease/capability was issued for this stale manifest.
+            if (
+              invocation.manifestFacts.memoryBundleHash == null ||
+              !this.dependencies.memoryAdmission
+            ) {
+              throw new Error('review_memory_stale_without_snapshot');
+            }
+            this.dependencies.memoryAdmission.discard();
+            throw new ReviewMemoryAdmissionChangedSignal();
+          }
+          if (
             acquire.status === ReviewInvocationLeaseAcquireOutcomeStatus.Busy
           ) {
             input.busyPollsByProviderLane.set(
@@ -1271,7 +1286,6 @@ export class RunT0ReviewOrchestration {
             workSlotId: input.workSlot.workSlotId,
           });
           await this.assertRevisionCurrent(input.revision);
-          await this.assertMemoryEligible(invocation);
         } catch (error) {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
           throw error;
@@ -1322,10 +1336,6 @@ export class RunT0ReviewOrchestration {
             throw new ReviewExecutionDeadlineReachedSignal();
           }
         } catch (error) {
-          if (error instanceof ReviewMemoryAdmissionChangedSignal) {
-            await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
-            throw error;
-          }
           if (this.dependencies.signal) {
             await activeInvocation?.catch(() => undefined);
             if (this.dependencies.signal.aborted) {
@@ -1844,10 +1854,11 @@ export class RunT0ReviewOrchestration {
     readonly sourceExecutionId: string;
     readonly revision: ReviewRevisionFacts;
   }): Promise<ReviewObservationPayload> {
-    return this.withInvocationRevisionWatch(input, async (signal) => {
-      await this.assertMemoryEligible(input.invocation);
-      return this.executeLegacyInvocation(input, signal);
-    });
+    // A granted lease admits this immutable snapshot. Revocation affects the
+    // next admission, rather than changing an already-counted invocation.
+    return this.withInvocationRevisionWatch(input, (signal) =>
+      this.executeLegacyInvocation(input, signal)
+    );
   }
 
   private async withInvocationRevisionWatch<T>(

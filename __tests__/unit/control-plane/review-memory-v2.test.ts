@@ -50,6 +50,23 @@ describe('T0 memory companion v2', () => {
     expect(snapshot.renderedPrompt).toContain('HISTORICAL CONTEXT');
   });
 
+  it('permanently discards a captured snapshot without another retrieval', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(json(reviewMemoryBundle()));
+    const session = await ReviewMemorySession.capture({
+      apiUrl: 'https://fixture.invalid',
+      authorizationToken: 'execution-token',
+      binding: reviewMemoryBinding,
+      enabled: true,
+      pr,
+      fetchImpl,
+    });
+    const hash = session.current()!.hash;
+    session.discard();
+    expect(session.current()).toBeNull();
+    expect(await session.isEligible(hash)).toBe(false);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('binds the execution token and exact review revision, reads once and freezes the actual rendered snapshot', async () => {
     const fetchImpl = jest
       .fn()
@@ -98,9 +115,10 @@ describe('T0 memory companion v2', () => {
     expect(JSON.parse(String(init.body))).toEqual({
       protocolVersion: 2,
       ...reviewMemoryBinding,
-      safeRetrievalQuery: 'Bound outgoing calls api',
     });
     expect(String(init.body)).not.toContain('RAW');
+    expect(String(init.body)).not.toContain(pr.title);
+    expect(String(init.body)).not.toContain('safeRetrievalQuery');
     expect(JSON.parse(String(fetchImpl.mock.calls[1][1].body))).toMatchObject({
       bundleId: snapshot.bundle.bundleId,
       eligibilityEpoch: '17',

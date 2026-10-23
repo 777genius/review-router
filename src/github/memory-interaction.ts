@@ -38,6 +38,10 @@ export function parseMemoryInteraction(
 
   const command = parseMemoryCommand(trimmed);
   if (command) {
+    if (command.kind === 'update_memory') {
+      const invalidReason = validateMemoryText(command.body);
+      if (invalidReason) return { instructions: [], invalidReason };
+    }
     return { instructions: [{ type: 'command', command }] };
   }
 
@@ -64,6 +68,8 @@ export function memoryCommandLabel(command: ActionMemoryCommand): string {
       return `confirm ${command.suggestionId}`;
     case 'reject_suggestion':
       return `reject ${command.suggestionId}`;
+    case 'update_memory':
+      return `edit ${command.memoryItemId}`;
     case 'disable_memory':
       return `disable ${command.memoryItemId}`;
     case 'forget_memory':
@@ -76,6 +82,16 @@ export function memoryCommandLabel(command: ActionMemoryCommand): string {
 }
 
 function parseMemoryCommand(body: string): ActionMemoryCommand | null {
+  const update = new RegExp(
+    `^/rr\\s+(?:memory\\s+(?:edit|update)|edit-memory|update-memory)\\s+${memoryItemIdPattern}(?:\\s+([\\s\\S]*))?$`,
+    'i'
+  ).exec(body);
+  if (update?.[1])
+    return {
+      kind: 'update_memory',
+      memoryItemId: update[1],
+      body: cleanCandidateText(update[2] ?? ''),
+    };
   const status =
     /^\/rr\s+(?:memory-status|memory\s+status)\s+([a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\s*$/i.exec(
       body
@@ -192,20 +208,17 @@ function parseNaturalLanguageRemember(
 function validateCandidate(
   instruction: Extract<ParsedMemoryInstruction, { type: 'candidate' }>
 ): ParsedMemoryInteraction {
-  if (!instruction.candidateBody) {
-    return { instructions: [], invalidReason: 'memory text is empty' };
-  }
-  if (instruction.candidateBody.length > 2000) {
-    return { instructions: [], invalidReason: 'memory text is too long' };
-  }
-  if (looksUnsafeCandidateText(instruction.candidateBody)) {
-    return {
-      instructions: [],
-      invalidReason:
-        'memory text looks like code, diff, secret material, or raw prompt data',
-    };
-  }
+  const invalidReason = validateMemoryText(instruction.candidateBody);
+  if (invalidReason) return { instructions: [], invalidReason };
   return { instructions: [instruction] };
+}
+
+function validateMemoryText(body: string): string | undefined {
+  if (!body) return 'memory text is empty';
+  if (body.length > 1_000) return 'memory text is too long';
+  if (looksUnsafeCandidateText(body))
+    return 'memory text looks like code, diff, secret material, or raw prompt data';
+  return undefined;
 }
 
 function parseRequestedScope(value: string): 'repository' | 'workspace' {

@@ -53,6 +53,46 @@ describe('parseMemoryInteraction', () => {
     });
   });
 
+  it.each(['/rr memory edit', '/rr memory update', '/rr edit-memory'])(
+    'parses explicit correction %s with stable entry identity',
+    (prefix) => {
+      expect(
+        parseMemoryInteraction(
+          `${prefix} mem_existing Use UTC for stored times.`
+        )
+      ).toEqual({
+        instructions: [
+          {
+            type: 'command',
+            command: {
+              kind: 'update_memory',
+              memoryItemId: 'mem_existing',
+              body: 'Use UTC for stored times.',
+            },
+          },
+        ],
+      });
+    }
+  );
+  it('bounds corrections and new approvals to the same 1000-character safe text profile', () => {
+    expect(
+      parseMemoryInteraction('/rr memory edit mem_existing').invalidReason
+    ).toBe('memory text is empty');
+    expect(
+      parseMemoryInteraction(`/rr memory edit mem_existing ${'x'.repeat(1001)}`)
+        .invalidReason
+    ).toBe('memory text is too long');
+    expect(
+      parseMemoryInteraction(`/rr remember repo ${'x'.repeat(1001)}`)
+        .invalidReason
+    ).toBe('memory text is too long');
+    expect(
+      parseMemoryInteraction(
+        '/rr memory edit mem_existing github_pat_secret_value'
+      ).invalidReason
+    ).toContain('secret material');
+  });
+
   it('parses confirmation and cleanup commands', () => {
     expect(parseMemoryInteraction('/rr remember mem_suggestion_abc')).toEqual({
       instructions: [

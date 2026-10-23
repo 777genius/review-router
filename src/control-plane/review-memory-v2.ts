@@ -1,6 +1,5 @@
 import { createHash } from 'crypto';
 import type { PRContext } from '../types';
-import { buildSafeMemoryRetrievalQuery } from './memory';
 
 /** Memory has its own companion version; the review invocation protocol is unchanged. */
 export const REVIEW_MEMORY_V2 = Object.freeze({
@@ -84,13 +83,11 @@ export class ReviewMemorySession {
     });
     if (!options.enabled) return session;
     try {
-      const query = buildSafeMemoryRetrievalQuery(options.pr);
       const value = await session.post(
         REVIEW_MEMORY_V2.bundlePath,
         {
           protocolVersion: 2,
           ...session.options.binding,
-          ...(query ? { safeRetrievalQuery: query } : {}),
         },
         Math.min(
           options.timeoutMs ?? REVIEW_MEMORY_V2.retrievalTimeoutMs,
@@ -117,6 +114,11 @@ export class ReviewMemorySession {
       this.snapshot = null;
     }
     return this.snapshot;
+  }
+
+  /** A server lease rejection retires this captured input; never refetch it. */
+  discard(): void {
+    this.snapshot = null;
   }
 
   /** A rejected or unavailable admission permanently drops this run's snapshot. */

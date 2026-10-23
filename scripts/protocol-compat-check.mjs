@@ -59,24 +59,28 @@ async function readProtocolInfo(protocolInfoUrl, fetchImpl, timeoutMs) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), timeoutMs);
-    let response;
     try {
-      response = await fetchImpl(protocolInfoUrl, {
-        method: 'GET',
-        headers: { accept: 'application/json' },
-        redirect: 'error',
-        signal: abort.signal,
-      });
-    } catch {
-      continue;
+      let response;
+      try {
+        response = await fetchImpl(protocolInfoUrl, {
+          method: 'GET',
+          headers: { accept: 'application/json' },
+          redirect: 'error',
+          signal: abort.signal,
+        });
+      } catch {
+        continue;
+      }
+      if (response.status !== 200) return { kind: 'unavailable' };
+      try {
+        return { kind: 'ok', body: await response.json() };
+      } catch {
+        return abort.signal.aborted
+          ? { kind: 'unavailable' }
+          : { kind: 'invalid' };
+      }
     } finally {
       clearTimeout(timer);
-    }
-    if (response.status !== 200) return { kind: 'unavailable' };
-    try {
-      return { kind: 'ok', body: await response.json() };
-    } catch {
-      return { kind: 'invalid' };
     }
   }
   return { kind: 'unavailable' };

@@ -678,7 +678,12 @@ function minimalEnvelopeProtocolMismatch(
     );
   }
   const protocolVersion = envelope.protocolVersion;
+  const requestId = envelope.requestId;
   if (
+    typeof schemaDigest === 'string' &&
+    WELL_FORMED_SCHEMA_DIGEST.test(schemaDigest) &&
+    typeof requestId === 'string' &&
+    requestId.length > 0 &&
     typeof protocolVersion === 'string' &&
     WELL_FORMED_PROTOCOL_VERSION.test(protocolVersion) &&
     protocolVersion !== reviewActionV2PublishedProtocolVersion

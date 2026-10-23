@@ -1059,6 +1059,53 @@ describe('ReviewActionV2Client', () => {
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps a version mismatch without a well-formed minimal envelope on the invalid-response path', async () => {
+    const versionOnly = jest.fn(async () => jsonResponse({ protocolVersion: '1' }));
+    await expect(
+      createClient(versionOnly, 1).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.InvalidResponse,
+    });
+
+    const missingRequestId = jest.fn(async () =>
+      jsonResponse({
+        protocolVersion: '1',
+        schemaDigest: reviewActionV2PublishedSchemaDigest,
+        serverTime: '2026-07-22T12:00:00.000Z',
+        result: { status: ReviewRunAuthorizationResultStatus.Authorized },
+      })
+    );
+    await expect(
+      createClient(missingRequestId, 1).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.InvalidResponse,
+    });
+    expect(versionOnly).toHaveBeenCalledTimes(1);
+    expect(missingRequestId).toHaveBeenCalledTimes(1);
+  });
 });
 
 function createClient(fetchImpl: typeof fetch, maxAttempts = 2) {

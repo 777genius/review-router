@@ -184437,7 +184437,8 @@ function minimalEnvelopeProtocolMismatch(body2, operationId, httpStatus) {
     );
   }
   const protocolVersion = envelope.protocolVersion;
-  if (typeof protocolVersion === "string" && WELL_FORMED_PROTOCOL_VERSION.test(protocolVersion) && protocolVersion !== reviewActionV2PublishedProtocolVersion) {
+  const requestId2 = envelope.requestId;
+  if (typeof schemaDigest === "string" && WELL_FORMED_SCHEMA_DIGEST.test(schemaDigest) && typeof requestId2 === "string" && requestId2.length > 0 && typeof protocolVersion === "string" && WELL_FORMED_PROTOCOL_VERSION.test(protocolVersion) && protocolVersion !== reviewActionV2PublishedProtocolVersion) {
     return new ReviewActionV2ClientError(
       "protocol_version_mismatch" /* ProtocolVersionMismatch */,
       operationId,

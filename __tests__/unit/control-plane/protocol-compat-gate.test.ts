@@ -34,6 +34,7 @@ interface StubResponse {
 
 let server: Server;
 let protocolInfoUrl: string;
+let stallResponseBody = false;
 let stubResponse: StubResponse = {
   status: 200,
   body: protocolInfoBody([SUPPORTED_CONTRACT]),
@@ -117,6 +118,11 @@ describeOnPosix('workflow channel protocol compatibility gate', () => {
         response.writeHead(404).end();
         return;
       }
+      if (stallResponseBody) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.write('{"infoVersion":1,"contracts":[');
+        return;
+      }
       response.writeHead(stubResponse.status, {
         'content-type': 'application/json',
       });
@@ -133,6 +139,7 @@ describeOnPosix('workflow channel protocol compatibility gate', () => {
   afterAll(async () => {
     disposeScratchChannels();
     await new Promise<void>((resolve) => {
+      server.closeAllConnections();
       server.close(() => resolve());
     });
   });
@@ -232,5 +239,20 @@ describeOnPosix('workflow channel protocol compatibility gate', () => {
     const record = parseJsonLine(result.stderr);
     expect(record.code).toBe('workflow_channel_protocol_check_failed');
     expect(record.reason).toBe('protocol_info_invalid');
+  }, 30000);
+
+  it('reports protocol_info_unavailable when the protocol-info body stalls past the timeout', async () => {
+    const fixture = createScratchChannel();
+    stallResponseBody = true;
+    try {
+      const result = await runMonitor(fixture);
+
+      expect(result.code).toBe(1);
+      const record = parseJsonLine(result.stderr);
+      expect(record.code).toBe('workflow_channel_protocol_check_failed');
+      expect(record.reason).toBe('protocol_info_unavailable');
+    } finally {
+      stallResponseBody = false;
+    }
   }, 30000);
 });

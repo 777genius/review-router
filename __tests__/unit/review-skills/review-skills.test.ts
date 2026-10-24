@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createCapturedReviewSkills } from '../../../src/control-plane/generated/review-action-v2/review-skills-contract';
+import {
+  createCapturedReviewSkills,
+  reviewSkillsLimits,
+} from '../../../src/control-plane/generated/review-action-v2/review-skills-contract';
 import {
   LEGACY_REVIEW_SKILLS,
   assertReviewSkillsExecutionInput,
@@ -33,6 +36,101 @@ import {
 import type { PRContext, ReviewConfig } from '../../../src/types';
 
 const baseSha = 'a'.repeat(40);
+
+function fixtureGit(repo: string, args: string[], input?: string): string {
+  const execute = (command: string[]) =>
+    execFileSync('git', ['-C', repo, ...command], {
+      input,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'iliya',
+        GIT_AUTHOR_EMAIL: 'iliyazelenkog@gmail.com',
+        GIT_COMMITTER_NAME: 'iliya',
+        GIT_COMMITTER_EMAIL: 'iliyazelenkog@gmail.com',
+      },
+    }).trim();
+  if (args[0] === 'commit')
+    for (const identity of ['GIT_AUTHOR_IDENT', 'GIT_COMMITTER_IDENT'])
+      expect(execute(['var', identity])).toMatch(
+        /^iliya <iliyazelenkog@gmail.com> /
+      );
+  return execute(args);
+}
+
+function treeBudgetFixture(
+  scenario: 'entries' | 'bytes' | 'cached aliases' | 'references' | 'two roots'
+) {
+  const repo = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'review-skills-tree-budget-')
+  );
+  const git = (args: string[], input?: string) => fixtureGit(repo, args, input);
+  const listingBytes = (oid: string) =>
+    Buffer.byteLength(git(['ls-tree', '-z', oid]));
+  git(['init', '-q']);
+  const blob = git(['hash-object', '-w', '--stdin'], 'inert fixture\n');
+  const directories =
+    scenario === 'bytes'
+      ? 16
+      : scenario === 'two roots'
+        ? 17
+        : scenario === 'references'
+          ? 1
+          : 33;
+  const files =
+    scenario === 'bytes' ? 240 : scenario === 'references' ? 4094 : 128;
+  const shared = scenario === 'cached aliases' || scenario === 'two roots';
+  const rows: string[] = [];
+  let bytes = 0;
+  for (let directory = 0; directory < directories; directory++) {
+    const content = Array.from(
+      { length: files },
+      (_, file) =>
+        `100644 blob ${blob}\tfile-${shared ? 0 : directory}-${file}-${scenario === 'bytes' ? 'x'.repeat(225) : ''}.md\n`
+    ).join('');
+    let oid = git(['mktree'], content);
+    const size = listingBytes(oid);
+    expect(size).toBeLessThan(reviewSkillsLimits.treeBytes);
+    expect(files).toBeLessThan(reviewSkillsLimits.treeEntries);
+    bytes += size;
+    if (scenario === 'references') {
+      const instructions = git(
+        ['hash-object', '-w', '--stdin'],
+        '---\nname: test\ndescription: test\n---\n[resource](nested/file-0-0-.md)'
+      );
+      oid = git(
+        ['mktree'],
+        `100644 blob ${instructions}\tSKILL.md\n040000 tree ${oid}\tnested\n`
+      );
+      bytes += listingBytes(oid);
+    }
+    rows.push(`040000 tree ${oid}\tdirectory-${directory}\n`);
+  }
+  const root = git(['mktree'], rows.join(''));
+  bytes += listingBytes(root);
+  const parent = git(['mktree'], `040000 tree ${root}\tskills\n`);
+  const top = git(
+    ['mktree'],
+    `040000 tree ${parent}\t.agents\n` +
+      (scenario === 'two roots' ? `040000 tree ${parent}\t.reviewrouter\n` : '')
+  );
+  git(['read-tree', top]);
+  git(['commit', '-qm', 'test: exercise review Skills tree budget']);
+  const base = git(['rev-parse', 'HEAD']);
+  return {
+    repo,
+    bytes,
+    entries: directories * (files + 1) + (scenario === 'references' ? 2 : 0),
+    capture: createCapturedReviewSkills({
+      baseSha: base,
+      webSkills: [],
+      gitSources:
+        scenario === 'two roots'
+          ? [{ root: '.agents/skills' }, { root: '.reviewrouter/skills' }]
+          : [{ root: '.agents/skills' }],
+    }),
+  };
+}
 const web = (
   skillId = 'web-one',
   instructions = 'SKILL_ONE_MARKER',
@@ -374,17 +472,7 @@ describe('captured text-only review skills', () => {
 
   it('reads exact trusted Git objects, including references, despite malicious checkout HEAD changes', async () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'review-skills-git-'));
-    const git = (...args: string[]) =>
-      execFileSync('git', ['-C', repo, ...args], {
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          GIT_AUTHOR_NAME: 'Fixture',
-          GIT_AUTHOR_EMAIL: 'fixture@example.test',
-          GIT_COMMITTER_NAME: 'Fixture',
-          GIT_COMMITTER_EMAIL: 'fixture@example.test',
-        },
-      }).trim();
+    const git = (...args: string[]) => fixtureGit(repo, args);
     const dir = path.join(repo, '.agents/skills/quality');
     try {
       git('init', '-q');
@@ -479,17 +567,7 @@ describe('captured text-only review skills', () => {
       const repo = fs.mkdtempSync(
         path.join(os.tmpdir(), 'review-skills-bounds-')
       );
-      const git = (...args: string[]) =>
-        execFileSync('git', ['-C', repo, ...args], {
-          encoding: 'utf8',
-          env: {
-            ...process.env,
-            GIT_AUTHOR_NAME: 'Fixture',
-            GIT_AUTHOR_EMAIL: 'fixture@example.test',
-            GIT_COMMITTER_NAME: 'Fixture',
-            GIT_COMMITTER_EMAIL: 'fixture@example.test',
-          },
-        }).trim();
+      const git = (...args: string[]) => fixtureGit(repo, args);
       const prefix = '---\nname: test\ndescription: test\n---\n';
       try {
         git('init', '-q');
@@ -543,6 +621,52 @@ describe('captured text-only review skills', () => {
       }
     }
   );
+
+  it.each(['entries', 'bytes', 'cached aliases', 'references'] as const)(
+    'bounds cumulative Git tree %s during materialization',
+    async (scenario) => {
+      const fixture = treeBudgetFixture(scenario);
+      try {
+        if (scenario === 'bytes') {
+          expect(fixture.entries).toBeLessThan(reviewSkillsLimits.treeEntries);
+          expect(fixture.bytes).toBeGreaterThan(reviewSkillsLimits.treeBytes);
+        } else {
+          expect(fixture.entries).toBeGreaterThan(
+            reviewSkillsLimits.treeEntries
+          );
+          expect(fixture.bytes).toBeLessThan(reviewSkillsLimits.treeBytes);
+        }
+        await expect(
+          materializeReviewSkills({
+            capture: fixture.capture,
+            baseSha: fixture.capture.baseSha,
+            checkoutRoot: fixture.repo,
+          })
+        ).rejects.toThrow('review_skills_git_tree_too_large');
+      } finally {
+        fs.rmSync(fixture.repo, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it('keeps independent Git root budgets when object IDs are shared', async () => {
+    const fixture = treeBudgetFixture('two roots');
+    try {
+      expect(fixture.entries).toBeLessThan(reviewSkillsLimits.treeEntries);
+      expect(fixture.entries * 2).toBeGreaterThan(
+        reviewSkillsLimits.treeEntries
+      );
+      const result = await materializeReviewSkills({
+        capture: fixture.capture,
+        baseSha: fixture.capture.baseSha,
+        checkoutRoot: fixture.repo,
+      });
+      expect(result.kind).toBe('captured');
+      if (result.kind === 'captured') expect(result.bundle.skills).toEqual([]);
+    } finally {
+      fs.rmSync(fixture.repo, { recursive: true, force: true });
+    }
+  });
 
   it('fetches only a bounded run-authorized companion and rejects base/digest/stream corruption', async () => {
     const capture = captured();

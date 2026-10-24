@@ -163203,7 +163203,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.209",
+  version: "1.0.210",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -211287,6 +211287,15 @@ async function materializeReviewSkills(input) {
   if (!/^[a-f0-9]{40}$/.test(input.baseSha) || capture.baseSha !== input.baseSha)
     throw new Error("review_skills_capture_mismatch");
   const trees = /* @__PURE__ */ new Map();
+  const charge = (bytes, entries, path37, budget) => {
+    if (!budget || !(path37 === budget.root || path37.startsWith(`${budget.root}/`)) || budget.paths.has(path37))
+      return;
+    if (budget.bytes + bytes > TREE_BYTES || budget.entries + entries > reviewSkillsLimits.treeEntries)
+      throw new Error("review_skills_git_tree_too_large");
+    budget.bytes += bytes;
+    budget.entries += entries;
+    budget.paths.add(path37);
+  };
   const git = async (args, maxBuffer) => {
     input.signal?.throwIfAborted();
     try {
@@ -211313,10 +211322,18 @@ async function materializeReviewSkills(input) {
       throw new Error("review_skills_git_read_failed");
     }
   };
-  const tree = async (oid) => {
+  const tree = async (oid, path37, budget) => {
     const previous = trees.get(oid);
-    if (previous) return previous;
+    if (previous) {
+      charge(previous.bytes, previous.entries.length, path37, budget);
+      return previous.entries;
+    }
     const bytes = await git(["ls-tree", "-z", oid], TREE_BYTES);
+    let count2 = 0;
+    for (const byte of bytes) if (byte === 0) count2++;
+    if (count2 > reviewSkillsLimits.treeEntries)
+      throw new Error("review_skills_git_tree_too_large");
+    charge(bytes.byteLength, count2, path37, budget);
     const entries = decoder.decode(bytes).split("\0").filter(Boolean).map((row) => {
       const matched = /^(\d{6}) (blob|tree|commit) ([a-f0-9]{40})\t([^\0]+)$/u.exec(row);
       if (!matched || [...matched[4]].some(
@@ -211332,24 +211349,28 @@ async function materializeReviewSkills(input) {
     });
     if (entries.length > reviewSkillsLimits.treeEntries)
       throw new Error("review_skills_git_tree_too_large");
-    trees.set(oid, entries);
+    trees.set(oid, { entries, bytes: bytes.byteLength });
     return entries;
   };
-  const find = async (path37) => {
+  const find = async (path37, budget) => {
     let oid = input.baseSha;
+    let directory = "";
     const parts = path37.split("/");
     for (let i2 = 0; i2 < parts.length; i2++) {
-      const entry = (await tree(oid)).find((item) => item.name === parts[i2]);
+      const entry = (await tree(oid, directory, budget)).find(
+        (item) => item.name === parts[i2]
+      );
       if (!entry) return null;
       if (i2 === parts.length - 1) return entry;
       if (entry.mode !== "040000" || entry.type !== "tree")
         throw new Error("review_skills_git_nonregular");
       oid = entry.oid;
+      directory = directory ? `${directory}/${parts[i2]}` : parts[i2];
     }
     return null;
   };
-  const read = async (path37, limit) => {
-    const entry = await find(path37);
+  const read = async (path37, limit, budget) => {
+    const entry = await find(path37, budget);
     if (!entry) throw new Error("review_skills_reference_missing");
     if (!/^100(?:644|755)$/.test(entry.mode) || entry.type !== "blob")
       throw new Error("review_skills_git_nonregular");
@@ -211369,22 +211390,26 @@ async function materializeReviewSkills(input) {
   for (const source of capture.gitSources) {
     if (source.root !== ".reviewrouter/skills" && source.root !== ".agents/skills")
       throw new Error("review_skills_git_root_invalid");
-    const root = await find(source.root);
+    const budget = {
+      root: source.root,
+      bytes: 0,
+      entries: 0,
+      paths: /* @__PURE__ */ new Set()
+    };
+    const root = await find(source.root, budget);
     if (!root) continue;
     if (root.mode !== "040000" || root.type !== "tree")
       throw new Error("review_skills_git_nonregular");
-    for (const child of await tree(root.oid)) {
+    for (const child of await tree(root.oid, source.root, budget)) {
       if (child.mode === "120000" || child.mode === "160000")
         throw new Error("review_skills_git_nonregular");
       if (child.type !== "tree") continue;
-      const skill = (await tree(child.oid)).find(
-        (entry) => entry.name === "SKILL.md"
-      );
+      const skill = (await tree(child.oid, `${source.root}/${child.name}`, budget)).find((entry) => entry.name === "SKILL.md");
       if (!skill) continue;
       if (!/^100(?:644|755)$/.test(skill.mode) || skill.type !== "blob")
         throw new Error("review_skills_git_nonregular");
       const directory = `${source.root}/${child.name}`;
-      sources.push({ directory, path: `${directory}/SKILL.md` });
+      sources.push({ directory, path: `${directory}/SKILL.md`, budget });
       if (sources.length + capture.webSkills.length > reviewSkillsLimits.skillsPerRun)
         throw new Error("review_skills_count_invalid");
     }
@@ -211396,7 +211421,8 @@ async function materializeReviewSkills(input) {
   )) {
     const content = await read(
       source.path,
-      reviewSkillsLimits.instructionsBytes
+      reviewSkillsLimits.instructionsBytes,
+      source.budget
     );
     const parsed = parseGitReviewSkill(content);
     const resources = /* @__PURE__ */ new Map();
@@ -211420,7 +211446,8 @@ async function materializeReviewSkills(input) {
           throw new Error("review_skills_reference_count");
         const reference = await read(
           resolved,
-          reviewSkillsLimits.referenceBytes
+          reviewSkillsLimits.referenceBytes,
+          source.budget
         );
         resources.set(resolved, reference);
         visiting.add(resolved);

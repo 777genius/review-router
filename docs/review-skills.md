@@ -118,8 +118,10 @@ missing references, cycles, traversal, symlinks or Git links fail explicitly.
 
 Limits are 32 combined web/Git Skills, 32 KiB per Skill, eight references per Skill,
 16 KiB per reference, four reference levels and a 256 KiB materialized bundle.
-Tree enumeration is bounded to 1 MiB and 4096 entries per tree; Skill counts are
-checked before loading bodies. Limits never cause silent truncation.
+Tree enumeration is cumulatively bounded to 1 MiB and 4096 entries per selected
+Git root across Skill discovery and Markdown-reference traversal. Separate roots
+have independent budgets. Skill counts are checked before loading bodies. Limits
+never cause silent truncation.
 
 ## Offline qualification
 

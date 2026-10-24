@@ -1066,9 +1066,18 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     // §8.2 mapping invariant: every degraded/partial outcome carries
     // context_inspection_incomplete + provider_warning; natural
     // not_applicable skips stay unflagged; provider_warning alone never
-    // makes the projection partial.
+    // makes the projection partial. One tier is lighter: when the only
+    // degradation is an invalid filter decision that preserved the comments
+    // (§7.3) and inspection/coverage are intact, the advisory
+    // provider_warning alone is truthful — claiming
+    // context_inspection_incomplete there would over-escalate into a
+    // coverage failure for a run whose findings were preserved.
     const qualityFlags = accepted.partial
-      ? ['context_inspection_incomplete', 'provider_warning']
+      ? accepted.classification.filterCommentsPreserved &&
+        !accepted.normalized.diagnostics.partialFlagsRequired &&
+        accepted.uncoveredPaths.length === 0
+        ? ['provider_warning']
+        : ['context_inspection_incomplete', 'provider_warning']
       : [];
     const observation = normalizeReviewObservation({
       workSlotId: input.invocation.workSlotId,

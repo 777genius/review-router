@@ -419,6 +419,10 @@ export type OcrOutcomeClassification = Readonly<{
   reasons: readonly OcrOutcomeDiagnosticReason[];
   /** Degraded/partial engine outcome: needs partial quality flags (§8.2). */
   partial: boolean;
+  /** The only degradation is an invalid filter decision that preserved the
+   * comments (§7.3): inspection and path coverage are intact, so this needs
+   * just the advisory provider_warning, never context_inspection_incomplete. */
+  filterCommentsPreserved: boolean;
 }>;
 
 const STOP_CAUSE_REASONS: Readonly<
@@ -444,11 +448,14 @@ export function classifyOcrReviewOutcome(
   outcome: OcrReviewOutcome
 ): OcrOutcomeClassification {
   const reasons = new Set<OcrOutcomeDiagnosticReason>();
+  let filterCommentsPreserved = true;
   if (outcome.runStopCause !== null) {
     reasons.add(STOP_CAUSE_REASONS[outcome.runStopCause]);
+    filterCommentsPreserved = false;
   }
   if (outcome.grouping.state === 'failed' || outcome.grouping.state === 'cancelled') {
     reasons.add('grouping_fallback');
+    filterCommentsPreserved = false;
   }
   for (const group of outcome.groups) {
     if (!group.mainCompleted) {
@@ -457,26 +464,42 @@ export function classifyOcrReviewOutcome(
           ? STOP_CAUSE_REASONS[group.stopCause]
           : 'missing_required_main'
       );
+      filterCommentsPreserved = false;
     }
-    const phases = [
+    const [plan, compression, relocation] = [
       group.phases.plan,
       group.phases.compression,
       group.phases.relocation,
-      group.phases.filter,
     ];
-    if (phases.some((phase) => phase.state === 'failed' || phase.state === 'cancelled')) {
+    const filter = group.phases.filter;
+    const nonFilterFailed = [plan, compression, relocation].some(
+      (phase) => phase.state === 'failed' || phase.state === 'cancelled'
+    );
+    const filterFailed =
+      filter.state === 'failed' || filter.state === 'cancelled';
+    if (nonFilterFailed || filterFailed) {
       reasons.add('phase_failed');
+    }
+    if (nonFilterFailed) {
+      filterCommentsPreserved = false;
+    } else if (filterFailed && group.filterDecisionValid !== false) {
+      // The engine documents "preserved comments" (§7.3) only for the
+      // malformed-decision case (filter_decision_valid === false). A failed
+      // filter without that proof keeps the full flag pair.
+      filterCommentsPreserved = false;
     }
     if (group.filterDecisionValid === false) {
       reasons.add('invalid_filter_decision');
     }
     if (group.rounds.completed < group.rounds.started) {
       reasons.add('late_round_stop');
+      filterCommentsPreserved = false;
     }
   }
   return Object.freeze({
     reasons: Object.freeze([...reasons].sort()),
     partial: reasons.size > 0,
+    filterCommentsPreserved: filterCommentsPreserved && reasons.size > 0,
   });
 }
 

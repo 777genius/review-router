@@ -142645,37 +142645,52 @@ var STOP_CAUSE_REASONS = {
 };
 function classifyOcrReviewOutcome(outcome) {
   const reasons = /* @__PURE__ */ new Set();
+  let filterCommentsPreserved = true;
   if (outcome.runStopCause !== null) {
     reasons.add(STOP_CAUSE_REASONS[outcome.runStopCause]);
+    filterCommentsPreserved = false;
   }
   if (outcome.grouping.state === "failed" || outcome.grouping.state === "cancelled") {
     reasons.add("grouping_fallback");
+    filterCommentsPreserved = false;
   }
   for (const group of outcome.groups) {
     if (!group.mainCompleted) {
       reasons.add(
         group.stopCause !== null ? STOP_CAUSE_REASONS[group.stopCause] : "missing_required_main"
       );
+      filterCommentsPreserved = false;
     }
-    const phases = [
+    const [plan, compression, relocation] = [
       group.phases.plan,
       group.phases.compression,
-      group.phases.relocation,
-      group.phases.filter
+      group.phases.relocation
     ];
-    if (phases.some((phase) => phase.state === "failed" || phase.state === "cancelled")) {
+    const filter2 = group.phases.filter;
+    const nonFilterFailed = [plan, compression, relocation].some(
+      (phase) => phase.state === "failed" || phase.state === "cancelled"
+    );
+    const filterFailed = filter2.state === "failed" || filter2.state === "cancelled";
+    if (nonFilterFailed || filterFailed) {
       reasons.add("phase_failed");
+    }
+    if (nonFilterFailed) {
+      filterCommentsPreserved = false;
+    } else if (filterFailed && group.filterDecisionValid !== false) {
+      filterCommentsPreserved = false;
     }
     if (group.filterDecisionValid === false) {
       reasons.add("invalid_filter_decision");
     }
     if (group.rounds.completed < group.rounds.started) {
       reasons.add("late_round_stop");
+      filterCommentsPreserved = false;
     }
   }
   return Object.freeze({
     reasons: Object.freeze([...reasons].sort()),
-    partial: reasons.size > 0
+    partial: reasons.size > 0,
+    filterCommentsPreserved: filterCommentsPreserved && reasons.size > 0
   });
 }
 function optionalInt(value) {
@@ -147468,7 +147483,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.207",
+  version: "1.0.208",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -212335,7 +212350,7 @@ var OcrReviewInvocationAdapter = class {
       // One engine invocation; model calls are accounted separately (§9).
       transportAttemptCount: 1
     };
-    const qualityFlags = accepted.partial ? ["context_inspection_incomplete", "provider_warning"] : [];
+    const qualityFlags = accepted.partial ? accepted.classification.filterCommentsPreserved && !accepted.normalized.diagnostics.partialFlagsRequired && accepted.uncoveredPaths.length === 0 ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
     const observation = normalizeReviewObservation({
       workSlotId: input.invocation.workSlotId,
       attemptOrdinal: input.invocation.attemptOrdinal,

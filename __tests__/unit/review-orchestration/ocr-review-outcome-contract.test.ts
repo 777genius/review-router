@@ -293,6 +293,190 @@ describe('classifyOcrReviewOutcome (§8.2 mapping invariant)', () => {
     expect(classification.reasons).toContain('phase_failed');
   });
 
+  it('tiers a preserved filter decision as filterCommentsPreserved', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [
+            validGroup({
+              phases: {
+                plan: validPhase,
+                compression: validPhase,
+                relocation: validPhase,
+                filter: { state: 'failed', reason: 'invalid_arguments' },
+              },
+              filter_decision_valid: false,
+            }),
+          ],
+        })
+      )
+    );
+    expect(classification.partial).toBe(true);
+    expect(classification.filterCommentsPreserved).toBe(true);
+    expect(classification.reasons).toContain('invalid_filter_decision');
+    expect(classification.reasons).toContain('phase_failed');
+  });
+
+  it('does not tier a preserved filter decision alongside another phase failure', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [
+            validGroup({
+              phases: {
+                plan: { state: 'failed', reason: 'provider_error' },
+                compression: validPhase,
+                relocation: validPhase,
+                filter: { state: 'failed', reason: 'invalid_arguments' },
+              },
+              filter_decision_valid: false,
+            }),
+          ],
+        })
+      )
+    );
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
+  it('does not tier a failed filter without a preserved-decision proof', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [
+            validGroup({
+              phases: {
+                plan: validPhase,
+                compression: validPhase,
+                relocation: validPhase,
+                filter: { state: 'failed', reason: 'provider_error' },
+              },
+              filter_decision_valid: null,
+            }),
+          ],
+        })
+      )
+    );
+    expect(classification.partial).toBe(true);
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
+  it('does not tier a preserved filter decision with an incomplete main phase', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [
+            validGroup({
+              main_completed: false,
+              stop_cause: 'review_limit_reached',
+              rounds: { configured: 2, started: 1, completed: 0 },
+              phases: {
+                plan: validPhase,
+                compression: validPhase,
+                relocation: validPhase,
+                filter: { state: 'failed', reason: 'invalid_arguments' },
+              },
+              filter_decision_valid: false,
+            }),
+          ],
+        })
+      )
+    );
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
+  const preservedFilterGroup = (overrides: Record<string, unknown> = {}) =>
+    validGroup({
+      phases: {
+        plan: validPhase,
+        compression: validPhase,
+        relocation: validPhase,
+        filter: { state: 'failed', reason: 'invalid_arguments' },
+      },
+      filter_decision_valid: false,
+      ...overrides,
+    });
+
+  // Each disqualifier alone must keep the full partial tier: a false tier-down
+  // would let a real inspection gap pass the coverage gate.
+  it.each<[string, Record<string, unknown>]>([
+    [
+      'a run stop cause',
+      { run_stop_cause: 'token_budget', groups: [preservedFilterGroup()] },
+    ],
+    [
+      'a grouping fallback',
+      {
+        grouping: { state: 'failed', reason: 'provider_error' },
+        groups: [preservedFilterGroup()],
+      },
+    ],
+    [
+      'an incomplete main without a late round',
+      {
+        groups: [
+          preservedFilterGroup({
+            main_completed: false,
+            stop_cause: 'max_rounds',
+            rounds: { configured: 2, started: 1, completed: 1 },
+          }),
+        ],
+      },
+    ],
+    [
+      'a late round stop after main completion',
+      {
+        groups: [
+          preservedFilterGroup({
+            rounds: { configured: 3, started: 2, completed: 1 },
+          }),
+        ],
+      },
+    ],
+    [
+      'a failed filter whose decisions all parsed',
+      { groups: [preservedFilterGroup({ filter_decision_valid: true })] },
+    ],
+    [
+      'a second group with an incomplete main',
+      {
+        groups: [
+          preservedFilterGroup(),
+          validGroup({
+            paths: ['other.ts'],
+            main_completed: false,
+            stop_cause: 'deadline',
+            rounds: { configured: 2, started: 1, completed: 1 },
+          }),
+        ],
+      },
+    ],
+  ])('keeps the full partial tier for %s', (_label, overrides) => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(validOutcome(overrides))
+    );
+    expect(classification.partial).toBe(true);
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
+  it('tiers preserved filter decisions next to otherwise clean groups', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(
+        validOutcome({
+          groups: [preservedFilterGroup(), validGroup({ paths: ['other.ts'] })],
+        })
+      )
+    );
+    expect(classification.filterCommentsPreserved).toBe(true);
+  });
+
+  it('reports no preserved-filter tier on a natural completed run', () => {
+    const classification = classifyOcrReviewOutcome(
+      parseOcrReviewOutcome(validOutcome())
+    );
+    expect(classification.partial).toBe(false);
+    expect(classification.filterCommentsPreserved).toBe(false);
+  });
+
   it('keeps natural not_applicable phase skips unflagged', () => {
     const classification = classifyOcrReviewOutcome(
       parseOcrReviewOutcome(validOutcome())

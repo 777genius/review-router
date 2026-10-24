@@ -72,7 +72,14 @@ async function drain(response: Readable): Promise<string> {
 
 type ProbeMode =
   | 'positive-denial-recovery'
+  | 'proven-denial-release'
+  | 'unknown-effect-release-denied'
+  | 'paid-then-denial-release-denied'
+  | 'unclosed-denial-release-denied'
+  | 'cancelled-denial-release-denied'
   | 'accepted-socket-loss-terminal'
+  | 'poisoned-consumer-reopen'
+  | 'reopen-after-close-denied'
   | 'unreferenced-timeout-terminal'
   | 'referenced-rejection-terminal'
   | 'mid-stream-terminal';
@@ -89,13 +96,23 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
     },
     (request, reply) => {
       void (async () => {
+        if (request.url === '/api/action/v2/account-gateway/close') {
+          reply.writeHead(200, { 'content-type': 'application/json' });
+          reply.end('{"state":"closed"}');
+          return;
+        }
         requests++;
         assert.equal(request.method, 'POST');
         assert.equal(request.url, '/api/action/v2/account-gateway/responses');
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
         assert.equal(Buffer.concat(chunks).toString('utf8'), body);
-        if (mode === 'accepted-socket-loss-terminal' && requests === 1) {
+        if (
+          (mode === 'accepted-socket-loss-terminal' ||
+            mode === 'poisoned-consumer-reopen' ||
+            mode === 'unknown-effect-release-denied') &&
+          requests === 1
+        ) {
           request.socket.destroy();
           return;
         }
@@ -121,12 +138,38 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
           reply.end('synthetic edge rejection');
           return;
         }
+        if (mode === 'paid-then-denial-release-denied') {
+          if (requests === 1) {
+            reply.writeHead(200, { 'content-type': 'text/event-stream' });
+            reply.end(completed('paid-before-denial'));
+            return;
+          }
+          // lane_saturated is never waited out, so the production transport
+          // latches this closed denial without a synthetic wait budget.
+          reply.writeHead(503, { 'content-type': 'application/json' });
+          reply.end(
+            '{"error":{"code":"lane_saturated","effect":"not_dispatched"}}'
+          );
+          return;
+        }
+        if (mode === 'unclosed-denial-release-denied') {
+          reply.writeHead(503, { 'content-type': 'application/json' });
+          reply.end(
+            '{"error":{"code":"relay_saturated","effect":"not_dispatched","retryAfter":1}}'
+          );
+          return;
+        }
         if (mode === 'unreferenced-timeout-terminal' && requests === 1) {
           reply.writeHead(504, { 'content-type': 'text/plain' });
           reply.end('synthetic proxy timeout after dispatch');
           return;
         }
-        if (mode === 'positive-denial-recovery' && requests === 1) {
+        if (
+          (mode === 'positive-denial-recovery' ||
+            mode === 'proven-denial-release' ||
+            mode === 'cancelled-denial-release-denied') &&
+          requests === 1
+        ) {
           reply.writeHead(503, { 'content-type': 'application/json' });
           reply.end(
             '{"error":{"code":"relay_saturated","effect":"not_dispatched"}}'
@@ -157,7 +200,10 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
       () => token,
       (diagnostic) => {
         diagnostics.push(diagnostic);
-      }
+      },
+      undefined,
+      mode === 'proven-denial-release' ||
+        mode === 'cancelled-denial-release-denied'
     );
     if (mode === 'accepted-socket-loss-terminal') {
       await assert.rejects(
@@ -171,11 +217,176 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
       assert.equal(transport.lastFailure?.effect, 'effect_unknown');
       return;
     }
+    if (mode === 'poisoned-consumer-reopen') {
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'poisoned-post-loss')
+      );
+      assert.equal(requests, 1);
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      assert.equal(
+        transport.releaseRetrySafeFailure(),
+        false,
+        'an unknown effect is never positively proven unpaid'
+      );
+      assert.equal(
+        transport.reopenConsumer(),
+        true,
+        'a recorded failure fact reopens the consumer for a fresh attempt'
+      );
+      assert.equal(transport.lastFailure, undefined);
+      const recovered = await bounded(
+        transport.responses(Buffer.from(body)),
+        'poisoned-reopen-redispatch'
+      );
+      const recoveredText = await bounded(
+        drain(recovered.body),
+        'poisoned-reopen-drain'
+      );
+      assert.equal(
+        requests,
+        2,
+        'a reopened consumer permits exactly one fresh dispatch'
+      );
+      assert(recoveredText.includes('"type":"response.completed"'));
+      transport.cancelInference();
+      assert.equal(
+        transport.reopenConsumer(),
+        false,
+        'a cancelled consumer never reopens'
+      );
+      return;
+    }
+    if (mode === 'reopen-after-close-denied') {
+      await bounded(transport.close('completed'), 'reopen-close');
+      assert.equal(
+        transport.reopenConsumer(),
+        false,
+        'a closed consumer never reopens'
+      );
+      return;
+    }
+    if (mode === 'unknown-effect-release-denied') {
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'unknown-effect-loss')
+      );
+      assert.equal(requests, 1);
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      assert.equal(
+        transport.releaseRetrySafeFailure(),
+        false,
+        'an unknown effect is never positively proven unpaid'
+      );
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'unknown-effect-deny'),
+        /account_gateway_inference_denied/u
+      );
+      assert.equal(requests, 1, 'an unknown effect is never re-dispatched');
+      return;
+    }
+    if (
+      mode === 'paid-then-denial-release-denied' ||
+      mode === 'unclosed-denial-release-denied' ||
+      mode === 'cancelled-denial-release-denied'
+    ) {
+      const active = transport;
+      if (mode === 'paid-then-denial-release-denied') {
+        const paid = await bounded(
+          active.responses(Buffer.from(body)),
+          'paid-responses'
+        );
+        assert.equal(paid.httpStatus, 200);
+        assert(
+          (await bounded(drain(paid.body), 'paid-drain')).includes(
+            '"type":"response.completed"'
+          )
+        );
+      }
+      const denied = await bounded(
+        active.responses(Buffer.from(body)),
+        'denied-responses'
+      );
+      assert.equal(denied.httpStatus, 503);
+      await bounded(drain(denied.body), 'denied-drain');
+      await bounded(
+        (async () => {
+          while (active.lastFailure === undefined)
+            await new Promise((done) => setTimeout(done, 10));
+        })(),
+        'denied-failure-latch'
+      );
+      assert.equal(active.lastFailure?.effect, 'not_dispatched');
+      assert.equal(active.lastFailure?.requestRef, undefined);
+      if (mode === 'cancelled-denial-release-denied') active.cancelInference();
+      assert.equal(
+        active.releaseRetrySafeFailure(),
+        false,
+        mode === 'paid-then-denial-release-denied'
+          ? 'a denial after a paid request never releases the consumer'
+          : mode === 'cancelled-denial-release-denied'
+            ? 'a release never reopens a cancelled consumer'
+            : 'only the closed denial envelope proves nothing was dispatched'
+      );
+      await assert.rejects(
+        bounded(active.responses(Buffer.from(body)), 'denied-redispatch'),
+        /account_gateway_inference_denied/u
+      );
+      assert.equal(
+        requests,
+        mode === 'paid-then-denial-release-denied' ? 2 : 1,
+        'an unreleased denial is never re-dispatched'
+      );
+      return;
+    }
     const response = await bounded(
       transport.responses(Buffer.from(body)),
       'transient-responses'
     );
     const text = await bounded(drain(response.body), 'transient-drain');
+    if (mode === 'proven-denial-release') {
+      assert.equal(response.httpStatus, 503);
+      assert.equal(requests, 1);
+      assert.equal(
+        text,
+        '{"error":{"code":"relay_saturated","effect":"not_dispatched"}}'
+      );
+      const active = transport;
+      // The final non-stream response latches its failure fact after the
+      // bounded body drain completes.
+      await bounded(
+        (async () => {
+          while (active.lastFailure === undefined)
+            await new Promise((done) => setTimeout(done, 10));
+        })(),
+        'proven-failure-latch'
+      );
+      assert.equal(active.lastFailure?.effect, 'not_dispatched');
+      assert.equal(active.lastFailure?.requestRef, undefined);
+      assert.equal(
+        active.releaseRetrySafeFailure(),
+        true,
+        'a proven pre-dispatch denial paid nothing and may be released'
+      );
+      const retried = await bounded(
+        active.responses(Buffer.from(body)),
+        'released-redispatch'
+      );
+      const retriedText = await bounded(
+        drain(retried.body),
+        'released-redispatch-drain'
+      );
+      assert.equal(
+        requests,
+        2,
+        'a released proven denial permits exactly one fresh dispatch'
+      );
+      assert(retriedText.includes('"type":"response.completed"'));
+      assert.equal(
+        active.releaseRetrySafeFailure(),
+        false,
+        'nothing proven remains after a release'
+      );
+      return;
+    }
     if (mode === 'unreferenced-timeout-terminal') {
       assert.equal(response.httpStatus, 504);
       assert.equal(
@@ -251,6 +462,37 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
     { timeout: 20_000 },
     () => transientRetry('mid-stream-terminal')
   );
+  nodeTest(
+    'a released proven not-dispatched denial permits one fresh dispatch',
+    { timeout: 20_000 },
+    () => transientRetry('proven-denial-release')
+  );
+  nodeTest(
+    'an unknown effect is never released or re-dispatched',
+    { timeout: 20_000 },
+    () => transientRetry('unknown-effect-release-denied')
+  );
+  nodeTest(
+    'a denial after a paid request is never released',
+    { timeout: 20_000 },
+    () => transientRetry('paid-then-denial-release-denied')
+  );
+  nodeTest(
+    'an unclosed denial envelope is never released',
+    { timeout: 20_000 },
+    () => transientRetry('unclosed-denial-release-denied')
+  );
+  nodeTest('a cancelled consumer is never released', { timeout: 20_000 }, () =>
+    transientRetry('cancelled-denial-release-denied')
+  );
+  nodeTest(
+    'a recorded failure fact reopens the consumer for one fresh dispatch',
+    { timeout: 20_000 },
+    () => transientRetry('poisoned-consumer-reopen')
+  );
+  nodeTest('a closed consumer never reopens', { timeout: 20_000 }, () =>
+    transientRetry('reopen-after-close-denied')
+  );
 } else {
   test('real TLS transient retry recovers only provable not-dispatched failures', async () => {
     const root = await mkdtemp(join(tmpdir(), 'reviewrouter-transient-retry-'));
@@ -321,8 +563,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 5\b/);
-      expect(result.stdout).toMatch(/# pass 5\b/);
+      expect(result.stdout).toMatch(/# tests 12\b/);
+      expect(result.stdout).toMatch(/# pass 12\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

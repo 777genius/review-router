@@ -75,7 +75,10 @@ import {
 } from './ocr-review-managed-run';
 
 const OCR_ADAPTER_CONTRACT_VERSION = 'ocr-managed-review.v1';
-const OCR_RETRY_POLICY_VERSION = 'ocr-managed-no-replay.v1';
+const OCR_RETRY_POLICY_VERSION = 'ocr-managed-bounded-retry.v2';
+/** Bounded retries after positively proven unpaid denials only; a paid or
+ * unknown effect never replays (§8.4 step 2). */
+const OCR_ATTEMPT_BUDGET = 3;
 
 export type OcrReviewAssignment = Readonly<{
   workSlot: ReviewWorkSlotPlan;
@@ -96,6 +99,12 @@ export type OcrLoopbackBridge = Readonly<{
   requestCount(): number | undefined;
   /** Terminal Gateway effect facts; `effect: 'none'` is the safe state. */
   effectFacts?(): Readonly<{ effect: string }> | undefined;
+  /** Releases only positively proven unpaid pre-dispatch denials (§8.4 step 2);
+   * false for unknown/paid effects. */
+  releaseRetrySafeFailure?(): boolean;
+  /** Reopens a failure-fact consumer for one fresh bounded attempt; false for
+   * terminal/cancelled consumers keeps the fence. */
+  reopenConsumer?(): boolean;
 }>;
 
 export type OcrReviewProcessRunner = (input: {
@@ -343,6 +352,8 @@ export function buildOcrSemanticInvocationPreimage(input: {
   readonly modelReasoningEffort: string | null;
   readonly language: string | null;
   readonly limits: OcrManagedLimits;
+  readonly retryPolicyVersion: string;
+  readonly attemptBudget: number;
   readonly contextToolsPolicy?: Readonly<{
     planDigest: string;
     schemaDigest: string;
@@ -384,16 +395,17 @@ export function buildOcrSemanticInvocationPreimage(input: {
     },
     transportPolicy: 'account-gateway-loopback-v1',
     outputContract: OCR_OUTCOME_SCHEMA_VERSION,
-    retryPolicyVersion: OCR_RETRY_POLICY_VERSION,
-    attemptBudget: 1,
+    retryPolicyVersion: input.retryPolicyVersion,
+    attemptBudget: input.attemptBudget,
   });
 }
 
 /**
  * One FindingDiscovery slot over the whole canonical eligible inventory with
  * one vote identity (§4.3). RR batching/token compaction never split this
- * input; OCR groups internally. All in-scope lifecycle targets stay uncovered:
- * OCR findings are not lifecycle verdicts.
+ * input; OCR groups internally. OCR findings are not lifecycle verdicts, so
+ * lifecycle targets stay carried-unverified ("resolution not established")
+ * instead of revalidated.
  */
 export function planOcrReviewAssignments(input: {
   readonly prDescriptionEnabled?: boolean;
@@ -419,23 +431,11 @@ export function planOcrReviewAssignments(input: {
     left.filename < right.filename ? -1 : left.filename > right.filename ? 1 : 0
   );
   const paths = files.map((file) => file.filename);
-  const inScope = (target: LifecycleTarget) =>
-    files.some((file) =>
-      [file.filename, file.previousFilename].some(
-        (candidate) =>
-          candidate !== undefined &&
-          (target.currentPath === candidate ||
-            target.originalPath === candidate)
-      )
-    );
-  // OCR produces no lifecycle verdicts; every in-scope target is explicitly
-  // uncovered instead of silently dropped from assignment accounting (§4.3).
-  const uncoveredLifecycleTargetIds = Object.freeze(
-    input.lifecycleTargets
-      .filter(inScope)
-      .map((target) => target.targetId)
-      .sort()
-  );
+  // OCR produces no lifecycle verdicts (§4.3), so no lifecycle target can be
+  // revalidated here. Targets keep their carried-unverified facts ("resolution
+  // not established") exactly like a codex slot that returned no verdict, and a
+  // verdict gap is not dropped coverage the way an unassigned target would be.
+  const uncoveredLifecycleTargetIds = Object.freeze([]) as readonly string[];
   const plan = createStableReviewWorkPlan({
     reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
     compatibilityKey: input.compatibilityKey,
@@ -445,7 +445,10 @@ export function planOcrReviewAssignments(input: {
         providerKind: ReviewExecutionProviderKind.Ocr,
         providerVoteIdentityHash: ocrLanes[0].providerVoteIdentityHash,
         required: true,
-        attemptBudget: 1,
+        attemptBudget: Math.min(
+          OCR_ATTEMPT_BUDGET,
+          Math.max(1, input.authorization.limits.maxAttemptsPerSlot)
+        ),
         retryPolicyVersion: OCR_RETRY_POLICY_VERSION,
       },
     ],
@@ -577,6 +580,8 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
   >();
   private inFlight: Promise<unknown> = Promise.resolve();
   private running = false;
+  /** Slots whose engine run may already have paid for model requests. */
+  private readonly dispatchedSlots = new Set<string>();
 
   constructor(
     assignments: readonly OcrReviewAssignment[],
@@ -601,7 +606,8 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       throw new Error('review_action_v2_assignment_missing');
     }
     if (
-      assignment.workSlot.attemptBudget !== 1 ||
+      assignment.workSlot.attemptBudget < 1 ||
+      assignment.workSlot.attemptBudget > OCR_ATTEMPT_BUDGET ||
       assignment.workSlot.taskKind !== ReviewTaskKind.FindingDiscovery
     ) {
       throw new Error('review_action_v2_ocr_slot_contract_invalid');
@@ -653,6 +659,8 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       modelReasoningEffort: this.options.modelReasoningEffort,
       language: this.options.language,
       limits: this.options.limits,
+      retryPolicyVersion: OCR_RETRY_POLICY_VERSION,
+      attemptBudget: assignment.workSlot.attemptBudget,
     });
     fs.writeFileSync(this.options.run.rulePath, ruleText, { mode: 0o600 });
     if (backgroundText !== null && this.options.run.backgroundPath !== null) {
@@ -894,19 +902,53 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     }
     // §8.4 step 1: outer signal and current lease authority before dispatch.
     assertOcrInvocationLive(input);
-    // Step 2: known-terminal/unknown Gateway effect fences new calls. A
-    // positively proven not_dispatched effect is a distinct retry-safe
-    // failure (§8.4 step 2), never a paid/unknown effect.
-    const effectBefore = this.options.bridge.effectFacts?.();
-    if (effectBefore && effectBefore.effect !== 'none') {
-      if (effectBefore.effect === 'not_dispatched') {
-        throw new Error('review_action_v2_ocr_not_dispatched');
-      }
-      throw new Error('review_action_v2_ocr_gateway_effect_unknown');
-    }
     // One engine invocation in flight; aborting callers never dispatch late.
-    const run = this.gate(() => this.runInvocation(input, assignment));
+    // The effect fence runs inside the gate so no check outlives a dispatch.
+    const run = this.gate(async () => {
+      this.reopenPoisonedConsumer();
+      this.assertDispatchPermitted(assignment.workSlot.workSlotId);
+      return await this.runInvocation(input, assignment);
+    });
     return await run;
+  }
+
+  /** A recorded failure fact poisoned this consumer against replays; one fresh
+   * bounded attempt may reopen it so a transport failure cannot burn the whole
+   * attempt budget fenced. The per-consumer dispatch record restarts with the
+   * consumer. */
+  private reopenPoisonedConsumer(): void {
+    const effectBefore = this.options.bridge.effectFacts?.();
+    if (
+      effectBefore === undefined ||
+      effectBefore.effect === 'none' ||
+      this.options.bridge.reopenConsumer?.() !== true
+    )
+      return;
+    this.dispatchedSlots.clear();
+  }
+
+  /** §8.4 step 2: known-terminal/unknown Gateway effect fences new calls. A
+   * positively proven not_dispatched denial paid nothing, so releasing it
+   * lifts the fence for one fresh dispatch; unknown/paid effects never do.
+   * After an earlier engine run of the slot only that release reopens
+   * dispatch: without it the earlier run may have paid for its requests. */
+  private assertDispatchPermitted(workSlotId: string): void {
+    const effectBefore = this.options.bridge.effectFacts?.();
+    const effectKnown =
+      effectBefore !== undefined && effectBefore.effect !== 'none';
+    if (
+      (effectKnown || this.dispatchedSlots.has(workSlotId)) &&
+      (effectBefore?.effect !== 'not_dispatched' ||
+        this.options.bridge.releaseRetrySafeFailure?.() !== true)
+    ) {
+      throw new Error(
+        effectBefore?.effect === 'not_dispatched'
+          ? 'review_action_v2_ocr_not_dispatched'
+          : effectKnown
+            ? 'review_action_v2_ocr_gateway_effect_unknown'
+            : 'review_action_v2_ocr_replay_fenced'
+      );
+    }
   }
 
   private gate<T>(operation: () => Promise<T>): Promise<T> {
@@ -952,6 +994,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     });
     this.options.contextTools?.beginNativeSession();
     let processResult: OcrReviewProcessResult;
+    this.dispatchedSlots.add(assignment.workSlot.workSlotId);
     try {
       processResult = await this.options.processRunner({
         binaryPath: this.options.binaryPath,
@@ -1058,9 +1101,18 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     // §8.2 mapping invariant: every degraded/partial outcome carries
     // context_inspection_incomplete + provider_warning; natural
     // not_applicable skips stay unflagged; provider_warning alone never
-    // makes the projection partial.
+    // makes the projection partial. One tier is lighter: when the only
+    // degradation is an invalid filter decision that preserved the comments
+    // (§7.3) and inspection/coverage are intact, the advisory
+    // provider_warning alone is truthful — claiming
+    // context_inspection_incomplete there would over-escalate into a
+    // coverage failure for a run whose findings were preserved.
     const qualityFlags = accepted.partial
-      ? ['context_inspection_incomplete', 'provider_warning']
+      ? accepted.classification.filterCommentsPreserved &&
+        !accepted.normalized.diagnostics.partialFlagsRequired &&
+        accepted.uncoveredPaths.length === 0
+        ? ['provider_warning']
+        : ['context_inspection_incomplete', 'provider_warning']
       : [];
     const observation = normalizeReviewObservation({
       workSlotId: input.invocation.workSlotId,

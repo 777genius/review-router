@@ -125270,6 +125270,15 @@ async function materializeReviewSkills(input) {
   if (!/^[a-f0-9]{40}$/.test(input.baseSha) || capture.baseSha !== input.baseSha)
     throw new Error("review_skills_capture_mismatch");
   const trees = /* @__PURE__ */ new Map();
+  const charge = (bytes, entries, path19, budget) => {
+    if (!budget || !(path19 === budget.root || path19.startsWith(`${budget.root}/`)) || budget.paths.has(path19))
+      return;
+    if (budget.bytes + bytes > TREE_BYTES || budget.entries + entries > reviewSkillsLimits.treeEntries)
+      throw new Error("review_skills_git_tree_too_large");
+    budget.bytes += bytes;
+    budget.entries += entries;
+    budget.paths.add(path19);
+  };
   const git = async (args, maxBuffer) => {
     input.signal?.throwIfAborted();
     try {
@@ -125296,10 +125305,18 @@ async function materializeReviewSkills(input) {
       throw new Error("review_skills_git_read_failed");
     }
   };
-  const tree = async (oid) => {
+  const tree = async (oid, path19, budget) => {
     const previous = trees.get(oid);
-    if (previous) return previous;
+    if (previous) {
+      charge(previous.bytes, previous.entries.length, path19, budget);
+      return previous.entries;
+    }
     const bytes = await git(["ls-tree", "-z", oid], TREE_BYTES);
+    let count2 = 0;
+    for (const byte of bytes) if (byte === 0) count2++;
+    if (count2 > reviewSkillsLimits.treeEntries)
+      throw new Error("review_skills_git_tree_too_large");
+    charge(bytes.byteLength, count2, path19, budget);
     const entries = decoder.decode(bytes).split("\0").filter(Boolean).map((row) => {
       const matched = /^(\d{6}) (blob|tree|commit) ([a-f0-9]{40})\t([^\0]+)$/u.exec(row);
       if (!matched || [...matched[4]].some(
@@ -125315,24 +125332,28 @@ async function materializeReviewSkills(input) {
     });
     if (entries.length > reviewSkillsLimits.treeEntries)
       throw new Error("review_skills_git_tree_too_large");
-    trees.set(oid, entries);
+    trees.set(oid, { entries, bytes: bytes.byteLength });
     return entries;
   };
-  const find = async (path19) => {
+  const find = async (path19, budget) => {
     let oid = input.baseSha;
+    let directory = "";
     const parts = path19.split("/");
     for (let i = 0; i < parts.length; i++) {
-      const entry = (await tree(oid)).find((item) => item.name === parts[i]);
+      const entry = (await tree(oid, directory, budget)).find(
+        (item) => item.name === parts[i]
+      );
       if (!entry) return null;
       if (i === parts.length - 1) return entry;
       if (entry.mode !== "040000" || entry.type !== "tree")
         throw new Error("review_skills_git_nonregular");
       oid = entry.oid;
+      directory = directory ? `${directory}/${parts[i]}` : parts[i];
     }
     return null;
   };
-  const read = async (path19, limit) => {
-    const entry = await find(path19);
+  const read = async (path19, limit, budget) => {
+    const entry = await find(path19, budget);
     if (!entry) throw new Error("review_skills_reference_missing");
     if (!/^100(?:644|755)$/.test(entry.mode) || entry.type !== "blob")
       throw new Error("review_skills_git_nonregular");
@@ -125352,22 +125373,26 @@ async function materializeReviewSkills(input) {
   for (const source of capture.gitSources) {
     if (source.root !== ".reviewrouter/skills" && source.root !== ".agents/skills")
       throw new Error("review_skills_git_root_invalid");
-    const root = await find(source.root);
+    const budget = {
+      root: source.root,
+      bytes: 0,
+      entries: 0,
+      paths: /* @__PURE__ */ new Set()
+    };
+    const root = await find(source.root, budget);
     if (!root) continue;
     if (root.mode !== "040000" || root.type !== "tree")
       throw new Error("review_skills_git_nonregular");
-    for (const child of await tree(root.oid)) {
+    for (const child of await tree(root.oid, source.root, budget)) {
       if (child.mode === "120000" || child.mode === "160000")
         throw new Error("review_skills_git_nonregular");
       if (child.type !== "tree") continue;
-      const skill = (await tree(child.oid)).find(
-        (entry) => entry.name === "SKILL.md"
-      );
+      const skill = (await tree(child.oid, `${source.root}/${child.name}`, budget)).find((entry) => entry.name === "SKILL.md");
       if (!skill) continue;
       if (!/^100(?:644|755)$/.test(skill.mode) || skill.type !== "blob")
         throw new Error("review_skills_git_nonregular");
       const directory = `${source.root}/${child.name}`;
-      sources.push({ directory, path: `${directory}/SKILL.md` });
+      sources.push({ directory, path: `${directory}/SKILL.md`, budget });
       if (sources.length + capture.webSkills.length > reviewSkillsLimits.skillsPerRun)
         throw new Error("review_skills_count_invalid");
     }
@@ -125379,7 +125404,8 @@ async function materializeReviewSkills(input) {
   )) {
     const content = await read(
       source.path,
-      reviewSkillsLimits.instructionsBytes
+      reviewSkillsLimits.instructionsBytes,
+      source.budget
     );
     const parsed = parseGitReviewSkill(content);
     const resources = /* @__PURE__ */ new Map();
@@ -125403,7 +125429,8 @@ async function materializeReviewSkills(input) {
           throw new Error("review_skills_reference_count");
         const reference = await read(
           resolved,
-          reviewSkillsLimits.referenceBytes
+          reviewSkillsLimits.referenceBytes,
+          source.budget
         );
         resources.set(resolved, reference);
         visiting.add(resolved);
@@ -142645,37 +142672,52 @@ var STOP_CAUSE_REASONS = {
 };
 function classifyOcrReviewOutcome(outcome) {
   const reasons = /* @__PURE__ */ new Set();
+  let filterCommentsPreserved = true;
   if (outcome.runStopCause !== null) {
     reasons.add(STOP_CAUSE_REASONS[outcome.runStopCause]);
+    filterCommentsPreserved = false;
   }
   if (outcome.grouping.state === "failed" || outcome.grouping.state === "cancelled") {
     reasons.add("grouping_fallback");
+    filterCommentsPreserved = false;
   }
   for (const group of outcome.groups) {
     if (!group.mainCompleted) {
       reasons.add(
         group.stopCause !== null ? STOP_CAUSE_REASONS[group.stopCause] : "missing_required_main"
       );
+      filterCommentsPreserved = false;
     }
-    const phases = [
+    const [plan, compression, relocation] = [
       group.phases.plan,
       group.phases.compression,
-      group.phases.relocation,
-      group.phases.filter
+      group.phases.relocation
     ];
-    if (phases.some((phase) => phase.state === "failed" || phase.state === "cancelled")) {
+    const filter2 = group.phases.filter;
+    const nonFilterFailed = [plan, compression, relocation].some(
+      (phase) => phase.state === "failed" || phase.state === "cancelled"
+    );
+    const filterFailed = filter2.state === "failed" || filter2.state === "cancelled";
+    if (nonFilterFailed || filterFailed) {
       reasons.add("phase_failed");
+    }
+    if (nonFilterFailed) {
+      filterCommentsPreserved = false;
+    } else if (filterFailed && group.filterDecisionValid !== false) {
+      filterCommentsPreserved = false;
     }
     if (group.filterDecisionValid === false) {
       reasons.add("invalid_filter_decision");
     }
     if (group.rounds.completed < group.rounds.started) {
       reasons.add("late_round_stop");
+      filterCommentsPreserved = false;
     }
   }
   return Object.freeze({
     reasons: Object.freeze([...reasons].sort()),
-    partial: reasons.size > 0
+    partial: reasons.size > 0,
+    filterCommentsPreserved: filterCommentsPreserved && reasons.size > 0
   });
 }
 function optionalInt(value) {
@@ -147468,7 +147510,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.207",
+  version: "1.0.211",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -194546,6 +194588,17 @@ var RunT0ReviewOrchestration = class {
               exhaustionReason: "admission_limited" /* AdmissionLimited */
             };
           }
+          const retryDelayMs2 = attemptOrdinal < input.workSlot.attemptBudget ? this.clampProviderDelay(3e4) : 0;
+          if (retryDelayMs2 > 0) {
+            if (this.dependencies.signal) {
+              await this.dependencies.delay.sleep(
+                retryDelayMs2,
+                this.dependencies.signal
+              );
+            } else {
+              await this.dependencies.delay.sleep(retryDelayMs2);
+            }
+          }
           continue;
         }
       }
@@ -211681,7 +211734,8 @@ var import_child_process9 = require("child_process");
 var fs13 = __toESM(require("fs"));
 var path16 = __toESM(require("path"));
 var OCR_ADAPTER_CONTRACT_VERSION = "ocr-managed-review.v1";
-var OCR_RETRY_POLICY_VERSION = "ocr-managed-no-replay.v1";
+var OCR_RETRY_POLICY_VERSION = "ocr-managed-bounded-retry.v2";
+var OCR_ATTEMPT_BUDGET = 3;
 var OCR_ACCEPTANCE_DIAGNOSTIC_REASONS = [
   ...OCR_OUTCOME_DIAGNOSTIC_REASONS,
   "unverified_native_span",
@@ -211783,8 +211837,8 @@ function buildOcrSemanticInvocationPreimage(input) {
     },
     transportPolicy: "account-gateway-loopback-v1",
     outputContract: OCR_OUTCOME_SCHEMA_VERSION,
-    retryPolicyVersion: OCR_RETRY_POLICY_VERSION,
-    attemptBudget: 1
+    retryPolicyVersion: input.retryPolicyVersion,
+    attemptBudget: input.attemptBudget
   });
 }
 function planOcrReviewAssignments(input) {
@@ -211798,14 +211852,7 @@ function planOcrReviewAssignments(input) {
     (left, right) => left.filename < right.filename ? -1 : left.filename > right.filename ? 1 : 0
   );
   const paths = files.map((file) => file.filename);
-  const inScope = (target) => files.some(
-    (file) => [file.filename, file.previousFilename].some(
-      (candidate) => candidate !== void 0 && (target.currentPath === candidate || target.originalPath === candidate)
-    )
-  );
-  const uncoveredLifecycleTargetIds = Object.freeze(
-    input.lifecycleTargets.filter(inScope).map((target) => target.targetId).sort()
-  );
+  const uncoveredLifecycleTargetIds = Object.freeze([]);
   const plan = createStableReviewWorkPlan({
     reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
     compatibilityKey: input.compatibilityKey,
@@ -211815,7 +211862,10 @@ function planOcrReviewAssignments(input) {
         providerKind: "ocr" /* Ocr */,
         providerVoteIdentityHash: ocrLanes[0].providerVoteIdentityHash,
         required: true,
-        attemptBudget: 1,
+        attemptBudget: Math.min(
+          OCR_ATTEMPT_BUDGET,
+          Math.max(1, input.authorization.limits.maxAttemptsPerSlot)
+        ),
         retryPolicyVersion: OCR_RETRY_POLICY_VERSION
       }
     ],
@@ -211936,6 +211986,8 @@ var OcrReviewInvocationAdapter = class {
   preimages = /* @__PURE__ */ new WeakMap();
   inFlight = Promise.resolve();
   running = false;
+  /** Slots whose engine run may already have paid for model requests. */
+  dispatchedSlots = /* @__PURE__ */ new Set();
   /** Model-free: deterministic preview and semantic capture only (§5.2). */
   async prepare(input) {
     this.options.signal?.throwIfAborted();
@@ -211943,7 +211995,7 @@ var OcrReviewInvocationAdapter = class {
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error("review_action_v2_assignment_missing");
     }
-    if (assignment.workSlot.attemptBudget !== 1 || assignment.workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */) {
+    if (assignment.workSlot.attemptBudget < 1 || assignment.workSlot.attemptBudget > OCR_ATTEMPT_BUDGET || assignment.workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */) {
       throw new Error("review_action_v2_ocr_slot_contract_invalid");
     }
     const assignedPaths = Object.freeze(
@@ -211981,7 +212033,9 @@ var OcrReviewInvocationAdapter = class {
       ocrEffort: this.options.ocrEffort,
       modelReasoningEffort: this.options.modelReasoningEffort,
       language: this.options.language,
-      limits: this.options.limits
+      limits: this.options.limits,
+      retryPolicyVersion: OCR_RETRY_POLICY_VERSION,
+      attemptBudget: assignment.workSlot.attemptBudget
     });
     fs13.writeFileSync(this.options.run.rulePath, ruleText, { mode: 384 });
     if (backgroundText !== null && this.options.run.backgroundPath !== null) {
@@ -212186,15 +212240,36 @@ var OcrReviewInvocationAdapter = class {
       throw new Error("review_action_v2_prepared_invocation_identity_mismatch");
     }
     assertOcrInvocationLive(input);
-    const effectBefore = this.options.bridge.effectFacts?.();
-    if (effectBefore && effectBefore.effect !== "none") {
-      if (effectBefore.effect === "not_dispatched") {
-        throw new Error("review_action_v2_ocr_not_dispatched");
-      }
-      throw new Error("review_action_v2_ocr_gateway_effect_unknown");
-    }
-    const run2 = this.gate(() => this.runInvocation(input, assignment));
+    const run2 = this.gate(async () => {
+      this.reopenPoisonedConsumer();
+      this.assertDispatchPermitted(assignment.workSlot.workSlotId);
+      return await this.runInvocation(input, assignment);
+    });
     return await run2;
+  }
+  /** A recorded failure fact poisoned this consumer against replays; one fresh
+   * bounded attempt may reopen it so a transport failure cannot burn the whole
+   * attempt budget fenced. The per-consumer dispatch record restarts with the
+   * consumer. */
+  reopenPoisonedConsumer() {
+    const effectBefore = this.options.bridge.effectFacts?.();
+    if (effectBefore === void 0 || effectBefore.effect === "none" || this.options.bridge.reopenConsumer?.() !== true)
+      return;
+    this.dispatchedSlots.clear();
+  }
+  /** §8.4 step 2: known-terminal/unknown Gateway effect fences new calls. A
+   * positively proven not_dispatched denial paid nothing, so releasing it
+   * lifts the fence for one fresh dispatch; unknown/paid effects never do.
+   * After an earlier engine run of the slot only that release reopens
+   * dispatch: without it the earlier run may have paid for its requests. */
+  assertDispatchPermitted(workSlotId) {
+    const effectBefore = this.options.bridge.effectFacts?.();
+    const effectKnown = effectBefore !== void 0 && effectBefore.effect !== "none";
+    if ((effectKnown || this.dispatchedSlots.has(workSlotId)) && (effectBefore?.effect !== "not_dispatched" || this.options.bridge.releaseRetrySafeFailure?.() !== true)) {
+      throw new Error(
+        effectBefore?.effect === "not_dispatched" ? "review_action_v2_ocr_not_dispatched" : effectKnown ? "review_action_v2_ocr_gateway_effect_unknown" : "review_action_v2_ocr_replay_fenced"
+      );
+    }
   }
   gate(operation) {
     const next = this.inFlight.then(async () => {
@@ -212227,6 +212302,7 @@ var OcrReviewInvocationAdapter = class {
     });
     this.options.contextTools?.beginNativeSession();
     let processResult2;
+    this.dispatchedSlots.add(assignment.workSlot.workSlotId);
     try {
       processResult2 = await this.options.processRunner({
         binaryPath: this.options.binaryPath,
@@ -212316,7 +212392,7 @@ var OcrReviewInvocationAdapter = class {
       // One engine invocation; model calls are accounted separately (§9).
       transportAttemptCount: 1
     };
-    const qualityFlags = accepted.partial ? ["context_inspection_incomplete", "provider_warning"] : [];
+    const qualityFlags = accepted.partial ? accepted.classification.filterCommentsPreserved && !accepted.normalized.diagnostics.partialFlagsRequired && accepted.uncoveredPaths.length === 0 ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
     const observation = normalizeReviewObservation({
       workSlotId: input.invocation.workSlotId,
       attemptOrdinal: input.invocation.attemptOrdinal,
@@ -217971,7 +218047,9 @@ var ProductionT0ReviewRunner = class {
             capabilityAuthorization,
             actualModel: () => modelTransport.actualModel(),
             requestCount: () => modelTransport.requestCount?.(),
-            effectFacts: input.ocr.effectFacts
+            effectFacts: input.ocr.effectFacts,
+            releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true,
+            reopenConsumer: () => modelTransport.reopenConsumer?.() === true
           };
           const invocationAdapter2 = new OcrReviewInvocationAdapter(
             planned2.assignments,

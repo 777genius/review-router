@@ -602,6 +602,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                         nativeConnected: receipt.nativeConnected,
                         calls: receipt.calls,
                         hadFailure: receipt.hadFailure,
+                        toolCalls: receipt.toolCalls,
                       }),
                   }
                 : {}),

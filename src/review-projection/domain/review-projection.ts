@@ -242,6 +242,7 @@ export interface LifecycleProjectionDecision {
   readonly targetId: string;
   readonly verdict: LifecycleRevalidationVerdict;
   readonly reasonCodes: readonly string[];
+  readonly currentSourceFindingIds?: readonly string[];
 }
 
 export interface FindingPlacementDecision {

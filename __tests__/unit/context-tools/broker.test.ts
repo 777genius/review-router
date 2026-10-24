@@ -11,6 +11,7 @@ import {
   CONTEXT_TOOLS_PROFILE,
 } from '../../../src/context-tools/contract';
 import { bindContextToolCredentials } from '../../../src/context-tools/credential-bindings';
+import * as httpsMcp from '../../../src/context-tools/https-mcp-client';
 
 function plan(servers: unknown[] = []) {
   const preimage = {
@@ -172,6 +173,14 @@ describe('SDK 1.29 stateless loopback broker interop', () => {
         nativeConnected: true,
         calls: 1,
         hadFailure: false,
+        toolCalls: [
+          {
+            toolName: 'rr_repository_docs_read',
+            started: 1,
+            succeeded: 1,
+            failed: 0,
+          },
+        ],
       });
       await expect(
         client.callTool({
@@ -180,6 +189,14 @@ describe('SDK 1.29 stateless loopback broker interop', () => {
         })
       ).rejects.toThrow('context_tools_arguments_invalid');
       expect(call).toHaveBeenCalledTimes(1);
+      expect(broker.receipt().toolCalls).toEqual([
+        {
+          toolName: 'rr_repository_docs_read',
+          started: 1,
+          succeeded: 1,
+          failed: 0,
+        },
+      ]);
       const denied = await fetch(broker.config.url, {
         method: 'POST',
         headers: {
@@ -260,6 +277,14 @@ describe('SDK 1.29 stateless loopback broker interop', () => {
       ).toBeUndefined();
       expect(call).toHaveBeenCalledTimes(2);
       expect(broker.receipt()).toMatchObject({ calls: 2, hadFailure: false });
+      expect(broker.receipt().toolCalls).toEqual([
+        {
+          toolName: 'rr_repository_docs_read',
+          started: 2,
+          succeeded: 1,
+          failed: 1,
+        },
+      ]);
     } finally {
       await client.close();
       await broker.close();
@@ -308,10 +333,106 @@ describe('SDK 1.29 stateless loopback broker interop', () => {
       }
       expect(call).toHaveBeenCalledTimes(1);
       expect(broker.receipt()).toMatchObject({ calls: 1, hadFailure: true });
+      expect(broker.receipt().toolCalls).toEqual([
+        {
+          toolName: 'rr_repository_docs_read',
+          started: 1,
+          succeeded: 0,
+          failed: 1,
+        },
+      ]);
       expect(JSON.stringify(broker.receipt())).not.toContain('SECRET');
     } finally {
       await client.close();
       await broker.close();
+    }
+  });
+
+  test('reports actual successes separately for three selected tools without arguments or credentials', async () => {
+    const secret = 'SYNTHETIC-SECRET-CANARY';
+    const marker = 'PRIVATE-QUERY-CANARY';
+    const names = ['search', 'scrape', 'fixture'];
+    const call = jest.fn(async () => ({
+      content: [{ type: 'text' as const, text: secret }],
+    }));
+    const connect = jest
+      .spyOn(httpsMcp, 'connectHttpsContextTools')
+      .mockResolvedValue({
+        tools: names.map((name) => ({
+          name,
+          inputSchema: { type: 'object' as const },
+        })),
+        call,
+        close: jest.fn(async () => undefined),
+      });
+    const broker = await startContextToolsBroker({
+      plan: plan([{ ...remote, tools: names }]),
+      githubJson: JSON.stringify({ TOKEN: secret }),
+      builtins: {
+        'repository.docs.read': {
+          definition: { name: 'docs', inputSchema: { type: 'object' } },
+          call,
+        },
+      },
+      mask: jest.fn(),
+      deadlineMs: Date.now() + 10000,
+    });
+    const client = new Client(
+      { name: 'test', version: '1' },
+      { capabilities: {} }
+    );
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(broker.config.url), {
+          requestInit: {
+            headers: { Authorization: `Bearer ${broker.config.capability}` },
+          },
+        })
+      );
+      for (const name of names) {
+        const request = {
+          name: `rr_mcp_docs_${name}`,
+          arguments: { query: marker },
+        };
+        await client.callTool(request);
+        await client.callTool(request);
+      }
+      await expect(
+        client.callTool({ name: marker, arguments: {} })
+      ).rejects.toThrow('context_tools_arguments_invalid');
+      expect(call).toHaveBeenCalledTimes(3);
+      expect(broker.receipt().toolCalls).toEqual([
+        {
+          toolName: 'rr_repository_docs_read',
+          started: 0,
+          succeeded: 0,
+          failed: 0,
+        },
+        ...names.map((name) => ({
+          toolName: `rr_mcp_docs_${name}`,
+          started: 1,
+          succeeded: 1,
+          failed: 0,
+        })),
+      ]);
+      const receipt = JSON.stringify(broker.receipt());
+      for (const forbidden of [
+        secret,
+        marker,
+        broker.config.capability,
+        remote.url,
+        'Authorization',
+        'arguments',
+      ]) {
+        expect(receipt).not.toContain(forbidden);
+      }
+      // A caller cannot mutate future accounting by editing an earlier receipt.
+      (broker.receipt().toolCalls[1] as { succeeded: number }).succeeded = 99;
+      expect(broker.receipt().toolCalls[1].succeeded).toBe(1);
+    } finally {
+      await client.close();
+      await broker.close();
+      connect.mockRestore();
     }
   });
 });

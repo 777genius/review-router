@@ -163215,7 +163215,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.211",
+  version: "1.0.212",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -223167,6 +223167,12 @@ async function serveContextTools(input) {
   );
   const schemaDigest = `sha256:${sha256(canonicalJson(definitions))}`;
   const cache = /* @__PURE__ */ new Map();
+  const toolCalls = new Map(
+    [...input.bindings.keys()].map((toolName) => [
+      toolName,
+      { toolName, started: 0, succeeded: 0, failed: 0 }
+    ])
+  );
   let calls = 0;
   let hadFailure = false;
   let nativeConnected = false;
@@ -223249,6 +223255,8 @@ async function serveContextTools(input) {
           input.deadlineMs - Date.now()
         );
         if (timeoutMs <= 0) throw contextToolsError("deadline");
+        const counts = toolCalls.get(name);
+        counts.started += 1;
         let timer;
         try {
           const result2 = await Promise.race([
@@ -223262,8 +223270,11 @@ async function serveContextTools(input) {
           ]);
           if (Buffer.byteLength(JSON.stringify(result2)) > input.plan.limits.responseBytes)
             throw contextToolsError("response_too_large");
+          if (result2.isError === true) counts.failed += 1;
+          else counts.succeeded += 1;
           return result2;
         } catch (error4) {
+          counts.failed += 1;
           if (error4 instanceof ContextToolsError && (error4.code === "scope_denied" || error4.code === "arguments_invalid"))
             throw error4;
           hadFailure = true;
@@ -223330,7 +223341,8 @@ async function serveContextTools(input) {
       availableTools: [...input.bindings.keys()],
       nativeConnected,
       calls,
-      hadFailure
+      hadFailure,
+      toolCalls: [...toolCalls.values()].map((counts) => ({ ...counts }))
     }),
     close
   };
@@ -235095,12 +235107,21 @@ var BuildCurrentReviewProjection = class {
       occurrences,
       command.revisionFiles
     );
+    const linkedCurrentTargets = new Set(
+      lifecycleDecisions.filter(
+        (decision) => decision.verdict === "still_valid" /* StillValid */ && decision.reasonCodes.includes("current_finding_present") && decision.currentSourceFindingIds?.some(
+          (id) => occurrences.some(
+            (occurrence) => occurrence.sourceFindingIds.includes(id)
+          )
+        )
+      ).map((decision) => decision.targetId)
+    );
     const reviewPresentation = deriveReviewPresentation({
       reviewedHeadSha: command.scope.reviewedHeadSha,
       baseline: command.comparisonBaseline,
       coverage,
       incomplete: command.providerExecution.succeededProviders === 0 && command.providerExecution.plannedProviders > 0 || lifecycleFacts.some(
-        (fact) => fact.verdict !== "suppressed_by_human" && !occurrences.some(
+        (fact) => fact.verdict !== "suppressed_by_human" && !linkedCurrentTargets.has(fact.targetId) && !occurrences.some(
           (item) => item.lineageId === (fact.lineageId ?? fact.markerFingerprint)
         )
       ),
@@ -235845,7 +235866,17 @@ var LegacyReviewProjectionPolicyAdapter = class {
         decisions.set(record4.target.targetId, {
           targetId: record4.target.targetId,
           verdict,
-          reasonCodes: sortedUnique3(record4.reasonCodes)
+          reasonCodes: sortedUnique3(record4.reasonCodes),
+          ...verdict === "still_valid" /* StillValid */ && record4.reasonCodes.includes("current_finding_present") ? {
+            currentSourceFindingIds: sortedUnique3(
+              query.findings.filter(
+                (finding) => currentFindingMatchesTarget(
+                  toLegacyFinding(finding),
+                  record4.target
+                )
+              ).flatMap((finding) => finding.sourceFindingIds)
+            )
+          } : {}
         });
       }
     };
@@ -240903,7 +240934,8 @@ var ProductionT0ReviewRunner = class {
                   selectedTools: receipt.availableTools,
                   nativeConnected: receipt.nativeConnected,
                   calls: receipt.calls,
-                  hadFailure: receipt.hadFailure
+                  hadFailure: receipt.hadFailure,
+                  toolCalls: receipt.toolCalls
                 })
               } : {},
               bridge,

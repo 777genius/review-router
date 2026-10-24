@@ -657,6 +657,14 @@ describe('OcrReviewInvocationAdapter', () => {
       planDigest: 'sha256:' + 'a'.repeat(64),
       schemaDigest: 'sha256:' + 'b'.repeat(64),
       availableTools: ['rr_repository_docs_read'],
+      toolCalls: [
+        {
+          toolName: 'rr_repository_docs_read',
+          started: 1,
+          succeeded: 1,
+          failed: 0,
+        },
+      ],
       nativeConnected: true,
       calls: 1,
       hadFailure: false,
@@ -722,6 +730,9 @@ describe('OcrReviewInvocationAdapter', () => {
       planDigest: 'sha256:' + 'a'.repeat(64),
       schemaDigest: 'sha256:' + 'b'.repeat(64),
       availableTools: ['rr_mcp_docs_read'],
+      toolCalls: [
+        { toolName: 'rr_mcp_docs_read', started: 1, succeeded: 0, failed: 1 },
+      ],
       nativeConnected: true,
       calls: 1,
       hadFailure: true,

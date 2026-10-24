@@ -18,6 +18,12 @@ type TreeEntry = Readonly<{
   oid: string;
   name: string;
 }>;
+type TreeBudget = {
+  root: string;
+  bytes: number;
+  entries: number;
+  paths: Set<string>;
+};
 const run = promisify(execFile);
 const TREE_BYTES = reviewSkillsLimits.treeBytes;
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -36,7 +42,31 @@ export async function materializeReviewSkills(input: {
     capture.baseSha !== input.baseSha
   )
     throw new Error('review_skills_capture_mismatch');
-  const trees = new Map<string, readonly TreeEntry[]>();
+  const trees = new Map<
+    string,
+    Readonly<{ entries: readonly TreeEntry[]; bytes: number }>
+  >();
+  const charge = (
+    bytes: number,
+    entries: number,
+    path: string,
+    budget?: TreeBudget
+  ) => {
+    if (
+      !budget ||
+      !(path === budget.root || path.startsWith(`${budget.root}/`)) ||
+      budget.paths.has(path)
+    )
+      return;
+    if (
+      budget.bytes + bytes > TREE_BYTES ||
+      budget.entries + entries > reviewSkillsLimits.treeEntries
+    )
+      throw new Error('review_skills_git_tree_too_large');
+    budget.bytes += bytes;
+    budget.entries += entries;
+    budget.paths.add(path);
+  };
   const git = async (
     args: readonly string[],
     maxBuffer: number
@@ -66,10 +96,24 @@ export async function materializeReviewSkills(input: {
       throw new Error('review_skills_git_read_failed');
     }
   };
-  const tree = async (oid: string): Promise<readonly TreeEntry[]> => {
+  const tree = async (
+    oid: string,
+    path: string,
+    budget?: TreeBudget
+  ): Promise<readonly TreeEntry[]> => {
     const previous = trees.get(oid);
-    if (previous) return previous;
+    if (previous) {
+      // Charge each directory path once per root, including cached object aliases.
+      charge(previous.bytes, previous.entries.length, path, budget);
+      return previous.entries;
+    }
     const bytes = await git(['ls-tree', '-z', oid], TREE_BYTES);
+    let count = 0;
+    for (const byte of bytes) if (byte === 0) count++;
+    if (count > reviewSkillsLimits.treeEntries)
+      throw new Error('review_skills_git_tree_too_large');
+    // Debit the aggregate before decoding or retaining this directory's objects.
+    charge(bytes.byteLength, count, path, budget);
     const entries = decoder
       .decode(bytes)
       .split('\0')
@@ -97,24 +141,35 @@ export async function materializeReviewSkills(input: {
       });
     if (entries.length > reviewSkillsLimits.treeEntries)
       throw new Error('review_skills_git_tree_too_large');
-    trees.set(oid, entries);
+    trees.set(oid, { entries, bytes: bytes.byteLength });
     return entries;
   };
-  const find = async (path: string): Promise<TreeEntry | null> => {
+  const find = async (
+    path: string,
+    budget?: TreeBudget
+  ): Promise<TreeEntry | null> => {
     let oid = input.baseSha;
+    let directory = '';
     const parts = path.split('/');
     for (let i = 0; i < parts.length; i++) {
-      const entry = (await tree(oid)).find((item) => item.name === parts[i]);
+      const entry = (await tree(oid, directory, budget)).find(
+        (item) => item.name === parts[i]
+      );
       if (!entry) return null;
       if (i === parts.length - 1) return entry;
       if (entry.mode !== '040000' || entry.type !== 'tree')
         throw new Error('review_skills_git_nonregular');
       oid = entry.oid;
+      directory = directory ? `${directory}/${parts[i]}` : parts[i];
     }
     return null;
   };
-  const read = async (path: string, limit: number): Promise<string> => {
-    const entry = await find(path);
+  const read = async (
+    path: string,
+    limit: number,
+    budget: TreeBudget
+  ): Promise<string> => {
+    const entry = await find(path, budget);
     if (!entry) throw new Error('review_skills_reference_missing');
     if (!/^100(?:644|755)$/.test(entry.mode) || entry.type !== 'blob')
       throw new Error('review_skills_git_nonregular');
@@ -130,29 +185,35 @@ export async function materializeReviewSkills(input: {
       throw new Error('review_skills_git_text_invalid');
     return content;
   };
-  const sources: { path: string; directory: string }[] = [];
+  const sources: { path: string; directory: string; budget: TreeBudget }[] = [];
   for (const source of capture.gitSources) {
     if (
       source.root !== '.reviewrouter/skills' &&
       source.root !== '.agents/skills'
     )
       throw new Error('review_skills_git_root_invalid');
-    const root = await find(source.root);
+    const budget: TreeBudget = {
+      root: source.root,
+      bytes: 0,
+      entries: 0,
+      paths: new Set(),
+    };
+    const root = await find(source.root, budget);
     if (!root) continue;
     if (root.mode !== '040000' || root.type !== 'tree')
       throw new Error('review_skills_git_nonregular');
-    for (const child of await tree(root.oid)) {
+    for (const child of await tree(root.oid, source.root, budget)) {
       if (child.mode === '120000' || child.mode === '160000')
         throw new Error('review_skills_git_nonregular');
       if (child.type !== 'tree') continue;
-      const skill = (await tree(child.oid)).find(
-        (entry) => entry.name === 'SKILL.md'
-      );
+      const skill = (
+        await tree(child.oid, `${source.root}/${child.name}`, budget)
+      ).find((entry) => entry.name === 'SKILL.md');
       if (!skill) continue;
       if (!/^100(?:644|755)$/.test(skill.mode) || skill.type !== 'blob')
         throw new Error('review_skills_git_nonregular');
       const directory = `${source.root}/${child.name}`;
-      sources.push({ directory, path: `${directory}/SKILL.md` });
+      sources.push({ directory, path: `${directory}/SKILL.md`, budget });
       if (
         sources.length + capture.webSkills.length >
         reviewSkillsLimits.skillsPerRun
@@ -167,7 +228,8 @@ export async function materializeReviewSkills(input: {
   )) {
     const content = await read(
       source.path,
-      reviewSkillsLimits.instructionsBytes
+      reviewSkillsLimits.instructionsBytes,
+      source.budget
     );
     const parsed = parseGitReviewSkill(content);
     const resources = new Map<string, string>();
@@ -198,7 +260,8 @@ export async function materializeReviewSkills(input: {
           throw new Error('review_skills_reference_count');
         const reference = await read(
           resolved,
-          reviewSkillsLimits.referenceBytes
+          reviewSkillsLimits.referenceBytes,
+          source.budget
         );
         resources.set(resolved, reference);
         visiting.add(resolved);

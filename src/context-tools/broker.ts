@@ -29,6 +29,12 @@ export type ContextTool = Readonly<{
   validateArguments?: (args: Record<string, unknown>) => boolean;
   call: (args: Record<string, unknown>) => Promise<CallToolResult>;
 }>;
+type ContextToolCallCounts = {
+  toolName: string;
+  started: number;
+  succeeded: number;
+  failed: number;
+};
 export type ContextToolsReceipt = Readonly<{
   planDigest: string;
   schemaDigest: string;
@@ -36,6 +42,7 @@ export type ContextToolsReceipt = Readonly<{
   nativeConnected: boolean;
   calls: number;
   hadFailure: boolean;
+  toolCalls: readonly Readonly<ContextToolCallCounts>[];
 }>;
 export type ContextToolsBroker = Readonly<{
   config: Readonly<{
@@ -153,6 +160,14 @@ async function serveContextTools(input: {
   );
   const schemaDigest = `sha256:${sha256(canonicalJson(definitions))}`;
   const cache = new Map<string, Promise<CallToolResult>>();
+  // Only immutable selected names enter this bounded map. Cached requests do
+  // not represent another remote invocation and never increment these counts.
+  const toolCalls = new Map<string, ContextToolCallCounts>(
+    [...input.bindings.keys()].map((toolName) => [
+      toolName,
+      { toolName, started: 0, succeeded: 0, failed: 0 },
+    ])
+  );
   let calls = 0;
   let hadFailure = false;
   let nativeConnected = false;
@@ -254,6 +269,8 @@ async function serveContextTools(input: {
           input.deadlineMs - Date.now()
         );
         if (timeoutMs <= 0) throw contextToolsError('deadline');
+        const counts = toolCalls.get(name)!;
+        counts.started += 1;
         let timer: NodeJS.Timeout | undefined;
         try {
           const result = await Promise.race([
@@ -270,8 +287,11 @@ async function serveContextTools(input: {
             input.plan.limits.responseBytes
           )
             throw contextToolsError('response_too_large');
+          if (result.isError === true) counts.failed += 1;
+          else counts.succeeded += 1;
           return result;
         } catch (error) {
+          counts.failed += 1;
           if (
             error instanceof ContextToolsError &&
             (error.code === 'scope_denied' ||
@@ -343,6 +363,7 @@ async function serveContextTools(input: {
       nativeConnected,
       calls,
       hadFailure,
+      toolCalls: [...toolCalls.values()].map((counts) => ({ ...counts })),
     }),
     close,
   };

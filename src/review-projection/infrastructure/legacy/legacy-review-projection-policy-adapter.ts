@@ -2,7 +2,10 @@ import { ConsensusEngine } from '../../../analysis/consensus';
 import { Deduplicator } from '../../../analysis/deduplicator';
 import { FindingFilter } from '../../../analysis/finding-filter';
 import { SynthesisEngine } from '../../../analysis/synthesis';
-import { ThreadLifecycleAggregator } from '../../../analysis/thread-lifecycle';
+import {
+  ThreadLifecycleAggregator,
+  currentFindingMatchesTarget,
+} from '../../../analysis/thread-lifecycle';
 import { getBlockingFindingBreakdown } from '../../../output/severity-gate';
 import {
   FileChange,
@@ -254,6 +257,21 @@ export class LegacyReviewProjectionPolicyAdapter
           targetId: record.target.targetId,
           verdict,
           reasonCodes: sortedUnique(record.reasonCodes),
+          ...(verdict === LifecycleRevalidationVerdict.StillValid &&
+          record.reasonCodes.includes('current_finding_present')
+            ? {
+                currentSourceFindingIds: sortedUnique(
+                  query.findings
+                    .filter((finding) =>
+                      currentFindingMatchesTarget(
+                        toLegacyFinding(finding),
+                        record.target
+                      )
+                    )
+                    .flatMap((finding) => finding.sourceFindingIds)
+                ),
+              }
+            : {}),
         });
       }
     };

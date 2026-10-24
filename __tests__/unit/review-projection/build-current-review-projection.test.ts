@@ -726,6 +726,67 @@ describe('BuildCurrentReviewProjection', () => {
     );
   });
 
+  it('links a matched current finding to a stale lifecycle marker without granting mutation authority', async () => {
+    const current = finding({ anchorVerified: false });
+    const oldTarget = target({
+      title: current.title,
+      message: current.message,
+    });
+    const inventoryPort = new MutableInventoryPort(
+      inventory({ targets: [oldTarget] })
+    );
+    const policy = new LegacyReviewProjectionPolicyAdapter(DEFAULT_CONFIG);
+    const dependencies = {
+      lifecycleInventory: inventoryPort,
+      findingPolicy: new PassThroughFindingPolicy(),
+      lifecyclePolicy: policy,
+      presentationPolicy: policy,
+      mergeGatePolicy: policy,
+      limits: testLimits(),
+    };
+    const result = await new BuildCurrentReviewProjection(dependencies).execute(
+      command({ currentFindings: [current] })
+    );
+    const occurrence = result.envelope.occurrences[0];
+    expect(occurrence.lineageId).not.toBe(oldTarget.trustedMarker);
+    expect(result.envelope.publishing.lifecycle[0]).toMatchObject({
+      markerFingerprint: oldTarget.trustedMarker,
+      verdict: LifecycleRevalidationVerdict.StillValid,
+      reasonCodes: ['current_finding_present'],
+      mutationEligible: false,
+    });
+    expect(result.envelope.publishing.lifecycle[0]).not.toHaveProperty(
+      'lineageId'
+    );
+    expect(result.envelope.publishing.check.title).toBe('Review completed');
+    expect(result.envelope.publishing.summary.body).toContain(
+      '<!-- reviewrouter:review-status:complete -->'
+    );
+    expect(occurrence.placement.kind).toBe(FindingPlacementKind.File);
+    expect(result.envelope.mergeGate.conclusion).toBe(MergeGateConclusion.Fail);
+
+    // A stale reason alone, or a link absent from emitted current findings,
+    // cannot make unmatched historical state look verified.
+    for (const currentSourceFindingIds of [undefined, ['not-selected']]) {
+      const unlinked = await new BuildCurrentReviewProjection({
+        ...dependencies,
+        lifecyclePolicy: {
+          projectLifecycle: async () => [
+            {
+              targetId: oldTarget.targetId,
+              verdict: LifecycleRevalidationVerdict.StillValid,
+              reasonCodes: ['current_finding_present'],
+              currentSourceFindingIds,
+            },
+          ],
+        },
+      }).execute(command({ currentFindings: [current] }));
+      expect(unlinked.envelope.publishing.check.title).toBe(
+        'Review incomplete - unverified previous findings'
+      );
+    }
+  });
+
   it('changes projection when a current human reply or skip changes inventory', async () => {
     const currentFinding = finding({ trustedMarker: CURRENT_MARKER });
     const inventoryPort = new MutableInventoryPort(

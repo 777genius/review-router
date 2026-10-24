@@ -533,7 +533,7 @@ function resolveConfidenceThresholds(
   return thresholds;
 }
 
-function currentFindingMatchesTarget(
+export function currentFindingMatchesTarget(
   finding: Finding,
   target: LifecycleTarget
 ): boolean {

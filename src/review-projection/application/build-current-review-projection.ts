@@ -176,6 +176,20 @@ export class BuildCurrentReviewProjection {
       command.revisionFiles
     );
 
+    const linkedCurrentTargets = new Set(
+      lifecycleDecisions
+        .filter(
+          (decision) =>
+            decision.verdict === LifecycleRevalidationVerdict.StillValid &&
+            decision.reasonCodes.includes('current_finding_present') &&
+            decision.currentSourceFindingIds?.some((id) =>
+              occurrences.some((occurrence) =>
+                occurrence.sourceFindingIds.includes(id)
+              )
+            )
+        )
+        .map((decision) => decision.targetId)
+    );
     const reviewPresentation = deriveReviewPresentation({
       reviewedHeadSha: command.scope.reviewedHeadSha,
       baseline: command.comparisonBaseline,
@@ -186,6 +200,7 @@ export class BuildCurrentReviewProjection {
         lifecycleFacts.some(
           (fact) =>
             fact.verdict !== 'suppressed_by_human' &&
+            !linkedCurrentTargets.has(fact.targetId) &&
             !occurrences.some(
               (item) =>
                 item.lineageId === (fact.lineageId ?? fact.markerFingerprint)

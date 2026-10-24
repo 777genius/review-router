@@ -217,6 +217,8 @@ export type PreparedReviewInvocationManifestFacts = {
   readonly outputSchemaHash: string;
   readonly filePatchManifestHash: string;
   readonly contextManifestHash: string;
+  /** Null/absent means no memory text was included in this invocation. */
+  readonly memoryBundleHash?: string | null;
   readonly lifecycleTargetSetHash: string | null;
   readonly liveLifecycleStateHash: string | null;
   readonly toolPolicyHash: string;
@@ -404,6 +406,7 @@ export enum ReviewInvocationLeaseAcquireOutcomeStatus {
   Busy = 'busy',
   AttemptBudgetExhausted = 'attempt_budget_exhausted',
   NotRunnable = 'not_runnable',
+  InputStale = 'input_stale',
 }
 
 export enum ReviewPublicationRequestOutcomeStatus {
@@ -431,7 +434,8 @@ export type ReviewInvocationLeaseAcquireOutcome =
       readonly status:
         | ReviewInvocationLeaseAcquireOutcomeStatus.Busy
         | ReviewInvocationLeaseAcquireOutcomeStatus.AttemptBudgetExhausted
-        | ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable;
+        | ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable
+        | ReviewInvocationLeaseAcquireOutcomeStatus.InputStale;
     };
 
 export interface ReviewActionV2ControlPlanePort {
@@ -657,6 +661,13 @@ export interface PreparedReviewInvocationPort {
     readonly sourceReviewRevisionHash: string;
     readonly signal: AbortSignal;
   }): Promise<ReviewObservationPayload>;
+}
+
+/** Admission changes require a fresh prompt/manifest before cache or inference. */
+export interface ReviewMemoryAdmissionPort {
+  isEligible(memoryBundleHash: string | null | undefined): Promise<boolean>;
+  /** Permanently discard captured memory before same-attempt preparation. */
+  discard(): void;
 }
 
 /** Optional parent task, never a review observation or provider vote. */

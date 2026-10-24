@@ -53,14 +53,16 @@ export function hashConfig(config: ReviewConfig): string {
 export function hashIncrementalCompatibility(
   config: ReviewConfig,
   runtimeConfigVersion?: string,
-  reviewSkills?: Readonly<{ capturedDigest: string; executionDigest: string }>
+  reviewSkills?: Readonly<{ capturedDigest: string; executionDigest: string }>,
+  memoryBundleHash?: string | null
 ): string {
   return createHash('sha256')
     .update(
       incrementalCompatibilityPreimage(
         config,
         runtimeConfigVersion,
-        reviewSkills
+        reviewSkills,
+        memoryBundleHash
       )
     )
     .digest('hex');
@@ -71,11 +73,13 @@ export function hashIncrementalCompatibility(
 export function incrementalCompatibilityPreimage(
   config: ReviewConfig,
   runtimeConfigVersion?: string,
-  reviewSkills?: Readonly<{ capturedDigest: string; executionDigest: string }>
+  reviewSkills?: Readonly<{ capturedDigest: string; executionDigest: string }>,
+  memoryBundleHash?: string | null
 ): string {
   return JSON.stringify(
     sortObject({
       ...(reviewSkills === undefined ? {} : { reviewSkills }),
+      ...(memoryBundleHash == null ? {} : { memoryBundleHash }),
       cacheVersion: CACHE_VERSION,
       reviewConfig: config,
       runtimeConfigVersion: runtimeConfigVersion?.trim() || null,

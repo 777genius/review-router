@@ -9,6 +9,7 @@ import {
   ActionMemoryCommand,
   ActionMemoryInteractionPort,
   ActionMemoryMutationResponse,
+  ActionMemorySourceMetadata,
 } from '../../../src/control-plane/memory';
 import {
   ManualReviewRequestAvailability,
@@ -31,6 +32,7 @@ function makeClient(options: { parentBody?: string } = {}) {
   const getPull = jest.fn().mockResolvedValue({
     data: {
       number: 123,
+      base: { sha: 'def' },
       head: { sha: 'abc', repo: { fork: false } },
       user: { login: 'author' },
     },
@@ -85,6 +87,7 @@ function makeClient(options: { parentBody?: string } = {}) {
 class CapturingMemoryClient implements ActionMemoryInteractionPort {
   public readonly candidates: ActionMemoryCandidateRequest[] = [];
   public readonly commands: ActionMemoryCommand[][] = [];
+  public readonly sources: (ActionMemorySourceMetadata | undefined)[] = [];
 
   constructor(
     private readonly options: {
@@ -112,9 +115,11 @@ class CapturingMemoryClient implements ActionMemoryInteractionPort {
   }
 
   async submitCommands(
-    commands: readonly ActionMemoryCommand[]
+    commands: readonly ActionMemoryCommand[],
+    source?: ActionMemorySourceMetadata
   ): Promise<readonly ActionMemoryMutationResponse[]> {
     this.commands.push([...commands]);
+    this.sources.push(source);
     return (
       this.options.commandResponses ?? [
         { status: 'updated', id: 'mem_confirmed', version: 2 },
@@ -827,16 +832,28 @@ describe('ReviewInteractionHandler', () => {
   it('submits direct repository memory commands from PR issue comments', async () => {
     const { client, octokit } = makeClient();
     const memoryClient = new CapturingMemoryClient({
-      candidateResponse: { status: 'created', id: 'mem_direct', version: 1 },
+      candidateResponse: {
+        status: 'queued',
+        id: '12345678-1234-5234-8234-123456789abc',
+        entryId: 'mem_direct',
+        revision: '1',
+      },
     });
     process.env.GITHUB_EVENT_PATH = writeEvent({
       comment: {
         id: 77,
+        node_id: 'IC_fixture_77',
+        created_at: '2026-10-23T10:00:00Z',
+        updated_at: '2026-10-23T10:00:00Z',
         body: '/rr remember repo Use Playwright screenshots for memory dashboard QA.',
         user: { login: 'maintainer', type: 'User' },
       },
       issue: { number: 123, pull_request: {} },
-      repository: { full_name: 'test-owner/test-repo' },
+      repository: {
+        id: 1234,
+        full_name: 'test-owner/test-repo',
+        private: true,
+      },
     });
 
     const ledger = new ReviewLedger(client, 'test-secret');
@@ -853,25 +870,33 @@ describe('ReviewInteractionHandler', () => {
     );
     expect(memoryClient.candidates).toHaveLength(1);
     expect(memoryClient.candidates[0]).toMatchObject({
-      protocolVersion: 1,
+      protocolVersion: 2,
       intent: 'explicit_command',
       requestedScope: 'repository',
       candidateBody: 'Use Playwright screenshots for memory dashboard QA.',
       extractionMethod: 'explicit_command',
       source: {
         sourceId: 'github-comment:77',
-        githubCommentId: '77',
-        githubPullRequestNumber: 123,
+        nodeId: 'IC_fixture_77',
+        type: 'github_issue_comment',
+        githubRepositoryId: '1234',
+        pullRequestNumber: 123,
+        revision: '2026-10-23T10:00:00Z',
+        updatedAt: '2026-10-23T10:00:00Z',
+        statementAt: '2026-10-23T10:00:00Z',
         url: 'https://github.com/test-owner/test-repo/pull/123#issuecomment-77',
-        redactedExcerpt: 'Use Playwright screenshots for memory dashboard QA.',
-        sourceVisibility: 'private',
+        visibility: 'private',
       },
     });
-    expect(memoryClient.candidates[0].sourceTextHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(memoryClient.candidates[0].source.claimedBodyDigest).toMatch(
+      /^[a-f0-9]{64}$/
+    );
     expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_number: 123,
-        body: expect.stringContaining('Saved repository memory `mem_direct`'),
+        body: expect.stringContaining(
+          'Memory request for repository memory is queued.'
+        ),
       })
     );
   });
@@ -880,19 +905,26 @@ describe('ReviewInteractionHandler', () => {
     const { client, octokit } = makeClient();
     const memoryClient = new CapturingMemoryClient({
       candidateResponse: {
-        status: 'created',
-        id: 'mem_suggestion_natural',
-        version: 1,
+        status: 'completed',
+        id: '12345678-1234-5234-8234-123456789abc',
+        suggestionId: 'mem_suggestion_natural',
       },
     });
     process.env.GITHUB_EVENT_PATH = writeEvent({
       comment: {
         id: 78,
+        node_id: 'IC_fixture_78',
+        created_at: '2026-10-23T10:00:00Z',
+        updated_at: '2026-10-23T10:00:00Z',
         body: 'Remember for this repository: prefer compact badges over button-like badges.',
         user: { login: 'maintainer', type: 'User' },
       },
       issue: { number: 123, pull_request: {} },
-      repository: { full_name: 'test-owner/test-repo' },
+      repository: {
+        id: 1234,
+        full_name: 'test-owner/test-repo',
+        private: true,
+      },
     });
 
     const ledger = new ReviewLedger(client, 'test-secret');
@@ -924,17 +956,30 @@ describe('ReviewInteractionHandler', () => {
     const { client, octokit } = makeClient();
     const memoryClient = new CapturingMemoryClient({
       commandResponses: [
-        { status: 'created', id: 'mem_confirmed', version: 1 },
+        {
+          status: 'processing',
+          suggestionId: 'mem_suggestion_natural',
+          id: '12345678-1234-5234-8234-123456789abc',
+          entryId: 'mem_confirmed',
+          revision: '1',
+        },
       ],
     });
     process.env.GITHUB_EVENT_PATH = writeEvent({
       comment: {
         id: 79,
+        node_id: 'IC_fixture_79',
+        created_at: '2026-10-23T10:00:00Z',
+        updated_at: '2026-10-23T10:00:00Z',
         body: '/rr remember mem_suggestion_natural',
         user: { login: 'maintainer', type: 'User' },
       },
       issue: { number: 123, pull_request: {} },
-      repository: { full_name: 'test-owner/test-repo' },
+      repository: {
+        id: 1234,
+        full_name: 'test-owner/test-repo',
+        private: true,
+      },
     });
 
     const ledger = new ReviewLedger(client, 'test-secret');
@@ -954,11 +999,121 @@ describe('ReviewInteractionHandler', () => {
     expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.stringContaining(
-          'Confirmed memory suggestion `mem_suggestion_natural` as `mem_confirmed`'
+          'Memory request for confirm mem_suggestion_natural is processing.'
         ),
       })
     );
   });
+
+  it('does not present a rejected suggestion as a newly created candidate when response includes suggestionId', async () => {
+    const { client, octokit } = makeClient();
+    const memoryClient = new CapturingMemoryClient({
+      commandResponses: [
+        {
+          kind: 'reject_suggestion',
+          status: 'published',
+          suggestionId: 'mem_suggestion_rejected',
+          id: '12345678-1234-5234-8234-123456789abc',
+        },
+      ],
+    });
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 180,
+        node_id: 'IC_fixture_180',
+        created_at: '2026-10-23T10:00:00Z',
+        updated_at: '2026-10-23T10:00:00Z',
+        body: '/rr reject-memory mem_suggestion_rejected',
+        user: { id: 11, login: 'maintainer', type: 'User' },
+      },
+      issue: { number: 123, pull_request: {} },
+      repository: {
+        id: 1234,
+        full_name: 'test-owner/test-repo',
+        private: true,
+      },
+    });
+    await new ReviewInteractionHandler(
+      client,
+      new ReviewLedger(client, 'test-secret'),
+      undefined,
+      client,
+      memoryClient
+    ).execute();
+    const notice = String(
+      octokit.rest.issues.createComment.mock.calls[0][0].body
+    );
+    expect(notice).toContain(
+      'Rejected memory suggestion `mem_suggestion_rejected`'
+    );
+    expect(notice).not.toContain('Created pending');
+  });
+
+  it.each(['queued', 'published'] as const)(
+    'corrects one existing entry from an explicit comment and reports %s honestly',
+    async (status) => {
+      const { client, octokit } = makeClient();
+      const memoryClient = new CapturingMemoryClient({
+        commandResponses: [
+          {
+            kind: 'update_memory',
+            status,
+            id: '12345678-1234-5234-8234-123456789abc',
+            entryId: 'mem_existing',
+            revision: '2',
+          },
+        ],
+      });
+      process.env.GITHUB_EVENT_PATH = writeEvent({
+        comment: {
+          id: 179,
+          node_id: 'IC_fixture_179',
+          created_at: '2026-10-23T10:00:00Z',
+          updated_at: '2026-10-23T10:00:00Z',
+          body: '/rr memory edit mem_existing Use UTC for stored timestamps.',
+          user: { id: 11, login: 'maintainer', type: 'User' },
+        },
+        issue: { number: 123, pull_request: {} },
+        repository: {
+          id: 1234,
+          full_name: 'test-owner/test-repo',
+          private: true,
+        },
+      });
+      await new ReviewInteractionHandler(
+        client,
+        new ReviewLedger(client, 'test-secret'),
+        undefined,
+        client,
+        memoryClient
+      ).execute();
+      expect(memoryClient.candidates).toHaveLength(0);
+      expect(memoryClient.commands).toEqual([
+        [
+          {
+            kind: 'update_memory',
+            memoryItemId: 'mem_existing',
+            body: 'Use UTC for stored timestamps.',
+          },
+        ],
+      ]);
+      expect(memoryClient.sources[0]).toMatchObject({
+        nodeId: 'IC_fixture_179',
+        sourceId: 'github-comment:179',
+        githubRepositoryId: '1234',
+        pullRequestNumber: 123,
+      });
+      expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining(
+            status === 'queued'
+              ? 'Memory request for edit mem_existing is queued.'
+              : 'Updated memory `mem_existing`; the corrected revision is published.'
+          ),
+        })
+      );
+    }
+  );
 
   it('ignores bot memory comments to prevent loops', async () => {
     const { client, octokit } = makeClient();

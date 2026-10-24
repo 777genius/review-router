@@ -5,7 +5,7 @@ import {
 } from '../../../src/control-plane/memory';
 import { PRContext } from '../../../src/types';
 
-describe('ControlPlaneMemoryClient', () => {
+describe('ControlPlaneMemoryClient v2', () => {
   const runtimeConfig = {
     status: 'applied' as const,
     apiUrl: 'https://api.reviewrouter.org',
@@ -13,136 +13,193 @@ describe('ControlPlaneMemoryClient', () => {
     configVersion: 1,
     sessionToken: 'rr-session',
   };
-  const env = {
-    REVIEW_ROUTER_MEMORY_ENABLED: 'true',
-    REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT: '/api/action/v1/memory',
-    REVIEW_ROUTER_MEMORY_CANDIDATE_ENDPOINT: '/api/action/v1/memory-candidates',
-    REVIEW_ROUTER_MEMORY_COMMAND_ENDPOINT: '/api/action/v1/memory-commands',
+  const env = { REVIEW_ROUTER_MEMORY_ENABLED: 'true' };
+  const source = {
+    type: 'github_issue_comment' as const,
+    sourceId: 'github-comment:77',
+    nodeId: 'IC_fixture_77',
+    revision: '2026-10-23T10:00:00Z',
+    updatedAt: '2026-10-23T10:00:00Z',
+    statementAt: '2026-10-23T10:00:00Z',
+    githubRepositoryId: '1234',
+    pullRequestNumber: 7,
+    headSha: 'a'.repeat(40),
+    baseSha: 'b'.repeat(40),
+    claimedBodyDigest: 'c'.repeat(64),
+    visibility: 'private' as const,
+  };
+  const candidate = {
+    protocolVersion: 2 as const,
+    commandId: '12345678-1234-5234-8234-123456789abc',
+    expectedRevision: null,
+    kind: 'rule' as const,
+    intent: 'explicit_command' as const,
+    requestedScope: 'repository' as const,
+    candidateBody: 'Prefer guard clauses.',
+    extractionMethod: 'explicit_command' as const,
+    extractionVersion: 1,
+    source,
   };
 
-  it('fetches scoped memory bundle with a safe retrieval query', async () => {
-    const fetchImpl = jest
-      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          protocolVersion: 1,
-          memoryVersion: 7,
-          items: [
-            {
-              id: 'mem_browser',
-              scope: 'repository',
-              body: 'Run browser visual QA for memory dashboard changes.',
-            },
-          ],
-          degraded: false,
-          reason: null,
-        })
-      );
-    const client = new ControlPlaneMemoryClient(runtimeConfig, env, fetchImpl);
-
-    const bundle = await client.fetchBundleForPullRequest(
-      prContext({
-        title: 'Memory dashboard badge layout',
-        files: ['apps/web/app/dashboard/memory-management-panel.tsx'],
-      })
-    );
-
-    expect(String(fetchImpl.mock.calls[0][0])).toBe(
-      'https://api.reviewrouter.org/api/action/v1/memory?safeRetrievalQuery=Memory+dashboard+badge+layout+app%2Fdashboard%2Fmemory-management-panel.tsx'
-    );
-    expect(fetchImpl.mock.calls[0][1]).toMatchObject({
-      headers: { Authorization: 'Bearer rr-session' },
-    });
-    expect(bundle).toMatchObject({
-      protocolVersion: 1,
-      memoryVersion: 7,
-      items: [
-        {
-          id: 'mem_browser',
-          scope: 'repository',
-          body: 'Run browser visual QA for memory dashboard changes.',
-        },
-      ],
-    });
-  });
-
-  it('does not fetch memory when runtime config is unavailable', async () => {
+  it('fences unbound legacy bundle reads without network access', async () => {
     const fetchImpl = jest.fn();
-    const client = new ControlPlaneMemoryClient(
-      { status: 'fallback', reason: 'network_down' },
-      env,
-      fetchImpl
-    );
-
+    const client = new ControlPlaneMemoryClient(runtimeConfig, env, fetchImpl);
     await expect(
       client.fetchBundleForPullRequest(prContext())
     ).resolves.toBeNull();
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('posts candidates and normalized commands with the action session', async () => {
+  it('posts only v2 distilled candidate envelopes and preserves async state', async () => {
+    const fetchImpl = jest.fn().mockResolvedValueOnce(
+      jsonResponse({
+        status: 'queued',
+        id: candidate.commandId,
+        entryId: 'mem_1',
+        revision: '1',
+      })
+    );
+    const client = new ControlPlaneMemoryClient(runtimeConfig, env, fetchImpl);
+    await expect(client.submitCandidate(candidate)).resolves.toMatchObject({
+      status: 'queued',
+      entryId: 'mem_1',
+      revision: '1',
+    });
+    expect(String(fetchImpl.mock.calls[0][0])).toBe(
+      'https://api.reviewrouter.org/api/action/v2/memory/candidates'
+    );
+    expect(fetchImpl.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      headers: { authorization: 'Bearer rr-session' },
+    });
+    expect(JSON.parse(String(fetchImpl.mock.calls[0][1].body))).toEqual(
+      candidate
+    );
+    await expect(
+      client.submitCandidate({ ...candidate, protocolVersion: 1 } as never)
+    ).rejects.toThrow('memory_v2_source_required');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates the same entry with authorized CAS and uses the stable command ID when reading original retry preconditions', async () => {
     const fetchImpl = jest
-      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ protocolVersion: 1, status: 'created', id: 'mem_1' })
+        jsonResponse({ entryId: 'mem_existing', revision: '17' })
       )
       .mockResolvedValueOnce(
         jsonResponse({
-          protocolVersion: 1,
           results: [
-            { kind: 'confirm_suggestion', status: 'updated', id: 'mem_1' },
+            {
+              kind: 'update_memory',
+              status: 'queued',
+              id: candidate.commandId,
+              entryId: 'mem_existing',
+              revision: '18',
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ entryId: 'mem_existing', revision: '17' })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          results: [
+            {
+              kind: 'update_memory',
+              status: 'published',
+              id: candidate.commandId,
+              entryId: 'mem_existing',
+              revision: '18',
+            },
           ],
         })
       );
     const client = new ControlPlaneMemoryClient(runtimeConfig, env, fetchImpl);
-
-    await client.submitCandidate({
-      protocolVersion: 1,
-      intent: 'explicit_command',
-      requestedScope: 'repository',
-      candidateBody: 'Prefer guard clauses.',
-      extractionMethod: 'explicit_command',
-      extractionVersion: 1,
-      source: {
-        sourceId: 'github-comment:1',
-        sourceVisibility: 'private',
-      },
+    const command = {
+      kind: 'update_memory' as const,
+      memoryItemId: 'mem_existing',
+      body: 'Use UTC for stored times.',
+    };
+    await client.submitCommands([command], source);
+    await client.submitCommands([command], source);
+    const first = JSON.parse(String(fetchImpl.mock.calls[1][1].body));
+    const retry = JSON.parse(String(fetchImpl.mock.calls[3][1].body));
+    expect(retry).toEqual(first);
+    expect(first.commands[0]).toMatchObject({
+      ...command,
+      expectedRevision: '17',
     });
-    await client.submitCommands([
-      { kind: 'confirm_suggestion', suggestionId: 'mem_suggestion_1' },
-    ]);
-
-    expect(String(fetchImpl.mock.calls[0][0])).toBe(
-      'https://api.reviewrouter.org/api/action/v1/memory-candidates'
-    );
-    expect(JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))).toMatchObject({
-      candidateBody: 'Prefer guard clauses.',
-    });
-    expect(String(fetchImpl.mock.calls[1][0])).toBe(
-      'https://api.reviewrouter.org/api/action/v1/memory-commands'
-    );
-    expect(JSON.parse(String(fetchImpl.mock.calls[1][1]?.body))).toEqual({
-      protocolVersion: 1,
-      commands: [
-        { kind: 'confirm_suggestion', suggestionId: 'mem_suggestion_1' },
-      ],
-    });
+    expect(
+      new URL(String(fetchImpl.mock.calls[0][0])).searchParams.get('commandId')
+    ).toBe(first.commands[0].commandId);
+    expect(
+      new URL(String(fetchImpl.mock.calls[2][0])).searchParams.get(
+        'sourceNodeId'
+      )
+    ).toBe(source.nodeId);
   });
 
-  it('redacts sensitive errors and degrades bundle fetches', async () => {
-    const warnings: string[] = [];
+  it('reads an authorized current revision before retire/forget and binds it as a precondition', async () => {
     const fetchImpl = jest
-      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
-      .mockRejectedValueOnce(new Error('failed with ghs_secret_token'));
-    const client = new ControlPlaneMemoryClient(runtimeConfig, env, fetchImpl, {
-      warn: (message) => warnings.push(message),
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ entryId: 'mem_1', revision: '17' }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          protocolVersion: 2,
+          results: [
+            {
+              kind: 'forget_memory',
+              status: 'cleanup_pending',
+              id: candidate.commandId,
+              entryId: 'mem_1',
+              revision: '18',
+            },
+          ],
+        })
+      );
+    const client = new ControlPlaneMemoryClient(runtimeConfig, env, fetchImpl);
+    const result = await client.submitCommands(
+      [{ kind: 'forget_memory', memoryItemId: 'mem_1' }],
+      source
+    );
+    expect(result[0]).toMatchObject({ status: 'cleanup_pending' });
+    const url = new URL(String(fetchImpl.mock.calls[0][0]));
+    expect(url.pathname).toBe('/api/action/v2/memory/entries/mem_1');
+    expect(url.searchParams.get('sourceId')).toBe(source.sourceId);
+    expect(url.searchParams.get('sourceRevision')).toBe(source.revision);
+    expect(url.searchParams.get('headSha')).toBe(source.headSha);
+    const wire = JSON.parse(String(fetchImpl.mock.calls[1][1].body));
+    expect(wire).toMatchObject({
+      protocolVersion: 2,
+      source,
+      commands: [
+        {
+          kind: 'forget_memory',
+          memoryItemId: 'mem_1',
+          expectedRevision: '17',
+          commandId: expect.stringMatching(/^[a-f0-9-]{36}$/),
+        },
+      ],
     });
+    expect(String(fetchImpl.mock.calls[1][0])).toBe(
+      'https://api.reviewrouter.org/api/action/v2/memory/commands'
+    );
+  });
 
-    await expect(
-      client.fetchBundleForPullRequest(prContext())
-    ).resolves.toBeNull();
-    expect(warnings[0]).not.toContain('ghs_secret_token');
-    expect(warnings[0]).toContain('[redacted-github-token]');
+  it('rejects incompatible legacy success statuses and does not expose provider error text', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ status: 'created', id: 'mem_1' }))
+      .mockRejectedValueOnce(new Error('private provider text ghs_secret'));
+    const client = new ControlPlaneMemoryClient(runtimeConfig, env, fetchImpl);
+    await expect(client.submitCandidate(candidate)).rejects.toThrow(
+      'memory_mutation_invalid_response'
+    );
+    await expect(client.submitCandidate(candidate)).rejects.toThrow(
+      'review_memory_transport_unavailable'
+    );
   });
 });
 
@@ -214,9 +271,8 @@ function prContext(
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return {
-    ok: status >= 200 && status < 300,
+  return new Response(JSON.stringify(body), {
     status,
-    json: async () => body,
-  } as Response;
+    headers: { 'content-type': 'application/json' },
+  });
 }

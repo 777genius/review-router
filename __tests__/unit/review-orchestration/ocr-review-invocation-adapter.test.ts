@@ -163,7 +163,11 @@ describe('planOcrReviewAssignments (§4.3 one slot, one vote identity)', () => {
     expect(planned.plan.assignments[0].workSlot.attemptBudget).toBe(1);
   });
 
-  it('keeps in-scope lifecycle targets explicitly uncovered (OCR has no verdicts)', () => {
+  it('carries in-scope lifecycle targets as unverified instead of uncovered coverage', () => {
+    // OCR has no lifecycle verdicts (§4.3). In-scope targets are carried as
+    // unverified facts ("resolution not established") exactly like a codex
+    // slot that produced no verdict; they must not fail required file coverage
+    // the way a dropped assignment would.
     const targets = [
       {
         targetId: 'target-1',
@@ -179,7 +183,7 @@ describe('planOcrReviewAssignments (§4.3 one slot, one vote identity)', () => {
     const planned = planOcrReviewAssignments(
       planInput({ lifecycleTargets: targets })
     );
-    expect(planned.uncoveredLifecycleTargetIds).toEqual(['target-1']);
+    expect(planned.uncoveredLifecycleTargetIds).toEqual([]);
     expect(planned.assignments[0].lifecycleTargets).toEqual([]);
   });
 

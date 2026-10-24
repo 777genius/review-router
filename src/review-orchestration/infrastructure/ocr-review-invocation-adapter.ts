@@ -381,8 +381,9 @@ export function buildOcrSemanticInvocationPreimage(input: {
 /**
  * One FindingDiscovery slot over the whole canonical eligible inventory with
  * one vote identity (§4.3). RR batching/token compaction never split this
- * input; OCR groups internally. All in-scope lifecycle targets stay uncovered:
- * OCR findings are not lifecycle verdicts.
+ * input; OCR groups internally. OCR findings are not lifecycle verdicts, so
+ * lifecycle targets stay carried-unverified ("resolution not established")
+ * instead of revalidated.
  */
 export function planOcrReviewAssignments(input: {
   readonly prDescriptionEnabled?: boolean;
@@ -408,23 +409,11 @@ export function planOcrReviewAssignments(input: {
     left.filename < right.filename ? -1 : left.filename > right.filename ? 1 : 0
   );
   const paths = files.map((file) => file.filename);
-  const inScope = (target: LifecycleTarget) =>
-    files.some((file) =>
-      [file.filename, file.previousFilename].some(
-        (candidate) =>
-          candidate !== undefined &&
-          (target.currentPath === candidate ||
-            target.originalPath === candidate)
-      )
-    );
-  // OCR produces no lifecycle verdicts; every in-scope target is explicitly
-  // uncovered instead of silently dropped from assignment accounting (§4.3).
-  const uncoveredLifecycleTargetIds = Object.freeze(
-    input.lifecycleTargets
-      .filter(inScope)
-      .map((target) => target.targetId)
-      .sort()
-  );
+  // OCR produces no lifecycle verdicts (§4.3), so no lifecycle target can be
+  // revalidated here. Targets keep their carried-unverified facts ("resolution
+  // not established") exactly like a codex slot that returned no verdict, and a
+  // verdict gap is not dropped coverage the way an unassigned target would be.
+  const uncoveredLifecycleTargetIds = Object.freeze([]) as readonly string[];
   const plan = createStableReviewWorkPlan({
     reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
     compatibilityKey: input.compatibilityKey,

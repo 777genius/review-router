@@ -1142,10 +1142,10 @@ describeHarness(
         expect(observation).toBeDefined();
         // Usable findings survive the malformed decision (native removal skips it).
         expect(observation!.findingCount).toBe(3);
-        expect(observation!.qualityFlags).toEqual([
-          'context_inspection_incomplete',
-          'provider_warning',
-        ]);
+        // §7.3 preserved-comments degradation: inspection and path coverage
+        // are intact, so the advisory provider_warning alone is truthful and
+        // must not claim context inspection was incomplete.
+        expect(observation!.qualityFlags).toEqual(['provider_warning']);
 
         const native = parseOcrNativeReviewResult(
           scenario.resultRaw,
@@ -1162,6 +1162,7 @@ describeHarness(
         });
         const classification = classifyOcrReviewOutcome(native.outcome);
         expect(classification.partial).toBe(true);
+        expect(classification.filterCommentsPreserved).toBe(true);
         expect(classification.reasons).toEqual(
           expect.arrayContaining(['invalid_filter_decision', 'phase_failed'])
         );
@@ -1198,8 +1199,10 @@ describeHarness(
       const classification = classifyOcrReviewOutcome(native.outcome);
       expect(classification.partial).toBe(true);
       expect(classification.reasons).toContain('phase_failed');
-      // Null is not a false decision: no invalid_filter_decision degradation.
+      // Null is not a false decision: no invalid_filter_decision degradation,
+      // and no preserved-comments proof either, so the full flag pair stays.
       expect(classification.reasons).not.toContain('invalid_filter_decision');
+      expect(classification.filterCommentsPreserved).toBe(false);
     }, 120_000);
 
     // ------------------------------------------------------------------

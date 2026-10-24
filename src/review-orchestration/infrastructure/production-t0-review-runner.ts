@@ -573,6 +573,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             effectFacts: input.ocr.effectFacts,
             releaseRetrySafeFailure: () =>
               modelTransport.releaseRetrySafeFailure?.() === true,
+            reopenConsumer: () => modelTransport.reopenConsumer?.() === true,
           };
           const invocationAdapter = new OcrReviewInvocationAdapter(
             planned.assignments,

@@ -78,6 +78,8 @@ type ProbeMode =
   | 'unclosed-denial-release-denied'
   | 'cancelled-denial-release-denied'
   | 'accepted-socket-loss-terminal'
+  | 'poisoned-consumer-reopen'
+  | 'reopen-after-close-denied'
   | 'unreferenced-timeout-terminal'
   | 'referenced-rejection-terminal'
   | 'mid-stream-terminal';
@@ -94,6 +96,11 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
     },
     (request, reply) => {
       void (async () => {
+        if (request.url === '/api/action/v2/account-gateway/close') {
+          reply.writeHead(200, { 'content-type': 'application/json' });
+          reply.end('{"state":"closed"}');
+          return;
+        }
         requests++;
         assert.equal(request.method, 'POST');
         assert.equal(request.url, '/api/action/v2/account-gateway/responses');
@@ -102,6 +109,7 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         assert.equal(Buffer.concat(chunks).toString('utf8'), body);
         if (
           (mode === 'accepted-socket-loss-terminal' ||
+            mode === 'poisoned-consumer-reopen' ||
             mode === 'unknown-effect-release-denied') &&
           requests === 1
         ) {
@@ -207,6 +215,54 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         'a fully received POST must never be replayed after header loss'
       );
       assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      return;
+    }
+    if (mode === 'poisoned-consumer-reopen') {
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'poisoned-post-loss')
+      );
+      assert.equal(requests, 1);
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      assert.equal(
+        transport.releaseRetrySafeFailure(),
+        false,
+        'an unknown effect is never positively proven unpaid'
+      );
+      assert.equal(
+        transport.reopenConsumer(),
+        true,
+        'a recorded failure fact reopens the consumer for a fresh attempt'
+      );
+      assert.equal(transport.lastFailure, undefined);
+      const recovered = await bounded(
+        transport.responses(Buffer.from(body)),
+        'poisoned-reopen-redispatch'
+      );
+      const recoveredText = await bounded(
+        drain(recovered.body),
+        'poisoned-reopen-drain'
+      );
+      assert.equal(
+        requests,
+        2,
+        'a reopened consumer permits exactly one fresh dispatch'
+      );
+      assert(recoveredText.includes('"type":"response.completed"'));
+      transport.cancelInference();
+      assert.equal(
+        transport.reopenConsumer(),
+        false,
+        'a cancelled consumer never reopens'
+      );
+      return;
+    }
+    if (mode === 'reopen-after-close-denied') {
+      await bounded(transport.close('completed'), 'reopen-close');
+      assert.equal(
+        transport.reopenConsumer(),
+        false,
+        'a closed consumer never reopens'
+      );
       return;
     }
     if (mode === 'unknown-effect-release-denied') {
@@ -429,6 +485,14 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
   nodeTest('a cancelled consumer is never released', { timeout: 20_000 }, () =>
     transientRetry('cancelled-denial-release-denied')
   );
+  nodeTest(
+    'a recorded failure fact reopens the consumer for one fresh dispatch',
+    { timeout: 20_000 },
+    () => transientRetry('poisoned-consumer-reopen')
+  );
+  nodeTest('a closed consumer never reopens', { timeout: 20_000 }, () =>
+    transientRetry('reopen-after-close-denied')
+  );
 } else {
   test('real TLS transient retry recovers only provable not-dispatched failures', async () => {
     const root = await mkdtemp(join(tmpdir(), 'reviewrouter-transient-retry-'));
@@ -499,8 +563,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 10\b/);
-      expect(result.stdout).toMatch(/# pass 10\b/);
+      expect(result.stdout).toMatch(/# tests 12\b/);
+      expect(result.stdout).toMatch(/# pass 12\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

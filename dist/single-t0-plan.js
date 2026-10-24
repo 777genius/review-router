@@ -194588,7 +194588,7 @@ var RunT0ReviewOrchestration = class {
               exhaustionReason: "admission_limited" /* AdmissionLimited */
             };
           }
-          const retryDelayMs2 = this.clampProviderDelay(3e4);
+          const retryDelayMs2 = attemptOrdinal < input.workSlot.attemptBudget ? this.clampProviderDelay(3e4) : 0;
           if (retryDelayMs2 > 0) {
             if (this.dependencies.signal) {
               await this.dependencies.delay.sleep(

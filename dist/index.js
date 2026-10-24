@@ -163203,7 +163203,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.208",
+  version: "1.0.209",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -237131,14 +237131,7 @@ function planOcrReviewAssignments(input) {
     (left, right) => left.filename < right.filename ? -1 : left.filename > right.filename ? 1 : 0
   );
   const paths = files.map((file) => file.filename);
-  const inScope = (target) => files.some(
-    (file) => [file.filename, file.previousFilename].some(
-      (candidate) => candidate !== void 0 && (target.currentPath === candidate || target.originalPath === candidate)
-    )
-  );
-  const uncoveredLifecycleTargetIds = Object.freeze(
-    input.lifecycleTargets.filter(inScope).map((target) => target.targetId).sort()
-  );
+  const uncoveredLifecycleTargetIds = Object.freeze([]);
   const plan = createStableReviewWorkPlan({
     reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
     compatibilityKey: input.compatibilityKey,

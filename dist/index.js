@@ -131289,6 +131289,17 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     this.inferenceDenied = false;
     return true;
   }
+  /** A recorded failure fact is a proven failure and fresh dispatch stays
+   * bounded by the server-counted attempt budget, so one later attempt may
+   * reopen this consumer instead of burning the budget fenced. Terminal or
+   * cancelled consumers never reopen. */
+  reopenConsumer() {
+    if (this.terminal || this.inferenceCancelled) return false;
+    this.inferenceDenied = false;
+    this.mayHaveDispatched = false;
+    this.failure = void 0;
+    return true;
+  }
   get actualModel() {
     return this.inferenceDenied || this.modelUncertain ? void 0 : this.observedModel;
   }
@@ -131864,6 +131875,7 @@ async function startLocalGatewayModelTransport(transport, observe, directOpenRou
     requestCount: () => dispatchedRequests,
     failureFact: () => contextToolsFailure ?? transport.lastFailure,
     releaseRetrySafeFailure: () => transport.releaseRetrySafeFailure(),
+    reopenConsumer: () => transport.reopenConsumer(),
     setContextToolsGuard: (guard) => {
       contextToolsGuard = guard;
     },
@@ -163203,7 +163215,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.210",
+  version: "1.0.211",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -208486,6 +208498,17 @@ var RunT0ReviewOrchestration = class {
               exhaustionReason: "admission_limited" /* AdmissionLimited */
             };
           }
+          const retryDelayMs2 = attemptOrdinal < input.workSlot.attemptBudget ? this.clampProviderDelay(3e4) : 0;
+          if (retryDelayMs2 > 0) {
+            if (this.dependencies.signal) {
+              await this.dependencies.delay.sleep(
+                retryDelayMs2,
+                this.dependencies.signal
+              );
+            } else {
+              await this.dependencies.delay.sleep(retryDelayMs2);
+            }
+          }
           continue;
         }
       }
@@ -237547,10 +237570,21 @@ var OcrReviewInvocationAdapter = class {
     }
     assertOcrInvocationLive(input);
     const run3 = this.gate(async () => {
+      this.reopenPoisonedConsumer();
       this.assertDispatchPermitted(assignment.workSlot.workSlotId);
       return await this.runInvocation(input, assignment);
     });
     return await run3;
+  }
+  /** A recorded failure fact poisoned this consumer against replays; one fresh
+   * bounded attempt may reopen it so a transport failure cannot burn the whole
+   * attempt budget fenced. The per-consumer dispatch record restarts with the
+   * consumer. */
+  reopenPoisonedConsumer() {
+    const effectBefore = this.options.bridge.effectFacts?.();
+    if (effectBefore === void 0 || effectBefore.effect === "none" || this.options.bridge.reopenConsumer?.() !== true)
+      return;
+    this.dispatchedSlots.clear();
   }
   /** §8.4 step 2: known-terminal/unknown Gateway effect fences new calls. A
    * positively proven not_dispatched denial paid nothing, so releasing it
@@ -240845,7 +240879,8 @@ var ProductionT0ReviewRunner = class {
             actualModel: () => modelTransport.actualModel(),
             requestCount: () => modelTransport.requestCount?.(),
             effectFacts: input.ocr.effectFacts,
-            releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true
+            releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true,
+            reopenConsumer: () => modelTransport.reopenConsumer?.() === true
           };
           const invocationAdapter2 = new OcrReviewInvocationAdapter(
             planned2.assignments,

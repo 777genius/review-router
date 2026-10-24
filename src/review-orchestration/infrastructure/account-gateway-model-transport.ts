@@ -149,6 +149,9 @@ export type LocalGatewayModelTransport = Readonly<{
   /** Releases only positively proven unpaid pre-dispatch denials; false keeps
    * the inference fence for unknown/paid effects. */
   releaseRetrySafeFailure?(): boolean;
+  /** Reopens a failure-fact consumer for one fresh bounded attempt; false for
+   * terminal/cancelled consumers keeps the fence. */
+  reopenConsumer?(): boolean;
   setContextToolsGuard?(guard: (() => void) | undefined): void;
   /** Trusted parent only; its receipt never contributes review-engine evidence. */
   generatePrDescription?(input: {
@@ -250,6 +253,17 @@ export class AccountGatewayModelTransport {
       return false;
     this.failure = undefined;
     this.inferenceDenied = false;
+    return true;
+  }
+  /** A recorded failure fact is a proven failure and fresh dispatch stays
+   * bounded by the server-counted attempt budget, so one later attempt may
+   * reopen this consumer instead of burning the budget fenced. Terminal or
+   * cancelled consumers never reopen. */
+  reopenConsumer(): boolean {
+    if (this.terminal || this.inferenceCancelled) return false;
+    this.inferenceDenied = false;
+    this.mayHaveDispatched = false;
+    this.failure = undefined;
     return true;
   }
   get actualModel(): string | undefined {
@@ -1003,6 +1017,7 @@ export async function startLocalGatewayModelTransport(
     requestCount: () => dispatchedRequests,
     failureFact: () => contextToolsFailure ?? transport.lastFailure,
     releaseRetrySafeFailure: () => transport.releaseRetrySafeFailure(),
+    reopenConsumer: () => transport.reopenConsumer(),
     setContextToolsGuard: (guard: (() => void) | undefined) => {
       contextToolsGuard = guard;
     },

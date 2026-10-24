@@ -1169,6 +1169,81 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(observation.transportAttemptCount).toBe(1);
   });
 
+  it('re-dispatches a poisoned consumer after a failure fact once it reopens', async () => {
+    // A recorded failure fact is a proven failure and fresh dispatch stays
+    // bounded by the server-counted attempt budget, so one later attempt may
+    // reopen the consumer instead of burning the budget fenced.
+    let effect: { effect: string } | undefined;
+    let reopened = 0;
+    const { bridge, requests } = bridgeFixture({
+      effectFacts: () => effect,
+      reopenConsumer: () => {
+        if (effect === undefined || effect.effect === 'none') return false;
+        reopened += 1;
+        effect = undefined;
+        return true;
+      },
+    });
+    const processRunner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: async (input) => {
+        const result = await processRunner.runner(input);
+        requests.count += 1;
+        if (processRunner.calls.length === 1) {
+          effect = { effect: 'effect_unknown' };
+          return { ...result, exitCode: 1 };
+        }
+        return result;
+      },
+      previewRunner: previewRunner().runner,
+    });
+    const first = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.execute(executionInput(first))).rejects.toThrow(
+      /review_action_v2_ocr_gateway_effect_unknown/u
+    );
+    const second = await adapter.prepare({ workSlot, attemptOrdinal: 2 });
+    const observation = await adapter.execute(executionInput(second));
+    expect(reopened).toBe(1);
+    expect(processRunner.calls).toHaveLength(2);
+    expect(observation.transportAttemptCount).toBe(1);
+  });
+
+  it('never consults the reopen seam without a recorded failure fact', async () => {
+    // A failed run without a fact may have paid for its requests: the fence
+    // stays and the reopen seam must not even be consulted.
+    let reopened = 0;
+    const { bridge, requests } = bridgeFixture({
+      effectFacts: () => undefined,
+      reopenConsumer: () => {
+        reopened += 1;
+        return true;
+      },
+    });
+    const processRunner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: async (input) => {
+        const result = await processRunner.runner(input);
+        requests.count += 1;
+        return processRunner.calls.length === 1
+          ? { ...result, exitCode: 3 }
+          : result;
+      },
+      previewRunner: previewRunner().runner,
+    });
+    const first = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.execute(executionInput(first))).rejects.toThrow(
+      /review_action_v2_ocr_process_failed/u
+    );
+    const second = await adapter.prepare({ workSlot, attemptOrdinal: 2 });
+    await expect(adapter.execute(executionInput(second))).rejects.toThrow(
+      /review_action_v2_ocr_replay_fenced/u
+    );
+    expect(reopened).toBe(0);
+    expect(processRunner.calls).toHaveLength(1);
+  });
+
   it('classifies an inventory gap as a partial missing_paths observation', async () => {
     // §8.1/§8.2: a deleted file stays in the RR inventory denominator but the
     // producer never groups it; that gap is a bounded missing_paths

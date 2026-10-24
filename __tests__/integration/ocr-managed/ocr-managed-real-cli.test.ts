@@ -207,6 +207,8 @@ interface ScriptedStubScript {
     | 'empty-selection';
   /** Truncate the terminal SSE event mid-JSON on the first request. */
   readonly truncateFirst?: boolean;
+  /** Records the transport failure fact when the truncation happens. */
+  readonly onTruncated?: () => void;
 }
 
 /** Fixed reply for tool-less tasks (relocation and memory compression). */
@@ -349,6 +351,7 @@ function startScriptedStub(script: ScriptedStubScript): Promise<{
         response.write(
           'event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_trunc","object":"response","status":"comp'
         );
+        script.onTruncated?.();
         end('');
         return;
       }
@@ -434,6 +437,9 @@ function startScriptedStub(script: ScriptedStubScript): Promise<{
 interface ScriptedScenarioResult {
   observation?: ReviewObservationPayload;
   rejection?: unknown;
+  /** Rejection of the first attempt when reopenRetry ran a second one. */
+  firstRejection?: unknown;
+  reopened: number;
   requests: ScriptedRequest[];
   maxInFlight: number;
   resultRaw: Record<string, unknown> | undefined;
@@ -456,8 +462,17 @@ async function runScriptedScenario(input: {
   readonly maxTokens?: number;
   readonly reviewSkills?: ReviewSkillsExecutionInput;
   readonly assignedPaths?: readonly string[];
+  /** Poison the consumer after the truncated attempt and reopen it once. */
+  readonly reopenRetry?: boolean;
 }): Promise<ScriptedScenarioResult> {
-  const stub = await startScriptedStub(input.script);
+  let poisoned = false;
+  let reopened = 0;
+  const stub = await startScriptedStub({
+    ...input.script,
+    ...(input.reopenRetry === true
+      ? { onTruncated: () => (poisoned = true) }
+      : {}),
+  });
   try {
     const mergeBaseSha = git(input.checkoutRoot, 'rev-parse', 'HEAD~1').trim();
     const headSha = git(input.checkoutRoot, 'rev-parse', 'HEAD').trim();
@@ -578,12 +593,26 @@ async function runScriptedScenario(input: {
       liveLifecycleStateHash: '8'.repeat(64),
     });
 
+    // With reopenRetry the truncated terminal event records the production
+    // unknown-effect failure fact; reopenConsumer clears it once for one
+    // fresh bounded attempt.
     const bridge: OcrLoopbackBridge = {
       baseUrl: stub.baseUrl,
       capabilityAuthorization: BEARER,
       actualModel: () => (stub.requests.length > 0 ? 'stub-model' : undefined),
       requestCount: () => stub.requests.length,
-      effectFacts: () => ({ effect: 'none' }),
+      effectFacts: () =>
+        poisoned ? { effect: 'effect_unknown' } : { effect: 'none' },
+      ...(input.reopenRetry === true
+        ? {
+            reopenConsumer: (): boolean => {
+              if (!poisoned) return false;
+              poisoned = false;
+              reopened += 1;
+              return true;
+            },
+          }
+        : {}),
     };
     const adapter = new OcrReviewInvocationAdapter(planned.assignments, {
       model: 'stub-model',
@@ -620,15 +649,9 @@ async function runScriptedScenario(input: {
       previewRunner: runOcrReviewProcess,
     });
 
-    const prepared = await adapter.prepare({
-      workSlot: planned.assignments[0].workSlot,
-      attemptOrdinal: 1,
-    });
-    let observation: ReviewObservationPayload | undefined;
-    let rejection: unknown;
-    try {
-      observation = await adapter.execute({
-        invocation: prepared as PreparedReviewInvocation,
+    const executeInvocation = (invocation: PreparedReviewInvocation) =>
+      adapter.execute({
+        invocation,
         manifest: {
           manifestCanonicalJson: '{}',
           manifestKey: 'k',
@@ -648,8 +671,35 @@ async function runScriptedScenario(input: {
         sourceReviewRevisionHash: 'e'.repeat(64),
         signal: new AbortController().signal,
       });
+
+    const prepared = await adapter.prepare({
+      workSlot: planned.assignments[0].workSlot,
+      attemptOrdinal: 1,
+    });
+    let observation: ReviewObservationPayload | undefined;
+    let rejection: unknown;
+    try {
+      observation = await executeInvocation(
+        prepared as PreparedReviewInvocation
+      );
     } catch (error) {
       rejection = error;
+    }
+    let firstRejection: unknown;
+    if (input.reopenRetry === true && rejection !== undefined) {
+      firstRejection = rejection;
+      rejection = undefined;
+      const retried = await adapter.prepare({
+        workSlot: planned.assignments[0].workSlot,
+        attemptOrdinal: 2,
+      });
+      try {
+        observation = await executeInvocation(
+          retried as PreparedReviewInvocation
+        );
+      } catch (error) {
+        rejection = error;
+      }
     }
 
     const resultPath = path.join(runDirectory, 'result.json');
@@ -662,6 +712,8 @@ async function runScriptedScenario(input: {
     return {
       ...(observation !== undefined ? { observation } : {}),
       ...(rejection !== undefined ? { rejection } : {}),
+      ...(firstRejection !== undefined ? { firstRejection } : {}),
+      reopened,
       requests: stub.requests,
       maxInFlight: stub.maxInFlight,
       resultRaw,
@@ -1295,6 +1347,43 @@ describeHarness(
         reason: 'not_dispatched',
       });
       expect(group.filterDecisionValid).toBeNull();
+    }, 120_000);
+
+    it('a recorded failure fact reopens the consumer and the fresh real-CLI attempt completes', async () => {
+      // Production class behind required_work_exhausted: the truncated
+      // terminal event poisons the consumer with an unknown-effect fact.
+      // The fact is a proven failure, so one fresh bounded attempt reopens
+      // the consumer and re-runs the real binary to a complete observation
+      // instead of burning the whole attempt budget fenced.
+      const scenario = await runScriptedScenario({
+        workspace,
+        checkoutRoot,
+        script: {
+          nComments: 3,
+          contentLen: 80,
+          filterMode: 'approve',
+          truncateFirst: true,
+        },
+        reopenRetry: true,
+      });
+
+      // Attempt 1 fails closed on the recorded unknown-effect fact.
+      expect(scenario.firstRejection).toBeInstanceOf(OcrReviewAcceptanceError);
+      expect((scenario.firstRejection as OcrReviewAcceptanceError).code).toBe(
+        'gateway_effect_unknown'
+      );
+
+      // Exactly one reopen; the second real-CLI run re-dispatches through the
+      // same consumer and completes with all findings accepted.
+      expect(scenario.reopened).toBe(1);
+      expect(scenario.rejection).toBeUndefined();
+      expect(scenario.observation).toBeDefined();
+      expect(scenario.observation!.findingCount).toBe(3);
+      expect(scenario.observation!.transportAttemptCount).toBe(1);
+      expect(scenario.requests.length).toBeGreaterThan(1);
+      expect(
+        scenario.requests.filter((request) => request.kind === 'main').length
+      ).toBeGreaterThanOrEqual(2);
     }, 120_000);
 
     // ------------------------------------------------------------------

@@ -1380,6 +1380,23 @@ export class RunT0ReviewOrchestration {
               exhaustionReason: ReviewWorkSlotExhaustionReason.AdmissionLimited,
             };
           }
+          // Transient provider outages span minutes; a bounded pause keeps the
+          // fresh-attempt retry from burning the budget inside one blip. The
+          // last attempt exhausts at once: no retry follows to pause for.
+          const retryDelayMs =
+            attemptOrdinal < input.workSlot.attemptBudget
+              ? this.clampProviderDelay(30_000)
+              : 0;
+          if (retryDelayMs > 0) {
+            if (this.dependencies.signal) {
+              await this.dependencies.delay.sleep(
+                retryDelayMs,
+                this.dependencies.signal
+              );
+            } else {
+              await this.dependencies.delay.sleep(retryDelayMs);
+            }
+          }
           continue;
         }
       }

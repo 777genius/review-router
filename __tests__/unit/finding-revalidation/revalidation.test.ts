@@ -225,6 +225,59 @@ describe('bounded finding revalidation safety contracts', () => {
     expect(prepared.request).toMatchObject({ tools: [], tool_choice: 'none' });
   });
 
+  it('rejects a whole batch when targets swap otherwise valid citations from separate files', async () => {
+    const otherPath = 'src/other-tax.ts';
+    const otherBlobOid = 'e'.repeat(40);
+    const planningPorts = ports();
+    const plan = await planFindingRevalidation(
+      input([target(0), target(1, { originalPath: otherPath })]),
+      {
+        ...planningPorts,
+        sourceReader: {
+          read: async ({ headSha, path }) => ({
+            kind: 'file',
+            headSha,
+            path,
+            blobOid: path === otherPath ? otherBlobOid : blobOid,
+            bytes: Buffer.from(source),
+          }),
+        },
+      }
+    );
+    expect(plan.packets).toHaveLength(1);
+    expect(plan.packets[0]!.sources).toHaveLength(2);
+    const prepared = prepareLifecycleRequest(plan.packets[0]!, plan.outputCap);
+    const ownCitations = [
+      result(0),
+      {
+        ...result(1),
+        evidence: [
+          { ...result(1).evidence[0]!, path: otherPath, blobOid: otherBlobOid },
+        ],
+      },
+    ];
+    expect(
+      validateLifecycleResponse(
+        response(prepared.packet.packetHash, ownCitations),
+        prepared,
+        'saved-model',
+        prepared.requestHash
+      ).valid
+    ).toBe(true);
+    const swappedCitations = ownCitations.map((reply, index) => ({
+      ...reply,
+      evidence: ownCitations[1 - index]!.evidence,
+    }));
+    expect(
+      validateLifecycleResponse(
+        response(prepared.packet.packetHash, swappedCitations),
+        prepared,
+        'saved-model',
+        prepared.requestHash
+      )
+    ).toEqual({ valid: false, reason: 'missing_or_invalid_verdict' });
+  });
+
   it.each([
     'missing',
     'duplicate',

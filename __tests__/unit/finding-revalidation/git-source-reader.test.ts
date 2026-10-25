@@ -26,6 +26,14 @@ it('reads literal UTF-8 bytes from the captured Git commit and rejects unsafe ob
     git(['init', '--quiet']);
     git(['config', 'core.autocrlf', 'false']);
     git(['config', 'core.safecrlf', 'false']);
+    // A caller's signing policy must not launch a signer for this disposable fixture.
+    git(['config', 'commit.gpgsign', 'true']);
+    git(['config', 'gpg.format', 'openpgp']);
+    git([
+      'config',
+      'gpg.program',
+      join(repositoryRoot, 'unavailable-signing-program'),
+    ]);
     writeFileSync(
       join(repositoryRoot, 'literal[1].ts'),
       '\uFEFFconst fixed = true;\r\n'
@@ -35,7 +43,21 @@ it('reads literal UTF-8 bytes from the captured Git commit and rejects unsafe ob
     writeFileSync(join(repositoryRoot, 'invalid.ts'), Buffer.from([0xff]));
     symlinkSync('literal[1].ts', join(repositoryRoot, 'link.ts'));
     git(['add', '.']);
-    git(['commit', '--quiet', '-m', 'test: immutable source fixture']);
+    expect(git(['var', 'GIT_AUTHOR_IDENT'])).toMatch(
+      /^iliya <iliyazelenkog@gmail\.com> /
+    );
+    expect(git(['var', 'GIT_COMMITTER_IDENT'])).toMatch(
+      /^iliya <iliyazelenkog@gmail\.com> /
+    );
+    git([
+      '-c',
+      'commit.gpgsign=false',
+      'commit',
+      '--quiet',
+      '-m',
+      'test: immutable source fixture',
+    ]);
+    expect(git(['config', '--get', 'commit.gpgsign'])).toBe('true');
     const headSha = git(['rev-parse', 'HEAD']);
     writeFileSync(join(repositoryRoot, 'literal[1].ts'), 'mutable replacement');
     const reader = createGitImmutableSourceReader({ repositoryRoot });

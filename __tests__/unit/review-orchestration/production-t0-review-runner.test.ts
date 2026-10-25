@@ -43,12 +43,15 @@ import {
   mapOrchestrationResultToCodexOutcome,
   mapRevisionGuardErrorToCodexOutcome,
   planAssignments,
+  assertLegacyReviewPlanRestorable,
+  selectLegacyLifecycleTargets,
   resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions,
   resolveT0AttemptBudget,
   resolveProductionInvestigationReasoningEffort,
   selectDirectOpenRouterProvider,
 } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
+import { restoreProductionLifecycleVerification } from '../../../src/review-orchestration/infrastructure/restored-lifecycle-invocations';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../../src/context-gateway/context-gateway-release-contract';
 import {
   ReviewCapabilityKind,
@@ -60,6 +63,9 @@ import {
   ReviewOrchestrationResultStatus,
   ReviewPublicationUnavailableFact,
   ReviewTaskKind,
+  RestoredReviewExecutionState,
+  RestoredReviewWorkSlotState,
+  type RestoredReviewExecution,
   type ReviewRunAuthorization,
 } from '../../../src/review-orchestration/application';
 import {
@@ -75,6 +81,7 @@ import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import {
   ReviewDepth,
   type PRContext,
+  type LifecycleTarget,
   type ReviewConfig,
 } from '../../../src/types';
 import { compareCodeUnits } from '../../../src/review-orchestration/infrastructure/production-review-projection';
@@ -995,6 +1002,117 @@ process.stdin.once('data', () => {
     expect(resolveT0AttemptBudget(5, 2)).toBe(2);
   });
 
+  it.each([
+    ['off', undefined, 0],
+    ['off', '{invalid', 0],
+    ['report', undefined, 1],
+    ['resolve', undefined, 1],
+    ['resolve', '{invalid', 0],
+    ['resolve', '', 0],
+  ] as const)(
+    'selects legacy lifecycle targets with mode=%s and captured profile=%s',
+    (mode, capabilityJson, count) => {
+      const target = { targetId: 'old-target' } as LifecycleTarget;
+      expect(
+        selectLegacyLifecycleTargets(mode, capabilityJson, [target])
+      ).toEqual(count ? [target] : []);
+    }
+  );
+
+  it('continues exact legacy discovery with a present invalid cap and no frozen metadata', () => {
+    const admitted = authorization(1);
+    const planned = planAssignments({
+      authorization: admitted,
+      pr: pullRequest(['src/a.ts']),
+      config: DEFAULT_CONFIG,
+      providerName: 'codex/gpt-test',
+      compatibilityKey: '7'.repeat(64),
+      lifecycleTargets: selectLegacyLifecycleTargets('resolve', '{invalid', [
+        { targetId: 'old-target' } as LifecycleTarget,
+      ]),
+      liveLifecycleStateHash: '8'.repeat(64),
+    });
+    const restored: RestoredReviewExecution = {
+      executionId: 'existing-native-execution',
+      version: '9',
+      streamVersion: '8',
+      generation: '3',
+      state: RestoredReviewExecutionState.Running,
+      authorizationId: admitted.authorizationId,
+      reviewRevisionHash: admitted.facts.reviewRevisionHash,
+      planHash: planned.plan.planHash,
+      workSlots: planned.plan.assignments.map(({ workSlot }) => ({
+        workSlotId: workSlot.workSlotId,
+        required: workSlot.required,
+        providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+        state: RestoredReviewWorkSlotState.Pending,
+        activeLeaseId: null,
+        acceptedObservationRefId: null,
+      })),
+    };
+    const restoredLifecycle = restoreProductionLifecycleVerification(
+      restored,
+      planned.plan,
+      DEFAULT_CONFIG
+    );
+    expect(restoredLifecycle.plan).toBe(planned.plan);
+    expect(restoredLifecycle.packetsByWorkSlotId.size).toBe(0);
+    expect(restoredLifecycle.lifecycleVerification).toBeUndefined();
+    expect(planned.assignments[0].lifecycleTargets).toEqual([]);
+    const original = canonicalJson(restored);
+    expect(() =>
+      assertLegacyReviewPlanRestorable(restored, planned.plan)
+    ).not.toThrow();
+    expect(canonicalJson(restored)).toBe(original);
+    for (const incompatible of [
+      { ...restored, planHash: '9'.repeat(64) },
+      { ...restored, workSlots: [] },
+      {
+        ...restored,
+        workSlots: [
+          ...restored.workSlots,
+          { ...restored.workSlots[0], workSlotId: 'original-lifecycle-slot' },
+        ],
+      },
+      {
+        ...restored,
+        workSlots: [...restored.workSlots, restored.workSlots[0]],
+      },
+      ...[
+        { workSlotId: 'different-slot' },
+        { required: false },
+        { providerVoteIdentityHash: '9'.repeat(64) },
+      ].map((change) => ({
+        ...restored,
+        workSlots: [{ ...restored.workSlots[0], ...change }],
+      })),
+    ]) {
+      expect(() =>
+        assertLegacyReviewPlanRestorable(incompatible, planned.plan)
+      ).toThrow('review_restore_legacy_plan_unavailable');
+    }
+    expect(() =>
+      assertLegacyReviewPlanRestorable(null, planned.plan)
+    ).not.toThrow();
+    expect(() =>
+      assertLegacyReviewPlanRestorable(
+        {
+          ...restored,
+          persistedPlan: {
+            planHash: restored.planHash,
+            assignmentManifestVersion: 1,
+            assignmentManifestHash: planned.plan.assignmentManifestHash,
+            assignmentManifestCanonicalJson:
+              planned.plan.assignmentManifestCanonicalJson,
+            workSlots: planned.plan.assignments.map(({ workSlot }) => workSlot),
+            artifact: null,
+          },
+        },
+        planned.plan
+      )
+    ).not.toThrow();
+  });
+
   it('pins agentic reviews to the release gateway policy independently of investigation rollout', () => {
     expect(
       resolveProductionContextGatewayPolicyVersion({ agenticContext: true })
@@ -1091,6 +1209,10 @@ process.stdin.once('data', () => {
         liveLifecycleStateHash: '8'.repeat(64),
       };
       const planned = planAssignments(options);
+      // Old inventory is prompt input, not a member of the legacy frozen plan.
+      expect(
+        planAssignments({ ...options, lifecycleTargets: [] }).plan.planHash
+      ).toBe(planned.plan.planHash);
       expect(planned.assignments).toHaveLength(1);
       expect(
         planned.assignments.flatMap((a) => a.lifecycleTargets)

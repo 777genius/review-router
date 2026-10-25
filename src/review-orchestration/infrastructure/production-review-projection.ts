@@ -18,6 +18,7 @@ import {
   coverageManifestFileStatusRank,
   type CurrentFindingCandidate,
   type LifecycleRevalidation,
+  type LifecycleVerificationContext,
   type ReviewCoverageManifestFile,
   type ReviewProjectionLimits,
   type ReviewComparisonBaseline,
@@ -45,6 +46,26 @@ import {
 const productionReviewProjectionPolicyVersion =
   'review-projection-policy.v6-comparison';
 
+export interface ProductionLifecycleVerificationPlan {
+  readonly plannedProviderVoteKeys: readonly string[];
+  readonly mode: 'report' | 'resolve';
+  readonly targetReasonCodes?: Readonly<Record<string, readonly string[]>>;
+  readonly witnessesByTargetId: Readonly<
+    Record<
+      string,
+      {
+        readonly threadId: string;
+        readonly fingerprint: string;
+        readonly parentUpdatedAt: string;
+        readonly commentStateHash: string;
+      }
+    >
+  >;
+  readonly assignedTargetIdsByWorkSlotId: Readonly<
+    Record<string, readonly string[]>
+  >;
+}
+
 export type ProductionWorkAssignmentFacts = {
   readonly workSlotId: string;
   readonly taskKind: ReviewTaskKind;
@@ -62,6 +83,7 @@ export function createProductionReviewProjectionBuilder(input: {
   readonly uncoveredPaths: readonly string[];
   readonly uncoveredLifecycleTargetIds: readonly string[];
   readonly lifecycleInventory: CurrentLifecycleInventoryPort;
+  readonly lifecycleVerification?: ProductionLifecycleVerificationPlan;
   readonly skillsReceipt?: {
     render(
       evidence: readonly AcceptedReviewWorkSlotEvidence[]
@@ -123,6 +145,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       readonly uncoveredPaths: readonly string[];
       readonly uncoveredLifecycleTargetIds: readonly string[];
       readonly limits: ReviewProjectionLimits;
+      readonly lifecycleVerification?: ProductionLifecycleVerificationPlan;
     }
   ) {}
 
@@ -143,9 +166,67 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         .map(({ observation }) => observation.observationId)
         .sort(compareCodeUnits)
     );
+    const lifecycleVerification: LifecycleVerificationContext | undefined = this
+      .input.lifecycleVerification
+      ? {
+          plannedProviderVoteKeys:
+            this.input.lifecycleVerification.plannedProviderVoteKeys,
+          mode: this.input.lifecycleVerification.mode,
+          resolveConfidence:
+            this.input.config.reviewThreadLifecycleResolveConfidence,
+          targetReasonCodes: this.input.lifecycleVerification.targetReasonCodes,
+          observations: [...evidence.entries()].flatMap(
+            ([workSlotId, { observation }]) => {
+              const plan = this.input.lifecycleVerification!;
+              const assigned = plan.assignedTargetIdsByWorkSlotId[workSlotId];
+              if (
+                !assigned ||
+                !plan.plannedProviderVoteKeys.includes(
+                  observation.providerVoteIdentityHash
+                )
+              )
+                return [];
+              return parseObservation(
+                observation.payloadCanonicalJson
+              ).normalizedLifecycleRevalidations.map((raw) => {
+                const value = toRevalidation(observation, raw);
+                const witness = plan.witnessesByTargetId[value.targetId];
+                if (
+                  !assigned.includes(value.targetId) ||
+                  !witness ||
+                  value.fingerprint !== witness.fingerprint
+                )
+                  throw new Error(
+                    'review_action_v2_verification_assignment_invalid'
+                  );
+                return {
+                  targetId: value.targetId,
+                  threadId: witness.threadId,
+                  fingerprint: witness.fingerprint,
+                  threadStateHash: witness.commentStateHash,
+                  parentCommentUpdatedAt: witness.parentUpdatedAt,
+                  reviewedHeadSha: this.input.authorizationFacts.headSha,
+                  providerVoteKey: value.providerVoteKey,
+                  observationId: observation.observationId,
+                  verdict: value.verdict,
+                  confidence: value.confidence,
+                  reasonCodes: ['accepted_verification'],
+                };
+              });
+            }
+          ),
+        }
+      : undefined;
     const findings: CurrentFindingCandidate[] = [];
     const revalidations: LifecycleRevalidation[] = [];
-    for (const { observation } of evidence.values()) {
+    for (const [workSlotId, { observation }] of evidence.entries()) {
+      if (
+        this.input.lifecycleVerification &&
+        this.input.assignments.find(
+          (assignment) => assignment.workSlotId === workSlotId
+        )?.taskKind !== 'finding_discovery'
+      )
+        continue;
       const payload = parseObservation(observation.payloadCanonicalJson);
       payload.normalizedFindings.forEach((finding, index) => {
         findings.push(toFinding(observation, finding, index));
@@ -156,7 +237,10 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     }
 
     const requiredAssignments = this.input.assignments.filter(
-      (assignment) => assignment.required
+      (assignment) =>
+        assignment.required &&
+        (!this.input.lifecycleVerification ||
+          assignment.taskKind === 'finding_discovery')
     );
     const requiredWorkSlotIds = new Set(
       requiredAssignments.map((assignment) => assignment.workSlotId)
@@ -198,6 +282,11 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     };
     const exhaustedWorkSlots = new Set(input.exhaustedWorkSlotIds);
     for (const assignment of this.input.assignments) {
+      if (
+        this.input.lifecycleVerification &&
+        assignment.taskKind !== 'finding_discovery'
+      )
+        continue;
       const accepted = evidence.get(assignment.workSlotId);
       if (!accepted) {
         if (assignment.required) {
@@ -290,7 +379,8 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       requiredExhaustedWorkSlotIds.length === 0 &&
       completeLoad &&
       this.input.uncoveredPaths.length === 0 &&
-      this.input.uncoveredLifecycleTargetIds.length === 0 &&
+      (this.input.lifecycleVerification !== undefined ||
+        this.input.uncoveredLifecycleTargetIds.length === 0) &&
       requiredAssignments.every((assignment) =>
         evidence.has(assignment.workSlotId)
       ) &&
@@ -303,9 +393,10 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         : []),
       ...requiredExhaustedWorkSlotIds.map((id) => `work_slot_exhausted:${id}`),
       ...this.input.uncoveredPaths.map((path) => `work_slot_uncovered:${path}`),
-      ...this.input.uncoveredLifecycleTargetIds.map(
-        (targetId) => `lifecycle_target_uncovered:${targetId}`
-      ),
+      ...(this.input.lifecycleVerification
+        ? []
+        : this.input.uncoveredLifecycleTargetIds
+      ).map((targetId) => `lifecycle_target_uncovered:${targetId}`),
       ...coverageLimitations,
     ].sort();
     const incompleteCauses = Object.freeze(
@@ -320,7 +411,11 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       ].sort()
     );
     const providerExecution = providerExecutionSummary(
-      this.input.assignments,
+      this.input.lifecycleVerification
+        ? this.input.assignments.filter(
+            (assignment) => assignment.taskKind === 'finding_discovery'
+          )
+        : this.input.assignments,
       evidence
     );
     const manifestFiles = Object.freeze(
@@ -335,7 +430,10 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         : null;
 
     return Object.freeze({
-      projectionPolicyVersion: productionReviewProjectionPolicyVersion,
+      projectionPolicyVersion: this.input.lifecycleVerification
+        ? 'review-projection-policy.v7-lifecycle-verification'
+        : productionReviewProjectionPolicyVersion,
+      ...(lifecycleVerification ? { lifecycleVerification } : {}),
       authoritativeObservationIds,
       scope: {
         scmRepositoryIdentityId:

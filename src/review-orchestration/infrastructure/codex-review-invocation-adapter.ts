@@ -1,3 +1,4 @@
+import { lifecycleVerificationContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import { createHash } from 'crypto';
 import { PromptBuilder } from '../../analysis/llm/prompt-builder';
 import {
@@ -688,9 +689,13 @@ export class GeneratedProviderInvocationManifestAssembler implements ProviderInv
       providerKind: facts.providerKind,
       providerCapabilityHash: facts.providerCapabilityHash,
       requestedModel: invocation.requestedModel,
-      providerPolicyVersion: description
-        ? 'pr-description-provider-policy.v1'
-        : 'codex-provider-policy.v2-t0',
+      providerPolicyVersion:
+        facts.taskKindSet.length === 1 &&
+        facts.taskKindSet[0] === ReviewTaskKind.LifecycleRevalidation
+          ? lifecycleVerificationContract.policyVersion
+          : description
+            ? 'pr-description-provider-policy.v1'
+            : 'codex-provider-policy.v2-t0',
       producerReleaseId: this.authorization.facts.producerReleaseId,
       selectedProtocolVersion: this.authorization.facts.selectedProtocolVersion,
       providerRequestEnvelopeHash: facts.providerRequestEnvelopeHash,

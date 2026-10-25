@@ -9,6 +9,8 @@ import {
   LiveLifecycleTarget,
   ReviewProjectionLifecycleFact,
   LifecycleRevalidation,
+  LifecycleVerificationContext,
+  LifecycleVerificationFact,
   MergeGateConclusion,
   PriorLineageHint,
   ReviewCoverageFact,
@@ -52,9 +54,15 @@ export interface ProjectLifecycleQuery {
   readonly priorLineageHints: readonly PriorLineageHint[];
   readonly inventory: CurrentLifecycleInventory;
   readonly revalidations: readonly LifecycleRevalidation[];
+  readonly lifecycleVerification?: LifecycleVerificationContext;
+  readonly recurrenceVetoTargetIds?: readonly string[];
 }
 
 export interface ReviewLifecyclePolicyPort {
+  recurrenceVetoTargetIds?(query: {
+    readonly findings: readonly CurrentFindingCandidate[];
+    readonly inventory: CurrentLifecycleInventory;
+  }): readonly string[];
   projectLifecycle(
     query: ProjectLifecycleQuery
   ): Promise<readonly LifecycleProjectionDecision[]>;
@@ -101,11 +109,13 @@ export interface EvaluateMergeGateQuery {
   readonly occurrences: readonly FindingOccurrence[];
   readonly coverage: ReviewCoverageFact;
   readonly lifecycleInventoryComplete: boolean;
+  readonly lifecycleVerificationFacts?: readonly LifecycleVerificationFact[];
 }
 
 export interface MergeGateDecision {
   readonly conclusion: MergeGateConclusion;
   readonly blockingLineageIds: readonly string[];
+  readonly blockingConfirmedLifecycleTargetIds?: readonly string[];
   readonly reasonCodes: readonly string[];
 }
 

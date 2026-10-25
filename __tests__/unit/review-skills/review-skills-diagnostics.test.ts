@@ -18,16 +18,32 @@ describe('repository Skills diagnostic boundaries', () => {
         '-C',
         repo,
         '-c',
-        'user.name=fixture',
+        'user.name=iliya',
         '-c',
-        'user.email=fixture@example.test',
+        'user.email=iliyazelenkog@gmail.com',
+        '-c',
+        'commit.gpgsign=false',
         ...args,
       ],
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+      {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: 'iliya',
+          GIT_AUTHOR_EMAIL: 'iliyazelenkog@gmail.com',
+          GIT_COMMITTER_NAME: 'iliya',
+          GIT_COMMITTER_EMAIL: 'iliyazelenkog@gmail.com',
+        },
+      }
     ).trim();
   const commit = () => {
     git('add', '.');
-    git('commit', '-qm', 'fixture');
+    for (const identity of ['GIT_AUTHOR_IDENT', 'GIT_COMMITTER_IDENT'])
+      expect(git('var', identity)).toMatch(
+        /^iliya <iliyazelenkog@gmail\.com> /
+      );
+    git('commit', '-qm', 'test: review skills diagnostic fixture');
     return git('rev-parse', 'HEAD');
   };
   const source = '.agents/skills/review/SKILL.md';

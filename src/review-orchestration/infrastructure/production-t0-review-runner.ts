@@ -94,10 +94,12 @@ import {
   RunT0ReviewOrchestration,
   type ReviewPublicationUnavailableFact,
   type ReviewRunAuthorization,
+  type RestoredReviewExecution,
 } from '../application';
 import {
   createStableReviewBatchId,
   createStableReviewWorkPlan,
+  type StableReviewWorkPlan,
 } from '../domain';
 import type { MergeGateConclusion } from '../../review-projection/domain';
 import {
@@ -126,6 +128,19 @@ import {
 } from './github-review-state-adapter';
 import { createProductionReviewProjectionBuilder } from './production-review-projection';
 import { createPrDescriptionGeneration } from './pr-description-generation';
+import { lifecycleVerificationContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
+import {
+  readLifecycleCapability,
+  compositeLifecycleInvocations,
+  restorePersistedWorkPlan,
+} from './lifecycle-verification-invocation';
+import { planProductionLifecycleVerification } from './lifecycle-verification-planning';
+import { restoreReviewPublication } from './restore-review-publication';
+import {
+  restoreProductionLifecycleVerification,
+  restoredLifecycleInvocations,
+  restoredLifecycleManifestAssembler,
+} from './restored-lifecycle-invocations';
 import {
   ReviewActionV2ControlPlaneAdapter,
   projectReviewRunAuthorization,
@@ -409,6 +424,34 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
       }
 
+      // Persisted publication identity has priority over inventory-driven selection.
+      const preplanningRestore = await controlPlane.restoreExecution({
+        authorization,
+        reviewRevisionHash: authorization.facts.reviewRevisionHash,
+      });
+      const restoredPublication = await restoreReviewPublication({
+        restored: preplanningRestore,
+        authorization,
+        controlPlane,
+        deadline: executionDeadline,
+        signal,
+        sleep: (ms) => delay(ms, undefined, { signal }),
+      });
+      if (restoredPublication)
+        return mapOrchestrationResultToCodexOutcome(restoredPublication);
+      await Promise.resolve()
+        .then(() =>
+          controlPlane.restoreComparisonBaseline?.({
+            authorization,
+            reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          })
+        )
+        .catch(() => {
+          signal?.throwIfAborted();
+        });
+      const resolutionHistory =
+        controlPlane.readCapturedResolutionHistory?.() ?? [];
+
       const pr = await new PullRequestLoader(github).load(
         authorization.facts.pullRequestNumber
       );
@@ -577,6 +620,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           ].filter((part) => part.trim().length > 0);
           const prDescription = createPrDescriptionGeneration({
             enabled: config.updatePrDescription,
+            scopedCompanionDispatch:
+              !!admittedRuntime?.runtimeEnv[
+                lifecycleVerificationContract.capabilityRuntimeEnvKey
+              ],
             capabilityJson:
               admittedRuntime?.runtimeEnv[
                 prDescriptionContract.capabilityRuntimeEnvKey
@@ -590,16 +637,73 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             transport: modelTransport,
             warn: core.warning,
           });
-          const planned = planOcrReviewAssignments({
+          const lifecycleCapability =
+            config.reviewThreadLifecycle !== 'off' && input.accountGateway
+              ? readLifecycleCapability(
+                  admittedRuntime?.runtimeEnv[
+                    lifecycleVerificationContract.capabilityRuntimeEnvKey
+                  ],
+                  ocrModel,
+                  ReviewExecutionProviderKind.Ocr
+                )
+              : undefined;
+          let planned = planOcrReviewAssignments({
             prDescriptionEnabled: prDescription !== undefined,
             authorization,
             pr,
             config,
             compatibilityKey: ocrCompatibilityKey,
-            lifecycleTargets: initialLifecycle.promptTargets,
+            lifecycleTargets: selectLegacyLifecycleTargets(
+              config.reviewThreadLifecycle,
+              admittedRuntime?.runtimeEnv[
+                lifecycleVerificationContract.capabilityRuntimeEnvKey
+              ],
+              initialLifecycle.promptTargets
+            ),
             liveLifecycleStateHash:
               initialLifecycle.inventory.lifecycleStateHash,
           });
+          assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
+          // Existing executions never select new companion work or reset its allowance.
+          const lifecycle = preplanningRestore
+            ? restoreProductionLifecycleVerification(
+                preplanningRestore,
+                planned.plan,
+                config
+              )
+            : lifecycleCapability
+              ? await planProductionLifecycleVerification({
+                  capability: lifecycleCapability,
+                  authorization,
+                  plan: planned.plan,
+                  repository: input.repository,
+                  checkoutRoot: path.resolve(input.workspacePath),
+                  compatibilityKey: ocrCompatibilityKey,
+                  config,
+                  inventory: initialLifecycle.inventory,
+                  targets: initialLifecycle.revalidationTargets,
+                  resolutionHistory,
+                  renames: pr.files
+                    .filter((file) => !!file.previousFilename)
+                    .map((file) => ({
+                      previousFilename: file.previousFilename!,
+                      filename: file.filename,
+                    })),
+                })
+              : undefined;
+          if (
+            preplanningRestore?.persistedPlan?.compatibilityKey &&
+            preplanningRestore.persistedPlan.compatibilityKey !==
+              ocrCompatibilityKey
+          )
+            throw new Error('review_restore_compatibility_changed');
+          planned = {
+            ...planned,
+            plan: restorePersistedWorkPlan(
+              preplanningRestore,
+              lifecycle?.plan ?? planned.plan
+            ),
+          };
           const bridge: OcrLoopbackBridge = {
             baseUrl: modelTransport.baseUrl,
             capabilityAuthorization,
@@ -695,13 +799,30 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             oidc: {
               getToken: () => oidc.requestToken(input.audience),
             },
-            invocationManifestAssembler:
+            invocationManifestAssembler: restoredLifecycleManifestAssembler(
+              preplanningRestore,
               new GeneratedProviderInvocationManifestAssembler(
                 authorization,
                 config,
                 ocrCompatibilityKey
-              ),
-            invocations: invocationAdapter,
+              )
+            ),
+            invocations: preplanningRestore?.persistedPlan
+              ? restoredLifecycleInvocations(
+                  preplanningRestore,
+                  invocationAdapter
+                )
+              : lifecycle && lifecycleCapability
+                ? compositeLifecycleInvocations({
+                    discovery: invocationAdapter,
+                    packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
+                    capability: lifecycleCapability,
+                    outputCap: lifecycle.outputCap,
+                    reviewRevisionHash: authorization.facts.reviewRevisionHash,
+                    liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
+                    transport: modelTransport,
+                  })
+                : invocationAdapter,
             invocationFailureClassifier:
               new ProviderInvocationFailureClassifier(
                 modelTransport.failureFact
@@ -718,18 +839,26 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               pr,
               config,
               protocolLimits: authorization.limits,
-              assignments: planned.assignments.map((assignment) => ({
+              assignments: planned.plan.assignments.map((assignment) => ({
                 workSlotId: assignment.workSlot.workSlotId,
                 taskKind: assignment.workSlot.taskKind,
                 providerKind: assignment.workSlot.providerKind,
                 required: assignment.workSlot.required,
-                filePaths: assignment.context.files.map(
-                  (file) => file.filename
-                ),
+                filePaths:
+                  planned.assignments
+                    .find(
+                      (item) =>
+                        item.workSlot.workSlotId ===
+                        assignment.workSlot.workSlotId
+                    )
+                    ?.context.files.map((file) => file.filename) ?? [],
               })),
               uncoveredPaths: planned.uncoveredPaths,
               uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
               lifecycleInventory,
+              ...(lifecycle?.lifecycleVerification
+                ? { lifecycleVerification: lifecycle.lifecycleVerification }
+                : {}),
               skillsReceipt,
             }),
             identities,
@@ -770,6 +899,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 })
               ),
               allowPartial: true,
+              ...(preplanningRestore
+                ? { restoredExecution: preplanningRestore, restoreOnly: true }
+                : {}),
             },
             authorization
           );
@@ -862,6 +994,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         : undefined;
       const prDescription = createPrDescriptionGeneration({
         enabled: config.updatePrDescription,
+        scopedCompanionDispatch:
+          !!admittedRuntime?.runtimeEnv[
+            lifecycleVerificationContract.capabilityRuntimeEnvKey
+          ],
         capabilityJson:
           admittedRuntime?.runtimeEnv[
             prDescriptionContract.capabilityRuntimeEnvKey
@@ -877,17 +1013,73 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           input.accountGateway?.modelTransport,
         warn: core.warning,
       });
-      const planned = planAssignments({
+      const lifecycleCapability =
+        config.reviewThreadLifecycle !== 'off' && input.accountGateway
+          ? readLifecycleCapability(
+              admittedRuntime?.runtimeEnv[
+                lifecycleVerificationContract.capabilityRuntimeEnvKey
+              ],
+              model,
+              ReviewExecutionProviderKind.Codex
+            )
+          : undefined;
+      let planned = planAssignments({
         prDescriptionEnabled: prDescription !== undefined,
         authorization,
         pr,
         config,
         providerName: provider.name,
         compatibilityKey,
-        lifecycleTargets: initialLifecycle.promptTargets,
+        lifecycleTargets: selectLegacyLifecycleTargets(
+          config.reviewThreadLifecycle,
+          admittedRuntime?.runtimeEnv[
+            lifecycleVerificationContract.capabilityRuntimeEnvKey
+          ],
+          initialLifecycle.promptTargets
+        ),
         liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
         accountGateway: input.accountGateway !== undefined,
       });
+      assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
+      // Existing executions never select new companion work or reset its allowance.
+      const lifecycle = preplanningRestore
+        ? restoreProductionLifecycleVerification(
+            preplanningRestore,
+            planned.plan,
+            config
+          )
+        : lifecycleCapability
+          ? await planProductionLifecycleVerification({
+              capability: lifecycleCapability,
+              authorization,
+              plan: planned.plan,
+              repository: input.repository,
+              checkoutRoot: path.resolve(input.workspacePath),
+              compatibilityKey,
+              config,
+              inventory: initialLifecycle.inventory,
+              targets: initialLifecycle.revalidationTargets,
+              resolutionHistory,
+              renames: pr.files
+                .filter((file) => !!file.previousFilename)
+                .map((file) => ({
+                  previousFilename: file.previousFilename!,
+                  filename: file.filename,
+                })),
+            })
+          : undefined;
+      if (
+        preplanningRestore?.persistedPlan?.compatibilityKey &&
+        preplanningRestore.persistedPlan.compatibilityKey !== compatibilityKey
+      )
+        throw new Error('review_restore_compatibility_changed');
+      planned = {
+        ...planned,
+        plan: restorePersistedWorkPlan(
+          preplanningRestore,
+          lifecycle?.plan ?? planned.plan
+        ),
+      };
       const invocationAdapter = new CodexReviewInvocationAdapter(
         provider,
         new PromptBuilder(
@@ -1060,6 +1252,15 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         core.warning(
           'AI PR description omitted: no optional task budget remains.'
         );
+      const nativeDiscoveryInvocations = observeNativeReviewSkillsSupply(
+        invocationAdapter,
+        skillsReceiptCollector,
+        () =>
+          (
+            input.providerApi?.modelTransport ??
+            input.accountGateway?.modelTransport
+          )?.requestCount?.()
+      );
       const useCase = new RunT0ReviewOrchestration({
         ...(prDescription ? { prDescription } : {}),
         controlPlane,
@@ -1067,21 +1268,30 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         oidc: {
           getToken: () => oidc.requestToken(input.audience),
         },
-        invocationManifestAssembler:
+        invocationManifestAssembler: restoredLifecycleManifestAssembler(
+          preplanningRestore,
           new GeneratedProviderInvocationManifestAssembler(
             authorization,
             config,
             compatibilityKey
-          ),
-        invocations: observeNativeReviewSkillsSupply(
-          invocationAdapter,
-          skillsReceiptCollector,
-          () =>
-            (
-              input.providerApi?.modelTransport ??
-              input.accountGateway?.modelTransport
-            )?.requestCount?.()
+          )
         ),
+        invocations: preplanningRestore?.persistedPlan
+          ? restoredLifecycleInvocations(
+              preplanningRestore,
+              nativeDiscoveryInvocations
+            )
+          : lifecycle && lifecycleCapability
+            ? compositeLifecycleInvocations({
+                discovery: nativeDiscoveryInvocations,
+                packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
+                capability: lifecycleCapability,
+                outputCap: lifecycle.outputCap,
+                reviewRevisionHash: authorization.facts.reviewRevisionHash,
+                liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
+                transport: input.accountGateway!.modelTransport,
+              })
+            : nativeDiscoveryInvocations,
         ...(investigationInvocationAdapter
           ? { investigationInvocations: investigationInvocationAdapter }
           : {}),
@@ -1099,16 +1309,25 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           pr,
           config,
           protocolLimits: authorization.limits,
-          assignments: planned.assignments.map((assignment) => ({
+          assignments: planned.plan.assignments.map((assignment) => ({
             workSlotId: assignment.workSlot.workSlotId,
             taskKind: assignment.workSlot.taskKind,
             providerKind: assignment.workSlot.providerKind,
             required: assignment.workSlot.required,
-            filePaths: assignment.context.files.map((file) => file.filename),
+            filePaths:
+              planned.assignments
+                .find(
+                  (item) =>
+                    item.workSlot.workSlotId === assignment.workSlot.workSlotId
+                )
+                ?.context.files.map((file) => file.filename) ?? [],
           })),
           uncoveredPaths: planned.uncoveredPaths,
           uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
           lifecycleInventory,
+          ...(lifecycle?.lifecycleVerification
+            ? { lifecycleVerification: lifecycle.lifecycleVerification }
+            : {}),
           skillsReceipt,
         }),
         ...(contextGateway
@@ -1155,6 +1374,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             })
           ),
           allowPartial: true,
+          ...(preplanningRestore
+            ? { restoredExecution: preplanningRestore, restoreOnly: true }
+            : {}),
         },
         authorization
       );
@@ -2167,6 +2389,40 @@ export async function prepareSingleT0ReviewPlan(input: {
     reviewConfigPreimage,
     compatibilityPreimage,
   });
+}
+
+/** A captured profile cannot silently substitute legacy model revalidation. */
+export function selectLegacyLifecycleTargets(
+  mode: ReviewConfig['reviewThreadLifecycle'],
+  capabilityJson: string | undefined,
+  targets: readonly LifecycleTarget[]
+): readonly LifecycleTarget[] {
+  return mode === 'off' || capabilityJson !== undefined ? [] : targets;
+}
+
+/** Old producers restore only identities, so resume only an exact reconstructed plan. */
+export function assertLegacyReviewPlanRestorable(
+  restored: RestoredReviewExecution | null,
+  plan: StableReviewWorkPlan
+): void {
+  if (!restored || restored.persistedPlan) return;
+  const slots = new Map(
+    restored.workSlots.map((slot) => [slot.workSlotId, slot])
+  );
+  if (
+    restored.planHash !== plan.planHash ||
+    slots.size !== restored.workSlots.length ||
+    slots.size !== plan.assignments.length ||
+    plan.assignments.some(({ workSlot }) => {
+      const slot = slots.get(workSlot.workSlotId);
+      return (
+        !slot ||
+        slot.required !== workSlot.required ||
+        slot.providerVoteIdentityHash !== workSlot.providerVoteIdentityHash
+      );
+    })
+  )
+    throw new Error('review_restore_legacy_plan_unavailable');
 }
 
 export function planAssignments(input: {

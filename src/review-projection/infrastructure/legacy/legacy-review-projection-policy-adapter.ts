@@ -206,6 +206,22 @@ export class LegacyReviewProjectionPolicyAdapter
     });
   }
 
+  recurrenceVetoTargetIds(query: {
+    readonly findings: readonly CurrentFindingCandidate[];
+    readonly inventory: ProjectLifecycleQuery['inventory'];
+  }): readonly string[] {
+    return query.inventory.targets
+      .filter((target) =>
+        query.findings.some((finding) =>
+          currentFindingMatchesTarget(
+            toLegacyFinding(finding),
+            toLegacyLifecycleTarget(target)
+          )
+        )
+      )
+      .map((target) => target.targetId);
+  }
+
   async projectLifecycle(
     query: ProjectLifecycleQuery
   ): Promise<readonly LifecycleProjectionDecision[]> {
@@ -237,7 +253,9 @@ export class LegacyReviewProjectionPolicyAdapter
       mode:
         this.config.reviewThreadLifecycle === 'resolve' ? 'resolve' : 'report',
       targets,
-      plannedProviders: providerResults.map((result) => result.name),
+      plannedProviders: query.lifecycleVerification?.plannedProviderVoteKeys
+        ? [...query.lifecycleVerification.plannedProviderVoteKeys]
+        : providerResults.map((result) => result.name),
       providerResults,
       currentFindings: query.findings.map(toLegacyFinding),
       initialManualAttention: manualAttention,
@@ -293,6 +311,14 @@ export class LegacyReviewProjectionPolicyAdapter
       LifecycleRevalidationVerdict.Uncertain
     );
 
+    for (const targetId of query.recurrenceVetoTargetIds ?? [])
+      decisions.set(targetId, {
+        targetId,
+        verdict: LifecycleRevalidationVerdict.StillValid,
+        reasonCodes: ['current_finding_present'],
+        currentSourceFindingIds:
+          decisions.get(targetId)?.currentSourceFindingIds,
+      });
     return Array.from(decisions.values()).sort((left, right) =>
       left.targetId.localeCompare(right.targetId)
     );
@@ -336,7 +362,7 @@ export class LegacyReviewProjectionPolicyAdapter
         query.reviewPresentation?.state === 'incomplete',
       metrics: review.metrics,
     });
-    const summaryBody = limitReviewerPostedMarkdown(
+    let summaryBody = limitReviewerPostedMarkdown(
       renderReviewerSummaryMarkdown({
         ...this.summaryOptions,
         ...(this.summaryOptions.source
@@ -372,6 +398,24 @@ export class LegacyReviewProjectionPolicyAdapter
       })
     );
 
+    const verification = query.reviewPresentation?.verification;
+    if (verification) {
+      const fixes =
+        query.lifecycle?.facts.filter(
+          (fact) =>
+            fact.verification?.confirmationState === 'fix_confirmed_thread_open'
+        ) ?? [];
+      const statuses = [
+        ...new Set(fixes.map((fact) => fact.verification!.mutationStatus)),
+      ];
+      summaryBody = limitReviewerPostedMarkdown(
+        [
+          summaryBody,
+          '',
+          `${verification.confirmedOpen} previous findings confirmed open; ${verification.unverified} unverified. ${verification.fixesVerified} fixes verified. Closure status as of projection: ${statuses.length ? statuses.map((status) => ({ report_only: 'report-only; no automatic closure', pending: 'closure planned', blocked_partial_review: 'held for complete discovery', not_eligible: 'automatic closure unavailable', native_resolved: 'native closure confirmed' })[status]).join('; ') : 'no verified fix candidates'}.`,
+        ].join('\n')
+      );
+    }
     return {
       summaryBody,
       checkName: 'ReviewRouter',
@@ -399,16 +443,41 @@ export class LegacyReviewProjectionPolicyAdapter
           )
           .map((occurrence) => occurrence.lineageId)
       : [];
+    const blockingConfirmedLifecycleTargetIds = threshold
+      ? (query.lifecycleVerificationFacts ?? [])
+          .filter(
+            (fact) =>
+              fact.confirmationState === 'confirmed_open' &&
+              fact.severity !== 'unknown' &&
+              { critical: 3, major: 2, minor: 1 }[fact.severity] >=
+                { critical: 3, major: 2, minor: 1 }[threshold]
+          )
+          .map((fact) => fact.targetId)
+      : [];
+    const targetBlocking = query.lifecycleVerificationFacts
+      ? {
+          blockingConfirmedLifecycleTargetIds: sortedUnique(
+            blockingConfirmedLifecycleTargetIds
+          ),
+        }
+      : {};
     const incomplete =
       query.coverage.state === ProjectionCoverageState.Partial ||
       !query.lifecycleInventoryComplete;
 
-    if (blockingLineageIds.length > 0) {
+    if (
+      blockingLineageIds.length > 0 ||
+      blockingConfirmedLifecycleTargetIds.length > 0
+    ) {
       return {
         conclusion: MergeGateConclusion.Fail,
         blockingLineageIds: sortedUnique(blockingLineageIds),
+        ...targetBlocking,
         reasonCodes: [
-          'blocking_current_findings',
+          ...(blockingLineageIds.length ? ['blocking_current_findings'] : []),
+          ...(blockingConfirmedLifecycleTargetIds.length
+            ? ['blocking_confirmed_lifecycle_targets']
+            : []),
           ...(incomplete ? ['partial_coverage'] : []),
         ],
       };
@@ -417,12 +486,14 @@ export class LegacyReviewProjectionPolicyAdapter
       return {
         conclusion: MergeGateConclusion.Inconclusive,
         blockingLineageIds: [],
+        ...targetBlocking,
         reasonCodes: ['partial_coverage'],
       };
     }
     return {
       conclusion: MergeGateConclusion.Pass,
       blockingLineageIds: [],
+      ...targetBlocking,
       reasonCodes: [],
     };
   }
@@ -562,6 +633,15 @@ function lifecycleLinesForSummary(
     ])
   );
   for (const occurrence of occurrences) {
+    if (
+      lifecycle?.facts.some(
+        (fact) =>
+          fact.lineageId === occurrence.lineageId &&
+          fact.verification &&
+          fact.verification.confirmationState !== 'unverified'
+      )
+    )
+      continue;
     const kind = lifecycleKindForSummary(occurrence.state);
     if (!kind) {
       continue;
@@ -595,6 +675,34 @@ function lifecycleLinesForSummary(
     });
   }
   for (const fact of lifecycle?.facts ?? []) {
+    if (
+      fact.verification &&
+      fact.verification.confirmationState !== 'unverified'
+    ) {
+      const target = lifecycle?.targets.find(
+        (candidate) => candidate.targetId === fact.targetId
+      );
+      if (
+        target &&
+        fact.verification.confirmationState === 'confirmed_open' &&
+        !occurrences.some(
+          (occurrence) =>
+            occurrence.lineageId === fact.lineageId &&
+            isCurrentOccurrence(occurrence)
+        )
+      )
+        lines.push({
+          kind: 'active',
+          ...(fact.lineageId ? { lineageId: fact.lineageId } : {}),
+          title: target.title,
+          message: `${target.message} (confirmed still valid)`,
+          locationLabel: findingLocationLabel({
+            file: target.currentPath ?? target.originalPath,
+            line: target.currentLine ?? target.originalLine ?? 1,
+          }),
+        });
+      continue;
+    }
     if (
       fact.verdict !== LifecycleRevalidationVerdict.Uncertain ||
       representedTargetIds.has(fact.targetId)

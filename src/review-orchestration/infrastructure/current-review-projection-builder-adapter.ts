@@ -5,7 +5,10 @@ import {
   type BuildCurrentReviewProjectionCommand,
 } from '../../review-projection/application';
 import { ProjectionCoverageState } from '../../review-projection/domain';
-import type { ReviewComparisonBaseline } from '../../review-projection/domain';
+import type {
+  ReviewComparisonBaseline,
+  ReviewProjectionEnvelopeV1,
+} from '../../review-projection/domain';
 import {
   canonicalizeReviewProjection,
   hashReviewProjectionCanonicalJson,
@@ -128,35 +131,49 @@ export class CurrentReviewProjectionBuilderAdapter implements CurrentReviewProje
       }
       if (!appended) this.skillsReceipt.unavailable();
     }
-    const operationsCanonicalJson = canonicalJson(envelope.publishing);
-    const artifactHash = sha256(
-      `rr.review-artifact.v1\0${canonicalJson({
-        operationsCanonicalJson,
-        projectionHash,
-      })}`
-    );
-    return Object.freeze({
-      artifactId: `rr:artifact:${artifactHash}`,
-      artifactHash,
-      projectionEnvelopeVersion: 1,
-      projectionEnvelopeCanonicalJson: projectionCanonicalJson,
+    return currentReviewProjectionFromEnvelope(
+      envelope,
+      projectionCanonicalJson,
       projectionHash,
-      lifecycleStateHash: built.envelope.lifecycleStateHash,
-      commandLedgerWatermark: built.envelope.commandLedgerWatermark,
-      operationsCanonicalJson,
-      findingCount: built.findingCount,
-      mergeGateConclusion: built.envelope.mergeGate.conclusion,
-      publicationOperationCount:
-        2 +
-        (envelope.publishing.prDescription ? 1 : 0) +
-        built.envelope.publishing.inlineReviewChunks.length +
-        built.envelope.publishing.lifecycle.length,
-      publicationChunkCount:
-        built.envelope.publishing.inlineReviewChunks.length,
-      coverageComplete:
-        built.envelope.coverage.state === ProjectionCoverageState.Complete,
-    });
+      built.findingCount
+    );
   }
+}
+
+/** Shared immutable transport mapping, also used when resuming a persisted artifact. */
+export function currentReviewProjectionFromEnvelope(
+  envelope: ReviewProjectionEnvelopeV1,
+  projectionCanonicalJson = canonicalizeReviewProjection(envelope),
+  projectionHash = hashReviewProjectionCanonicalJson(projectionCanonicalJson),
+  findingCount = envelope.occurrences.length
+): CurrentReviewProjection {
+  const operationsCanonicalJson = canonicalJson(envelope.publishing);
+  const artifactHash = sha256(
+    `rr.review-artifact.v1\0${canonicalJson({
+      operationsCanonicalJson,
+      projectionHash,
+    })}`
+  );
+  return Object.freeze({
+    artifactId: `rr:artifact:${artifactHash}`,
+    artifactHash,
+    projectionEnvelopeVersion: 1,
+    projectionEnvelopeCanonicalJson: projectionCanonicalJson,
+    projectionHash,
+    lifecycleStateHash: envelope.lifecycleStateHash,
+    commandLedgerWatermark: envelope.commandLedgerWatermark,
+    operationsCanonicalJson,
+    findingCount,
+    mergeGateConclusion: envelope.mergeGate.conclusion,
+    publicationOperationCount:
+      2 +
+      (envelope.publishing.prDescription ? 1 : 0) +
+      envelope.publishing.inlineReviewChunks.length +
+      envelope.publishing.lifecycle.length,
+    publicationChunkCount: envelope.publishing.inlineReviewChunks.length,
+    coverageComplete:
+      envelope.coverage.state === ProjectionCoverageState.Complete,
+  });
 }
 
 function canonicalJson(value: unknown): string {

@@ -101,6 +101,9 @@ export type RunT0ReviewOrchestrationCommand = {
   readonly sourceRunAttempt: string;
   readonly ownerIdHash: string;
   readonly allowPartial: boolean;
+  readonly restoredExecution?: RestoredReviewExecution;
+  /** Preserve persisted identities and one-shot/uncertain effects; never-started discovery may resume native admission. */
+  readonly restoreOnly?: boolean;
 };
 
 export type ReviewOrchestrationResult = {
@@ -302,25 +305,46 @@ export class RunT0ReviewOrchestration {
           }),
       ]);
 
-      execution = await this.dependencies.controlPlane.startExecution({
-        authorization,
-        idempotencyKey: this.idempotencyKey('start', [
-          authorization.authorizationId,
-          command.reviewRevisionHash,
-          command.planHash,
-        ]),
-        executionId: command.executionId,
-        reviewRevisionHash: command.reviewRevisionHash,
-        compatibilityKey: command.compatibilityKey,
-        planHash: command.planHash,
-        workSlotsCanonicalJson: command.workSlotsCanonicalJson,
-        assignmentManifestCanonicalJson:
-          command.assignmentManifestCanonicalJson,
-        assignmentManifestHash: command.assignmentManifestHash,
-        workSlots: command.workSlots,
-        sourceRunId: command.sourceRunId,
-        sourceRunAttempt: command.sourceRunAttempt,
-      });
+      if (
+        command.restoredExecution &&
+        restoredExecution &&
+        (restoredExecution.executionId !==
+          command.restoredExecution.executionId ||
+          restoredExecution.generation !==
+            command.restoredExecution.generation ||
+          restoredExecution.planHash !== command.planHash)
+      )
+        throw new Error('review_orchestration_restored_execution_drift');
+      const continuingExecution = command.restoredExecution
+        ? (restoredExecution ?? command.restoredExecution)
+        : undefined;
+      execution = continuingExecution
+        ? {
+            executionId: continuingExecution.executionId,
+            generation: continuingExecution.generation,
+            streamVersion: continuingExecution.streamVersion,
+            executionVersion: continuingExecution.version,
+            restoredExecution: continuingExecution,
+          }
+        : await this.dependencies.controlPlane.startExecution({
+            authorization,
+            idempotencyKey: this.idempotencyKey('start', [
+              authorization.authorizationId,
+              command.reviewRevisionHash,
+              command.planHash,
+            ]),
+            executionId: command.executionId,
+            reviewRevisionHash: command.reviewRevisionHash,
+            compatibilityKey: command.compatibilityKey,
+            planHash: command.planHash,
+            workSlotsCanonicalJson: command.workSlotsCanonicalJson,
+            assignmentManifestCanonicalJson:
+              command.assignmentManifestCanonicalJson,
+            assignmentManifestHash: command.assignmentManifestHash,
+            workSlots: command.workSlots,
+            sourceRunId: command.sourceRunId,
+            sourceRunAttempt: command.sourceRunAttempt,
+          });
       this.dependencies.progress?.report({
         type: 'initialized',
         workSlots: command.workSlots,
@@ -361,7 +385,29 @@ export class RunT0ReviewOrchestration {
         if (!restoredSlot) {
           throw new Error('review_orchestration_restored_work_slot_missing');
         }
+        const persistedSlot =
+          execution.restoredExecution.persistedPlan?.workSlots.find(
+            (slot) => slot.workSlotId === workSlot.workSlotId
+          );
+        const restoredSatisfied =
+          restoredSlot.state === RestoredReviewWorkSlotState.Satisfied;
+        const lifecycleEvidenceUnavailable =
+          workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation &&
+          (!restoredSatisfied ||
+            !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
+              (manifest) => manifest.workSlotId === workSlot.workSlotId
+            ));
+        // Pending/ordinal 1 is before any lease acquisition. Older restore
+        // responses omit the ordinal; retain their native admission behavior.
+        const discoveryDispatchUncertain =
+          workSlot.taskKind === ReviewTaskKind.FindingDiscovery &&
+          !restoredSatisfied &&
+          (restoredSlot.state === RestoredReviewWorkSlotState.Leased ||
+            restoredSlot.activeLeaseId !== null ||
+            (persistedSlot?.nextAttemptOrdinal ?? 1) > 1);
         if (
+          (command.restoreOnly &&
+            (lifecycleEvidenceUnavailable || discoveryDispatchUncertain)) ||
           restoredSlot.state === RestoredReviewWorkSlotState.Exhausted ||
           restoredSlot.state === RestoredReviewWorkSlotState.Cancelled
         ) {
@@ -544,15 +590,16 @@ export class RunT0ReviewOrchestration {
         };
       }
 
-      const prDescription = descriptionSlots[0]
-        ? await this.generatePrDescription({
-            command,
-            authorization,
-            execution,
-            workSlot: descriptionSlots[0],
-            restored: restoredExecution !== null,
-          })
-        : undefined;
+      const prDescription =
+        !command.restoreOnly && descriptionSlots[0]
+          ? await this.generatePrDescription({
+              command,
+              authorization,
+              execution,
+              workSlot: descriptionSlots[0],
+              restored: restoredExecution !== null,
+            })
+          : undefined;
       const projection = await this.dependencies.projectionBuilder.build({
         comparisonBaseline,
         acceptedEvidence,
@@ -2200,6 +2247,7 @@ export class RunT0ReviewOrchestration {
             },
             (watchedSignal) =>
               generator.execute({
+                sourceExecutionId: input.execution.executionId,
                 invocation,
                 manifest,
                 lease: currentLease(),

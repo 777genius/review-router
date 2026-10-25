@@ -1,4 +1,6 @@
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
+import type { TargetWitness } from '../../../src/finding-revalidation';
+import { lifecycleVerificationDescriptorDigest } from '../../../src/control-plane/generated/review-action-v2/companion-contracts';
 import {
   ReviewSkillsReceiptCollector,
   REVIEW_SKILLS_RECEIPT_UNAVAILABLE,
@@ -16,12 +18,18 @@ import { mapLinesToPositions } from '../../../src/utils/diff';
 import {
   ReviewExecutionProviderKind,
   ReviewTaskKind,
+  RestoredReviewExecutionState,
+  RestoredReviewWorkSlotState,
+  type RestoredReviewExecution,
 } from '../../../src/review-orchestration/application';
 import {
+  createStableReviewWorkPlan,
   createReviewPromptCoverageManifest,
   ReviewPromptPathCoverageKind,
 } from '../../../src/review-orchestration/domain';
 import { createProductionReviewProjectionBuilder } from '../../../src/review-orchestration/infrastructure/production-review-projection';
+import { restoreProductionLifecycleVerification } from '../../../src/review-orchestration/infrastructure/restored-lifecycle-invocations';
+import { lifecycleHash } from '../../../src/review-orchestration/infrastructure/lifecycle-verification-invocation';
 import {
   CheckConclusion,
   FindingSeverity,
@@ -1968,3 +1976,352 @@ async function projectNativeOcrComments(
   });
   return JSON.parse(projection.projectionEnvelopeCanonicalJson);
 }
+
+it('derives verifier confirmations from accepted restored slots, keeping companion absence outside discovery coverage', async () => {
+  const inventory = completeLifecycleInventory();
+  const marker = 'a'.repeat(24);
+  const commentStateHash = 'b'.repeat(64);
+  const parentUpdatedAt = '2026-10-22T00:00:00.000Z';
+  inventory.loadCurrent.mockResolvedValue({
+    ...(await inventory.loadCurrent()),
+    targets: [
+      {
+        targetId: 'old-tax',
+        threadId: 'thread-tax',
+        trustedMarker: marker,
+        title: 'Tax divisor is zero',
+        message: 'A valid input causes division by zero.',
+        severity: FindingSeverity.Major,
+        originalPath: 'src/tax.ts',
+        currentPath: 'src/tax.ts',
+        parentCommentUpdatedAt: parentUpdatedAt,
+        threadCommentCount: 1,
+        threadStateHash: commentStateHash,
+        disposition: LifecycleTargetDisposition.Active,
+        viewerCanResolve: true,
+      },
+    ],
+  });
+  const verifierSlot = {
+    ...assignment('verifier-slot', false),
+    taskKind: ReviewTaskKind.LifecycleRevalidation,
+    filePaths: [],
+  };
+  const builder = createProductionReviewProjectionBuilder({
+    authorizationFacts,
+    pr,
+    config: {
+      ...DEFAULT_CONFIG,
+      reviewThreadLifecycle: 'report',
+      failOnSeverity: 'major',
+    },
+    protocolLimits,
+    assignments: [assignment('discovery-slot', true), verifierSlot],
+    uncoveredPaths: [],
+    uncoveredLifecycleTargetIds: ['old-tax'],
+    lifecycleInventory: inventory,
+    lifecycleVerification: {
+      plannedProviderVoteKeys: [
+        authorizationFacts.providerVoteLanes[0].providerVoteIdentityHash,
+      ],
+      mode: 'report',
+      witnessesByTargetId: {
+        'old-tax': {
+          threadId: 'thread-tax',
+          fingerprint: marker,
+          parentUpdatedAt,
+          commentStateHash,
+        },
+      },
+      assignedTargetIdsByWorkSlotId: { 'verifier-slot': ['old-tax'] },
+    },
+  });
+  const discovery = acceptedEvidence(
+    'discovery-slot',
+    fullCoverageManifest('discovery-slot')
+  );
+  const verifier = acceptedEvidence(
+    'verifier-slot',
+    createReviewPromptCoverageManifest({
+      workSlotId: 'verifier-slot',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: [],
+      pathCoverage: [],
+    }),
+    [],
+    [],
+    [
+      {
+        targetId: 'old-tax',
+        fingerprint: marker,
+        verdict: 'still_valid',
+        confidence: 0.99,
+        evidence: [],
+        rationale: 'Accepted scoped source proof.',
+      },
+    ]
+  );
+  const result = await builder.build({
+    acceptedEvidence: [discovery, verifier],
+    exhaustedWorkSlotIds: [],
+    reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+  });
+  const projection = JSON.parse(result.projectionEnvelopeCanonicalJson);
+  expect(projection.projectionPolicyVersion).toBe(
+    'review-projection-policy.v7-lifecycle-verification'
+  );
+  expect(projection.occurrences).toEqual([]);
+  expect(projection.coverage.state).toBe('complete');
+  expect(projection.mergeGate.blockingConfirmedLifecycleTargetIds).toEqual([
+    'old-tax',
+  ]);
+  expect(projection.publishing.lifecycle[0].verification).toMatchObject({
+    confirmationState: 'confirmed_open',
+    observationIds: ['observation-verifier-slot'],
+  });
+  const missing = await builder.build({
+    acceptedEvidence: [discovery],
+    exhaustedWorkSlotIds: ['verifier-slot'],
+    reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+  });
+  const missingProjection = JSON.parse(missing.projectionEnvelopeCanonicalJson);
+  expect(missingProjection.coverage.state).toBe('complete');
+  expect(
+    missingProjection.publishing.lifecycle[0].verification.confirmationState
+  ).toBe('unverified');
+  expect(missingProjection.publishing.summary.allClear).toBe(false);
+});
+
+it.each(['removed', 'changed'] as const)(
+  'restores frozen accepted sibling B through production projection when sibling A is %s before artifact creation',
+  async (change) => {
+    const parentUpdatedAt = '2026-10-22T00:00:00.000Z';
+    const commentStateHash = 'b'.repeat(64);
+    const targets = ['A', 'B'].map((suffix) => ({
+      targetId: `target-${suffix}`,
+      threadId: `thread-${suffix}`,
+      trustedMarker: suffix.toLowerCase().repeat(24),
+      title: `Prior failure ${suffix}`,
+      message: `The original failure ${suffix} had a distinct cause.`,
+      severity: FindingSeverity.Major,
+      originalPath: 'src/tax.ts',
+      currentPath: 'src/tax.ts',
+      parentCommentUpdatedAt: parentUpdatedAt,
+      threadCommentCount: 1,
+      threadStateHash: commentStateHash,
+      disposition: LifecycleTargetDisposition.Active,
+      viewerCanResolve: true,
+    }));
+    const witnesses: TargetWitness[] = targets.map((target) => ({
+      targetId: target.targetId,
+      threadId: target.threadId,
+      fingerprint: target.trustedMarker,
+      parentId: `parent-${target.targetId}`,
+      parentCreatedAt: parentUpdatedAt,
+      parentUpdatedAt,
+      parentBodyHash: '1'.repeat(64),
+      claimHash: '2'.repeat(64),
+      commentStateHash,
+      ledgerWatermark: 'ledger-1',
+      originalPath: target.originalPath,
+      currentPath: target.currentPath,
+      originalLine: 1,
+      currentLine: 1,
+      severity: 'major',
+      resolutionHistory: {
+        historyCut: '2026-10-21T00:00:00.000Z',
+        guardVersion: '1',
+        state: 'no_prior_since_creation',
+      },
+    }));
+    const original = createStableReviewWorkPlan({
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      compatibilityKey: 'c'.repeat(64),
+      providers: [
+        {
+          providerName: 'codex/managed',
+          providerKind: ReviewExecutionProviderKind.Codex,
+          providerVoteIdentityHash:
+            authorizationFacts.providerVoteLanes[0].providerVoteIdentityHash,
+          required: true,
+          attemptBudget: 1,
+          retryPolicyVersion: 'discovery-v1',
+        },
+      ],
+      batches: [
+        {
+          batchId: 'discovery',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          required: true,
+          paths: ['src/a.ts'],
+        },
+        {
+          batchId: 'frozen-packet-A-B',
+          taskKind: ReviewTaskKind.LifecycleRevalidation,
+          required: false,
+          paths: [],
+        },
+      ],
+      eligiblePaths: ['src/a.ts'],
+      uncoveredPaths: [],
+      excludedPaths: [],
+      maxWorkSlots: 2,
+      maxAttemptsPerSlot: 1,
+      lifecyclePlan: (assignments) => ({
+        version: 1,
+        capabilityHash: 'f'.repeat(64),
+        descriptorDigest: lifecycleVerificationDescriptorDigest,
+        policyDigest: '9'.repeat(64),
+        inventoryHash: '8'.repeat(64),
+        inventoryCount: 2,
+        dispositionCounts: {
+          eligible: 2,
+          manual: 0,
+          unsupported: 0,
+          capped: 0,
+          unavailable: 0,
+          resolved: 0,
+        },
+        participantRoster: authorizationFacts.providerVoteLanes,
+        targets: witnesses,
+        assignments: assignments
+          .filter(
+            (value) =>
+              value.workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation
+          )
+          .map((value) => ({
+            workSlotId: value.workSlot.workSlotId,
+            packetHash: '7'.repeat(64),
+            targetIds: targets.map((target) => target.targetId),
+            lifecycleTargetSetHash: lifecycleHash(witnesses),
+            liveLifecycleStateHash: 'd'.repeat(64),
+          })),
+      }),
+    });
+    const restored: RestoredReviewExecution = {
+      executionId: 'existing-execution',
+      version: '2',
+      streamVersion: '2',
+      generation: '1',
+      state: RestoredReviewExecutionState.Running,
+      authorizationId: 'existing-authorization',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      planHash: original.planHash,
+      workSlots: original.assignments.map(({ workSlot }) => ({
+        ...workSlot,
+        state: RestoredReviewWorkSlotState.Satisfied,
+        activeLeaseId: null,
+        acceptedObservationRefId: `accepted-${workSlot.workSlotId}`,
+      })),
+      persistedPlan: {
+        planHash: original.planHash,
+        assignmentManifestVersion: 2,
+        assignmentManifestHash: original.assignmentManifestHash,
+        assignmentManifestCanonicalJson:
+          original.assignmentManifestCanonicalJson,
+        workSlots: original.assignments.map((value) => value.workSlot),
+        artifact: null,
+      },
+    };
+    const config = {
+      ...DEFAULT_CONFIG,
+      reviewThreadLifecycle: 'report' as const,
+    };
+    const frozen = restoreProductionLifecycleVerification(
+      restored,
+      original,
+      config
+    );
+    const inventory = completeLifecycleInventory();
+    inventory.loadCurrent.mockResolvedValue({
+      ...(await inventory.loadCurrent()),
+      lifecycleStateHash: 'changed-aggregate-inventory',
+      targets:
+        change === 'removed'
+          ? [targets[1]]
+          : [{ ...targets[0], threadStateHash: 'e'.repeat(64) }, targets[1]],
+    });
+    const discoverySlot = original.assignments[0].workSlot.workSlotId;
+    const verifierSlot = original.assignments[1].workSlot.workSlotId;
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr,
+      config,
+      protocolLimits,
+      assignments: frozen.plan.assignments.map(({ workSlot }) => ({
+        ...workSlot,
+        filePaths:
+          workSlot.taskKind === ReviewTaskKind.FindingDiscovery
+            ? ['src/a.ts']
+            : [],
+      })),
+      uncoveredPaths: [],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: inventory,
+      lifecycleVerification: frozen.lifecycleVerification,
+    });
+    const result = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence(discoverySlot, fullCoverageManifest(discoverySlot)),
+        acceptedEvidence(
+          verifierSlot,
+          createReviewPromptCoverageManifest({
+            workSlotId: verifierSlot,
+            reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+            assignedPaths: [],
+            pathCoverage: [],
+          }),
+          [],
+          [],
+          targets.map((target) => ({
+            targetId: target.targetId,
+            fingerprint: target.trustedMarker,
+            verdict: 'resolved',
+            confidence: 0.99,
+            rationale: 'Accepted immutable source proof before restart.',
+            evidence: [
+              {
+                path: 'src/tax.ts',
+                startLine: 1,
+                endLine: 1,
+                reason: `The guarded return eliminates failure ${target.targetId}.`,
+              },
+            ],
+          }))
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const projection = JSON.parse(result.projectionEnvelopeCanonicalJson);
+    const rows = projection.publishing.lifecycle as {
+      targetId: string;
+      verification: { confirmationState: string; observationIds: string[] };
+    }[];
+    expect(
+      rows.find((row) => row.targetId === 'target-B')?.verification
+    ).toMatchObject({
+      confirmationState: 'fix_confirmed_thread_open',
+      observationIds: [`observation-${verifierSlot}`],
+      mutationStatus: 'report_only',
+    });
+    if (change === 'removed')
+      expect(rows.find((row) => row.targetId === 'target-A')).toBeUndefined();
+    else
+      expect(
+        rows.find((row) => row.targetId === 'target-A')?.verification
+      ).toMatchObject({
+        confirmationState: 'unverified',
+        observationIds: [],
+      });
+    expect(
+      rows.filter(
+        (row) =>
+          row.verification.confirmationState === 'fix_confirmed_thread_open'
+      )
+    ).toHaveLength(1);
+    expect(projection.coverage.state).toBe('complete');
+    expect(frozen.plan.planHash).toBe(original.planHash);
+    expect(frozen.packetsByWorkSlotId.size).toBe(0);
+  }
+);

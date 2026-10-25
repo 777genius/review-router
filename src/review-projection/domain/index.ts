@@ -6,3 +6,4 @@ export * from './review-projection-canonicalizer';
 export * from './review-projection-limits';
 export * from './comparison-baseline';
 export * from './review-presentation';
+export * from './lifecycle-verification';

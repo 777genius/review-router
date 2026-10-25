@@ -3,6 +3,7 @@ import { GitHubClient } from '../../github/client';
 import {
   commandLedgerWatermark,
   type LoadedLedger,
+  type ActiveLedgerSkip,
   type ReviewLedger,
 } from '../../github/ledger';
 import {
@@ -10,7 +11,9 @@ import {
   lifecycleObservationAuthors,
   trustedReviewThreadAuthorsFromEnv,
   type ReviewThreadInventory,
+  type ReviewThreadLifecycleTarget,
 } from '../../github/review-thread-inventory';
+import type { RevalidationTarget } from '../../finding-revalidation/domain/contracts';
 import type { LifecycleTarget } from '../../types';
 import type { ReviewRevisionGuardPort } from '../application';
 import {
@@ -177,6 +180,7 @@ export class FreshGitHubLifecycleInventory implements CurrentLifecycleInventoryP
   ): Promise<{
     readonly inventory: CurrentLifecycleInventory;
     readonly promptTargets: readonly LifecycleTarget[];
+    readonly revalidationTargets: readonly RevalidationTarget[];
   }> {
     const [raw, ledger] = await Promise.all([
       this.loader.load(pullRequestNumber),
@@ -185,12 +189,105 @@ export class FreshGitHubLifecycleInventory implements CurrentLifecycleInventoryP
     const inventory = mapFreshInventory(raw, expectedHeadSha, ledger);
     return Object.freeze({
       inventory,
+      revalidationTargets: toRevalidationTargets(
+        raw,
+        inventory.commandLedgerWatermark,
+        this.ledger.activeSkips(ledger.payload, inventory.loadedForHeadSha)
+      ),
       promptTargets: Object.freeze([
         ...raw.candidates,
         ...raw.manualAttention.map((record) => record.target),
       ]),
     });
   }
+}
+
+/** Transient model input; raw claims/bodies never enter the persisted assignment witness. */
+export function toRevalidationTargets(
+  raw: ReviewThreadInventory,
+  ledgerWatermark: string,
+  activeSkips: readonly ActiveLedgerSkip[] = []
+): readonly RevalidationTarget[] {
+  const targets = [
+    ...raw.candidates,
+    ...raw.manualAttention.map((record) => ({
+      ...record.target,
+      reasonCodes: [
+        ...new Set([
+          ...(record.target.reasonCodes ?? []),
+          ...record.reasonCodes,
+        ]),
+      ],
+    })),
+  ];
+  return Object.freeze(
+    targets.map((target: ReviewThreadLifecycleTarget): RevalidationTarget => {
+      const reasons = target.reasonCodes ?? [];
+      const path = target.currentPath || target.originalPath;
+      const line = target.currentLine ?? target.originalLine;
+      // Reuse the ledger's active-skip reduction/expiry policy. These exact marker
+      // and same-location checks match existing lifecycle command handling.
+      const commandDismissed =
+        reasons.includes('command_dismissed') ||
+        activeSkips.some(
+          (skip) =>
+            skip.fingerprint === target.fingerprint ||
+            skip.legacyFingerprint === target.fingerprint ||
+            (target.parentCommentDatabaseId !== undefined &&
+              skip.parentCommentId === target.parentCommentDatabaseId) ||
+            (line !== undefined &&
+              skip.line != null &&
+              skip.path?.toLowerCase() === path.toLowerCase() &&
+              skip.line === line)
+        );
+      const completeWitness =
+        typeof target.parentCommentCreatedAt === 'string' &&
+        typeof target.parentCommentBodyHash === 'string' &&
+        /^[a-f0-9]{64}$/.test(target.parentCommentBodyHash) &&
+        typeof target.claimHash === 'string' &&
+        /^[a-f0-9]{64}$/.test(target.claimHash) &&
+        typeof target.threadStateHash === 'string' &&
+        /^[a-f0-9]{64}$/.test(target.threadStateHash) &&
+        target.findingMarkerAmbiguous === false;
+      return Object.freeze({
+        targetId: target.targetId,
+        threadId: target.threadId,
+        fingerprint: target.fingerprint,
+        parentId: target.parentCommentId,
+        parentCreatedAt: target.parentCommentCreatedAt ?? '',
+        parentUpdatedAt: target.parentCommentUpdatedAt,
+        parentBodyHash: target.parentCommentBodyHash ?? '',
+        claimHash: target.claimHash ?? '',
+        commentStateHash: target.threadStateHash,
+        ledgerWatermark,
+        originalPath: target.originalPath,
+        currentPath: target.currentPath ?? null,
+        originalLine: target.originalLine ?? null,
+        currentLine: target.currentLine ?? null,
+        severity: target.severity,
+        title: target.title,
+        message: target.message,
+        diffHunk: target.diffHunk ?? null,
+        isResolved: false, // The inventory loader excludes closed threads from candidates/manual work.
+        trusted:
+          target.trustedAuthor &&
+          completeWitness &&
+          !reasons.some((reason) =>
+            [
+              'untrusted_author',
+              'missing_old_finding_details',
+              'unsafe_prompt_data',
+              'not_reviewrouter_thread',
+              'missing_finding_marker',
+            ].includes(reason)
+          ),
+        hasHumanReply: target.hasHumanReply || reasons.includes('human_reply'),
+        parentEdited: target.parentCommentEdited !== false,
+        markerAmbiguous: target.findingMarkerAmbiguous !== false,
+        commandDismissed,
+      });
+    })
+  );
 }
 
 function mapFreshInventory(

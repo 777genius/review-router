@@ -142804,7 +142804,8 @@ var baselineSchema = external_exports.object({
   snapshotVersion: external_exports.number().int().positive().safe(),
   projectionPolicyVersion: external_exports.enum([
     "review-projection-policy.v5-t0",
-    "review-projection-policy.v6-comparison"
+    "review-projection-policy.v6-comparison",
+    "review-projection-policy.v7-lifecycle-verification"
   ]),
   projectionEnvelopeVersion: external_exports.literal("review_projection.v1"),
   priorLineageHints: external_exports.array(hintSchema).max(REVIEW_PROJECTION_ABSOLUTE_LIMITS.maxLineageHints),

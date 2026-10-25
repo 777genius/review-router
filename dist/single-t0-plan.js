@@ -147860,7 +147860,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.214",
+  version: "1.0.215",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -215203,8 +215203,10 @@ var CodexAppServerProtocolClient = class {
         approvalPolicy: "never",
         approvalsReviewer: "user",
         sandbox: "read-only",
-        config: {
-          model_reasoning_effort: this.request.reasoningEffort
+        ...this.request.reasoningEffort === null ? {} : {
+          config: {
+            model_reasoning_effort: this.request.reasoningEffort
+          }
         },
         ephemeral: true,
         environments: [],
@@ -215237,7 +215239,7 @@ var CodexAppServerProtocolClient = class {
           type: "readOnly",
           networkAccess: false
         },
-        effort: this.request.reasoningEffort,
+        ...this.request.reasoningEffort === null ? {} : { effort: this.request.reasoningEffort },
         ...this.request.outputSchema === void 0 ? {} : { outputSchema: this.request.outputSchema }
       }).then((value) => this.bindTurn(value))
     );
@@ -215418,7 +215420,16 @@ var CodexAppServerProtocolClient = class {
     const actualModel = requireModel(response.model);
     const responseModelProvider = requireModelProvider(response.modelProvider);
     const threadModelProvider = requireModelProvider(thread.modelProvider);
-    if (responseModelProvider !== threadModelProvider || thread.ephemeral !== true || thread.path !== null || thread.cliVersion !== CODEX_APP_SERVER_VERSION || response.cwd !== this.request.cwd || thread.cwd !== this.request.cwd || response.approvalPolicy !== "never" || response.approvalsReviewer !== "user" || !isReadOnlySandbox(response.sandbox) || response.reasoningEffort !== this.request.reasoningEffort || !Array.isArray(response.instructionSources) || response.instructionSources.length !== 0 || !Array.isArray(thread.turns) || thread.turns.length !== 0 || this.provisionalThreadId !== null && this.provisionalThreadId !== threadId) {
+    if (responseModelProvider !== threadModelProvider || thread.ephemeral !== true || thread.path !== null || thread.cliVersion !== CODEX_APP_SERVER_VERSION || response.cwd !== this.request.cwd || thread.cwd !== this.request.cwd || response.approvalPolicy !== "never" || response.approvalsReviewer !== "user" || !isReadOnlySandbox(response.sandbox) || (this.request.reasoningEffort === null ? response.reasoningEffort !== null && ![
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra"
+    ].includes(response.reasoningEffort) : response.reasoningEffort !== this.request.reasoningEffort) || !Array.isArray(response.instructionSources) || response.instructionSources.length !== 0 || !Array.isArray(thread.turns) || thread.turns.length !== 0 || this.provisionalThreadId !== null && this.provisionalThreadId !== threadId) {
       throw confinementFailure("thread_start_contract");
     }
     this.threadId = threadId;
@@ -217501,7 +217512,7 @@ OUTPUT JSON SCHEMA:
 ${JSON.stringify(outputSchema)}
 Return exactly one JSON object matching this schema, with no markdown or prose.` : request3.prompt;
     const execution = this.prepareExecution({ ...request3, prompt });
-    const reasoningEffort = this.options.reasoningEffort ?? "xhigh";
+    const reasoningEffort = this.options.reasoningEffort === void 0 ? "xhigh" : this.options.reasoningEffort;
     const result2 = await this.appServerRunner.executeTurn({
       invocationId: request3.invocationId,
       fencingToken: request3.fencingToken,
@@ -220217,7 +220228,8 @@ var ProductionT0ReviewRunner = class {
       serverReasoningEffort
     });
     if (input.providerApi || input.accountGateway && model === "mimo-v2.6-pro") {
-      process.env.CODEX_REASONING_EFFORT = reasoningEffort;
+      if (reasoningEffort !== null)
+        process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
     const configuredTimeoutMs = Math.max(
@@ -221173,8 +221185,13 @@ function resolveProductionInvestigationReasoningEffort(input) {
       throw new Error("provider_api_reasoning_effort_unsupported");
     return effort2;
   }
-  if (!input.accountGateway || input.codexModel !== "mimo-v2.6-pro") {
-    return "xhigh";
+  if (!input.accountGateway) return "xhigh";
+  if (input.codexModel !== "mimo-v2.6-pro") {
+    const effort2 = input.serverReasoningEffort;
+    if (effort2 === void 0) return null;
+    if (effort2 !== "minimal" && effort2 !== "low" && effort2 !== "medium" && effort2 !== "high" && effort2 !== "xhigh" && effort2 !== "max" && effort2 !== "ultra")
+      throw new Error("account_gateway_codex_reasoning_effort_unsupported");
+    return effort2;
   }
   const effort = input.serverReasoningEffort ?? "high";
   if (effort !== "low" && effort !== "medium" && effort !== "high") {

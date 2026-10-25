@@ -94,10 +94,12 @@ import {
   RunT0ReviewOrchestration,
   type ReviewPublicationUnavailableFact,
   type ReviewRunAuthorization,
+  type RestoredReviewExecution,
 } from '../application';
 import {
   createStableReviewBatchId,
   createStableReviewWorkPlan,
+  type StableReviewWorkPlan,
 } from '../domain';
 import type { MergeGateConclusion } from '../../review-projection/domain';
 import {
@@ -651,16 +653,19 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             pr,
             config,
             compatibilityKey: ocrCompatibilityKey,
-            lifecycleTargets:
+            lifecycleTargets: selectLegacyLifecycleTargets(
+              config.reviewThreadLifecycle,
               admittedRuntime?.runtimeEnv[
                 lifecycleVerificationContract.capabilityRuntimeEnvKey
-              ] !== undefined
-                ? []
-                : initialLifecycle.promptTargets,
+              ],
+              initialLifecycle.promptTargets
+            ),
             liveLifecycleStateHash:
               initialLifecycle.inventory.lifecycleStateHash,
           });
-          const lifecycle = preplanningRestore?.persistedPlan
+          assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
+          // Existing executions never select new companion work or reset its allowance.
+          const lifecycle = preplanningRestore
             ? restoreProductionLifecycleVerification(
                 preplanningRestore,
                 planned.plan,
@@ -1025,16 +1030,19 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         config,
         providerName: provider.name,
         compatibilityKey,
-        lifecycleTargets:
+        lifecycleTargets: selectLegacyLifecycleTargets(
+          config.reviewThreadLifecycle,
           admittedRuntime?.runtimeEnv[
             lifecycleVerificationContract.capabilityRuntimeEnvKey
-          ] !== undefined
-            ? []
-            : initialLifecycle.promptTargets,
+          ],
+          initialLifecycle.promptTargets
+        ),
         liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
         accountGateway: input.accountGateway !== undefined,
       });
-      const lifecycle = preplanningRestore?.persistedPlan
+      assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
+      // Existing executions never select new companion work or reset its allowance.
+      const lifecycle = preplanningRestore
         ? restoreProductionLifecycleVerification(
             preplanningRestore,
             planned.plan,
@@ -2381,6 +2389,40 @@ export async function prepareSingleT0ReviewPlan(input: {
     reviewConfigPreimage,
     compatibilityPreimage,
   });
+}
+
+/** A captured profile cannot silently substitute legacy model revalidation. */
+export function selectLegacyLifecycleTargets(
+  mode: ReviewConfig['reviewThreadLifecycle'],
+  capabilityJson: string | undefined,
+  targets: readonly LifecycleTarget[]
+): readonly LifecycleTarget[] {
+  return mode === 'off' || capabilityJson !== undefined ? [] : targets;
+}
+
+/** Old producers restore only identities, so resume only an exact reconstructed plan. */
+export function assertLegacyReviewPlanRestorable(
+  restored: RestoredReviewExecution | null,
+  plan: StableReviewWorkPlan
+): void {
+  if (!restored || restored.persistedPlan) return;
+  const slots = new Map(
+    restored.workSlots.map((slot) => [slot.workSlotId, slot])
+  );
+  if (
+    restored.planHash !== plan.planHash ||
+    slots.size !== restored.workSlots.length ||
+    slots.size !== plan.assignments.length ||
+    plan.assignments.some(({ workSlot }) => {
+      const slot = slots.get(workSlot.workSlotId);
+      return (
+        !slot ||
+        slot.required !== workSlot.required ||
+        slot.providerVoteIdentityHash !== workSlot.providerVoteIdentityHash
+      );
+    })
+  )
+    throw new Error('review_restore_legacy_plan_unavailable');
 }
 
 export function planAssignments(input: {

@@ -215,97 +215,104 @@ describe('RunT0ReviewOrchestration', () => {
     }
   );
 
-  it('retains accepted discovery A while pending discovery B resumes native admission', async () => {
-    const fixture = createFixture({ workSlotCount: 2 });
-    const restored = {
-      ...restoredAdmission(fixture.command, {
-        state: RestoredReviewWorkSlotState.Pending,
-        acceptedObservationRefId: null,
-      }).restoredExecution,
-      persistedPlan: {
-        planHash: fixture.command.planHash,
-        assignmentManifestVersion: 1,
-        assignmentManifestHash: fixture.command.assignmentManifestHash,
-        assignmentManifestCanonicalJson:
-          fixture.command.assignmentManifestCanonicalJson,
-        workSlots: fixture.command.workSlots.map((slot) => ({
-          ...slot,
-          nextAttemptOrdinal: 1,
-        })),
-        artifact: null,
-      },
-    };
-    restored.workSlots[0] = {
-      ...restored.workSlots[0],
-      state: RestoredReviewWorkSlotState.Satisfied,
-      acceptedObservationRefId: observationRef(
-        fixture.command.executionId,
-        fixture.command.workSlots[0].workSlotId,
-        'accepted-A'
-      ),
-    };
-    const manifest =
-      await fixture.dependencies.invocationManifestAssembler.assemble(
-        await fixture.dependencies.invocations.prepare({
-          workSlot: fixture.command.workSlots[0],
-          attemptOrdinal: 1,
+  it.each([false, true])(
+    'retains accepted discovery A while pending B resumes; frozen metadata=%s',
+    async (withMetadata) => {
+      const fixture = createFixture({ workSlotCount: 2 });
+      const restored = {
+        ...restoredAdmission(fixture.command, {
+          state: RestoredReviewWorkSlotState.Pending,
+          acceptedObservationRefId: null,
+        }).restoredExecution,
+        ...(withMetadata
+          ? {
+              persistedPlan: {
+                planHash: fixture.command.planHash,
+                assignmentManifestVersion: 1,
+                assignmentManifestHash: fixture.command.assignmentManifestHash,
+                assignmentManifestCanonicalJson:
+                  fixture.command.assignmentManifestCanonicalJson,
+                workSlots: fixture.command.workSlots.map((slot) => ({
+                  ...slot,
+                  nextAttemptOrdinal: 1,
+                })),
+                artifact: null,
+              },
+            }
+          : {}),
+      };
+      restored.workSlots[0] = {
+        ...restored.workSlots[0],
+        state: RestoredReviewWorkSlotState.Satisfied,
+        acceptedObservationRefId: observationRef(
+          fixture.command.executionId,
+          fixture.command.workSlots[0].workSlotId,
+          'accepted-A'
+        ),
+      };
+      const manifest =
+        await fixture.dependencies.invocationManifestAssembler.assemble(
+          await fixture.dependencies.invocations.prepare({
+            workSlot: fixture.command.workSlots[0],
+            attemptOrdinal: 1,
+          })
+        );
+      fixture.controlPlane.lookupEvidence
+        .mockReset()
+        .mockResolvedValueOnce({
+          kind: ReviewEvidenceLookupKind.Hit,
+          observation: {
+            ...observationPayload,
+            observationId: 'accepted-A',
+            eligibilityPolicyVersion: 't0-v1',
+            providerKind: ReviewExecutionProviderKind.Codex,
+            providerInvocationKey: manifest.providerInvocationKey,
+            providerVoteIdentityHash: manifest.providerVoteIdentityHash,
+          },
+          attachment: sameExecutionAttachment,
+        })
+        .mockResolvedValue({ kind: ReviewEvidenceLookupKind.Miss });
+      fixture.controlPlane.restoreExecution.mockResolvedValue({
+        ...restored,
+        version: '2',
+        streamVersion: '2',
+      });
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        restoredExecution: restored,
+        restoreOnly: true,
+      });
+      expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+        1
+      );
+      expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledWith(
+        expect.objectContaining({ workSlot: fixture.command.workSlots[1] })
+      );
+      expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(1);
+      expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acceptedEvidence: [
+            expect.objectContaining({
+              workSlotId: fixture.command.workSlots[0].workSlotId,
+              observation: expect.objectContaining({
+                observationId: 'accepted-A',
+              }),
+            }),
+            expect.objectContaining({
+              workSlotId: fixture.command.workSlots[1].workSlotId,
+              observation: expect.objectContaining({
+                observationId: 'observation-1',
+              }),
+            }),
+          ],
+          exhaustedWorkSlotIds: [],
         })
       );
-    fixture.controlPlane.lookupEvidence
-      .mockReset()
-      .mockResolvedValueOnce({
-        kind: ReviewEvidenceLookupKind.Hit,
-        observation: {
-          ...observationPayload,
-          observationId: 'accepted-A',
-          eligibilityPolicyVersion: 't0-v1',
-          providerKind: ReviewExecutionProviderKind.Codex,
-          providerInvocationKey: manifest.providerInvocationKey,
-          providerVoteIdentityHash: manifest.providerVoteIdentityHash,
-        },
-        attachment: sameExecutionAttachment,
-      })
-      .mockResolvedValue({ kind: ReviewEvidenceLookupKind.Miss });
-    fixture.controlPlane.restoreExecution.mockResolvedValue({
-      ...restored,
-      version: '2',
-      streamVersion: '2',
-    });
-    const result = await fixture.useCase.execute({
-      ...fixture.command,
-      restoredExecution: restored,
-      restoreOnly: true,
-    });
-    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
-    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
-    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
-      1
-    );
-    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledWith(
-      expect.objectContaining({ workSlot: fixture.command.workSlots[1] })
-    );
-    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
-    expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(1);
-    expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
-      expect.objectContaining({
-        acceptedEvidence: [
-          expect.objectContaining({
-            workSlotId: fixture.command.workSlots[0].workSlotId,
-            observation: expect.objectContaining({
-              observationId: 'accepted-A',
-            }),
-          }),
-          expect.objectContaining({
-            workSlotId: fixture.command.workSlots[1].workSlotId,
-            observation: expect.objectContaining({
-              observationId: 'observation-1',
-            }),
-          }),
-        ],
-        exhaustedWorkSlotIds: [],
-      })
-    );
-  });
+    }
+  );
 
   it.each([
     'lifecycle_pending',

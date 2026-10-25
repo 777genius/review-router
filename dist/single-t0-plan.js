@@ -193788,9 +193788,15 @@ var RunT0ReviewOrchestration = class {
         if (!restoredSlot) {
           throw new Error("review_orchestration_restored_work_slot_missing");
         }
-        if (command.restoreOnly && (restoredSlot.state !== "satisfied" /* Satisfied */ || workSlot.taskKind === "lifecycle_revalidation" /* LifecycleRevalidation */ && !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
+        const persistedSlot = execution.restoredExecution.persistedPlan?.workSlots.find(
+          (slot) => slot.workSlotId === workSlot.workSlotId
+        );
+        const restoredSatisfied = restoredSlot.state === "satisfied" /* Satisfied */;
+        const lifecycleEvidenceUnavailable = workSlot.taskKind === "lifecycle_revalidation" /* LifecycleRevalidation */ && (!restoredSatisfied || !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
           (manifest) => manifest.workSlotId === workSlot.workSlotId
-        )) || restoredSlot.state === "exhausted" /* Exhausted */ || restoredSlot.state === "cancelled" /* Cancelled */) {
+        ));
+        const discoveryDispatchUncertain = workSlot.taskKind === "finding_discovery" /* FindingDiscovery */ && !restoredSatisfied && (restoredSlot.state === "leased" /* Leased */ || restoredSlot.activeLeaseId !== null || (persistedSlot?.nextAttemptOrdinal ?? 1) > 1);
+        if (command.restoreOnly && (lifecycleEvidenceUnavailable || discoveryDispatchUncertain) || restoredSlot.state === "exhausted" /* Exhausted */ || restoredSlot.state === "cancelled" /* Cancelled */) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
             workSlot.workSlotId,

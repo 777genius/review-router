@@ -142824,9 +142824,10 @@ function renderReviewBanner(baseUrl2, presentation) {
 function reviewPresentationHeading(presentation) {
   if (presentation.variant === "update" && presentation.changes) {
     const changes = presentation.changes;
+    const confirmedOpen = Math.max(0, changes.open - changes.unverified);
     return `## ${presentation.state === "incomplete" ? "Review incomplete" : "Review updated"}
 
-${changes.new} new \xB7 ${changes.resolved} resolved \xB7 ${changes.open} open${changes.unverified ? ` \xB7 ${changes.unverified} unverified (included in open)` : ""}`;
+${changes.new} new \xB7 ${changes.resolved} resolved \xB7 ${confirmedOpen} confirmed open${changes.unverified ? ` \xB7 ${changes.unverified} previous ${changes.unverified === 1 ? "issue" : "issues"} not verified` : ""}`;
   }
   return "";
 }
@@ -142994,15 +142995,28 @@ function renderReviewerSummaryMarkdown(input) {
     for (const warning3 of input.lifecycleWarnings ?? [])
       pushWarning(escapeMarkdownText(warning3));
   }
-  const visibleLifecycle = (input.lifecycle ?? []).filter(
-    (line2) => line2.kind === "active" || line2.kind === "uncertain" || line2.kind === "carried"
+  const detailedLineages = new Set(
+    input.findings.flatMap(
+      (finding) => finding.lineageId ? [finding.lineageId] : []
+    )
   );
-  if (visibleLifecycle.length) {
-    lines.push("", `**${labels.previous} (${visibleLifecycle.length})**`);
-    for (const line2 of visibleLifecycle) {
-      pushWarning(
-        `- **${copy.lifecycle[line2.kind]}** \xB7 ${escapeMarkdownText(compactFindingPresentation(line2, locale).title)} \xB7 ${escapeCoverageManifestPath(line2.locationLabel)}`
-      );
+  const history = (input.lifecycle ?? []).filter(
+    (line2) => !line2.lineageId || !detailedLineages.has(line2.lineageId)
+  );
+  const lifecycleGroups = [
+    history.filter((line2) => line2.kind === "active"),
+    history.filter(
+      (line2) => line2.kind === "uncertain" || line2.kind === "carried"
+    )
+  ];
+  const historyLines = [[], []];
+  for (const [index, group] of lifecycleGroups.entries()) {
+    if (!group.length) continue;
+    for (const line2 of group) {
+      const overview = `- ${index === 0 ? `**${copy.lifecycle[line2.kind]}** \xB7 ` : ""}${escapeMarkdownText(compactFindingPresentation(line2, locale).title)} \xB7 ${escapeCoverageManifestPath(line2.locationLabel)}`;
+      if (utf8Bytes([...historyLines[index], overview].join("\n")) <= 12e3)
+        historyLines[index].push(overview);
+      else omitted = true;
     }
   }
   const diagnostics = [];
@@ -143069,14 +143083,13 @@ function renderReviewerSummaryMarkdown(input) {
     const hiddenFiles = manifestFiles.length - manifestLines.length;
     if (hiddenFiles > 0) diagnostics.push("", copy.moreFiles(hiddenFiles));
   }
-  const history = input.lifecycle ?? [];
   if (history.length)
     diagnostics.push(
       "",
       `### ${labels.previous}`,
       "",
       ...history.map(
-        (line2) => `- **${copy.lifecycle[line2.kind]}** \xB7 ${escapeMarkdownText(line2.title)} \xB7 ${escapeCoverageManifestPath(line2.locationLabel)}
+        (line2) => `- ${line2.kind === "uncertain" || line2.kind === "carried" ? "" : `**${copy.lifecycle[line2.kind]}** \xB7 `}${escapeMarkdownText(line2.title)} \xB7 ${escapeCoverageManifestPath(line2.locationLabel)}
 
 ${safeFindingBody(line2.message)}`
       )
@@ -143165,28 +143178,50 @@ ${safeFindingBody(line2.message)}`
     return true;
   };
   const findings = [...input.findings].sort(compareSummaryFindings);
-  for (const finding of findings) {
-    const presentation = compactFindingPresentation(finding, locale);
-    const overview = compactFindingLine(
-      finding,
-      presentation.title,
-      input.source
-    );
-    const excerpt = findings.length <= 3 ? presentation.excerpt : "";
-    const preview = [
-      overview,
-      ...excerpt ? [
-        "",
-        escapeMarkdownText(excerpt).replace(/^([#+-])/, "\\$1").replace(/^(\d+)([.)])(?=\s)/, "$1\\$2")
-      ] : []
-    ].join("\n");
-    const details2 = renderFindingDetails(copy, finding, chrome);
-    if (!append(`${preview}
+  const newFindings = findings.filter((finding) => !finding.previous);
+  const previousFindings = findings.filter((finding) => finding.previous);
+  const findingBudget = maxSummaryBytes - 6e3 - utf8Bytes(historyLines.flat().join("\n"));
+  for (const [kind, group] of [
+    ["new", newFindings],
+    ["rechecked", previousFindings]
+  ]) {
+    const groupCount = group.length + (kind === "rechecked" ? lifecycleGroups[0].length : 0);
+    if (groupCount || kind === "new" && input.reviewPresentation?.variant === "update")
+      append(
+        `### ${findingGroupHeading(locale, kind, groupCount)}`,
+        findingBudget
+      );
+    for (const finding of group) {
+      const presentation = compactFindingPresentation(finding, locale);
+      const overview = compactFindingLine(
+        finding,
+        presentation.title,
+        input.source
+      );
+      const excerpt = findings.length <= 3 ? presentation.excerpt : "";
+      const preview = [
+        overview,
+        ...excerpt ? [
+          "",
+          escapeMarkdownText(excerpt).replace(/^([#+-])/, "\\$1").replace(/^(\d+)([.)])(?=\s)/, "$1\\$2")
+        ] : []
+      ].join("\n");
+      const details2 = renderFindingDetails(copy, finding, chrome);
+      if (!append(`${preview}
 
-${details2}`, maxSummaryBytes - 6e3)) {
-      append(preview, maxSummaryBytes - 6e3);
+${details2}`, findingBudget)) {
+        append(preview, findingBudget);
+      }
     }
+    if (kind === "rechecked" && historyLines[0].length)
+      append(historyLines[0].join("\n"));
   }
+  if (historyLines[1].length)
+    append(
+      `### ${findingGroupHeading(locale, "unverified", lifecycleGroups[1].length)}
+
+${historyLines[1].join("\n")}`
+    );
   const details = [];
   for (const block of markdownBlocks(diagnostics.join("\n"))) {
     const candidate = `<details>
@@ -143433,6 +143468,53 @@ function slavicFindingWord(count2, forms) {
 }
 function englishFindingWord(count2) {
   return count2 === 1 ? "finding" : "findings";
+}
+function findingGroupHeading(locale, kind, count2) {
+  if (locale === "en") {
+    if (kind === "new") return `${count2} new`;
+    return `${count2} previous ${count2 === 1 ? "issue" : "issues"} ${kind === "rechecked" ? "rechecked" : "not verified"}`;
+  }
+  const words = {
+    ru: [
+      "\u041D\u043E\u0432\u044B\u0435",
+      "\u041F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0438\u0435 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F \u043F\u0435\u0440\u0435\u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u044B",
+      "\u041F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0438\u0435 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u044B"
+    ],
+    uk: [
+      "\u041D\u043E\u0432\u0456",
+      "\u041F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0456 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u0435\u043D\u043E \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E",
+      "\u041F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0456 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F \u043D\u0435 \u043F\u0456\u0434\u0442\u0432\u0435\u0440\u0434\u0436\u0435\u043D\u043E"
+    ],
+    es: [
+      "Nuevos",
+      "Problemas anteriores revisados",
+      "Problemas anteriores sin verificar"
+    ],
+    pt: [
+      "Novos",
+      "Problemas anteriores revistos",
+      "Problemas anteriores n\xE3o verificados"
+    ],
+    fr: [
+      "Nouveaux",
+      "Probl\xE8mes pr\xE9c\xE9dents rev\xE9rifi\xE9s",
+      "Probl\xE8mes pr\xE9c\xE9dents non v\xE9rifi\xE9s"
+    ],
+    de: [
+      "Neu",
+      "Fr\xFChere Probleme erneut gepr\xFCft",
+      "Fr\xFChere Probleme nicht best\xE4tigt"
+    ],
+    it: [
+      "Nuovi",
+      "Problemi precedenti ricontrollati",
+      "Problemi precedenti non verificati"
+    ],
+    zh: ["\u65B0\u95EE\u9898", "\u5DF2\u590D\u67E5\u7684\u5148\u524D\u95EE\u9898", "\u672A\u7ECF\u8BC1\u5B9E\u7684\u5148\u524D\u95EE\u9898"],
+    ja: ["\u65B0\u3057\u3044\u6307\u6458", "\u518D\u78BA\u8A8D\u6E08\u307F\u306E\u904E\u53BB\u306E\u6307\u6458", "\u672A\u78BA\u8A8D\u306E\u904E\u53BB\u306E\u6307\u6458"],
+    ko: ["\uC0C8 \uC774\uC288", "\uB2E4\uC2DC \uAC80\uD1A0\uD55C \uC774\uC804 \uC774\uC288", "\uD655\uC778\uB418\uC9C0 \uC54A\uC740 \uC774\uC804 \uC774\uC288"]
+  };
+  return `${words[locale][kind === "new" ? 0 : kind === "rechecked" ? 1 : 2]}: ${count2}`;
 }
 var copies = {
   en: {
@@ -144425,7 +144507,7 @@ function compactFindingPresentation(finding, locale) {
     120,
     locale
   ) || "\u2026";
-  const consumed = title.endsWith("\u2026") ? title.slice(0, -1) : title;
+  const consumed = title.endsWith("\u2026") ? firstSentence(paragraph) : title;
   const remaining = derived && paragraph.startsWith(consumed) ? paragraph.slice(consumed.length).trimStart() : paragraph;
   return { title, excerpt: plainExcerpt(remaining, 320, locale) };
 }
@@ -163215,7 +163297,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.212",
+  version: "1.0.213",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -235944,7 +236026,11 @@ var LegacyReviewProjectionPolicyAdapter = class {
         } : {},
         language: this.config.outputLanguage,
         reviewPresentation: query.reviewPresentation,
-        findings: currentOccurrences.map(toLegacyFinding).map(toReviewerSummaryFinding),
+        findings: currentOccurrences.map((occurrence) => ({
+          ...toReviewerSummaryFinding(toLegacyFinding(occurrence)),
+          lineageId: occurrence.lineageId,
+          previous: query.reviewPresentation?.variant === "update" && occurrence.state !== "new" /* New */
+        })),
         metrics: review.metrics,
         incomplete,
         incompleteCauses: query.incompleteCauses,
@@ -236116,6 +236202,7 @@ function lifecycleLinesForSummary(occurrences, lifecycle) {
     if (fact) representedTargetIds.add(fact.targetId);
     lines.push({
       kind,
+      lineageId: occurrence.lineageId,
       title: occurrence.title,
       message: fact ? `${occurrence.message} (${attentionReasons.get(fact.targetId)})` : occurrence.message,
       locationLabel: findingLocationLabel({
@@ -236135,6 +236222,7 @@ function lifecycleLinesForSummary(occurrences, lifecycle) {
     if (!target) continue;
     lines.push({
       kind: "uncertain",
+      ...fact.lineageId ? { lineageId: fact.lineageId } : {},
       title: target.title,
       message: `${target.message} (${attentionReasons.get(fact.targetId)})`,
       locationLabel: findingLocationLabel({

@@ -1034,6 +1034,125 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
       reasonCodes: [],
     });
   });
+
+  it.each([0, 1, 2])(
+    'separates %s new findings from rechecked and unverified history',
+    async (newCount) => {
+      const newOccurrences = Array.from({ length: newCount }, (_, index) =>
+        occurrence({
+          lineageId: `new-${index}`,
+          title: `New issue ${index}`,
+          severity: FindingSeverity.Minor,
+        })
+      );
+      const oldStates =
+        newCount === 1
+          ? []
+          : [
+              FindingOccurrenceState.Reconfirmed,
+              FindingOccurrenceState.Changed,
+            ];
+      const oldOccurrences = oldStates.map((state, index) =>
+        occurrence({
+          lineageId: `rechecked-${index}`,
+          title: `Rechecked issue ${index}`,
+          state,
+        })
+      );
+      const unverified = Array.from({ length: 4 }, (_, index) =>
+        occurrence({
+          lineageId: `uncertain-${index}`,
+          title: `Unverified issue ${index}`,
+          state:
+            index % 2
+              ? FindingOccurrenceState.CarriedUnverified
+              : FindingOccurrenceState.Uncertain,
+        })
+      );
+      const presentation = {
+        variant: 'update' as const,
+        state: 'complete' as const,
+        severity: {
+          critical: 0,
+          major: 4 + oldOccurrences.length,
+          minor: newCount,
+          info: 0,
+        },
+        changes: {
+          new: newCount,
+          resolved: 0,
+          open: 4 + oldOccurrences.length + newCount,
+          unverified: 4,
+        },
+      };
+      const query = {
+        scope: {
+          scmRepositoryIdentityId: 'repo-1',
+          pullRequestNumber: 46,
+          baseSha: '0'.repeat(40),
+          reviewedHeadSha: '1'.repeat(40),
+          reviewRevisionHash: 'grouped-summary',
+        },
+        presentation: {
+          title: 'Review',
+          author: 'author',
+          additions: 1,
+          deletions: 0,
+        },
+        providerExecution: { plannedProviders: 1, succeededProviders: 1 },
+        reviewPresentation: presentation,
+        coverage: {
+          state: ProjectionCoverageState.Complete,
+          mode: 'full' as const,
+          totalFiles: 1,
+          reviewedFiles: 1,
+          unreviewedFiles: 0,
+          limitations: [],
+        },
+        occurrences: [...unverified, ...oldOccurrences, ...newOccurrences],
+        revisionFiles: [revisionFile()],
+        limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+      };
+      const original = JSON.stringify(query);
+      for (const state of ['complete', 'incomplete'] as const) {
+        const projected = await adapter.projectPresentation({
+          ...query,
+          reviewPresentation: { ...presentation, state },
+        });
+        const visible = projected.summaryBody.replace(
+          /<details>[\s\S]*?<\/details>/g,
+          ''
+        );
+        expect(visible).toContain(`### ${newCount} new`);
+        if (oldOccurrences.length)
+          expect(visible).toContain('### 2 previous issues rechecked');
+        else expect(visible).not.toContain('### 2 previous issues rechecked');
+        expect(visible).toContain('### 4 previous issues not verified');
+        const newSection = visible
+          .split(`### ${newCount} new`)[1]
+          .split(/\n### /)[0];
+        expect(newSection).not.toContain('Rechecked issue');
+        expect(newSection).not.toContain('Unverified issue');
+        for (let index = 0; index < newCount; index++)
+          expect(newSection).toContain(`minor · New issue ${index}`);
+        expect(visible.indexOf(`### ${newCount} new`)).toBeLessThan(
+          visible.indexOf('### 4 previous issues not verified')
+        );
+        expect(visible).toContain(
+          `${newCount + oldOccurrences.length} confirmed open`
+        );
+        expect(visible).not.toContain(
+          `${newCount + oldOccurrences.length + 4} open`
+        );
+        expect(visible).not.toContain('No findings');
+        if (state === 'incomplete') {
+          expect(visible).toContain('Review incomplete');
+          expect(visible).not.toMatch(/Review complete|all.clear/i);
+        }
+      }
+      expect(JSON.stringify(query)).toBe(original);
+    }
+  );
 });
 
 function candidate(overrides: Record<string, unknown> = {}) {

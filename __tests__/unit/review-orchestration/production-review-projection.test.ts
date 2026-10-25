@@ -129,7 +129,7 @@ describe('production review projection coverage', () => {
       });
       expect(envelope.snapshot.lineageHints[0].active).toBe(true);
       expect(envelope.publishing.summary.body).toContain(
-        '0 new · 0 resolved · 1 open · 1 unverified (included in open)'
+        '0 new · 0 resolved · 0 confirmed open · 1 previous issue not verified'
       );
     }
   );
@@ -229,7 +229,7 @@ describe('production review projection coverage', () => {
       );
       if (expectedOccurrences) {
         expect(envelope.publishing.summary.body).toContain(
-          '0 new · 0 resolved · 1 open · 1 unverified (included in open)'
+          '0 new · 0 resolved · 0 confirmed open · 1 previous issue not verified'
         );
         expect(envelope.publishing.summary.body).toContain(
           'Original summary-only bug'

@@ -239,7 +239,9 @@ describe('BuildCurrentReviewProjection', () => {
     const details = body.match(/<details>[\s\S]*?<\/details>/g) ?? [];
     // One semantic historical issue has a visible action row and one full
     // diagnostic history row. A duplicated target would add rows to both.
-    const historicalRow = /^- \*\*needs attention\*\* · Previous defect ·/gm;
+    const historicalRow = /^- Previous defect ·/gm;
+    expect(visible).toContain('### 1 previous issue not verified');
+    expect(visible).not.toContain('needs attention');
     expect(visible.match(historicalRow)).toHaveLength(1);
     expect(details).toHaveLength(1);
     const diagnosticBody = details.join('\n');

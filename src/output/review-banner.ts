@@ -66,7 +66,8 @@ export function reviewPresentationHeading(
 ): string {
   if (presentation.variant === 'update' && presentation.changes) {
     const changes = presentation.changes;
-    return `## ${presentation.state === 'incomplete' ? 'Review incomplete' : 'Review updated'}\n\n${changes.new} new · ${changes.resolved} resolved · ${changes.open} open${changes.unverified ? ` · ${changes.unverified} unverified (included in open)` : ''}`;
+    const confirmedOpen = Math.max(0, changes.open - changes.unverified);
+    return `## ${presentation.state === 'incomplete' ? 'Review incomplete' : 'Review updated'}\n\n${changes.new} new · ${changes.resolved} resolved · ${confirmedOpen} confirmed open${changes.unverified ? ` · ${changes.unverified} previous ${changes.unverified === 1 ? 'issue' : 'issues'} not verified` : ''}`;
   }
   return '';
 }

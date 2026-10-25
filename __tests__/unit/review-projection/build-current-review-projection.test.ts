@@ -1215,6 +1215,79 @@ describe('accepted companion confirmations', () => {
     });
   };
 
+  it.each([false, true])(
+    'keeps human-dismissed targets complete without prior hints (verification %s)',
+    async (verificationEnabled) => {
+      const dismissed = target({
+        disposition: LifecycleTargetDisposition.CommandSuppressed,
+        viewerCanResolve: true,
+      });
+      const result = await build([dismissed]).execute(
+        command({
+          ...(verificationEnabled
+            ? {
+                lifecycleVerification: companion(
+                  [dismissed],
+                  [LifecycleRevalidationVerdict.Resolved]
+                ),
+              }
+            : {}),
+        })
+      );
+
+      expect(result.envelope.occurrences).toEqual([]);
+      expect(result.envelope.publishing.lifecycle).toEqual([
+        expect.objectContaining({
+          targetId: dismissed.targetId,
+          verdict: 'suppressed_by_human',
+          mutationEligible: false,
+        }),
+      ]);
+      expect(
+        result.envelope.publishing.lifecycle[0].verification
+      ).toBeUndefined();
+      expect(result.envelope.publishing.summary.allClear).toBe(true);
+      expect(result.envelope.publishing.check.title).not.toContain(
+        'incomplete'
+      );
+      if (verificationEnabled)
+        expect(result.envelope.publishing.summary.body).toContain(
+          '0 unverified'
+        );
+    }
+  );
+
+  it('retains unrelated unverified targets beside a human-dismissed target', async () => {
+    const dismissed = target({
+      disposition: LifecycleTargetDisposition.CommandSuppressed,
+      viewerCanResolve: true,
+    });
+    const unknown = target({
+      targetId: 'target-unknown',
+      threadId: 'thread-unknown',
+      trustedMarker: 'b'.repeat(24),
+    });
+    const result = await build([dismissed, unknown]).execute(
+      command({
+        lifecycleVerification: companion([], []),
+      })
+    );
+
+    expect(
+      result.envelope.publishing.lifecycle[0].verification
+    ).toBeUndefined();
+    expect(result.envelope.publishing.lifecycle[1].verification).toMatchObject({
+      targetId: unknown.targetId,
+      confirmationState: 'unverified',
+    });
+    expect(result.envelope.publishing.summary.body).toContain('1 unverified');
+    expect(result.envelope.publishing.summary.allClear).toBe(false);
+    expect(result.envelope.publishing.check.title).toContain('incomplete');
+    expect(
+      result.envelope.publishing.lifecycle.some((fact) => fact.mutationEligible)
+    ).toBe(false);
+  });
+
   it('fails for an outside-diff confirmed major with no baseline or occurrence', async () => {
     const old = target({
       originalPath: 'src/old.ts',

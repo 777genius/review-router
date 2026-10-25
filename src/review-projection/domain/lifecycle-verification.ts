@@ -27,7 +27,11 @@ export function projectLifecycleVerification(input: {
   ) {
     throw new Error('lifecycle verification roster invalid');
   }
-  return inventory.targets.map((target) => {
+  const verificationTargets = inventory.targets.filter(
+    (target) =>
+      target.disposition !== LifecycleTargetDisposition.CommandSuppressed
+  );
+  return verificationTargets.map((target) => {
     const hints = input.priorLineageHints.filter(
       (hint) => hint.active && hint.lineageId === target.trustedMarker
     );

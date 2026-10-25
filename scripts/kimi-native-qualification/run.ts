@@ -26,7 +26,8 @@ type ScenarioReceipt = Readonly<{
   mode: Mode;
   requests: number;
   functionRoundTrip: boolean;
-  omittedReasoning: boolean;
+  reasoningControlsAbsent: boolean;
+  reasoningEnvelopes: readonly string[];
   omittedServiceTier: boolean;
   functionToolsOnly: boolean;
   exitCode: number | null;
@@ -109,6 +110,7 @@ function catalog(): JsonRecord {
         support_verbosity: false,
         apply_patch_tool_type: null,
         tool_mode: 'direct',
+        use_responses_lite: false,
         supports_search_tool: false,
         experimental_supported_tools: [],
         additional_speed_tiers: [],
@@ -163,7 +165,11 @@ async function scenario(
         { mode: 0o600 }
       );
       assert.equal(body.model, model);
-      assert(!Object.hasOwn(body, 'reasoning'), 'reasoning_must_be_omitted');
+      assert(
+        body.reasoning === undefined ||
+          (record(body.reasoning) && Object.keys(body.reasoning).length === 0),
+        'reasoning_controls_must_be_absent'
+      );
       assert(
         !Object.hasOwn(body, 'service_tier'),
         'service_tier_must_be_omitted'
@@ -456,7 +462,10 @@ async function scenario(
       mode,
       requests: requests.length,
       functionRoundTrip,
-      omittedReasoning: true,
+      reasoningControlsAbsent: true,
+      reasoningEnvelopes: requests.map(({ body }) =>
+        body.reasoning === undefined ? 'omitted' : 'empty_object'
+      ),
       omittedServiceTier: true,
       functionToolsOnly: true,
       exitCode,

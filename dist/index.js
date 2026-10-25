@@ -142941,7 +142941,10 @@ function projectLifecycleVerification(input) {
   if (roster.size !== context5.plannedProviderVoteKeys.length || [...roster].some((key) => !key)) {
     throw new Error("lifecycle verification roster invalid");
   }
-  return inventory.targets.map((target) => {
+  const verificationTargets = inventory.targets.filter(
+    (target) => target.disposition !== "command_suppressed" /* CommandSuppressed */
+  );
+  return verificationTargets.map((target) => {
     const hints = input.priorLineageHints.filter(
       (hint) => hint.active && hint.lineageId === target.trustedMarker
     );
@@ -211245,7 +211248,12 @@ function parsePersistedReviewPlan(value, expected) {
     "persisted_assignment_manifest_hash"
   );
   if (json3 !== null) {
-    const manifest = JSON.parse(json3);
+    let manifest;
+    try {
+      manifest = parseCanonicalObject(json3);
+    } catch {
+      throw new Error("review_action_v2_persisted_manifest_invalid");
+    }
     if (![1, 2].includes(manifest.manifestVersion) || manifest.manifestVersion !== value.assignmentManifestVersion || digest4(
       `rr.review-assignment-manifest.v${manifest.manifestVersion}\0${json3}`
     ) !== manifestHash)
@@ -243367,10 +243375,15 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             pr: pr2,
             config: config2,
             compatibilityKey: ocrCompatibilityKey,
-            lifecycleTargets: admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey] !== void 0 ? [] : initialLifecycle.promptTargets,
+            lifecycleTargets: selectLegacyLifecycleTargets(
+              config2.reviewThreadLifecycle,
+              admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+              initialLifecycle.promptTargets
+            ),
             liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
           });
-          const lifecycle2 = preplanningRestore?.persistedPlan ? restoreProductionLifecycleVerification(
+          assertLegacyReviewPlanRestorable(preplanningRestore, planned2.plan);
+          const lifecycle2 = preplanningRestore ? restoreProductionLifecycleVerification(
             preplanningRestore,
             planned2.plan,
             config2
@@ -243651,11 +243664,16 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
         config: config2,
         providerName: provider.name,
         compatibilityKey,
-        lifecycleTargets: admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey] !== void 0 ? [] : initialLifecycle.promptTargets,
+        lifecycleTargets: selectLegacyLifecycleTargets(
+          config2.reviewThreadLifecycle,
+          admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+          initialLifecycle.promptTargets
+        ),
         liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
         accountGateway: input.accountGateway !== void 0
       });
-      const lifecycle = preplanningRestore?.persistedPlan ? restoreProductionLifecycleVerification(
+      assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
+      const lifecycle = preplanningRestore ? restoreProductionLifecycleVerification(
         preplanningRestore,
         planned.plan,
         config2
@@ -244349,6 +244367,20 @@ function resolveContextGatewayBundlePath() {
 }
 function createProductionT0ReviewRunner(input = {}) {
   return new ProductionT0ReviewRunner(input.fetchImpl, input.progress);
+}
+function selectLegacyLifecycleTargets(mode, capabilityJson, targets) {
+  return mode === "off" || capabilityJson !== void 0 ? [] : targets;
+}
+function assertLegacyReviewPlanRestorable(restored, plan) {
+  if (!restored || restored.persistedPlan) return;
+  const slots = new Map(
+    restored.workSlots.map((slot) => [slot.workSlotId, slot])
+  );
+  if (restored.planHash !== plan.planHash || slots.size !== restored.workSlots.length || slots.size !== plan.assignments.length || plan.assignments.some(({ workSlot }) => {
+    const slot = slots.get(workSlot.workSlotId);
+    return !slot || slot.required !== workSlot.required || slot.providerVoteIdentityHash !== workSlot.providerVoteIdentityHash;
+  }))
+    throw new Error("review_restore_legacy_plan_unavailable");
 }
 function planAssignments(input) {
   const codexLanes = input.authorization.facts.providerVoteLanes.filter(

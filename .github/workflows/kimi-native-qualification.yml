@@ -1,0 +1,47 @@
+name: Kimi native qualification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/kimi-native-qualification.yml
+      - scripts/kimi-native-qualification/**
+      - tsconfig.kimi-native.json
+      - src/codex-oauth/**
+      - src/control-plane/approved-review-agent.ts
+      - src/control-plane/review-agent-profiles.json
+      - src/providers/codex**
+      - src/review-investigation/infrastructure/codex-app-server**
+      - src/review-investigation/infrastructure/codex-review-agent-adapter.ts
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-kimi:
+    name: Pinned Codex Kimi wire contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.11.1
+      - name: Install isolated exact native TypeScript compiler
+        run: npm install --prefix tmp/kimi-native-qualification-compiler --no-audit --no-fund --ignore-scripts typescript-native@npm:typescript@7.0.2 @types/node@22.19.17
+      - name: Compile strict qualification project
+        run: |
+          node tmp/kimi-native-qualification-compiler/node_modules/typescript-native/bin/tsc --version
+          node tmp/kimi-native-qualification-compiler/node_modules/typescript-native/bin/tsc -p tsconfig.kimi-native.json
+      - name: Qualify actual approved Codex without provider credentials
+        run: node tmp/kimi-native-qualification-build/scripts/kimi-native-qualification/run.js tmp/kimi-native-qualification
+      - name: Retain synthetic wire and native receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: kimi-native-qualification
+          path: tmp/kimi-native-qualification
+          if-no-files-found: ignore

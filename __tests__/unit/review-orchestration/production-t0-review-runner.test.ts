@@ -197,6 +197,11 @@ describe('ProductionT0ReviewRunner policy', () => {
     ['mimo-v2.6-pro', 'gpt-caller', true, 'low', 'mimo-v2.6-pro'],
     ['gpt-selected', 'mimo-v2.6-pro', false, undefined, 'mimo-v2.6-pro'],
     ['gpt-selected', 'mimo-v2.6-pro', false, 'high', 'mimo-v2.6-pro'],
+    ['gpt-unseen-minimal', 'gpt-caller', false, 'minimal', 'gpt-unseen-minimal'],
+    ['gpt-unseen-high-only', 'gpt-caller', false, 'high', 'gpt-unseen-high-only'],
+    ['gpt-unseen-default', 'gpt-caller', false, undefined, 'gpt-unseen-default'],
+    ['gpt-unseen-max', 'gpt-caller', false, 'max', 'gpt-unseen-max'],
+    ['gpt-unseen-ultra', 'gpt-caller', false, 'ultra', 'gpt-unseen-ultra'],
   ] as const)(
     'pins AppServer catalog and effort from selected %s independently of caller %s (gateway %s, effort %s)',
     async (
@@ -377,7 +382,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           '7'.repeat(64)
         ).assemble(invocation);
         // Ambient effort changes after preparation cannot change the launch.
-        process.env.CODEX_REASONING_EFFORT = 'low';
+        process.env.CODEX_REASONING_EFFORT = 'xhigh';
         // Real adapter/session/config preparation, stopped before any subprocess.
         await expect(agents[0].agent.executeTurn(request)).rejects.toBe(
           stoppedAtBoundary
@@ -400,7 +405,7 @@ describe('ProductionT0ReviewRunner policy', () => {
         }
         const investigationLaunch = execute.mock.calls[1][0];
         expect(launch.protocol.reasoningEffort).toBe(
-          enabled ? (reasoningEffort ?? 'high') : 'xhigh'
+          enabled ? (reasoningEffort ?? 'high') : (reasoningEffort ?? null)
         );
         expect(investigationLaunch.protocol.requestedModel).toBe(
           invocation.requestedModel
@@ -471,6 +476,19 @@ describe('ProductionT0ReviewRunner policy', () => {
         execute.mockRestore();
         fs.rmSync(root, { recursive: true, force: true });
       }
+    }
+  );
+
+  it.each(['none', 'unsupported'])(
+    'rejects a Gateway Codex effort outside saved policy: %s',
+    (serverReasoningEffort) => {
+      expect(() =>
+        resolveProductionInvestigationReasoningEffort({
+          codexModel: 'gpt-unseen',
+          accountGateway: true,
+          serverReasoningEffort,
+        })
+      ).toThrow('account_gateway_codex_reasoning_effort_unsupported');
     }
   );
 

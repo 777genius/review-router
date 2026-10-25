@@ -345,7 +345,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       input.providerApi ||
       (input.accountGateway && model === 'mimo-v2.6-pro')
     ) {
-      process.env.CODEX_REASONING_EFFORT = reasoningEffort;
+      if (reasoningEffort !== null)
+        process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
     const configuredTimeoutMs = Math.max(
@@ -1563,7 +1564,7 @@ export function resolveProductionInvestigationReasoningEffort(input: {
   readonly accountGateway: boolean;
   readonly providerApi?: boolean;
   readonly serverReasoningEffort?: string;
-}): NonNullable<CodexReviewAgentAdapterOptions['reasoningEffort']> {
+}): Exclude<CodexReviewAgentAdapterOptions['reasoningEffort'], undefined> {
   if (input.providerApi) {
     const effort = input.serverReasoningEffort ?? 'xhigh';
     if (
@@ -1575,8 +1576,24 @@ export function resolveProductionInvestigationReasoningEffort(input: {
       throw new Error('provider_api_reasoning_effort_unsupported');
     return effort;
   }
-  if (!input.accountGateway || input.codexModel !== 'mimo-v2.6-pro') {
-    return 'xhigh';
+  if (!input.accountGateway) return 'xhigh';
+  if (input.codexModel !== 'mimo-v2.6-pro') {
+    // Only captured policy may override the selected Codex model's default.
+    // null survives adapter defaults and capability hashing without inventing
+    // an effort for models whose catalog is owned by the upstream AppServer.
+    const effort = input.serverReasoningEffort;
+    if (effort === undefined) return null;
+    if (
+      effort !== 'minimal' &&
+      effort !== 'low' &&
+      effort !== 'medium' &&
+      effort !== 'high' &&
+      effort !== 'xhigh' &&
+      effort !== 'max' &&
+      effort !== 'ultra'
+    )
+      throw new Error('account_gateway_codex_reasoning_effort_unsupported');
+    return effort;
   }
   // Only the applied server field authorizes effort; caller env can survive
   // an omitted runtime value. The approved MiMo default is high.
@@ -1609,8 +1626,9 @@ export function createConfiguredProductionInvestigationAgents(input: {
   readonly modelTransport?: LocalGatewayModelTransport;
   readonly admittedGatewayModel?: string;
   readonly directCredentialLease?: () => import('../../providers/prepared-invocation').ProviderCredentialLease;
-  readonly reasoningEffort: NonNullable<
-    CodexReviewAgentAdapterOptions['reasoningEffort']
+  readonly reasoningEffort: Exclude<
+    CodexReviewAgentAdapterOptions['reasoningEffort'],
+    undefined
   >;
 }): readonly ConfiguredProductionReviewAgent[] {
   if (input.approvedAgent && input.approvedAgent.agentKind !== 'codex') {

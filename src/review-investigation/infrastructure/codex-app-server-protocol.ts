@@ -9,14 +9,23 @@ import type { ReviewTurnUsage } from '../domain/turn-observation';
 export const CODEX_APP_SERVER_VERSION = '0.147.0';
 export const CODEX_APP_SERVER_MCP_NAME = 'reviewrouter';
 
-export type CodexAppServerReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+export type CodexAppServerReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max'
+  | 'ultra';
 
 export type CodexAppServerProtocolRequest = Readonly<{
   cwd: string;
   prompt: string;
   clientTurnId: string;
   requestedModel: string;
-  reasoningEffort: CodexAppServerReasoningEffort;
+  /** null delegates to the admitted model's upstream default. */
+  reasoningEffort: CodexAppServerReasoningEffort | null;
   outputSchema?: Readonly<Record<string, unknown>>;
   allowedTools: readonly string[];
   maxOutputBytes: number;
@@ -223,9 +232,11 @@ export class CodexAppServerProtocolClient {
           approvalPolicy: 'never',
           approvalsReviewer: 'user',
           sandbox: 'read-only',
-          config: {
-            model_reasoning_effort: this.request.reasoningEffort,
-          },
+          ...(this.request.reasoningEffort === null
+            ? {}
+            : {
+                config: { model_reasoning_effort: this.request.reasoningEffort },
+              }),
           ephemeral: true,
           environments: [],
           dynamicTools: [],
@@ -259,7 +270,9 @@ export class CodexAppServerProtocolClient {
             type: 'readOnly',
             networkAccess: false,
           },
-          effort: this.request.reasoningEffort,
+          ...(this.request.reasoningEffort === null
+            ? {}
+            : { effort: this.request.reasoningEffort }),
           ...(this.request.outputSchema === undefined
             ? {}
             : { outputSchema: this.request.outputSchema }),
@@ -477,7 +490,19 @@ export class CodexAppServerProtocolClient {
       response.approvalPolicy !== 'never' ||
       response.approvalsReviewer !== 'user' ||
       !isReadOnlySandbox(response.sandbox) ||
-      response.reasoningEffort !== this.request.reasoningEffort ||
+      (this.request.reasoningEffort === null
+        ? response.reasoningEffort !== null &&
+          ![
+            'none',
+            'minimal',
+            'low',
+            'medium',
+            'high',
+            'xhigh',
+            'max',
+            'ultra',
+          ].includes(response.reasoningEffort as string)
+        : response.reasoningEffort !== this.request.reasoningEffort) ||
       !Array.isArray(response.instructionSources) ||
       response.instructionSources.length !== 0 ||
       !Array.isArray(thread.turns) ||

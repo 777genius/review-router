@@ -51,6 +51,11 @@ import {
 } from '../../control-plane/runtime-config';
 import { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
 import { readApprovedReviewAgent } from '../../control-plane/approved-review-agent';
+import {
+  readAdmittedGatewayCodexModelSettings,
+  resolveAdmittedGatewayCodexReasoningEffort,
+  type AdmittedGatewayCodexModelSettings,
+} from '../../control-plane/admitted-gateway-codex-model-settings';
 export { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../context-gateway/context-gateway-release-contract';
 import { BatchOrchestrator } from '../../core/batch-orchestrator';
@@ -335,11 +340,19 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         ? selectDirectOpenRouterProvider(config)
         : selectCodexProvider(config);
     const model = codexProviderName.slice(codexProviderName.indexOf('/') + 1);
+    const gatewayModelSettings =
+      input.accountGateway && !input.ocr && !isAccountGatewayMiMoModel(model)
+        ? readAdmittedGatewayCodexModelSettings(
+            input.accountGateway.runtimeConfig,
+            model
+          )
+        : undefined;
     const reasoningEffort = resolveProductionInvestigationReasoningEffort({
       codexModel: model,
       accountGateway: input.accountGateway !== undefined,
       providerApi: input.providerApi !== undefined,
       serverReasoningEffort,
+      gatewayModelSettings,
     });
     if (
       input.providerApi ||
@@ -962,7 +975,15 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             }
           : {}),
         ...(input.accountGateway
-          ? { accountGateway: input.accountGateway.modelTransport }
+          ? {
+              accountGateway: input.accountGateway.modelTransport,
+              ...(gatewayModelSettings
+                ? {
+                    accountGatewayModelSettings: gatewayModelSettings,
+                    accountGatewaySavedReasoningEffort: serverReasoningEffort,
+                  }
+                : {}),
+            }
           : {}),
       });
       const compatibilityKey = hashIncrementalCompatibility(
@@ -1096,8 +1117,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         agenticContext,
         contextGateway,
         false,
-        input.providerApi ? reasoningEffort : 'xhigh',
-        input.providerApi?.credentialLease
+        input.providerApi || gatewayModelSettings ? reasoningEffort : 'xhigh',
+        input.providerApi?.credentialLease,
+        gatewayModelSettings
       );
       const investigationInvocationAdapter =
         createProductionReviewInvestigationInvocation({
@@ -1119,7 +1141,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               contextGateway,
               true,
               reasoningEffort,
-              input.providerApi?.credentialLease
+              input.providerApi?.credentialLease,
+              gatewayModelSettings
             ),
         });
       const identities = new DeterministicReviewOrchestrationIdentity();
@@ -1196,6 +1219,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                         input.accountGateway?.runtimeConfig.runtimeEnv
                           .CODEX_MODEL,
                       reasoningEffort,
+                      gatewayModelSettings,
                     }),
                   }
                 );
@@ -1564,6 +1588,7 @@ export function resolveProductionInvestigationReasoningEffort(input: {
   readonly accountGateway: boolean;
   readonly providerApi?: boolean;
   readonly serverReasoningEffort?: string;
+  readonly gatewayModelSettings?: AdmittedGatewayCodexModelSettings;
 }): Exclude<CodexReviewAgentAdapterOptions['reasoningEffort'], undefined> {
   if (input.providerApi) {
     const effort = input.serverReasoningEffort ?? 'xhigh';
@@ -1578,11 +1603,18 @@ export function resolveProductionInvestigationReasoningEffort(input: {
   }
   if (!input.accountGateway) return 'xhigh';
   if (input.codexModel !== 'mimo-v2.6-pro') {
-    // Only captured policy may override the selected Codex model's default.
-    // null survives adapter defaults and capability hashing without inventing
-    // an effort for models whose catalog is owned by the upstream AppServer.
+    if (input.gatewayModelSettings) {
+      if (input.gatewayModelSettings.model !== input.codexModel)
+        throw new Error('account_gateway_codex_model_settings_invalid');
+      return resolveAdmittedGatewayCodexReasoningEffort(
+        input.gatewayModelSettings,
+        input.serverReasoningEffort
+      );
+    }
+    // Qualified legacy compatibility only. Dynamic models require managed
+    // settings at checkout; absence does not establish an account default.
     const effort = input.serverReasoningEffort;
-    if (effort === undefined) return null;
+    if (effort === undefined) return 'xhigh';
     if (
       effort !== 'minimal' &&
       effort !== 'low' &&
@@ -1625,6 +1657,7 @@ export function createConfiguredProductionInvestigationAgents(input: {
   readonly executionSessions: ReviewAgentExecutionSessionResolverPort;
   readonly modelTransport?: LocalGatewayModelTransport;
   readonly admittedGatewayModel?: string;
+  readonly gatewayModelSettings?: AdmittedGatewayCodexModelSettings;
   readonly directCredentialLease?: () => import('../../providers/prepared-invocation').ProviderCredentialLease;
   readonly reasoningEffort: Exclude<
     CodexReviewAgentAdapterOptions['reasoningEffort'],
@@ -1691,7 +1724,8 @@ export function createConfiguredProductionInvestigationAgents(input: {
                     await prepareAccountGatewayModelCatalog(
                       input.codexModel,
                       input.modelTransport!.environment.CODEX_HOME,
-                      input.modelTransport!.configuration
+                      input.modelTransport!.configuration,
+                      input.gatewayModelSettings
                     );
                   const result = await appServer.executeTurn({
                     ...request,

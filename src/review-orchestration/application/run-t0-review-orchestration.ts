@@ -102,6 +102,7 @@ export type RunT0ReviewOrchestrationCommand = {
   readonly ownerIdHash: string;
   readonly allowPartial: boolean;
   readonly restoredExecution?: RestoredReviewExecution;
+  /** Preserve persisted identities and one-shot/uncertain effects; never-started discovery may resume native admission. */
   readonly restoreOnly?: boolean;
 };
 
@@ -384,13 +385,29 @@ export class RunT0ReviewOrchestration {
         if (!restoredSlot) {
           throw new Error('review_orchestration_restored_work_slot_missing');
         }
+        const persistedSlot =
+          execution.restoredExecution.persistedPlan?.workSlots.find(
+            (slot) => slot.workSlotId === workSlot.workSlotId
+          );
+        const restoredSatisfied =
+          restoredSlot.state === RestoredReviewWorkSlotState.Satisfied;
+        const lifecycleEvidenceUnavailable =
+          workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation &&
+          (!restoredSatisfied ||
+            !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
+              (manifest) => manifest.workSlotId === workSlot.workSlotId
+            ));
+        // Pending/ordinal 1 is before any lease acquisition. Older restore
+        // responses omit the ordinal; retain their native admission behavior.
+        const discoveryDispatchUncertain =
+          workSlot.taskKind === ReviewTaskKind.FindingDiscovery &&
+          !restoredSatisfied &&
+          (restoredSlot.state === RestoredReviewWorkSlotState.Leased ||
+            restoredSlot.activeLeaseId !== null ||
+            (persistedSlot?.nextAttemptOrdinal ?? 1) > 1);
         if (
           (command.restoreOnly &&
-            (restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied ||
-              (workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation &&
-                !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
-                  (manifest) => manifest.workSlotId === workSlot.workSlotId
-                )))) ||
+            (lifecycleEvidenceUnavailable || discoveryDispatchUncertain)) ||
           restoredSlot.state === RestoredReviewWorkSlotState.Exhausted ||
           restoredSlot.state === RestoredReviewWorkSlotState.Cancelled
         ) {

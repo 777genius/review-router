@@ -109,6 +109,7 @@ export function validateLifecycleResponse(
           'reason',
         ]) ||
         typeof citation.path !== 'string' ||
+        citation.path !== target.sourcePath ||
         typeof citation.blobOid !== 'string' ||
         !Number.isInteger(citation.startLine) ||
         !Number.isInteger(citation.endLine) ||

@@ -1264,11 +1264,17 @@ describe('compact summary publication contract', () => {
       lifecycleAttention: true,
       lifecycleWarnings: ['A human reply requires attention.'],
       lifecycle: [
+        ...Array.from({ length: 100 }, (_, index) => ({
+          kind: 'active' as const,
+          title: `Known previous issue ${index}: ${'Rechecked evidence '.repeat(12)}`,
+          message: 'The issue was rechecked and remains valid.',
+          locationLabel: 'src/prior.ts:1',
+        })),
         {
           kind: 'uncertain',
           title: 'Previous authentication issue',
           message: 'Still needs a decision.',
-          locationLabel: 'src/old.ts:2',
+          locationLabel: `src/${'old-'.repeat(50)}.ts:2`,
         },
       ],
     });
@@ -1281,6 +1287,10 @@ describe('compact summary publication contract', () => {
     expect(visible).toContain('1 previous issue not verified');
     expect(visible).not.toContain('needs attention');
     expect(visible).toContain('Previous authentication issue');
+    expect(visible).toContain('- **critical · Guard the tenant boundary**');
+    expect(visible.indexOf('### 1 new')).toBeLessThan(
+      visible.indexOf('### 100 previous issues rechecked')
+    );
     expect(visible).toContain(
       'Full findings remain in the review JSON artifact.'
     );

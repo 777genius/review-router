@@ -143014,7 +143014,7 @@ function renderReviewerSummaryMarkdown(input) {
     if (!group.length) continue;
     for (const line2 of group) {
       const overview = `- ${index === 0 ? `**${copy.lifecycle[line2.kind]}** \xB7 ` : ""}${escapeMarkdownText(compactFindingPresentation(line2, locale).title)} \xB7 ${escapeCoverageManifestPath(line2.locationLabel)}`;
-      if (utf8Bytes([...historyLines.flat(), overview].join("\n")) <= 12e3)
+      if (utf8Bytes([...historyLines[index], overview].join("\n")) <= 12e3)
         historyLines[index].push(overview);
       else omitted = true;
     }

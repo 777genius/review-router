@@ -425,7 +425,7 @@ export function renderReviewerSummaryMarkdown(
     if (!group.length) continue;
     for (const line of group) {
       const overview = `- ${index === 0 ? `**${copy.lifecycle[line.kind]}** · ` : ''}${escapeMarkdownText(compactFindingPresentation(line, locale).title)} · ${escapeCoverageManifestPath(line.locationLabel)}`;
-      if (utf8Bytes([...historyLines.flat(), overview].join('\n')) <= 12_000)
+      if (utf8Bytes([...historyLines[index], overview].join('\n')) <= 12_000)
         historyLines[index].push(overview);
       else omitted = true;
     }

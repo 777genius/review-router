@@ -131061,8 +131061,10 @@ var mimoModel = {
 function isAccountGatewayMiMoModel(model) {
   return model === mimoModel.slug;
 }
-async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration) {
-  const catalogModel = model === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model) ? mimoModel : void 0;
+async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration, settings) {
+  if (settings && (settings.model !== model || isAccountGatewayMiMoModel(model)))
+    throw new Error("account_gateway_codex_model_settings_invalid");
+  const catalogModel = settings ? managedCodexModel(settings) : model === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model) ? mimoModel : void 0;
   if (!catalogModel) return void 0;
   if (!codexHome || !path5.isAbsolute(codexHome))
     throw new Error("account_gateway_catalog_home_unavailable");
@@ -131082,6 +131084,104 @@ async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfig
   );
   await fs6.chmod(configPath, 384);
   return setting;
+}
+function managedCodexModel(settings) {
+  return {
+    slug: settings.model,
+    display_name: settings.model,
+    description: "Managed account model",
+    base_instructions: "",
+    default_reasoning_level: settings.reasoning?.default ?? null,
+    supported_reasoning_levels: (settings.reasoning?.allowed ?? []).map(
+      (effort) => ({ effort, description: effort })
+    ),
+    supports_reasoning_summary_parameter: false,
+    default_reasoning_summary: "none",
+    use_responses_lite: false,
+    prefer_websockets: false,
+    shell_type: "unified_exec",
+    visibility: "list",
+    supported_in_api: true,
+    priority: 0,
+    support_verbosity: false,
+    apply_patch_tool_type: "freeform",
+    truncation_policy: { mode: "tokens", limit: 1e4 },
+    supports_parallel_tool_calls: false,
+    context_window: 272e3,
+    max_context_window: 272e3,
+    auto_compact_token_limit: null,
+    comp_hash: "3000",
+    input_modalities: ["text"],
+    supports_image_detail_original: false,
+    experimental_supported_tools: [],
+    tool_mode: "direct",
+    supports_search_tool: false,
+    multi_agent_version: "v2",
+    include_skills_usage_instructions: false,
+    include_apps_usage_instructions: false,
+    include_plugin_usage_instructions: false,
+    auto_review_model_override: null,
+    model_specialty: null
+  };
+}
+
+// src/control-plane/admitted-gateway-codex-model-settings.ts
+var GATEWAY_CODEX_MODEL_SETTINGS_ENV = "REVIEW_ROUTER_GATEWAY_MODEL_SETTINGS_JSON";
+var canonicalEfforts = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max"
+];
+function readAdmittedGatewayCodexModelSettings(runtime, selectedModel) {
+  const raw = runtime?.runtimeEnv[GATEWAY_CODEX_MODEL_SETTINGS_ENV];
+  if (raw === void 0) return void 0;
+  const invalid4 = () => new Error("account_gateway_codex_model_settings_invalid");
+  if (Buffer.byteLength(raw, "utf8") > 2048) throw invalid4();
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw invalid4();
+  }
+  if (!hasKeys(value, ["model", "reasoning"])) throw invalid4();
+  if (typeof value.model !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(value.model) || value.model !== selectedModel)
+    throw invalid4();
+  if (value.reasoning === null)
+    return Object.freeze({ model: value.model, reasoning: null });
+  if (!hasKeys(value.reasoning, ["allowed", "default"])) throw invalid4();
+  const { allowed, default: defaultEffort } = value.reasoning;
+  if (!Array.isArray(allowed) || allowed.length === 0 || allowed.length > 7 || allowed.some((effort) => !isCanonicalEffort(effort)) || new Set(allowed).size !== allowed.length || !isCanonicalEffort(defaultEffort) || !allowed.includes(defaultEffort))
+    throw invalid4();
+  return Object.freeze({
+    model: value.model,
+    reasoning: Object.freeze({
+      allowed: Object.freeze(
+        canonicalEfforts.filter((effort) => allowed.includes(effort))
+      ),
+      default: defaultEffort
+    })
+  });
+}
+function resolveAdmittedGatewayCodexReasoningEffort(settings, savedEffort) {
+  const effective = savedEffort === "ultra" ? "max" : savedEffort;
+  if (settings.reasoning === null) {
+    if (effective !== void 0)
+      throw new Error("account_gateway_codex_reasoning_effort_unsupported");
+    return null;
+  }
+  const selected = effective ?? settings.reasoning.default;
+  if (!isCanonicalEffort(selected) || !settings.reasoning.allowed.includes(selected))
+    throw new Error("account_gateway_codex_reasoning_effort_unsupported");
+  return selected;
+}
+function isCanonicalEffort(value) {
+  return typeof value === "string" && canonicalEfforts.includes(value);
+}
+function hasKeys(value, keys3) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(",") === [...keys3].sort().join(",");
 }
 
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
@@ -132739,12 +132839,16 @@ var CodexProvider = class _CodexProvider extends Provider {
     const auditMode = agenticContext && !contextGateway ? this.agenticAuditMode() : "off";
     const eventAudit = contextGateway ? true : this.shouldUseEventAudit();
     const forkSandbox = !this.modelTransport && this.shouldUseForkSandboxCodexHomeConfig();
-    const reasoningEffort = this.resolveReasoningEffort(false);
+    const reasoningEffort = this.options.accountGatewayModelSettings ? resolveAdmittedGatewayCodexReasoningEffort(
+      this.options.accountGatewayModelSettings,
+      this.options.accountGatewaySavedReasoningEffort
+    ) ?? void 0 : this.resolveReasoningEffort(false);
     const gateway = this.options.accountGateway;
     const modelCatalogSetting = gateway ? await prepareAccountGatewayModelCatalog(
       this.model,
       gateway.environment.CODEX_HOME,
-      gateway.configuration
+      gateway.configuration,
+      this.options.accountGatewayModelSettings
     ) : void 0;
     const frozenCliConfig = {
       model: this.model,
@@ -230857,7 +230961,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
   });
 }
 var CodexReviewInvocationAdapter = class {
-  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false, investigationReasoningEffort = "xhigh", directCredentialLease) {
+  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false, investigationReasoningEffort = "xhigh", directCredentialLease, gatewayModelSettings) {
     this.provider = provider;
     this.promptBuilder = promptBuilder;
     this.timeoutMs = timeoutMs;
@@ -230866,6 +230970,7 @@ var CodexReviewInvocationAdapter = class {
     this.investigationManifestBindingEnabled = investigationManifestBindingEnabled;
     this.investigationReasoningEffort = investigationReasoningEffort;
     this.directCredentialLease = directCredentialLease;
+    this.gatewayModelSettings = gatewayModelSettings;
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
         throw new Error("review_action_v2_assignment_duplicate");
@@ -230943,6 +231048,7 @@ var CodexReviewInvocationAdapter = class {
       probeLimits: preparedPrompt.investigationProbePlan.limits,
       probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
       reasoningEffort: this.investigationReasoningEffort,
+      ...this.gatewayModelSettings ? { gatewayModelSettings: this.gatewayModelSettings } : {},
       requestedModel: prepared.requestedModel,
       searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
       turnPromptContractHash: REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH
@@ -230964,7 +231070,11 @@ var CodexReviewInvocationAdapter = class {
           enabledTools: [...gatewayPlanningConfig.enabledTools].sort()
         } : null,
         preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
-        providerKind: prepared.providerKind
+        providerKind: prepared.providerKind,
+        ...this.gatewayModelSettings ? {
+          gatewayModelSettings: this.gatewayModelSettings,
+          reasoningEffort: this.investigationReasoningEffort
+        } : {}
       }),
       providerRequestEnvelopeHash: investigationSeedEnvelope?.canonicalJson ?? prepared.observableInputPreimage,
       outputSchemaHash: canonicalJson11(
@@ -243116,11 +243226,16 @@ var ProductionT0ReviewRunner = class {
     };
     const codexProviderName = input.ocr ? "" : input.providerApi ? selectDirectOpenRouterProvider(config2) : selectCodexProvider(config2);
     const model = codexProviderName.slice(codexProviderName.indexOf("/") + 1);
+    const gatewayModelSettings = input.accountGateway && !input.ocr && !isAccountGatewayMiMoModel(model) ? readAdmittedGatewayCodexModelSettings(
+      input.accountGateway.runtimeConfig,
+      model
+    ) : void 0;
     const reasoningEffort = resolveProductionInvestigationReasoningEffort({
       codexModel: model,
       accountGateway: input.accountGateway !== void 0,
       providerApi: input.providerApi !== void 0,
-      serverReasoningEffort
+      serverReasoningEffort,
+      gatewayModelSettings
     });
     if (input.providerApi || input.accountGateway && model === "mimo-v2.6-pro") {
       if (reasoningEffort !== null)
@@ -243627,7 +243742,13 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           disableBuiltinTools: true,
           waitForProcessClose: true
         } : {},
-        ...input.accountGateway ? { accountGateway: input.accountGateway.modelTransport } : {}
+        ...input.accountGateway ? {
+          accountGateway: input.accountGateway.modelTransport,
+          ...gatewayModelSettings ? {
+            accountGatewayModelSettings: gatewayModelSettings,
+            accountGatewaySavedReasoningEffort: serverReasoningEffort
+          } : {}
+        } : {}
       });
       const compatibilityKey = hashIncrementalCompatibility(
         config2,
@@ -243729,8 +243850,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
         agenticContext,
         contextGateway,
         false,
-        input.providerApi ? reasoningEffort : "xhigh",
-        input.providerApi?.credentialLease
+        input.providerApi || gatewayModelSettings ? reasoningEffort : "xhigh",
+        input.providerApi?.credentialLease,
+        gatewayModelSettings
       );
       const investigationInvocationAdapter = createProductionReviewInvestigationInvocation({
         rollout: investigationRollout,
@@ -243750,7 +243872,8 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           contextGateway,
           true,
           reasoningEffort,
-          input.providerApi?.credentialLease
+          input.providerApi?.credentialLease,
+          gatewayModelSettings
         )
       });
       const identities = new DeterministicReviewOrchestrationIdentity();
@@ -243807,7 +243930,8 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 executionSessions: gateway,
                 modelTransport: input.providerApi?.modelTransport ?? input.accountGateway?.modelTransport,
                 admittedGatewayModel: input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-                reasoningEffort
+                reasoningEffort,
+                gatewayModelSettings
               })
             }
           );
@@ -244082,8 +244206,16 @@ function resolveProductionInvestigationReasoningEffort(input) {
   }
   if (!input.accountGateway) return "xhigh";
   if (input.codexModel !== "mimo-v2.6-pro") {
+    if (input.gatewayModelSettings) {
+      if (input.gatewayModelSettings.model !== input.codexModel)
+        throw new Error("account_gateway_codex_model_settings_invalid");
+      return resolveAdmittedGatewayCodexReasoningEffort(
+        input.gatewayModelSettings,
+        input.serverReasoningEffort
+      );
+    }
     const effort2 = input.serverReasoningEffort;
-    if (effort2 === void 0) return null;
+    if (effort2 === void 0) return "xhigh";
     if (effort2 !== "minimal" && effort2 !== "low" && effort2 !== "medium" && effort2 !== "high" && effort2 !== "xhigh" && effort2 !== "max" && effort2 !== "ultra")
       throw new Error("account_gateway_codex_reasoning_effort_unsupported");
     return effort2;
@@ -244136,7 +244268,8 @@ function createConfiguredProductionInvestigationAgents(input) {
               const catalogSetting = await prepareAccountGatewayModelCatalog(
                 input.codexModel,
                 input.modelTransport.environment.CODEX_HOME,
-                input.modelTransport.configuration
+                input.modelTransport.configuration,
+                input.gatewayModelSettings
               );
               const result2 = await appServer.executeTurn({
                 ...request3,

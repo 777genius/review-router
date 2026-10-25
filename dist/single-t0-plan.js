@@ -126318,6 +126318,43 @@ var prDescriptionContract = Object.freeze({
   deadlineMs: 6e4,
   attemptBudget: 1
 });
+var lifecycleVerificationContract = Object.freeze({
+  extensionId: "lifecycle-verification.v1",
+  executor: "rr_bounded_lifecycle_verifier.v1",
+  version: 1,
+  taskKind: "lifecycle_revalidation",
+  modelTransport: "account_gateway",
+  capabilityRuntimeEnvKey: "REVIEW_ROUTER_LIFECYCLE_VERIFICATION_CAPABILITY_JSON",
+  unavailableReasonRuntimeEnvKey: "REVIEW_ROUTER_LIFECYCLE_VERIFICATION_UNAVAILABLE_REASON",
+  promptVersion: "lifecycle-verification-prompt.v1",
+  outputSchemaVersion: 1,
+  requestCanonicalizerVersion: "lifecycle-verification-request.v1",
+  policyVersion: "lifecycle-verification-policy.v1",
+  dispatchReadbackPath: "/api/action/v2/account-gateway/companion-dispatch",
+  maxTargetsPerPacket: 4,
+  maxPackets: 2,
+  maxFilesPerPacket: 6,
+  maxFileBytes: 24 * 1024,
+  maxSourceBytes: 64 * 1024,
+  maxPromptBytes: 96 * 1024,
+  maxClaimBytes: 4 * 1024,
+  maxResponseBytes: 32 * 1024,
+  maxLifecyclePlanBytes: 64 * 1024,
+  maxOutputTokens: 4096,
+  minOutputTokensPerTarget: 1024,
+  deadlineMs: 6e4,
+  attemptBudget: 1,
+  dispatchHeaders: Object.freeze({
+    dispatchId: "x-reviewrouter-companion-dispatch-id",
+    executionId: "x-reviewrouter-companion-execution-id",
+    workSlotId: "x-reviewrouter-companion-work-slot-id",
+    attemptOrdinal: "x-reviewrouter-companion-attempt-ordinal",
+    leaseId: "x-reviewrouter-companion-lease-id",
+    leaseCapability: "x-reviewrouter-companion-lease-capability",
+    fencingToken: "x-reviewrouter-companion-fencing-token",
+    preparedManifestKey: "x-reviewrouter-companion-prepared-manifest-key"
+  })
+});
 var contextToolsContract = Object.freeze({
   extensionId: "context-tools.v1",
   version: 1,
@@ -143279,7 +143316,7 @@ function acceptOcrManagedReviewResult(input) {
 }
 
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
-var import_crypto37 = require("crypto");
+var import_crypto38 = require("crypto");
 var import_child_process12 = require("child_process");
 var path18 = __toESM(require("path"));
 var import_util29 = require("util");
@@ -202478,10 +202515,10 @@ async function runGitCommand(args, options) {
 }
 
 // src/review-orchestration/infrastructure/github-review-state-adapter.ts
-var import_crypto27 = require("crypto");
+var import_crypto28 = require("crypto");
 
 // src/github/review-thread-inventory.ts
-var import_crypto26 = require("crypto");
+var import_crypto27 = require("crypto");
 
 // src/github/comment-fingerprint.ts
 var import_crypto23 = require("crypto");
@@ -202732,6 +202769,29 @@ var STOPWORDS = /* @__PURE__ */ new Set([
   "would"
 ]);
 
+// src/finding-revalidation/domain/packet.ts
+var import_crypto24 = require("crypto");
+var REVALIDATION_POLICY_VERSION = lifecycleVerificationContract.executor;
+var REVALIDATION_LIMITS = Object.freeze({
+  targets: lifecycleVerificationContract.maxTargetsPerPacket,
+  packets: lifecycleVerificationContract.maxPackets,
+  files: lifecycleVerificationContract.maxFilesPerPacket,
+  fileBytes: lifecycleVerificationContract.maxFileBytes,
+  sourceBytes: lifecycleVerificationContract.maxSourceBytes,
+  requestBytes: lifecycleVerificationContract.maxPromptBytes,
+  claimBytes: lifecycleVerificationContract.maxClaimBytes,
+  responseBytes: lifecycleVerificationContract.maxResponseBytes,
+  outputTokens: lifecycleVerificationContract.maxOutputTokens,
+  targetOutputTokens: lifecycleVerificationContract.minOutputTokensPerTarget,
+  timeoutMs: lifecycleVerificationContract.deadlineMs
+});
+function canonicalRevalidationJson(value) {
+  return canonicalJson3(value);
+}
+function revalidationHash(domain, value) {
+  return (0, import_crypto24.createHash)("sha256").update(`${REVALIDATION_POLICY_VERSION}:${domain}\0`).update(canonicalRevalidationJson(value)).digest("hex");
+}
+
 // src/review-projection/domain/review-projection-limits.ts
 var REVIEW_PROJECTION_ABSOLUTE_LIMITS = {
   maxProjectionBytes: 2e6,
@@ -202811,15 +202871,15 @@ function coverageManifestFileStatusRank(status) {
 }
 
 // src/review-projection/domain/review-projection-canonicalizer.ts
-var import_crypto24 = require("crypto");
+var import_crypto25 = require("crypto");
 function canonicalizeReviewProjection(envelope) {
   return JSON.stringify(toCanonicalValue(envelope));
 }
 function hashReviewProjectionCanonicalJson(canonicalJson16) {
-  return (0, import_crypto24.createHash)("sha256").update(canonicalJson16, "utf8").digest("hex");
+  return (0, import_crypto25.createHash)("sha256").update(canonicalJson16, "utf8").digest("hex");
 }
 function hashProjectionFact(value) {
-  return (0, import_crypto24.createHash)("sha256").update(JSON.stringify(toCanonicalValue(value)), "utf8").digest("hex");
+  return (0, import_crypto25.createHash)("sha256").update(JSON.stringify(toCanonicalValue(value)), "utf8").digest("hex");
 }
 function deepFreezeProjection(value) {
   if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
@@ -203032,7 +203092,7 @@ function sortedUnique(values) {
 }
 
 // src/review-projection/domain/review-lifecycle-observation.ts
-var import_crypto25 = require("crypto");
+var import_crypto26 = require("crypto");
 var REVIEW_LIFECYCLE_THREAD_STATE_VERSION = "review_lifecycle_thread_state.v1";
 var REVIEW_LIFECYCLE_MARKER_FINGERPRINT = /^(?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64})$/;
 var RFC3339_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
@@ -203119,7 +203179,7 @@ function daysInMonth(year, month) {
   return [4, 6, 9, 11].includes(month) ? 30 : 31;
 }
 function sha25612(value) {
-  return (0, import_crypto25.createHash)("sha256").update(value, "utf8").digest("hex");
+  return (0, import_crypto26.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 function compareCodeUnits6(left, right) {
   if (left < right) return -1;
@@ -203548,6 +203608,22 @@ var ReviewThreadInventoryLoader = class {
       diffHunk: parent.diffHunk ?? void 0,
       parentCommentId: parent.id,
       parentCommentDatabaseId: parent.databaseId ?? void 0,
+      parentCommentCreatedAt: normalizeCommentTimestamp(
+        requireCommentTimestamp(parent.createdAt)
+      ),
+      parentCommentBodyHash: (0, import_crypto27.createHash)("sha256").update(body2, "utf8").digest("hex"),
+      claimHash: revalidationHash("claim", {
+        title,
+        message,
+        diffHunk: parent.diffHunk ?? null
+      }),
+      ...parent.updatedAt ? {
+        parentCommentEdited: normalizeCommentTimestamp(parent.updatedAt) !== normalizeCommentTimestamp(
+          requireCommentTimestamp(parent.createdAt)
+        )
+      } : {},
+      // Only the valid-marker branch can construct this target.
+      findingMarkerAmbiguous: false,
       parentCommentUpdatedAt: normalizeCommentTimestamp(
         parent.updatedAt ?? requireCommentTimestamp(parent.createdAt)
       ),
@@ -203672,7 +203748,7 @@ function shouldTrustGitHubActionsBot(env) {
   return env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS === "fallback";
 }
 function targetIdFor(threadId, parentCommentId, fingerprint) {
-  return `rrt_${(0, import_crypto26.createHash)("sha256").update(`${threadId}
+  return `rrt_${(0, import_crypto27.createHash)("sha256").update(`${threadId}
 ${parentCommentId}
 ${fingerprint}`).digest("hex").slice(0, 16)}`;
 }
@@ -203886,6 +203962,11 @@ var FreshGitHubLifecycleInventory = class {
     const inventory = mapFreshInventory(raw, expectedHeadSha, ledger);
     return Object.freeze({
       inventory,
+      revalidationTargets: toRevalidationTargets(
+        raw,
+        inventory.commandLedgerWatermark,
+        this.ledger.activeSkips(ledger.payload, inventory.loadedForHeadSha)
+      ),
       promptTargets: Object.freeze([
         ...raw.candidates,
         ...raw.manualAttention.map((record4) => record4.target)
@@ -203893,6 +203974,66 @@ var FreshGitHubLifecycleInventory = class {
     });
   }
 };
+function toRevalidationTargets(raw, ledgerWatermark, activeSkips = []) {
+  const targets = [
+    ...raw.candidates,
+    ...raw.manualAttention.map((record4) => ({
+      ...record4.target,
+      reasonCodes: [
+        .../* @__PURE__ */ new Set([
+          ...record4.target.reasonCodes ?? [],
+          ...record4.reasonCodes
+        ])
+      ]
+    }))
+  ];
+  return Object.freeze(
+    targets.map((target) => {
+      const reasons = target.reasonCodes ?? [];
+      const path19 = target.currentPath || target.originalPath;
+      const line2 = target.currentLine ?? target.originalLine;
+      const commandDismissed = reasons.includes("command_dismissed") || activeSkips.some(
+        (skip) => skip.fingerprint === target.fingerprint || skip.legacyFingerprint === target.fingerprint || target.parentCommentDatabaseId !== void 0 && skip.parentCommentId === target.parentCommentDatabaseId || line2 !== void 0 && skip.line != null && skip.path?.toLowerCase() === path19.toLowerCase() && skip.line === line2
+      );
+      const completeWitness = typeof target.parentCommentCreatedAt === "string" && typeof target.parentCommentBodyHash === "string" && /^[a-f0-9]{64}$/.test(target.parentCommentBodyHash) && typeof target.claimHash === "string" && /^[a-f0-9]{64}$/.test(target.claimHash) && typeof target.threadStateHash === "string" && /^[a-f0-9]{64}$/.test(target.threadStateHash) && target.findingMarkerAmbiguous === false;
+      return Object.freeze({
+        targetId: target.targetId,
+        threadId: target.threadId,
+        fingerprint: target.fingerprint,
+        parentId: target.parentCommentId,
+        parentCreatedAt: target.parentCommentCreatedAt ?? "",
+        parentUpdatedAt: target.parentCommentUpdatedAt,
+        parentBodyHash: target.parentCommentBodyHash ?? "",
+        claimHash: target.claimHash ?? "",
+        commentStateHash: target.threadStateHash,
+        ledgerWatermark,
+        originalPath: target.originalPath,
+        currentPath: target.currentPath ?? null,
+        originalLine: target.originalLine ?? null,
+        currentLine: target.currentLine ?? null,
+        severity: target.severity,
+        title: target.title,
+        message: target.message,
+        diffHunk: target.diffHunk ?? null,
+        isResolved: false,
+        // The inventory loader excludes closed threads from candidates/manual work.
+        trusted: target.trustedAuthor && completeWitness && !reasons.some(
+          (reason) => [
+            "untrusted_author",
+            "missing_old_finding_details",
+            "unsafe_prompt_data",
+            "not_reviewrouter_thread",
+            "missing_finding_marker"
+          ].includes(reason)
+        ),
+        hasHumanReply: target.hasHumanReply || reasons.includes("human_reply"),
+        parentEdited: target.parentCommentEdited !== false,
+        markerAmbiguous: target.findingMarkerAmbiguous !== false,
+        commandDismissed
+      });
+    })
+  );
+}
 function mapFreshInventory(raw, expectedHeadSha, ledger) {
   if (raw.failed) {
     throw new Error("review_action_v2_lifecycle_inventory_unavailable");
@@ -204059,7 +204200,7 @@ function canonicalJson12(value) {
   return JSON.stringify(value);
 }
 function sha25613(value) {
-  return (0, import_crypto27.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto28.createHash)("sha256").update(value).digest("hex");
 }
 function compareCodeUnits7(left, right) {
   if (left < right) return -1;
@@ -204068,7 +204209,7 @@ function compareCodeUnits7(left, right) {
 }
 
 // src/review-orchestration/infrastructure/production-review-projection.ts
-var import_crypto29 = require("crypto");
+var import_crypto30 = require("crypto");
 
 // src/config/review-router-endpoints.json
 var review_router_endpoints_default = {
@@ -209377,7 +209518,7 @@ function sortedUnique3(values) {
 }
 
 // src/review-orchestration/infrastructure/current-review-projection-builder-adapter.ts
-var import_crypto28 = require("crypto");
+var import_crypto29 = require("crypto");
 var CurrentReviewProjectionBuilderAdapter = class {
   constructor(projection, commands, description) {
     this.projection = projection;
@@ -209444,7 +209585,7 @@ function canonicalJson13(value) {
   return JSON.stringify(value);
 }
 function sha25614(value) {
-  return (0, import_crypto28.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto29.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/infrastructure/production-review-projection.ts
@@ -209980,11 +210121,11 @@ function normalizeManifestPath(path19) {
   return path19.startsWith("./") ? path19.slice(2) : path19;
 }
 function sha25615(value) {
-  return (0, import_crypto29.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto30.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/infrastructure/pr-description-generation.ts
-var import_crypto30 = require("crypto");
+var import_crypto31 = require("crypto");
 function createPrDescriptionGeneration(input) {
   if (!input.enabled) return void 0;
   const language = input.language ?? "English";
@@ -210132,7 +210273,7 @@ function createPrDescriptionGeneration(input) {
   };
 }
 function hash(value) {
-  return (0, import_crypto30.createHash)("sha256").update(value, "utf8").digest("hex");
+  return (0, import_crypto31.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 function hasApprovedCapability(json3) {
   if (!json3 || Buffer.byteLength(json3, "utf8") > 512) return false;
@@ -210151,10 +210292,10 @@ function sensitivePath(value) {
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
-var import_crypto32 = require("crypto");
+var import_crypto33 = require("crypto");
 
 // src/review-orchestration/infrastructure/context-gateway-failed-seal.ts
-var import_crypto31 = require("crypto");
+var import_crypto32 = require("crypto");
 var emptyCanonicalJson = "{}";
 var emptyCanonicalJsonHash = digest3(emptyCanonicalJson);
 var failedTerminalOutcomeHash = digest3(
@@ -210179,7 +210320,7 @@ function createFailedContextGatewaySealPayload(input) {
   });
 }
 function digest3(value) {
-  return (0, import_crypto31.createHash)("sha256").update(value, "utf8").digest("hex");
+  return (0, import_crypto32.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
@@ -211836,7 +211977,7 @@ function isRecord9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function digest4(value) {
-  return (0, import_crypto32.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto33.createHash)("sha256").update(value).digest("hex");
 }
 function deterministicIdempotencyKey(purpose, parts) {
   return `rr:${purpose}:${digest4(
@@ -211848,7 +211989,7 @@ function deterministicIdempotencyKey(purpose, parts) {
 }
 
 // src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts
-var import_crypto33 = require("crypto");
+var import_crypto34 = require("crypto");
 var import_child_process9 = require("child_process");
 var fs13 = __toESM(require("fs"));
 var path16 = __toESM(require("path"));
@@ -212588,7 +212729,7 @@ function canonicalJson14(value) {
   return JSON.stringify(value);
 }
 function sha25616(value) {
-  return (0, import_crypto33.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto34.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/codex-oauth/ocr-managed-bootstrap.ts
@@ -212784,7 +212925,7 @@ function sanitizeProcessText(value) {
 }
 
 // src/review-investigation/infrastructure/codex-app-server-protocol.ts
-var import_crypto34 = require("crypto");
+var import_crypto35 = require("crypto");
 var import_path7 = __toESM(require("path"));
 var CODEX_APP_SERVER_VERSION = "0.147.0";
 var CODEX_APP_SERVER_MCP_NAME = "reviewrouter";
@@ -213823,7 +213964,7 @@ function parseTurnError(value) {
       "turn_error",
       codexErrorInfo
     ),
-    fingerprint: (0, import_crypto34.createHash)("sha256").update(canonical).digest("hex")
+    fingerprint: (0, import_crypto35.createHash)("sha256").update(canonical).digest("hex")
   });
 }
 function withProtocolProcessDetail(failure, origin, validatedCodexErrorInfo) {
@@ -214115,7 +214256,7 @@ function notificationDiagnosticStage(value) {
       if (typeof value === "string" && IGNORED_NOTIFICATION_METHODS.has(value)) {
         return "ignored_notification" /* IgnoredNotification */;
       }
-      return typeof value === "string" ? `unknown_notification_${(0, import_crypto34.createHash)("sha256").update(value).digest("hex").slice(0, 12)}` : "unknown_notification" /* UnknownNotification */;
+      return typeof value === "string" ? `unknown_notification_${(0, import_crypto35.createHash)("sha256").update(value).digest("hex").slice(0, 12)}` : "unknown_notification" /* UnknownNotification */;
   }
 }
 function withStreamDiagnosticStage(error3, stage) {
@@ -216442,9 +216583,9 @@ function nullableTimestamp(value, field) {
 }
 
 // src/review-investigation/infrastructure/review-action-v2-investigation-lease-adapter.ts
-var import_crypto35 = require("crypto");
+var import_crypto36 = require("crypto");
 var ReviewActionV2InvestigationLeaseAdapter = class {
-  constructor(client2, requestId2 = import_crypto35.randomUUID) {
+  constructor(client2, requestId2 = import_crypto36.randomUUID) {
     this.client = client2;
     this.requestId = requestId2;
   }
@@ -216613,7 +216754,7 @@ function leaseFromAcquire(input) {
   return lease;
 }
 function deterministicId2(namespace, parts) {
-  const digest5 = (0, import_crypto35.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  const digest5 = (0, import_crypto36.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
   return `rr:${namespace}:${digest5}`;
 }
 function requireString5(value, field) {
@@ -217704,7 +217845,7 @@ function capabilityUnavailable(message) {
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-investigation-context-attestation-adapter.ts
-var import_crypto36 = require("crypto");
+var import_crypto37 = require("crypto");
 var ReviewActionV2InvestigationContextAttestationAdapter = class {
   constructor(client2, authorizationToken) {
     this.client = client2;
@@ -217836,7 +217977,7 @@ var ReviewActionV2InvestigationContextAttestationAdapter = class {
   }
 };
 function deterministicId3(namespace, parts) {
-  const digest5 = (0, import_crypto36.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  const digest5 = (0, import_crypto37.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
   return `rr:${namespace}:${digest5}`;
 }
 function requireString6(value, field) {
@@ -218722,7 +218863,7 @@ function publicInvestigationProcessDiagnostic(stderr) {
   ];
   return Object.freeze({
     stderrByteCount: Buffer.byteLength(stderr, "utf8"),
-    stderrDigest: (0, import_crypto37.createHash)("sha256").update(stderr).digest("hex").slice(0, 16),
+    stderrDigest: (0, import_crypto38.createHash)("sha256").update(stderr).digest("hex").slice(0, 16),
     diagnosticKinds: Object.freeze(
       diagnosticKinds.filter(([pattern]) => pattern.test(stderr)).map(([, kind]) => kind)
     )
@@ -219242,7 +219383,7 @@ async function prepareSingleT0ReviewPlan(input) {
   });
   const { planHash: probePlanHash, ...probePayload } = investigation.investigationProbePlan;
   const probePlanPreimage = canonicalJson15(probePayload);
-  const hash2 = (value) => (0, import_crypto37.createHash)("sha256").update(value).digest("hex");
+  const hash2 = (value) => (0, import_crypto38.createHash)("sha256").update(value).digest("hex");
   if (hash2(probePlanPreimage) !== probePlanHash || hash2(investigation.investigationContextPrompt ?? "") !== investigation.investigationSeedEnvelope.envelope.reviewPromptHash) {
     throw new Error("review_action_v2_single_plan_seed_preimage_mismatch");
   }
@@ -219568,7 +219709,7 @@ function canonicalJson15(value) {
   return JSON.stringify(value);
 }
 function sha25617(value) {
-  return (0, import_crypto37.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto38.createHash)("sha256").update(value).digest("hex");
 }
 function runAccountGatewayGit(args, options, signal, timeoutMs = 6e4) {
   signal.throwIfAborted();

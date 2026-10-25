@@ -143004,7 +143004,12 @@ function renderReviewBanner(baseUrl2, presentation) {
   const numeric2 = {
     ...presentation.severity,
     ...presentation.coverage,
-    ...presentation.changes
+    ...presentation.changes,
+    ...presentation.verification ? {
+      verified: presentation.verification.fixesVerified,
+      not_verified: presentation.verification.unverified,
+      confirmed_open: presentation.verification.confirmedOpen
+    } : {}
   };
   if (!Object.values(numeric2).every(
     (value) => Number.isSafeInteger(value) && value >= 0 && value <= 9999
@@ -143029,21 +143034,34 @@ function renderReviewBanner(baseUrl2, presentation) {
       )
     }).toString();
     const source = (layout) => `${url3}&theme=auto&layout=${layout}`.replaceAll("&", "&amp;");
+    const verification = presentation.verification;
+    const verificationUnknownOnly = !!verification && verification.unverified > 0 && verification.fixesVerified === 0 && verification.confirmedOpen === 0 && Object.values(presentation.severity).every((count2) => count2 === 0) && (presentation.variant === "first" || presentation.changes?.new === 0 && presentation.changes.resolved === 0);
+    const alt = verificationUnknownOnly ? "Verification incomplete" : presentation.state === "incomplete" ? "Review incomplete" : presentation.variant === "update" ? "Review updated" : "Review complete";
     return `<picture>
 <source media="(max-width: 600px)" srcset="${source("compact")}">
-<img src="${source("wide")}" alt="${presentation.state === "incomplete" ? "Review incomplete" : presentation.variant === "update" ? "Review updated" : "Review complete"}" width="100%">
+<img src="${source("wide")}" alt="${alt}" width="100%">
 </picture>`;
   } catch {
     return "";
   }
 }
 function reviewPresentationHeading(presentation) {
+  const verification = presentation.verification;
+  const verifiedFixes = verification ? `${verification.fixesVerified} ${verification.fixesVerified === 1 ? "fix" : "fixes"} verified` : "";
   if (presentation.variant === "update" && presentation.changes) {
     const changes = presentation.changes;
     const confirmedOpen = Math.max(0, changes.open - changes.unverified);
+    const unverified = verification?.unverified ?? changes.unverified;
     return `## ${presentation.state === "incomplete" ? "Review incomplete" : "Review updated"}
 
-${changes.new} new \xB7 ${changes.resolved} resolved \xB7 ${confirmedOpen} confirmed open${changes.unverified ? ` \xB7 ${changes.unverified} previous ${changes.unverified === 1 ? "issue" : "issues"} not verified` : ""}`;
+${changes.new} new \xB7 ${changes.resolved} resolved${verification?.fixesVerified ? ` \xB7 ${verifiedFixes}` : ""} \xB7 ${confirmedOpen} confirmed open${unverified ? ` \xB7 ${unverified} previous ${unverified === 1 ? "issue" : "issues"} not verified` : ""}`;
+  }
+  if (verification && Object.values(presentation.severity).every((count2) => count2 === 0)) {
+    const detail = verification.fixesVerified > 0 ? verifiedFixes : verification.unverified > 0 ? `${verification.unverified} previous ${verification.unverified === 1 ? "issue" : "issues"} not verified` : "";
+    if (detail)
+      return presentation.state === "incomplete" || verification.unverified > 0 ? `## Review incomplete
+
+${detail}` : `## ${detail}`;
   }
   return "";
 }

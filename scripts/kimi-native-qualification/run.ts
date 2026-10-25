@@ -314,6 +314,7 @@ async function scenario(
     env: environment,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+  if (mode === 'exec') child.stdin.end();
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (bytes: Buffer) => {

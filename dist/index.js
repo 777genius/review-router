@@ -131139,6 +131139,43 @@ var prDescriptionContract = Object.freeze({
   deadlineMs: 6e4,
   attemptBudget: 1
 });
+var lifecycleVerificationContract = Object.freeze({
+  extensionId: "lifecycle-verification.v1",
+  executor: "rr_bounded_lifecycle_verifier.v1",
+  version: 1,
+  taskKind: "lifecycle_revalidation",
+  modelTransport: "account_gateway",
+  capabilityRuntimeEnvKey: "REVIEW_ROUTER_LIFECYCLE_VERIFICATION_CAPABILITY_JSON",
+  unavailableReasonRuntimeEnvKey: "REVIEW_ROUTER_LIFECYCLE_VERIFICATION_UNAVAILABLE_REASON",
+  promptVersion: "lifecycle-verification-prompt.v1",
+  outputSchemaVersion: 1,
+  requestCanonicalizerVersion: "lifecycle-verification-request.v1",
+  policyVersion: "lifecycle-verification-policy.v1",
+  dispatchReadbackPath: "/api/action/v2/account-gateway/companion-dispatch",
+  maxTargetsPerPacket: 4,
+  maxPackets: 2,
+  maxFilesPerPacket: 6,
+  maxFileBytes: 24 * 1024,
+  maxSourceBytes: 64 * 1024,
+  maxPromptBytes: 96 * 1024,
+  maxClaimBytes: 4 * 1024,
+  maxResponseBytes: 32 * 1024,
+  maxLifecyclePlanBytes: 64 * 1024,
+  maxOutputTokens: 4096,
+  minOutputTokensPerTarget: 1024,
+  deadlineMs: 6e4,
+  attemptBudget: 1,
+  dispatchHeaders: Object.freeze({
+    dispatchId: "x-reviewrouter-companion-dispatch-id",
+    executionId: "x-reviewrouter-companion-execution-id",
+    workSlotId: "x-reviewrouter-companion-work-slot-id",
+    attemptOrdinal: "x-reviewrouter-companion-attempt-ordinal",
+    leaseId: "x-reviewrouter-companion-lease-id",
+    leaseCapability: "x-reviewrouter-companion-lease-capability",
+    fencingToken: "x-reviewrouter-companion-fencing-token",
+    preparedManifestKey: "x-reviewrouter-companion-prepared-manifest-key"
+  })
+});
 var contextToolsContract = Object.freeze({
   extensionId: "context-tools.v1",
   version: 1,
@@ -153057,7 +153094,32 @@ var AcceptanceDetector = class {
 };
 
 // src/github/review-thread-inventory.ts
+var import_crypto17 = require("crypto");
+
+// src/finding-revalidation/domain/packet.ts
 var import_crypto16 = require("crypto");
+var REVALIDATION_POLICY_VERSION = lifecycleVerificationContract.executor;
+var REVALIDATION_LIMITS = Object.freeze({
+  targets: lifecycleVerificationContract.maxTargetsPerPacket,
+  packets: lifecycleVerificationContract.maxPackets,
+  files: lifecycleVerificationContract.maxFilesPerPacket,
+  fileBytes: lifecycleVerificationContract.maxFileBytes,
+  sourceBytes: lifecycleVerificationContract.maxSourceBytes,
+  requestBytes: lifecycleVerificationContract.maxPromptBytes,
+  claimBytes: lifecycleVerificationContract.maxClaimBytes,
+  responseBytes: lifecycleVerificationContract.maxResponseBytes,
+  outputTokens: lifecycleVerificationContract.maxOutputTokens,
+  targetOutputTokens: lifecycleVerificationContract.minOutputTokensPerTarget,
+  timeoutMs: lifecycleVerificationContract.deadlineMs
+});
+function canonicalRevalidationJson(value) {
+  return canonicalJson2(value);
+}
+function revalidationHash(domain, value) {
+  return (0, import_crypto16.createHash)("sha256").update(`${REVALIDATION_POLICY_VERSION}:${domain}\0`).update(canonicalRevalidationJson(value)).digest("hex");
+}
+
+// src/github/review-thread-inventory.ts
 var DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS = ["review-router-ai[bot]"];
 var GITHUB_ACTIONS_BOT_AUTHOR = "github-actions[bot]";
 var RESOLUTION_REPLY_MARKER = "reviewrouter-lifecycle-resolution:v1";
@@ -153359,6 +153421,22 @@ var ReviewThreadInventoryLoader = class {
       diffHunk: parent.diffHunk ?? void 0,
       parentCommentId: parent.id,
       parentCommentDatabaseId: parent.databaseId ?? void 0,
+      parentCommentCreatedAt: normalizeCommentTimestamp(
+        requireCommentTimestamp(parent.createdAt)
+      ),
+      parentCommentBodyHash: (0, import_crypto17.createHash)("sha256").update(body2, "utf8").digest("hex"),
+      claimHash: revalidationHash("claim", {
+        title,
+        message,
+        diffHunk: parent.diffHunk ?? null
+      }),
+      ...parent.updatedAt ? {
+        parentCommentEdited: normalizeCommentTimestamp(parent.updatedAt) !== normalizeCommentTimestamp(
+          requireCommentTimestamp(parent.createdAt)
+        )
+      } : {},
+      // Only the valid-marker branch can construct this target.
+      findingMarkerAmbiguous: false,
       parentCommentUpdatedAt: normalizeCommentTimestamp(
         parent.updatedAt ?? requireCommentTimestamp(parent.createdAt)
       ),
@@ -153483,7 +153561,7 @@ function shouldTrustGitHubActionsBot(env) {
   return env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS === "fallback";
 }
 function targetIdFor(threadId, parentCommentId, fingerprint) {
-  return `rrt_${(0, import_crypto16.createHash)("sha256").update(`${threadId}
+  return `rrt_${(0, import_crypto17.createHash)("sha256").update(`${threadId}
 ${parentCommentId}
 ${fingerprint}`).digest("hex").slice(0, 16)}`;
 }
@@ -154163,7 +154241,7 @@ function safeReason(message) {
 }
 
 // src/control-plane/memory.ts
-var import_crypto17 = require("crypto");
+var import_crypto18 = require("crypto");
 var ControlPlaneMemoryClient = class {
   constructor(runtimeConfig, env = process.env, fetchImpl = fetch, memoryLogger = logger) {
     this.runtimeConfig = runtimeConfig;
@@ -154294,7 +154372,7 @@ function buildSafeMemoryRetrievalQuery(pr2) {
   return normalized.length > 0 ? normalized : null;
 }
 function memorySourceHash(value) {
-  return (0, import_crypto17.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto18.createHash)("sha256").update(value).digest("hex");
 }
 function parseActionMemoryBundle(value) {
   if (!value || typeof value !== "object") {
@@ -154483,7 +154561,7 @@ function createExecutionDeadlineFromEnvironment(environment = process.env, clock
 
 // src/review-execution/infrastructure/http-review-checkpoint-client.ts
 var fs15 = __toESM(require("fs/promises"));
-var import_crypto18 = require("crypto");
+var import_crypto19 = require("crypto");
 
 // src/review-execution/domain/review-checkpoint.ts
 var REVIEW_CHECKPOINT_PROTOCOL_VERSION = 1;
@@ -155567,7 +155645,7 @@ var FileReviewCheckpointFinalizationMarkerWriter = class _FileReviewCheckpointFi
   }
   async write(marker2) {
     const validated = reviewCheckpointFinalizationMarkerSchema.parse(marker2);
-    const temporaryPath = `${this.path}.tmp-${process.pid}-${(0, import_crypto18.randomUUID)()}`;
+    const temporaryPath = `${this.path}.tmp-${process.pid}-${(0, import_crypto19.randomUUID)()}`;
     try {
       await fs15.writeFile(temporaryPath, JSON.stringify(validated), {
         encoding: "utf8",
@@ -158228,7 +158306,7 @@ function prioritizeFilesByRisk(files) {
 }
 
 // src/review-execution/domain/review-batch-plan.ts
-var import_crypto19 = require("crypto");
+var import_crypto20 = require("crypto");
 function compareCodePoints3(left, right) {
   if (left < right) return -1;
   if (left > right) return 1;
@@ -158273,10 +158351,10 @@ function createReviewBatchPlan(input) {
     providerNames,
     batches: canonicalBatches
   };
-  const planHash = (0, import_crypto19.createHash)("sha256").update(JSON.stringify(payload)).digest("hex");
+  const planHash = (0, import_crypto20.createHash)("sha256").update(JSON.stringify(payload)).digest("hex");
   const batches = Object.freeze(
     input.batches.map((batch, index) => {
-      const id = (0, import_crypto19.createHash)("sha256").update(
+      const id = (0, import_crypto20.createHash)("sha256").update(
         JSON.stringify({
           version: "v1" /* V1 */,
           planHash,
@@ -162235,7 +162313,7 @@ function sanitizeNoticeError(error4) {
 }
 
 // src/github/discussion.ts
-var import_crypto20 = require("crypto");
+var import_crypto21 = require("crypto");
 var DISCUSSION_MARKER = "reviewrouter-discussion:v1";
 var DISCUSSION_MARKER_RE = /<!--\s*reviewrouter-discussion:v1\s+user_comment_id=(\d+)\s+body_sha=([a-f0-9]{64})\s*-->/;
 var ReviewDiscussionHandler = class {
@@ -162480,7 +162558,7 @@ function isBotUser(user) {
   return user?.type === "Bot" || login.endsWith("[bot]");
 }
 function bodyHash(body2) {
-  return (0, import_crypto20.createHash)("sha256").update(body2.trim()).digest("hex");
+  return (0, import_crypto21.createHash)("sha256").update(body2.trim()).digest("hex");
 }
 function sanitizeError(error4) {
   const message = error4 instanceof Error ? error4.message : String(error4);
@@ -162690,7 +162768,7 @@ async function initializeEmptyGitRepository(cwd) {
 var import_os5 = require("os");
 
 // src/control-plane/generated/review-action-v2/usage-producer-v1.ts
-var import_crypto21 = require("crypto");
+var import_crypto22 = require("crypto");
 var import_fs = require("fs");
 var import_path2 = require("path");
 
@@ -162917,7 +162995,7 @@ function canonicalJson4(value) {
 }
 
 // src/control-plane/generated/review-action-v2/usage-producer-v1.ts
-var digest2 = (value) => (0, import_crypto21.createHash)("sha256").update(canonicalJson4(value)).digest("hex");
+var digest2 = (value) => (0, import_crypto22.createHash)("sha256").update(canonicalJson4(value)).digest("hex");
 var UsageDelivery = class _UsageDelivery {
   constructor(options, grant, privateKey, directory) {
     this.options = options;
@@ -162938,7 +163016,7 @@ var UsageDelivery = class _UsageDelivery {
   coverageAckRevision = 0;
   /** Pre-register the public key under current OIDC authorization, never expose custody. */
   static prepareRegistration() {
-    const keys3 = (0, import_crypto21.generateKeyPairSync)("ed25519");
+    const keys3 = (0, import_crypto22.generateKeyPairSync)("ed25519");
     return {
       publicKey: keys3.publicKey.export({ type: "spki", format: "pem" }).toString(),
       acceptGrant: (options, grant) => _UsageDelivery.fromGrant(options, grant, keys3.privateKey)
@@ -162947,7 +163025,7 @@ var UsageDelivery = class _UsageDelivery {
   static async create(options) {
     const url3 = new URL("/api/provider-usage/grants", options.apiUrl);
     if (url3.protocol !== "https:") throw new Error("usage_https_required");
-    const keys3 = (0, import_crypto21.generateKeyPairSync)("ed25519");
+    const keys3 = (0, import_crypto22.generateKeyPairSync)("ed25519");
     const response = await (options.fetchImpl ?? fetch)(url3, {
       method: "POST",
       redirect: "error",
@@ -163137,7 +163215,7 @@ var UsageDelivery = class _UsageDelivery {
   }
   persist() {
     const envelope = this.envelope();
-    const signature = (0, import_crypto21.sign)(
+    const signature = (0, import_crypto22.sign)(
       null,
       Buffer.from(canonicalJson4(envelope)),
       this.privateKey
@@ -164529,7 +164607,7 @@ function sanitizeProcessText(value) {
 }
 
 // src/review-investigation/infrastructure/codex-app-server-protocol.ts
-var import_crypto22 = require("crypto");
+var import_crypto23 = require("crypto");
 var import_path5 = __toESM(require("path"));
 var CODEX_APP_SERVER_VERSION = "0.147.0";
 var CODEX_APP_SERVER_MCP_NAME = "reviewrouter";
@@ -165568,7 +165646,7 @@ function parseTurnError(value) {
       "turn_error",
       codexErrorInfo
     ),
-    fingerprint: (0, import_crypto22.createHash)("sha256").update(canonical).digest("hex")
+    fingerprint: (0, import_crypto23.createHash)("sha256").update(canonical).digest("hex")
   });
 }
 function withProtocolProcessDetail(failure, origin, validatedCodexErrorInfo) {
@@ -165860,7 +165938,7 @@ function notificationDiagnosticStage(value) {
       if (typeof value === "string" && IGNORED_NOTIFICATION_METHODS.has(value)) {
         return "ignored_notification" /* IgnoredNotification */;
       }
-      return typeof value === "string" ? `unknown_notification_${(0, import_crypto22.createHash)("sha256").update(value).digest("hex").slice(0, 12)}` : "unknown_notification" /* UnknownNotification */;
+      return typeof value === "string" ? `unknown_notification_${(0, import_crypto23.createHash)("sha256").update(value).digest("hex").slice(0, 12)}` : "unknown_notification" /* UnknownNotification */;
   }
 }
 function withStreamDiagnosticStage(error4, stage) {
@@ -167077,7 +167155,7 @@ function tomlStringArray2(values) {
 }
 
 // src/control-plane/review-action-v2-client.ts
-var import_crypto23 = require("crypto");
+var import_crypto24 = require("crypto");
 var import__2 = __toESM(require__());
 var import_ajv_formats = __toESM(require_dist5());
 
@@ -205783,7 +205861,7 @@ var ReviewActionV2Client = class {
   constructor(options) {
     this.apiUrl = parseApiUrl(options.apiUrl, options.allowInsecureLocalhost);
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.requestIdFactory = options.requestIdFactory ?? (() => `rr:${(0, import_crypto23.randomUUID)()}`);
+    this.requestIdFactory = options.requestIdFactory ?? (() => `rr:${(0, import_crypto24.randomUUID)()}`);
     this.sleep = options.sleep ?? ((delayMs) => new Promise((resolve6) => setTimeout(resolve6, delayMs)));
     this.random = options.random ?? Math.random;
     this.monotonicNow = options.monotonicNow ?? (() => performance.now());
@@ -206222,7 +206300,7 @@ function readRetryAfterMs(response) {
   return Math.min(Math.max(0, at2 - Date.now()), 3e4);
 }
 function sha2566(value) {
-  return (0, import_crypto23.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto24.createHash)("sha256").update(value).digest("hex");
 }
 function clampInteger(value, minimum, maximum) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
@@ -206232,7 +206310,7 @@ function clampInteger(value, minimum, maximum) {
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
-var import_crypto28 = require("crypto");
+var import_crypto29 = require("crypto");
 
 // src/review-orchestration/application/review-orchestration-ports.ts
 var ReviewExecutionProviderKind = /* @__PURE__ */ ((ReviewExecutionProviderKind2) => {
@@ -206302,7 +206380,7 @@ var ReviewInvocationConfigurationMismatchError = class extends Error {
 };
 
 // src/review-orchestration/application/run-t0-review-orchestration.ts
-var import_crypto26 = require("crypto");
+var import_crypto27 = require("crypto");
 
 // src/review-orchestration/domain/review-orchestration-state.ts
 function createReviewOrchestrationState(workSlotIds) {
@@ -206436,7 +206514,7 @@ function requireIdentity(value) {
 }
 
 // src/review-orchestration/domain/review-prompt-coverage.ts
-var import_crypto24 = require("crypto");
+var import_crypto25 = require("crypto");
 function createReviewPromptCoverageManifest(input) {
   if (!input.workSlotId || !/^[a-f0-9]{64}$/.test(input.reviewRevisionHash)) {
     throw new Error("review_prompt_coverage_scope_invalid");
@@ -206524,11 +206602,11 @@ function canonicalJson6(value) {
   return JSON.stringify(value);
 }
 function sha2567(value) {
-  return (0, import_crypto24.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto25.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/domain/stable-review-work-plan.ts
-var import_crypto25 = require("crypto");
+var import_crypto26 = require("crypto");
 var assignmentManifestMaxBytes = 512 * 1024;
 var assignmentManifestMaxPaths = 4096;
 var assignmentManifestMaxPathLength = 1024;
@@ -206786,7 +206864,7 @@ function compareCodePoints5(left, right) {
   return 0;
 }
 function sha2568(value) {
-  return (0, import_crypto25.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto26.createHash)("sha256").update(value).digest("hex");
 }
 function requireDigest2(value, field) {
   if (!/^[a-f0-9]{64}$/.test(value)) throw new Error(`${field}_invalid`);
@@ -209574,7 +209652,7 @@ function canonicalize2(value) {
   return value;
 }
 function sha2569(value) {
-  return (0, import_crypto26.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto27.createHash)("sha256").update(value).digest("hex");
 }
 function safeFailureCode(error4) {
   if (!(error4 instanceof Error)) return "unknown_failure";
@@ -209614,7 +209692,7 @@ function emitReviewInvestigationTelemetry(message) {
 }
 
 // src/review-orchestration/infrastructure/context-gateway-failed-seal.ts
-var import_crypto27 = require("crypto");
+var import_crypto28 = require("crypto");
 var emptyCanonicalJson = "{}";
 var emptyCanonicalJsonHash = digest3(emptyCanonicalJson);
 var failedTerminalOutcomeHash = digest3(
@@ -209639,7 +209717,7 @@ function createFailedContextGatewaySealPayload(input) {
   });
 }
 function digest3(value) {
-  return (0, import_crypto27.createHash)("sha256").update(value, "utf8").digest("hex");
+  return (0, import_crypto28.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
@@ -211296,7 +211374,7 @@ function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function digest4(value) {
-  return (0, import_crypto28.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto29.createHash)("sha256").update(value).digest("hex");
 }
 function deterministicIdempotencyKey(purpose, parts) {
   return `rr:${purpose}:${digest4(
@@ -224534,7 +224612,7 @@ function acceptOcrManagedReviewResult(input) {
 }
 
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
-var import_crypto45 = require("crypto");
+var import_crypto46 = require("crypto");
 var import_child_process19 = require("child_process");
 var path30 = __toESM(require("path"));
 var import_util32 = require("util");
@@ -224778,7 +224856,7 @@ function isReviewActionV2ScmMutationEnvName(name) {
 }
 
 // src/codex-oauth/crypto.ts
-var import_crypto29 = require("crypto");
+var import_crypto30 = require("crypto");
 
 // node_modules/libsodium/dist/modules-esm/libsodium.mjs
 var import_meta = {};
@@ -228232,7 +228310,7 @@ function compactCodexAuthJsonBytes(input) {
   return {
     compactAuthJsonBytes,
     byteLength: compactByteLength,
-    exactBytesSha256: (0, import_crypto29.createHash)("sha256").update(input.authJsonBytes, "utf8").digest("hex")
+    exactBytesSha256: (0, import_crypto30.createHash)("sha256").update(input.authJsonBytes, "utf8").digest("hex")
   };
 }
 function computeCodexAuthGenerationHash(input) {
@@ -228240,7 +228318,7 @@ function computeCodexAuthGenerationHash(input) {
   if (salt.length < 16) {
     throw new Error("generation_hash_salt_too_short");
   }
-  return (0, import_crypto29.createHmac)("sha256", salt).update(input.authJsonBytes, "utf8").digest("base64url");
+  return (0, import_crypto30.createHmac)("sha256", salt).update(input.authJsonBytes, "utf8").digest("base64url");
 }
 function computeCodexAccountIdentityHash(input) {
   const auth3 = JSON.parse(input.authJsonBytes);
@@ -228253,7 +228331,7 @@ function computeCodexAccountIdentityHash(input) {
   if (salt.length < 16) {
     throw new Error("codex_account_identity_salt_invalid");
   }
-  return (0, import_crypto29.createHmac)("sha256", salt).update(
+  return (0, import_crypto30.createHmac)("sha256", salt).update(
     JSON.stringify({
       issuer: identity.issuer,
       subject: identity.subject,
@@ -228329,7 +228407,7 @@ function buildCodexRotatingWritebackRequest(input) {
     accountIdentityAlgorithm: "provider_issuer_subject_account_v1",
     encryptedValue: input.encryptedValue,
     keyId: input.keyId,
-    idempotencyKey: input.idempotencyKey ?? `wrb:${(0, import_crypto29.randomUUID)()}`
+    idempotencyKey: input.idempotencyKey ?? `wrb:${(0, import_crypto30.randomUUID)()}`
   };
 }
 function requireStableIdentityClaim(value) {
@@ -228592,7 +228670,7 @@ function assertScmReadToken(token, expectedRepository) {
 }
 
 // src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts
-var import_crypto32 = require("crypto");
+var import_crypto33 = require("crypto");
 
 // src/control-plane/generated/review-action-v2/provider-invocation-manifest-v1.ts
 var providerInvocationManifestV1CanonicalizerDescriptor = {
@@ -229195,7 +229273,7 @@ var prDescriptionExtensionV1 = {
 };
 
 // src/review-orchestration/infrastructure/review-observation-normalizer.ts
-var import_crypto31 = require("crypto");
+var import_crypto32 = require("crypto");
 var reviewEvidencePayloadVersion = 2;
 function normalizeReviewObservation(input) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(input.workSlotId)) {
@@ -229323,7 +229401,7 @@ function canonicalJson10(value) {
   return JSON.stringify(value);
 }
 function sha25610(value) {
-  return (0, import_crypto31.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto32.createHash)("sha256").update(value).digest("hex");
 }
 function redactSensitiveText2(value) {
   return value.replace(
@@ -230607,10 +230685,10 @@ function isSafeReviewActionV2Diagnostic(message) {
   return false;
 }
 function sha25611(value) {
-  return (0, import_crypto32.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto33.createHash)("sha256").update(value).digest("hex");
 }
 function sha256Bytes(value) {
-  return (0, import_crypto32.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto33.createHash)("sha256").update(value).digest("hex");
 }
 function compareCodeUnits4(left, right) {
   if (left < right) return -1;
@@ -230620,7 +230698,7 @@ function compareCodeUnits4(left, right) {
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
 var import_child_process13 = require("child_process");
-var import_crypto35 = require("crypto");
+var import_crypto36 = require("crypto");
 var import_promises9 = require("fs/promises");
 var os12 = __toESM(require("os"));
 var path23 = __toESM(require("path"));
@@ -230980,7 +231058,7 @@ function gitOptions(root, encoding) {
 }
 
 // src/context-gateway/context-gateway-v4-replay-material.ts
-var import_crypto33 = require("crypto");
+var import_crypto34 = require("crypto");
 var import_promises7 = require("fs/promises");
 var import_path6 = __toESM(require("path"));
 var MAX_ENTRIES = 2e3;
@@ -231112,7 +231190,7 @@ function decryptContextGatewayV4ReplayMaterial(input) {
     if (nonce.byteLength !== 12 || authTag.byteLength !== 16) {
       throw new Error("invalid_envelope");
     }
-    const decipher = (0, import_crypto33.createDecipheriv)(
+    const decipher = (0, import_crypto34.createDecipheriv)(
       REPLAY_ENCRYPTION_ALGORITHM,
       replayEncryptionKey(input.secret, input.sessionId),
       nonce
@@ -231136,8 +231214,8 @@ function encryptContextGatewayV4ReplayMaterial(input) {
   if (Buffer.byteLength(input.plaintextCanonicalJson, "utf8") > MAX_STATE_BYTES) {
     throw new Error("context_gateway_v4_replay_size_invalid");
   }
-  const nonce = (0, import_crypto33.randomBytes)(12);
-  const cipher = (0, import_crypto33.createCipheriv)(
+  const nonce = (0, import_crypto34.randomBytes)(12);
+  const cipher = (0, import_crypto34.createCipheriv)(
     REPLAY_ENCRYPTION_ALGORITHM,
     replayEncryptionKey(input.secret, input.sessionId),
     nonce
@@ -231157,7 +231235,7 @@ function encryptContextGatewayV4ReplayMaterial(input) {
   });
 }
 function replayEncryptionKey(secret, sessionId) {
-  return (0, import_crypto33.createHmac)("sha256", secret).update("reviewrouter.context-gateway-v4.replay-material.v1\0", "utf8").update(sessionId, "utf8").digest();
+  return (0, import_crypto34.createHmac)("sha256", secret).update("reviewrouter.context-gateway-v4.replay-material.v1\0", "utf8").update(sessionId, "utf8").digest();
 }
 function replayAssociatedData(sessionId) {
   return Buffer.from(
@@ -231233,13 +231311,13 @@ function isRecord8(value) {
 }
 async function atomicPrivateWrite(target, content) {
   await (0, import_promises7.mkdir)(import_path6.default.dirname(target), { recursive: true, mode: 448 });
-  const temporary = `${target}.${process.pid}.${(0, import_crypto33.randomBytes)(6).toString("hex")}.tmp`;
+  const temporary = `${target}.${process.pid}.${(0, import_crypto34.randomBytes)(6).toString("hex")}.tmp`;
   await (0, import_promises7.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
   await (0, import_promises7.rename)(temporary, target);
 }
 
 // src/context-gateway/context-gateway-v4-recorder.ts
-var import_crypto34 = require("crypto");
+var import_crypto35 = require("crypto");
 var import_promises8 = require("fs/promises");
 var import_path7 = __toESM(require("path"));
 var MAX_EVENTS = 2e3;
@@ -231471,7 +231549,7 @@ function sanitizeReason(value) {
 }
 async function atomicPrivateWrite2(target, content) {
   await (0, import_promises8.mkdir)(import_path7.default.dirname(target), { recursive: true, mode: 448 });
-  const temporary = `${target}.${process.pid}.${(0, import_crypto34.randomBytes)(6).toString("hex")}.tmp`;
+  const temporary = `${target}.${process.pid}.${(0, import_crypto35.randomBytes)(6).toString("hex")}.tmp`;
   await (0, import_promises8.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
   await (0, import_promises8.rename)(temporary, target);
 }
@@ -232237,7 +232315,7 @@ function createV4WireSealPayload(transcript) {
   });
 }
 function keyedSha2562(secret, value) {
-  return (0, import_crypto35.createHmac)("sha256", secret).update(value).digest("hex");
+  return (0, import_crypto36.createHmac)("sha256", secret).update(value).digest("hex");
 }
 function requireProviderKind(value) {
   switch (value) {
@@ -232274,19 +232352,19 @@ function requireContextGatewayMaxOperations(value) {
   return value;
 }
 function sha25612(value) {
-  return (0, import_crypto35.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto36.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
 var import_child_process16 = require("child_process");
-var import_crypto37 = require("crypto");
+var import_crypto38 = require("crypto");
 var import_promises13 = require("fs/promises");
 var os13 = __toESM(require("os"));
 var path27 = __toESM(require("path"));
 var import_util30 = require("util");
 
 // src/context-gateway/context-gateway-recorder.ts
-var import_crypto36 = require("crypto");
+var import_crypto37 = require("crypto");
 var import_promises10 = require("fs/promises");
 var path24 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
@@ -232533,7 +232611,7 @@ function parseCanonicalState(raw, kind) {
 }
 async function atomicPrivateWrite3(target, content) {
   await (0, import_promises10.mkdir)(path24.dirname(target), { recursive: true, mode: 448 });
-  const temporary = `${target}.${process.pid}.${(0, import_crypto36.randomBytes)(6).toString("hex")}.tmp`;
+  const temporary = `${target}.${process.pid}.${(0, import_crypto37.randomBytes)(6).toString("hex")}.tmp`;
   await (0, import_promises10.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
   await (0, import_promises10.rename)(temporary, target);
 }
@@ -233987,7 +234065,7 @@ var ContextAttestationReplayRunner = class {
     const directory = await (0, import_promises13.mkdtemp)(
       path27.join(os13.tmpdir(), "reviewrouter-context-replay-")
     );
-    const secret = (0, import_crypto37.randomBytes)(32);
+    const secret = (0, import_crypto38.randomBytes)(32);
     try {
       const eventChainSeedHash = sha256(
         canonicalizeReviewContextReplayChainSeed({
@@ -234069,7 +234147,7 @@ var ContextAttestationReplayRunner = class {
     const directory = await (0, import_promises13.mkdtemp)(
       path27.join(os13.tmpdir(), "reviewrouter-context-replay-v4-")
     );
-    const secret = (0, import_crypto37.randomBytes)(32);
+    const secret = (0, import_crypto38.randomBytes)(32);
     try {
       const eventChainSeedHash = sha256(
         canonicalizeReviewContextReplayChainSeed({
@@ -234823,7 +234901,7 @@ async function runGitCommand(args, options) {
 }
 
 // src/review-orchestration/infrastructure/github-review-state-adapter.ts
-var import_crypto38 = require("crypto");
+var import_crypto39 = require("crypto");
 var GitHubReviewRevisionGuard = class {
   constructor(client2, scope) {
     this.client = client2;
@@ -234936,6 +235014,11 @@ var FreshGitHubLifecycleInventory = class {
     const inventory = mapFreshInventory(raw, expectedHeadSha, ledger);
     return Object.freeze({
       inventory,
+      revalidationTargets: toRevalidationTargets(
+        raw,
+        inventory.commandLedgerWatermark,
+        this.ledger.activeSkips(ledger.payload, inventory.loadedForHeadSha)
+      ),
       promptTargets: Object.freeze([
         ...raw.candidates,
         ...raw.manualAttention.map((record4) => record4.target)
@@ -234943,6 +235026,66 @@ var FreshGitHubLifecycleInventory = class {
     });
   }
 };
+function toRevalidationTargets(raw, ledgerWatermark, activeSkips = []) {
+  const targets = [
+    ...raw.candidates,
+    ...raw.manualAttention.map((record4) => ({
+      ...record4.target,
+      reasonCodes: [
+        .../* @__PURE__ */ new Set([
+          ...record4.target.reasonCodes ?? [],
+          ...record4.reasonCodes
+        ])
+      ]
+    }))
+  ];
+  return Object.freeze(
+    targets.map((target) => {
+      const reasons = target.reasonCodes ?? [];
+      const path37 = target.currentPath || target.originalPath;
+      const line2 = target.currentLine ?? target.originalLine;
+      const commandDismissed = reasons.includes("command_dismissed") || activeSkips.some(
+        (skip) => skip.fingerprint === target.fingerprint || skip.legacyFingerprint === target.fingerprint || target.parentCommentDatabaseId !== void 0 && skip.parentCommentId === target.parentCommentDatabaseId || line2 !== void 0 && skip.line != null && skip.path?.toLowerCase() === path37.toLowerCase() && skip.line === line2
+      );
+      const completeWitness = typeof target.parentCommentCreatedAt === "string" && typeof target.parentCommentBodyHash === "string" && /^[a-f0-9]{64}$/.test(target.parentCommentBodyHash) && typeof target.claimHash === "string" && /^[a-f0-9]{64}$/.test(target.claimHash) && typeof target.threadStateHash === "string" && /^[a-f0-9]{64}$/.test(target.threadStateHash) && target.findingMarkerAmbiguous === false;
+      return Object.freeze({
+        targetId: target.targetId,
+        threadId: target.threadId,
+        fingerprint: target.fingerprint,
+        parentId: target.parentCommentId,
+        parentCreatedAt: target.parentCommentCreatedAt ?? "",
+        parentUpdatedAt: target.parentCommentUpdatedAt,
+        parentBodyHash: target.parentCommentBodyHash ?? "",
+        claimHash: target.claimHash ?? "",
+        commentStateHash: target.threadStateHash,
+        ledgerWatermark,
+        originalPath: target.originalPath,
+        currentPath: target.currentPath ?? null,
+        originalLine: target.originalLine ?? null,
+        currentLine: target.currentLine ?? null,
+        severity: target.severity,
+        title: target.title,
+        message: target.message,
+        diffHunk: target.diffHunk ?? null,
+        isResolved: false,
+        // The inventory loader excludes closed threads from candidates/manual work.
+        trusted: target.trustedAuthor && completeWitness && !reasons.some(
+          (reason) => [
+            "untrusted_author",
+            "missing_old_finding_details",
+            "unsafe_prompt_data",
+            "not_reviewrouter_thread",
+            "missing_finding_marker"
+          ].includes(reason)
+        ),
+        hasHumanReply: target.hasHumanReply || reasons.includes("human_reply"),
+        parentEdited: target.parentCommentEdited !== false,
+        markerAmbiguous: target.findingMarkerAmbiguous !== false,
+        commandDismissed
+      });
+    })
+  );
+}
 function mapFreshInventory(raw, expectedHeadSha, ledger) {
   if (raw.failed) {
     throw new Error("review_action_v2_lifecycle_inventory_unavailable");
@@ -235109,7 +235252,7 @@ function canonicalJson12(value) {
   return JSON.stringify(value);
 }
 function sha25613(value) {
-  return (0, import_crypto38.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto39.createHash)("sha256").update(value).digest("hex");
 }
 function compareCodeUnits7(left, right) {
   if (left < right) return -1;
@@ -235118,7 +235261,7 @@ function compareCodeUnits7(left, right) {
 }
 
 // src/review-orchestration/infrastructure/production-review-projection.ts
-var import_crypto40 = require("crypto");
+var import_crypto41 = require("crypto");
 
 // src/review-projection/application/build-current-review-projection.ts
 var BuildCurrentReviewProjection = class {
@@ -236403,7 +236546,7 @@ function sortedUnique3(values) {
 }
 
 // src/review-orchestration/infrastructure/current-review-projection-builder-adapter.ts
-var import_crypto39 = require("crypto");
+var import_crypto40 = require("crypto");
 var CurrentReviewProjectionBuilderAdapter = class {
   constructor(projection, commands, description) {
     this.projection = projection;
@@ -236470,7 +236613,7 @@ function canonicalJson13(value) {
   return JSON.stringify(value);
 }
 function sha25614(value) {
-  return (0, import_crypto39.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto40.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/infrastructure/production-review-projection.ts
@@ -237006,11 +237149,11 @@ function normalizeManifestPath(path37) {
   return path37.startsWith("./") ? path37.slice(2) : path37;
 }
 function sha25615(value) {
-  return (0, import_crypto40.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto41.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/infrastructure/pr-description-generation.ts
-var import_crypto41 = require("crypto");
+var import_crypto42 = require("crypto");
 function createPrDescriptionGeneration(input) {
   if (!input.enabled) return void 0;
   const language = input.language ?? "English";
@@ -237158,7 +237301,7 @@ function createPrDescriptionGeneration(input) {
   };
 }
 function hash(value) {
-  return (0, import_crypto41.createHash)("sha256").update(value, "utf8").digest("hex");
+  return (0, import_crypto42.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 function hasApprovedCapability(json3) {
   if (!json3 || Buffer.byteLength(json3, "utf8") > 512) return false;
@@ -237177,7 +237320,7 @@ function sensitivePath(value) {
 }
 
 // src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts
-var import_crypto42 = require("crypto");
+var import_crypto43 = require("crypto");
 var import_child_process17 = require("child_process");
 var fs25 = __toESM(require("fs"));
 var path28 = __toESM(require("path"));
@@ -237917,7 +238060,7 @@ function canonicalJson14(value) {
   return JSON.stringify(value);
 }
 function sha25616(value) {
-  return (0, import_crypto42.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto43.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/codex-oauth/ocr-managed-bootstrap.ts
@@ -239273,9 +239416,9 @@ function nullableTimestamp(value, field) {
 }
 
 // src/review-investigation/infrastructure/review-action-v2-investigation-lease-adapter.ts
-var import_crypto43 = require("crypto");
+var import_crypto44 = require("crypto");
 var ReviewActionV2InvestigationLeaseAdapter = class {
-  constructor(client2, requestId2 = import_crypto43.randomUUID) {
+  constructor(client2, requestId2 = import_crypto44.randomUUID) {
     this.client = client2;
     this.requestId = requestId2;
   }
@@ -239444,7 +239587,7 @@ function leaseFromAcquire(input) {
   return lease;
 }
 function deterministicId2(namespace, parts) {
-  const digest5 = (0, import_crypto43.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  const digest5 = (0, import_crypto44.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
   return `rr:${namespace}:${digest5}`;
 }
 function requireString5(value, field) {
@@ -240535,7 +240678,7 @@ function capabilityUnavailable(message) {
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-investigation-context-attestation-adapter.ts
-var import_crypto44 = require("crypto");
+var import_crypto45 = require("crypto");
 var ReviewActionV2InvestigationContextAttestationAdapter = class {
   constructor(client2, authorizationToken) {
     this.client = client2;
@@ -240667,7 +240810,7 @@ var ReviewActionV2InvestigationContextAttestationAdapter = class {
   }
 };
 function deterministicId3(namespace, parts) {
-  const digest5 = (0, import_crypto44.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  const digest5 = (0, import_crypto45.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
   return `rr:${namespace}:${digest5}`;
 }
 function requireString6(value, field) {
@@ -241553,7 +241696,7 @@ function publicInvestigationProcessDiagnostic(stderr) {
   ];
   return Object.freeze({
     stderrByteCount: Buffer.byteLength(stderr, "utf8"),
-    stderrDigest: (0, import_crypto45.createHash)("sha256").update(stderr).digest("hex").slice(0, 16),
+    stderrDigest: (0, import_crypto46.createHash)("sha256").update(stderr).digest("hex").slice(0, 16),
     diagnosticKinds: Object.freeze(
       diagnosticKinds.filter(([pattern]) => pattern.test(stderr)).map(([, kind]) => kind)
     )
@@ -242130,7 +242273,7 @@ function canonicalJson15(value) {
   return JSON.stringify(value);
 }
 function sha25617(value) {
-  return (0, import_crypto45.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto46.createHash)("sha256").update(value).digest("hex");
 }
 function runAccountGatewayGit(args, options, signal, timeoutMs = 6e4) {
   signal.throwIfAborted();
@@ -243634,7 +243777,7 @@ function safeTerminalOutcomeError(error4) {
 }
 
 // src/control-plane/review-action-v2-contract.ts
-var import_crypto46 = require("crypto");
+var import_crypto47 = require("crypto");
 var import_fs4 = require("fs");
 var import_path9 = __toESM(require("path"));
 var HANDOFF_MANIFEST_FILE = "handoff-manifest.json";
@@ -243769,7 +243912,7 @@ function assertExactKeys(value, expected) {
   }
 }
 function sha25618(value) {
-  return (0, import_crypto46.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto47.createHash)("sha256").update(value).digest("hex");
 }
 function isRecord12(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);

@@ -14,6 +14,8 @@ import { hasOwnedPrDescriptionMarker } from '../../github/pr-description-markers
 import {
   providerApiCheckoutCompanionContract,
   prDescriptionContract,
+  lifecycleVerificationContract,
+  type ReviewCompanionDispatchContextV1,
 } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import { setTimeout as wait } from 'timers/promises';
 
@@ -156,9 +158,23 @@ export type LocalGatewayModelTransport = Readonly<{
   /** Trusted parent only; its receipt never contributes review-engine evidence. */
   generatePrDescription?(input: {
     requestBody: Uint8Array;
+    dispatch?: ReviewCompanionDispatchContextV1;
     signal: AbortSignal;
   }): Promise<PrDescriptionModelReceipt>;
+  generateLifecycleVerification?(input: {
+    requestBody: Uint8Array;
+    dispatch: ReviewCompanionDispatchContextV1;
+    signal: AbortSignal;
+    maxResponseBytes: number;
+    deadlineMs: number;
+  }): Promise<LifecycleVerificationModelReceipt>;
   dispose(): Promise<void>;
+}>;
+
+export type LifecycleVerificationModelReceipt = Readonly<{
+  body: Uint8Array;
+  actualModel: string;
+  providerRequestEnvelopeHash: string;
 }>;
 
 export type PrDescriptionModelReceipt = Readonly<{
@@ -221,7 +237,8 @@ export class AccountGatewayModelTransport {
     private readonly observe?: ObserveTransport,
     private readonly directOpenRouter?: DirectOpenRouterLimits,
     private readonly auxiliaryDescription: boolean = false,
-    private readonly completedDescriptionResponse?: (response: unknown) => void
+    private readonly completedDescriptionResponse?: (response: unknown) => void,
+    private readonly companionDispatch?: ReviewCompanionDispatchContextV1
   ) {
     this.origin = trustedGatewayOrigin(apiUrl);
     if (directOpenRouter && this.origin.origin !== 'https://openrouter.ai')
@@ -274,6 +291,7 @@ export class AccountGatewayModelTransport {
 
   async generatePrDescription(input: {
     requestBody: Uint8Array;
+    dispatch?: ReviewCompanionDispatchContextV1;
     signal: AbortSignal;
   }): Promise<PrDescriptionModelReceipt> {
     input.signal.throwIfAborted();
@@ -326,7 +344,8 @@ export class AccountGatewayModelTransport {
       true,
       (response) => {
         markdown = completedPrDescriptionText(response);
-      }
+      },
+      input.dispatch
     );
     const abort = new AbortController();
     this.held.add(abort);
@@ -349,6 +368,70 @@ export class AccountGatewayModelTransport {
         throw new Error('pr_description_model_evidence_unavailable');
       return Object.freeze({
         generatedMarkdown: markdown,
+        actualModel: auxiliary.actualModel,
+        providerRequestEnvelopeHash: createHash('sha256')
+          .update(bytes)
+          .digest('hex'),
+      });
+    } finally {
+      clearTimeout(timer);
+      this.held.delete(abort);
+      abort.abort();
+      auxiliary.cancelHeldStreams();
+    }
+  }
+
+  /** Parent-only, one HTTP attempt: a denied or uncertain dispatch is never replayed. */
+  async generateLifecycleVerification(input: {
+    requestBody: Uint8Array;
+    dispatch: ReviewCompanionDispatchContextV1;
+    signal: AbortSignal;
+    maxResponseBytes: number;
+    deadlineMs: number;
+  }): Promise<LifecycleVerificationModelReceipt> {
+    input.signal.throwIfAborted();
+    if (this.directOpenRouter || this.terminal || this.held.size > 0)
+      throw new Error('lifecycle_verification_connection_unavailable');
+    const bytes = Buffer.from(input.requestBody);
+    if (bytes.length > lifecycleVerificationContract.maxPromptBytes)
+      throw new Error('lifecycle_verification_input_bound');
+    let text: string | undefined;
+    const auxiliary = new AccountGatewayModelTransport(
+      this.origin.origin,
+      this.authorization,
+      this.observe,
+      undefined,
+      true,
+      (response) => {
+        text = completedPrDescriptionText(
+          response,
+          Math.min(
+            input.maxResponseBytes,
+            lifecycleVerificationContract.maxResponseBytes
+          ),
+          false
+        );
+      },
+      input.dispatch
+    );
+    const abort = new AbortController();
+    this.held.add(abort);
+    const signal = AbortSignal.any([input.signal, abort.signal]);
+    const timer = setTimeout(
+      () => abort.abort(),
+      Math.min(input.deadlineMs, lifecycleVerificationContract.deadlineMs)
+    );
+    try {
+      const response = await auxiliary.responses(bytes, signal);
+      if (response.httpStatus !== 200) {
+        response.cancel();
+        throw new Error('lifecycle_verification_dispatch_unavailable');
+      }
+      for await (const _chunk of response.body) signal.throwIfAborted();
+      if (!text || !auxiliary.actualModel)
+        throw new Error('lifecycle_verification_model_evidence_unavailable');
+      return Object.freeze({
+        body: Buffer.from(text, 'utf8'),
         actualModel: auxiliary.actualModel,
         providerRequestEnvelopeHash: createHash('sha256')
           .update(bytes)
@@ -800,6 +883,20 @@ export class AccountGatewayModelTransport {
           maxHeaderSize: ACCOUNT_GATEWAY_BOUNDS.headerBytes,
           headers: {
             authorization: `Bearer ${token}`,
+            ...(this.companionDispatch
+              ? Object.fromEntries(
+                  Object.entries(
+                    lifecycleVerificationContract.dispatchHeaders
+                  ).map(([key, header]) => [
+                    header,
+                    String(
+                      this.companionDispatch![
+                        key as keyof ReviewCompanionDispatchContextV1
+                      ]
+                    ),
+                  ])
+                )
+              : {}),
             'content-type': 'application/json',
             accept: route.endsWith('/responses')
               ? 'text/event-stream'
@@ -1022,6 +1119,8 @@ export async function startLocalGatewayModelTransport(
       contextToolsGuard = guard;
     },
     generatePrDescription: (input) => transport.generatePrDescription(input),
+    generateLifecycleVerification: (input) =>
+      transport.generateLifecycleVerification(input),
     async dispose() {
       stopping = true;
       transport.cancelHeldStreams();
@@ -1270,7 +1369,11 @@ function responsesStreamAudit(
   };
 }
 
-function completedPrDescriptionText(raw: unknown): string {
+function completedPrDescriptionText(
+  raw: unknown,
+  maxBytes: number = prDescriptionContract.maxGeneratedMarkdownBytes,
+  rejectReservedMarker = true
+): string {
   const response = raw as { status?: unknown; output?: unknown } | null;
   if (response?.status !== 'completed' || !Array.isArray(response.output))
     throw new Error('pr_description_output_invalid');
@@ -1290,14 +1393,13 @@ function completedPrDescriptionText(raw: unknown): string {
       if (content?.type !== 'output_text' || typeof content.text !== 'string')
         throw new Error('pr_description_output_invalid');
       bytes += Buffer.byteLength(content.text, 'utf8');
-      if (bytes > prDescriptionContract.maxGeneratedMarkdownBytes)
-        throw new Error('pr_description_output_bound');
+      if (bytes > maxBytes) throw new Error('pr_description_output_bound');
       parts.push(content.text);
     }
   }
   const markdown = parts.join('').trim();
   if (!markdown) throw new Error('pr_description_output_empty');
-  if (hasOwnedPrDescriptionMarker(markdown))
+  if (rejectReservedMarker && hasOwnedPrDescriptionMarker(markdown))
     throw new Error('pr_description_output_reserved_marker');
   return markdown;
 }

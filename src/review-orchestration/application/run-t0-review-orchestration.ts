@@ -101,6 +101,8 @@ export type RunT0ReviewOrchestrationCommand = {
   readonly sourceRunAttempt: string;
   readonly ownerIdHash: string;
   readonly allowPartial: boolean;
+  readonly restoredExecution?: RestoredReviewExecution;
+  readonly restoreOnly?: boolean;
 };
 
 export type ReviewOrchestrationResult = {
@@ -302,25 +304,46 @@ export class RunT0ReviewOrchestration {
           }),
       ]);
 
-      execution = await this.dependencies.controlPlane.startExecution({
-        authorization,
-        idempotencyKey: this.idempotencyKey('start', [
-          authorization.authorizationId,
-          command.reviewRevisionHash,
-          command.planHash,
-        ]),
-        executionId: command.executionId,
-        reviewRevisionHash: command.reviewRevisionHash,
-        compatibilityKey: command.compatibilityKey,
-        planHash: command.planHash,
-        workSlotsCanonicalJson: command.workSlotsCanonicalJson,
-        assignmentManifestCanonicalJson:
-          command.assignmentManifestCanonicalJson,
-        assignmentManifestHash: command.assignmentManifestHash,
-        workSlots: command.workSlots,
-        sourceRunId: command.sourceRunId,
-        sourceRunAttempt: command.sourceRunAttempt,
-      });
+      if (
+        command.restoredExecution &&
+        restoredExecution &&
+        (restoredExecution.executionId !==
+          command.restoredExecution.executionId ||
+          restoredExecution.generation !==
+            command.restoredExecution.generation ||
+          restoredExecution.planHash !== command.planHash)
+      )
+        throw new Error('review_orchestration_restored_execution_drift');
+      const continuingExecution = command.restoredExecution
+        ? (restoredExecution ?? command.restoredExecution)
+        : undefined;
+      execution = continuingExecution
+        ? {
+            executionId: continuingExecution.executionId,
+            generation: continuingExecution.generation,
+            streamVersion: continuingExecution.streamVersion,
+            executionVersion: continuingExecution.version,
+            restoredExecution: continuingExecution,
+          }
+        : await this.dependencies.controlPlane.startExecution({
+            authorization,
+            idempotencyKey: this.idempotencyKey('start', [
+              authorization.authorizationId,
+              command.reviewRevisionHash,
+              command.planHash,
+            ]),
+            executionId: command.executionId,
+            reviewRevisionHash: command.reviewRevisionHash,
+            compatibilityKey: command.compatibilityKey,
+            planHash: command.planHash,
+            workSlotsCanonicalJson: command.workSlotsCanonicalJson,
+            assignmentManifestCanonicalJson:
+              command.assignmentManifestCanonicalJson,
+            assignmentManifestHash: command.assignmentManifestHash,
+            workSlots: command.workSlots,
+            sourceRunId: command.sourceRunId,
+            sourceRunAttempt: command.sourceRunAttempt,
+          });
       this.dependencies.progress?.report({
         type: 'initialized',
         workSlots: command.workSlots,
@@ -362,6 +385,12 @@ export class RunT0ReviewOrchestration {
           throw new Error('review_orchestration_restored_work_slot_missing');
         }
         if (
+          (command.restoreOnly &&
+            (restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied ||
+              (workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation &&
+                !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
+                  (manifest) => manifest.workSlotId === workSlot.workSlotId
+                )))) ||
           restoredSlot.state === RestoredReviewWorkSlotState.Exhausted ||
           restoredSlot.state === RestoredReviewWorkSlotState.Cancelled
         ) {
@@ -544,15 +573,16 @@ export class RunT0ReviewOrchestration {
         };
       }
 
-      const prDescription = descriptionSlots[0]
-        ? await this.generatePrDescription({
-            command,
-            authorization,
-            execution,
-            workSlot: descriptionSlots[0],
-            restored: restoredExecution !== null,
-          })
-        : undefined;
+      const prDescription =
+        !command.restoreOnly && descriptionSlots[0]
+          ? await this.generatePrDescription({
+              command,
+              authorization,
+              execution,
+              workSlot: descriptionSlots[0],
+              restored: restoredExecution !== null,
+            })
+          : undefined;
       const projection = await this.dependencies.projectionBuilder.build({
         comparisonBaseline,
         acceptedEvidence,
@@ -2200,6 +2230,7 @@ export class RunT0ReviewOrchestration {
             },
             (watchedSignal) =>
               generator.execute({
+                sourceExecutionId: input.execution.executionId,
                 invocation,
                 manifest,
                 lease: currentLease(),

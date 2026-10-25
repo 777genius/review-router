@@ -19,6 +19,7 @@ import type { LocalGatewayModelTransport } from './account-gateway-model-transpo
 
 export function createPrDescriptionGeneration(input: {
   enabled: boolean;
+  scopedCompanionDispatch?: boolean;
   capabilityJson?: string;
   pr: PRContext;
   reviewRevisionHash: string;
@@ -163,6 +164,8 @@ export function createPrDescriptionGeneration(input: {
     },
     async execute({
       invocation,
+      manifest,
+      sourceExecutionId,
       lease,
       signal,
     }): Promise<GeneratedPrDescription> {
@@ -171,8 +174,30 @@ export function createPrDescriptionGeneration(input: {
         invocation.manifestFacts.providerRequestEnvelopeHash !== hash(request)
       )
         throw new Error('pr_description_prepared_request_changed');
+      if (input.scopedCompanionDispatch && !sourceExecutionId)
+        throw new Error('pr_description_execution_scope_missing');
       const receipt = await input.transport!.generatePrDescription!({
         requestBody: Buffer.from(request, 'utf8'),
+        ...(input.scopedCompanionDispatch
+          ? {
+              dispatch: {
+                dispatchId: hash(
+                  JSON.stringify({
+                    executionId: sourceExecutionId,
+                    workSlotId: invocation.workSlotId,
+                    attemptOrdinal: 1,
+                  })
+                ),
+                executionId: sourceExecutionId!,
+                workSlotId: invocation.workSlotId,
+                attemptOrdinal: 1,
+                leaseId: lease.leaseId,
+                leaseCapability: lease.leaseCapability,
+                fencingToken: lease.fencingToken,
+                preparedManifestKey: manifest.manifestKey,
+              },
+            }
+          : {}),
         signal,
       });
       if (
@@ -223,7 +248,7 @@ function hasApprovedCapability(json: string | undefined): boolean {
   }
 }
 
-function sensitivePath(value: string): boolean {
+export function sensitivePath(value: string): boolean {
   const normalized = value.replaceAll('\\', '/');
   return (
     normalized.startsWith('/') ||

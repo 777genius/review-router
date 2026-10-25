@@ -450,10 +450,16 @@ export class ReviewActionV2ControlPlaneAdapter
       });
   }
 
+  private capturedResolutionHistory: readonly unknown[] | null = null;
+  readCapturedResolutionHistory(): readonly unknown[] | null {
+    return this.capturedResolutionHistory;
+  }
+
   async restoreComparisonBaseline(input: {
     readonly authorization: ReviewRunAuthorization;
     readonly reviewRevisionHash: string;
   }) {
+    this.capturedResolutionHistory = null;
     const request = {
       authorizationToken: input.authorization.authorizationToken,
       reviewRevisionHash: input.reviewRevisionHash,
@@ -469,7 +475,24 @@ export class ReviewActionV2ControlPlaneAdapter
       result.restoreMode !== 'comparison_baseline.v1'
     )
       return null;
-    const baseline = parseReviewComparisonBaseline(result.payloadCanonicalJson);
+    this.capturedResolutionHistory = null;
+    let baselineJson = result.payloadCanonicalJson;
+    try {
+      const payload: unknown = JSON.parse(baselineJson ?? 'null');
+      if (isRecord(payload) && payload.comparisonVersion === 2) {
+        this.capturedResolutionHistory = Array.isArray(
+          payload.resolutionHistory
+        )
+          ? Object.freeze(payload.resolutionHistory)
+          : null;
+        baselineJson = payload.baseline
+          ? JSON.stringify(payload.baseline)
+          : null;
+      }
+    } catch {
+      return null;
+    }
+    const baseline = parseReviewComparisonBaseline(baselineJson);
     if (
       !baseline ||
       baseline.snapshotVersion !== result.snapshotVersion ||
@@ -1452,6 +1475,7 @@ function parseRestoredExecution(
     'state',
     'version',
     'workSlots',
+    ...(parsed.persistedPlan !== undefined ? ['persistedPlan'] : []),
   ]);
   const executionId = requireString(
     parsed.executionId,
@@ -1518,7 +1542,222 @@ function parseRestoredExecution(
     reviewRevisionHash,
     planHash,
     workSlots: Object.freeze(workSlots),
+    ...(parsed.persistedPlan !== undefined
+      ? {
+          persistedPlan: parsePersistedReviewPlan(parsed.persistedPlan, {
+            executionId,
+            generation,
+            reviewRevisionHash,
+            planHash,
+            workSlots,
+          }),
+        }
+      : {}),
   });
+}
+
+function parsePersistedReviewPlan(
+  value: unknown,
+  expected: {
+    executionId: string;
+    generation: string;
+    reviewRevisionHash: string;
+    planHash: string;
+    workSlots: readonly {
+      workSlotId: string;
+      providerVoteIdentityHash: string;
+      required: boolean;
+      state: RestoredReviewWorkSlotState;
+    }[];
+  }
+): import('../application').PersistedReviewExecutionPlan {
+  if (
+    !isRecord(value) ||
+    value.planHash !== expected.planHash ||
+    !Array.isArray(value.workSlots) ||
+    value.workSlots.length !== expected.workSlots.length
+  )
+    throw new Error('review_action_v2_persisted_plan_invalid');
+  const workSlots = value.workSlots.map((raw) => {
+    if (!isRecord(raw))
+      throw new Error('review_action_v2_persisted_slot_invalid');
+    const matched = expected.workSlots.find(
+      (slot) => slot.workSlotId === raw.workSlotId
+    );
+    if (
+      !matched ||
+      raw.providerVoteIdentityHash !== matched.providerVoteIdentityHash ||
+      raw.required !== matched.required ||
+      !Object.values(ReviewTaskKind).includes(raw.taskKind as ReviewTaskKind) ||
+      !Object.values(ReviewExecutionProviderKind).includes(
+        raw.providerKind as ReviewExecutionProviderKind
+      ) ||
+      !Number.isSafeInteger(raw.attemptBudget) ||
+      (raw.attemptBudget as number) < 1 ||
+      typeof raw.retryPolicyVersion !== 'string' ||
+      typeof raw.shardKey !== 'string'
+    )
+      throw new Error('review_action_v2_persisted_slot_invalid');
+    return {
+      workSlotId: matched.workSlotId,
+      providerVoteIdentityHash: matched.providerVoteIdentityHash,
+      required: matched.required,
+      taskKind: raw.taskKind as ReviewTaskKind,
+      providerKind: raw.providerKind as ReviewExecutionProviderKind,
+      shardKey: raw.shardKey,
+      attemptBudget: raw.attemptBudget as number,
+      retryPolicyVersion: raw.retryPolicyVersion,
+      ...(typeof raw.nextAttemptOrdinal === 'number'
+        ? { nextAttemptOrdinal: raw.nextAttemptOrdinal }
+        : {}),
+    };
+  });
+  const json = requireNullableString(
+    value.assignmentManifestCanonicalJson,
+    'persisted_assignment_manifest'
+  );
+  const manifestHash =
+    value.assignmentManifestHash === null
+      ? null
+      : requireDigest(
+          value.assignmentManifestHash,
+          'persisted_assignment_manifest_hash'
+        );
+  if (json !== null) {
+    const manifest = JSON.parse(json) as { manifestVersion?: unknown };
+    if (
+      ![1, 2].includes(manifest.manifestVersion as number) ||
+      manifest.manifestVersion !== value.assignmentManifestVersion ||
+      digest(
+        `rr.review-assignment-manifest.v${manifest.manifestVersion}\0${json}`
+      ) !== manifestHash
+    )
+      throw new Error('review_action_v2_persisted_manifest_invalid');
+  }
+  let artifact: import('../application').PersistedReviewExecutionPlan['artifact'] =
+    null;
+  if (value.artifact !== null) {
+    if (!isRecord(value.artifact))
+      throw new Error('review_action_v2_persisted_artifact_invalid');
+    const raw = value.artifact;
+    if (
+      raw.executionId !== expected.executionId ||
+      raw.generation !== expected.generation ||
+      raw.reviewRevisionHash !== expected.reviewRevisionHash ||
+      typeof raw.reviewedHeadSha !== 'string' ||
+      !/^[a-f0-9]{40}$/.test(raw.reviewedHeadSha) ||
+      typeof raw.projectionEnvelopeVersion !== 'number'
+    )
+      throw new Error('review_action_v2_persisted_artifact_scope_mismatch');
+    artifact = {
+      artifactId: requireString(raw.artifactId, 'persisted_artifact_id'),
+      executionId: expected.executionId,
+      generation: expected.generation,
+      reviewedHeadSha: raw.reviewedHeadSha,
+      reviewRevisionHash: expected.reviewRevisionHash,
+      projectionHash: requireDigest(
+        raw.projectionHash,
+        'persisted_projection_hash'
+      ),
+      projectionEnvelopeVersion: raw.projectionEnvelopeVersion,
+      projectionEnvelopeCanonicalJson: requireString(
+        raw.projectionEnvelopeCanonicalJson,
+        'persisted_projection_envelope'
+      ),
+      lifecycleStateHash: requireDigest(
+        raw.lifecycleStateHash,
+        'persisted_lifecycle_state'
+      ),
+      commandLedgerWatermark: requireDecimal(
+        raw.commandLedgerWatermark,
+        'persisted_ledger_watermark'
+      ),
+      publicationAttemptId: requireString(
+        raw.publicationAttemptId,
+        'persisted_publication_id'
+      ),
+    };
+  }
+  return Object.freeze({
+    ...(value.compatibilityKey !== undefined
+      ? {
+          compatibilityKey: requireDigest(
+            value.compatibilityKey,
+            'persisted_compatibility_key'
+          ),
+        }
+      : {}),
+    ...(value.acceptedManifests !== undefined
+      ? {
+          acceptedManifests: parseAcceptedRestoreManifests(
+            value.acceptedManifests,
+            expected.workSlots
+          ),
+        }
+      : {}),
+    planHash: expected.planHash,
+    assignmentManifestVersion: value.assignmentManifestVersion as number | null,
+    assignmentManifestHash: manifestHash,
+    assignmentManifestCanonicalJson: json,
+    workSlots,
+    artifact,
+  });
+}
+
+function parseAcceptedRestoreManifests(
+  value: unknown,
+  slots: readonly {
+    workSlotId: string;
+    providerVoteIdentityHash: string;
+    state: RestoredReviewWorkSlotState;
+  }[]
+) {
+  if (!Array.isArray(value) || value.length > slots.length)
+    throw new Error('review_restore_accepted_manifests_invalid');
+  const seen = new Set<string>();
+  return Object.freeze(
+    value.map((raw) => {
+      if (!isRecord(raw))
+        throw new Error('review_restore_accepted_manifest_invalid');
+      requireExactKeys(raw, [
+        'workSlotId',
+        'manifestCanonicalJson',
+        'manifestKey',
+        'providerInvocationKey',
+        'providerVoteIdentityHash',
+      ]);
+      const workSlotId = requireString(
+        raw.workSlotId,
+        'restore_manifest_work_slot'
+      );
+      const slot = slots.find(
+        (candidate) => candidate.workSlotId === workSlotId
+      );
+      if (
+        !slot ||
+        slot.state !== RestoredReviewWorkSlotState.Satisfied ||
+        seen.has(workSlotId) ||
+        raw.providerVoteIdentityHash !== slot.providerVoteIdentityHash
+      )
+        throw new Error('review_restore_accepted_manifest_scope_mismatch');
+      seen.add(workSlotId);
+      const manifestCanonicalJson = requireString(
+        raw.manifestCanonicalJson,
+        'restore_prepared_manifest'
+      );
+      parseCanonicalObject(manifestCanonicalJson);
+      return Object.freeze({
+        workSlotId,
+        manifestCanonicalJson,
+        manifestKey: requireDigest(raw.manifestKey, 'restore_manifest_key'),
+        providerInvocationKey: requireDigest(
+          raw.providerInvocationKey,
+          'restore_provider_invocation_key'
+        ),
+        providerVoteIdentityHash: slot.providerVoteIdentityHash,
+      });
+    })
+  );
 }
 
 function parseRestoredWorkSlot(value: unknown) {

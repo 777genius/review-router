@@ -1470,6 +1470,44 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     }
   );
 
+  it('retains authenticated resolution history without a comparison baseline and clears it on unavailable reads', async () => {
+    const history = [
+      {
+        targetId: 'target',
+        threadId: 'thread',
+        parentCommentId: 'parent',
+        parentCreatedAt: '2026-10-25T00:00:00.000Z',
+        parentBodyHash: 'a'.repeat(64),
+        history: {
+          threadId: 'thread',
+          version: 1,
+          historyCut: null,
+          confirmed: null,
+          pending: [],
+        },
+      },
+    ];
+    const execute = jest.fn().mockResolvedValue({
+      status: 'found',
+      restoreMode: 'comparison_baseline.v1',
+      payloadCanonicalJson: JSON.stringify({
+        comparisonVersion: 2,
+        baseline: null,
+        resolutionHistory: history,
+      }),
+    });
+    const adapter = createAdapter(execute);
+    const input = {
+      authorization,
+      reviewRevisionHash: startInput.reviewRevisionHash,
+    };
+    expect(await adapter.restoreComparisonBaseline(input)).toBeNull();
+    expect(adapter.readCapturedResolutionHistory()).toEqual(history);
+    execute.mockResolvedValueOnce({ status: 'not_found' });
+    expect(await adapter.restoreComparisonBaseline(input)).toBeNull();
+    expect(adapter.readCapturedResolutionHistory()).toBeNull();
+  });
+
   it('reads an explicit empty comparison baseline without changing exact snapshot restore', async () => {
     const baseline = {
       schemaVersion: 'comparison_baseline.v1',
@@ -1519,6 +1557,54 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
       payloadCanonicalJson: JSON.stringify(baseline),
     });
     expect(await adapter.restoreComparisonBaseline(input)).toBeNull();
+  });
+
+  it('restores original accepted manifests only for their exact satisfied slots', async () => {
+    const raw = JSON.parse(canonicalExecution());
+    raw.workSlots[0].state = RestoredReviewWorkSlotState.Satisfied;
+    raw.workSlots[0].acceptedObservationRefId = `obsref:${'a'.repeat(64)}`;
+    const manifest = { workSlotId: workSlot.workSlotId, ...providerManifest };
+    raw.persistedPlan = {
+      planHash: startInput.planHash,
+      assignmentManifestVersion: null,
+      assignmentManifestCanonicalJson: null,
+      assignmentManifestHash: null,
+      workSlots: [workSlot],
+      artifact: null,
+      acceptedManifests: [manifest],
+    };
+    const response = {
+      status: ReviewExecutionRestoreResultStatus.Found,
+      executionId: 'execution-1',
+      generation: '1',
+      streamVersion: '1',
+      executionState: RestoredReviewExecutionState.Running,
+      executionCanonicalJson: canonicalJson(raw),
+    };
+    const execute = jest.fn().mockResolvedValue(response);
+    const adapter = createAdapter(execute);
+    expect(
+      (
+        await adapter.restoreExecution({
+          authorization,
+          reviewRevisionHash: startInput.reviewRevisionHash,
+        })
+      )?.persistedPlan?.acceptedManifests
+    ).toEqual([manifest]);
+    raw.persistedPlan.acceptedManifests[0] = {
+      ...manifest,
+      workSlotId: 'other-slot',
+    };
+    execute.mockResolvedValueOnce({
+      ...response,
+      executionCanonicalJson: canonicalJson(raw),
+    });
+    await expect(
+      adapter.restoreExecution({
+        authorization,
+        reviewRevisionHash: startInput.reviewRevisionHash,
+      })
+    ).rejects.toThrow('restore_accepted_manifest_scope_mismatch');
   });
 
   it('restores a bounded exact-revision execution instead of dropping it', async () => {

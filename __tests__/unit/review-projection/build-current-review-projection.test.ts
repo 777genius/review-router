@@ -1,3 +1,4 @@
+import { deriveReviewPresentation } from '../../../src/review-projection/domain/review-presentation';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import { LegacyReviewProjectionPolicyAdapter } from '../../../src/review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter';
 import {
@@ -1173,3 +1174,304 @@ function severityRank(severity: FindingSeverity): number {
     [FindingSeverity.Minor]: 1,
   }[severity];
 }
+
+describe('accepted companion confirmations', () => {
+  const companion = (
+    targets: readonly ReturnType<typeof target>[],
+    verdicts: readonly LifecycleRevalidationVerdict[],
+    mode: 'report' | 'resolve' = 'resolve'
+  ) => ({
+    plannedProviderVoteKeys: ['verifier/account'],
+    mode,
+    observations: targets.map((item, index) => ({
+      targetId: item.targetId,
+      threadId: item.threadId,
+      fingerprint: item.trustedMarker,
+      threadStateHash: item.threadStateHash,
+      parentCommentUpdatedAt: item.parentCommentUpdatedAt,
+      reviewedHeadSha: HEAD,
+      providerVoteKey: 'verifier/account',
+      observationId: 'observation-1',
+      verdict: verdicts[index],
+      confidence: 0.99,
+      reasonCodes: ['accepted_verification'],
+    })),
+  });
+  const build = (
+    targets: readonly ReturnType<typeof target>[],
+    findingPolicy?: CurrentFindingPolicyPort
+  ) => {
+    const policy = new LegacyReviewProjectionPolicyAdapter({
+      ...DEFAULT_CONFIG,
+      reviewThreadLifecycle: 'resolve',
+    });
+    return new BuildCurrentReviewProjection({
+      lifecycleInventory: new MutableInventoryPort(inventory({ targets })),
+      findingPolicy: findingPolicy ?? policy,
+      lifecyclePolicy: policy,
+      presentationPolicy: policy,
+      mergeGatePolicy: policy,
+      limits: testLimits(),
+    });
+  };
+
+  it('fails for an outside-diff confirmed major with no baseline or occurrence', async () => {
+    const old = target({
+      originalPath: 'src/old.ts',
+      currentPath: 'src/old.ts',
+    });
+    const result = await build([old]).execute(
+      command({
+        lifecycleVerification: companion(
+          [old],
+          [LifecycleRevalidationVerdict.StillValid]
+        ),
+      })
+    );
+    expect(result.envelope.occurrences).toEqual([]);
+    expect(result.envelope.mergeGate).toMatchObject({
+      conclusion: MergeGateConclusion.Fail,
+      blockingLineageIds: [],
+      blockingConfirmedLifecycleTargetIds: [old.targetId],
+    });
+    expect(result.envelope.publishing.lifecycle[0].verification).toMatchObject({
+      confirmationState: 'confirmed_open',
+      severity: FindingSeverity.Major,
+    });
+    expect(result.envelope.publishing.summary.allClear).toBe(false);
+    expect(result.envelope.publishing.summary.body).toContain(
+      'confirmed still valid'
+    );
+  });
+
+  it('keeps two verified fixes positive in report mode and partial discovery, without native closed counts', async () => {
+    const targets = [
+      target({
+        targetId: 'tax-a',
+        threadId: 'thread-a',
+        trustedMarker: 'a'.repeat(24),
+        viewerCanResolve: true,
+      }),
+      target({
+        targetId: 'tax-b',
+        threadId: 'thread-b',
+        trustedMarker: 'b'.repeat(24),
+        viewerCanResolve: true,
+      }),
+      target({
+        targetId: 'tax-open',
+        threadId: 'thread-open',
+        trustedMarker: 'c'.repeat(24),
+      }),
+      target({
+        targetId: 'tax-unknown',
+        threadId: 'thread-unknown',
+        trustedMarker: 'd'.repeat(24),
+      }),
+    ];
+    const verdicts = [
+      LifecycleRevalidationVerdict.Resolved,
+      LifecycleRevalidationVerdict.Resolved,
+      LifecycleRevalidationVerdict.StillValid,
+      LifecycleRevalidationVerdict.Uncertain,
+    ];
+    for (const mode of ['report', 'resolve'] as const) {
+      const request = command({
+        lifecycleVerification: companion(targets, verdicts, mode),
+        currentFindings: [
+          finding({
+            severity: FindingSeverity.Minor,
+            title: 'Negative rounding drops a cent',
+            message: 'Math.round returns negative zero for negative amounts.',
+            filePath: 'src/service.ts',
+          }),
+        ],
+      });
+      const result = await build(
+        targets,
+        new PassThroughFindingPolicy()
+      ).execute(request);
+      expect(
+        result.envelope.publishing.lifecycle.map(
+          (fact) => fact.verification?.confirmationState
+        )
+      ).toEqual([
+        'fix_confirmed_thread_open',
+        'fix_confirmed_thread_open',
+        'confirmed_open',
+        'unverified',
+      ]);
+      expect(
+        result.envelope.publishing.lifecycle.filter(
+          (fact) => fact.mutationEligible
+        )
+      ).toHaveLength(mode === 'resolve' ? 2 : 0);
+      expect(result.envelope.publishing.summary.body).toContain(
+        '2 fixes verified'
+      );
+      expect(result.envelope.publishing.summary.occurrenceCounts.resolved).toBe(
+        0
+      );
+      const partial = await build(
+        targets,
+        new PassThroughFindingPolicy()
+      ).execute({
+        ...request,
+        coverage: {
+          ...request.coverage,
+          state: ProjectionCoverageState.Partial,
+        },
+      });
+      expect(
+        partial.envelope.publishing.lifecycle.every(
+          (fact) => !fact.mutationEligible
+        )
+      ).toBe(true);
+      expect(
+        partial.envelope.publishing.lifecycle[0].verification?.mutationStatus
+      ).toBe('blocked_partial_review');
+      expect(partial.envelope.publishing.summary.body).toContain(
+        '2 fixes verified'
+      );
+      expect(partial.envelope.publishing.summary.allClear).toBe(false);
+    }
+  });
+
+  it('vetoes a matching raw recurrence hidden by presentation selection', async () => {
+    const old = target({
+      title: 'Tax amount overflows',
+      message: 'Tax amount overflows for large valid input.',
+      viewerCanResolve: true,
+    });
+    const hidden = finding({ title: old.title, message: old.message });
+    const result = await build([old], {
+      selectCurrent: async () => [],
+    }).execute(
+      command({
+        currentFindings: [hidden],
+        lifecycleVerification: companion(
+          [old],
+          [LifecycleRevalidationVerdict.Resolved]
+        ),
+      })
+    );
+    expect(result.envelope.occurrences).toEqual([]);
+    expect(result.envelope.publishing.lifecycle[0].mutationEligible).toBe(
+      false
+    );
+    expect(
+      result.envelope.publishing.lifecycle[0].verification?.reasonCodes
+    ).toContain('current_finding_present');
+    expect(result.envelope.publishing.summary.allClear).toBe(false);
+  });
+
+  it('replaces a known carried contribution and deduplicates a matching current occurrence', async () => {
+    const old = target({
+      title: 'Tax amount overflows',
+      message: 'Tax amount overflows for large valid input.',
+      viewerCanResolve: true,
+    });
+    for (const currentFindings of [
+      [],
+      [finding({ title: old.title, message: old.message })],
+    ]) {
+      const request = command({
+        priorLineageHints: [
+          hint({
+            lineageId: old.trustedMarker,
+            trustedMarker: old.trustedMarker,
+          }),
+        ],
+        currentFindings,
+        lifecycleVerification: companion(
+          [old],
+          [LifecycleRevalidationVerdict.StillValid]
+        ),
+      });
+      const result = await build([old], new PassThroughFindingPolicy()).execute(
+        request
+      );
+      expect(result.envelope.occurrences).toHaveLength(1);
+      const presentation = deriveReviewPresentation({
+        reviewedHeadSha: HEAD,
+        coverage: request.coverage,
+        incomplete: false,
+        occurrences: result.envelope.occurrences,
+        lifecycleVerificationFacts: result.envelope.publishing.lifecycle.map(
+          (fact) => fact.verification!
+        ),
+      });
+      expect(presentation.severity.major).toBe(1);
+      expect(presentation.verification).toEqual({
+        confirmedOpen: 1,
+        fixesVerified: 0,
+        unverified: 0,
+      });
+      expect(result.envelope.publishing.summary.body).toContain('0 unverified');
+    }
+  });
+
+  it('replaces one real carried lineage only once when two native targets share it', async () => {
+    const first = target({ viewerCanResolve: true });
+    const second = target({
+      ...first,
+      targetId: 'target-second',
+      threadId: 'thread-second',
+    });
+    const targets = [first, second];
+    const request = command({
+      priorLineageHints: [
+        hint({
+          lineageId: first.trustedMarker,
+          trustedMarker: first.trustedMarker,
+        }),
+      ],
+      lifecycleVerification: companion(targets, [
+        LifecycleRevalidationVerdict.StillValid,
+        LifecycleRevalidationVerdict.StillValid,
+      ]),
+    });
+    const result = await build(targets).execute(request);
+    expect(result.envelope.occurrences).toHaveLength(1);
+    const presentation = deriveReviewPresentation({
+      reviewedHeadSha: HEAD,
+      coverage: request.coverage,
+      incomplete: false,
+      occurrences: result.envelope.occurrences,
+      lifecycleVerificationFacts: result.envelope.publishing.lifecycle.map(
+        (fact) => fact.verification!
+      ),
+    });
+    expect(presentation.severity.major).toBe(1);
+    expect(presentation.verification).toEqual({
+      confirmedOpen: 1,
+      fixesVerified: 0,
+      unverified: 0,
+    });
+  });
+
+  it('does not shrink the planned roster or count repeated responses as quorum', async () => {
+    const old = target({ viewerCanResolve: true });
+    const context = companion([old], [LifecycleRevalidationVerdict.Resolved]);
+    for (const broken of [
+      {
+        ...context,
+        plannedProviderVoteKeys: ['verifier/account', 'missing/account'],
+      },
+      {
+        ...context,
+        observations: [...context.observations, ...context.observations],
+      },
+    ]) {
+      const result = await build([old]).execute(
+        command({ lifecycleVerification: broken })
+      );
+      expect(
+        result.envelope.publishing.lifecycle[0].verification?.confirmationState
+      ).toBe('unverified');
+      expect(result.envelope.publishing.lifecycle[0].mutationEligible).toBe(
+        false
+      );
+    }
+  });
+});

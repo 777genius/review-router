@@ -1,3 +1,7 @@
+import {
+  restoredLifecycleInvocations,
+  restoredLifecycleManifestAssembler,
+} from '../../../src/review-orchestration/infrastructure/restored-lifecycle-invocations';
 import { createHash } from 'crypto';
 import {
   ReviewEvidenceLookupKind,
@@ -43,6 +47,142 @@ import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import { ExecutionDeadline } from '../../../src/review-execution/domain/execution-deadline';
 
 describe('RunT0ReviewOrchestration', () => {
+  it('looks up accepted lifecycle evidence under its original manifest without rebuilding source packets', async () => {
+    const fixture = createFixture({ workSlotCount: 2, allowPartial: true });
+    const slots = fixture.command.workSlots.map((slot, index) =>
+      index === 1
+        ? {
+            ...slot,
+            taskKind: ReviewTaskKind.LifecycleRevalidation,
+            required: false,
+            attemptBudget: 1,
+          }
+        : slot
+    );
+    const command = {
+      ...fixture.command,
+      workSlots: slots,
+      workSlotsCanonicalJson: canonicalizeReviewWorkSlots(slots),
+    };
+    const prepared = await fixture.dependencies.invocations.prepare({
+      workSlot: slots[1],
+      attemptOrdinal: 1,
+    });
+    const original = {
+      workSlotId: slots[1].workSlotId,
+      manifestCanonicalJson: canonicalJson({
+        ...prepared.manifestFacts,
+        taskKindSet: [ReviewTaskKind.LifecycleRevalidation],
+        requestedModel: 'gpt-test',
+      }),
+      manifestKey: hash('original-A-B-manifest'),
+      providerInvocationKey: hash('original-A-B-invocation'),
+      providerVoteIdentityHash: hash('vote'),
+    };
+    const restored = {
+      ...restoredAdmission(command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution,
+      persistedPlan: {
+        planHash: command.planHash,
+        assignmentManifestVersion: 2,
+        assignmentManifestHash: command.assignmentManifestHash,
+        assignmentManifestCanonicalJson:
+          command.assignmentManifestCanonicalJson,
+        workSlots: slots,
+        artifact: null,
+        acceptedManifests: [original],
+      },
+    };
+    restored.workSlots[1] = {
+      ...restored.workSlots[1],
+      state: RestoredReviewWorkSlotState.Satisfied,
+      acceptedObservationRefId: observationRef(
+        command.executionId,
+        slots[1].workSlotId,
+        'accepted-A-B'
+      ),
+    };
+    const prepareFresh = jest.mocked(fixture.dependencies.invocations.prepare);
+    prepareFresh.mockClear();
+    Object.assign(fixture.dependencies, {
+      invocations: restoredLifecycleInvocations(
+        restored,
+        fixture.dependencies.invocations
+      ),
+      invocationManifestAssembler: restoredLifecycleManifestAssembler(
+        restored,
+        fixture.dependencies.invocationManifestAssembler
+      ),
+    });
+    fixture.controlPlane.restoreExecution.mockResolvedValue(restored);
+    fixture.controlPlane.lookupEvidence.mockResolvedValue({
+      kind: ReviewEvidenceLookupKind.Hit,
+      observation: {
+        ...observationPayload,
+        observationId: 'accepted-A-B',
+        eligibilityPolicyVersion: 't0-v1',
+        providerKind: ReviewExecutionProviderKind.Codex,
+        providerInvocationKey: original.providerInvocationKey,
+        providerVoteIdentityHash: original.providerVoteIdentityHash,
+      },
+      attachment: sameExecutionAttachment,
+    });
+    const result = await fixture.useCase.execute({
+      ...command,
+      restoredExecution: restored,
+      restoreOnly: true,
+    });
+    expect(result.status).toBe(
+      ReviewOrchestrationResultStatus.PartialCompleted
+    );
+    expect(fixture.controlPlane.lookupEvidence).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.lookupEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workSlot: slots[1],
+        manifest: original,
+        planHash: command.planHash,
+      })
+    );
+    expect(prepareFresh).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.acquireInvocationLease).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+    expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+      expect.objectContaining({
+        acceptedEvidence: [
+          expect.objectContaining({
+            workSlotId: slots[1].workSlotId,
+            observation: expect.objectContaining({
+              observationId: 'accepted-A-B',
+            }),
+          }),
+        ],
+      })
+    );
+  });
+
+  it('restores the same persisted execution without starting or replaying unaccepted inference', async () => {
+    const fixture = createFixture({ workSlotCount: 1, allowPartial: true });
+    const restored = restoredAdmission(fixture.command, {
+      state: RestoredReviewWorkSlotState.Pending,
+      acceptedObservationRefId: null,
+    }).restoredExecution;
+    fixture.controlPlane.restoreExecution.mockResolvedValue(restored);
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      restoredExecution: restored,
+      restoreOnly: true,
+    });
+    expect(result.executionId).toBe(restored.executionId);
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.lookupEvidence).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.acquireInvocationLease).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+  });
+
   it.each(['rejection', 'synchronous throw'])(
     'continues without optional comparison history after a baseline %s',
     async (failure) => {

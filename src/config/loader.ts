@@ -25,9 +25,13 @@ export class ConfigLoader {
   /** Trusted native runtime configuration, without ambient env or checkout files.
    * The same parser/defaults/validation apply; this is not a caller override. */
   static loadRuntimeEnvironment(
-    env: Readonly<Record<string, string | undefined>>
+    env: Readonly<Record<string, string | undefined>>,
+    options: { readonly modelTransport?: boolean } = {}
   ): ReviewConfig {
-    return this.resolve({}, this.loadFromEnv({ ...env }));
+    return this.resolve(
+      {},
+      this.loadFromEnv({ ...env }, options.modelTransport === true)
+    );
   }
 
   private static resolve(
@@ -86,7 +90,8 @@ export class ConfigLoader {
   }
 
   private static loadFromEnv(
-    env: Readonly<Record<string, string | undefined>> = process.env
+    env: Readonly<Record<string, string | undefined>> = process.env,
+    modelTransport = false
   ): Partial<ReviewConfig> {
     const codexProvider = this.codexProviderFromModel(env.CODEX_MODEL);
     const claudeProvider = this.claudeProviderFromModel(env.CLAUDE_MODEL);
@@ -105,6 +110,7 @@ export class ConfigLoader {
     if (
       (env.REVIEW_AUTH_MODE?.trim() === 'mimo-token-plan-api' ||
         providers?.some((provider) => provider.startsWith('codex-mimo/'))) &&
+      !modelTransport &&
       !env.MIMO_TOKEN_PLAN_API_KEY?.trim()
     ) {
       throw new Error(

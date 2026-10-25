@@ -12,27 +12,26 @@ import {
   readApprovedReviewAgent,
   assertApprovedReviewAgentVersion,
 } from '../control-plane/approved-review-agent';
-import { providerApiCheckoutCompanionContract } from '../control-plane/generated/review-action-v2/companion-contracts';
+import {
+  providerApiCheckoutCompanionContract,
+  type ProviderApiAuthMode,
+} from '../control-plane/generated/review-action-v2/companion-contracts';
 import { ReviewActionV2Client } from '../control-plane/review-action-v2-client';
 import type { AdmittedRuntimeConfig } from '../control-plane/runtime-config';
 import { CODEX_SHELL_ENVIRONMENT_POLICY } from '../providers/codex-confinement-policy';
 import {
   AccountGatewayModelTransport,
   createAccountGatewayRunFetch,
-  startDirectOpenRouterModelTransport,
+  startDirectProviderApiModelTransport,
   type LocalGatewayModelTransport,
 } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import { ReviewActionV2ControlPlaneAdapter } from '../review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
-import {
-  selectDirectOpenRouterProvider,
-  resolveProductionInvestigationReasoningEffort,
-} from '../review-orchestration/infrastructure/production-t0-review-runner';
+import { resolveProductionInvestigationReasoningEffort } from '../review-orchestration/infrastructure/production-t0-review-runner';
 import { validateAccountGatewayCheckout } from './account-gateway-runtime';
 import {
   clearCodexRotatingOidcRequestEnv,
   clearCodexRotatingProcessAuthEnv,
   clearCodexRotatingProviderSecretEnv,
-  readCodexRotatingProviderSecretInputs,
   CODEX_ROTATING_AUTH_INPUT_ENV_NAMES,
 } from './auth-input';
 import {
@@ -49,12 +48,16 @@ import type {
   CodexOAuthV2ReviewResult,
   CodexOAuthV2ReviewRunnerPort,
 } from './runtime';
+import {
+  readDirectProviderSelection,
+  readProviderApiSecret,
+} from './provider-api-selection';
 
 export const PROVIDER_API_ACTION_MODE = 'provider-api';
 export type ProviderApiRuntimeInputs = Omit<
   CodexOAuthRuntimeInputs,
   'providerInstanceId' | 'reviewMode'
->;
+> & { readonly providerApiAuthMode?: ProviderApiAuthMode };
 
 export function assertProviderApiLocalInputs(
   env: NodeJS.ProcessEnv = process.env
@@ -73,28 +76,25 @@ export function assertProviderApiLocalInputs(
     'INPUT_CLAUDE-CODE-OAUTH-TOKEN',
     'INPUT_OPENAI_API_KEY',
     'INPUT_OPENAI-API-KEY',
-    'INPUT_MIMO_TOKEN_PLAN_API_KEY',
   ]) {
     if (env[key]) throw new Error('provider_api_alternate_auth_input');
   }
 }
 
-export function approvedProviderApiAgent(runtime: AdmittedRuntimeConfig) {
+export function approvedProviderApiAgent(
+  runtime: AdmittedRuntimeConfig,
+  expectedMode?: ProviderApiAuthMode
+) {
   const env = runtime.runtimeEnv;
-  if (
-    env.REVIEW_AUTH_MODE !==
-      providerApiCheckoutCompanionContract.providerApiAuthMode ||
-    !/^openrouter\/[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(
-      env.REVIEW_PROVIDERS ?? ''
-    )
-  ) {
+  const selection = readDirectProviderSelection(env);
+  if (expectedMode !== undefined && selection.mode !== expectedMode) {
     throw new Error('provider_api_admitted_configuration_invalid');
   }
-  selectDirectOpenRouterProvider(ConfigLoader.loadRuntimeEnvironment(env));
   resolveProductionInvestigationReasoningEffort({
-    codexModel: env.REVIEW_PROVIDERS!.slice('openrouter/'.length),
+    codexModel: selection.model,
     accountGateway: false,
     providerApi: true,
+    providerApiAuthMode: selection.mode,
     serverReasoningEffort: env.CODEX_REASONING_EFFORT,
   });
   const agent = readApprovedReviewAgent(
@@ -136,6 +136,9 @@ export async function runProviderApiRuntime(
   let usageDelivery: UsageDelivery | undefined;
   let phase = 'authorization';
   try {
+    const mode =
+      input.providerApiAuthMode ??
+      providerApiCheckoutCompanionContract.providerApiAuthMode;
     const fetchImpl = createAccountGatewayRunFetch(
       ports.fetchImpl ?? fetch,
       run.signal
@@ -185,11 +188,11 @@ export async function runProviderApiRuntime(
     const readCapability = async () => {
       run.signal.throwIfAborted();
       const capability = validateAccountGatewayCheckout(
-        await transport.providerApiCheckoutCapability(run.signal),
+        await transport.providerApiCheckoutCapability(run.signal, mode),
         input.repository,
         input.headSha
       );
-      approvedProviderApiAgent(capability.runtimeConfig);
+      approvedProviderApiAgent(capability.runtimeConfig, mode);
       if (
         admitted &&
         (admitted.configVersion !== capability.runtimeConfig.configVersion ||
@@ -205,7 +208,12 @@ export async function runProviderApiRuntime(
       return capability;
     };
     const capability = await readCapability();
-    const agent = approvedProviderApiAgent(capability.runtimeConfig);
+    const agent = approvedProviderApiAgent(capability.runtimeConfig, mode);
+    const selection = readDirectProviderSelection(
+      capability.runtimeConfig.runtimeEnv
+    );
+    phase = 'local_credential';
+    apiKey = readProviderApiSecret(selection.mode);
     phase = 'prepare_cli';
     cli = await prepareCodexCliBeforeAuthRead({
       signal: run.signal,
@@ -242,12 +250,9 @@ export async function runProviderApiRuntime(
       )
     );
     await fs.chmod(codexHome, 0o700);
-    phase = 'local_credential';
-    const secrets = readCodexRotatingProviderSecretInputs();
-    apiKey = secrets.openRouterApiKey;
-    if (!apiKey || secrets.claudeCodeOAuthToken)
-      throw new Error('provider_api_credential_missing');
-    modelTransport = await startDirectOpenRouterModelTransport(
+    phase = 'local_transport';
+    modelTransport = await startDirectProviderApiModelTransport(
+      selection.mode,
       () => {
         run.signal.throwIfAborted();
         if (!apiKey) throw new Error('provider_api_credential_closed');
@@ -257,7 +262,8 @@ export async function runProviderApiRuntime(
         requestMs: Math.max(
           1000,
           ConfigLoader.loadRuntimeEnvironment(
-            capability.runtimeConfig.runtimeEnv
+            capability.runtimeConfig.runtimeEnv,
+            { modelTransport: true }
           ).runTimeoutSeconds * 1000
         ),
         streamFrameBytes: CODEX_REVIEW_AGENT_MAX_EVENT_BYTES,
@@ -265,15 +271,19 @@ export async function runProviderApiRuntime(
           ? {
               usage: {
                 delivery: usageDelivery,
-                requestedModel:
-                  capability.runtimeConfig.runtimeEnv.REVIEW_PROVIDERS!.slice(
-                    'openrouter/'.length
-                  ),
+                requestedModel: selection.model,
               },
             }
           : {}),
       }
     );
+    modelTransport = Object.freeze({
+      ...modelTransport,
+      environment: Object.freeze({
+        ...modelTransport.environment,
+        CODEX_HOME: codexHome,
+      }),
+    });
     // No auth.json or upstream key: exec and app-server share only the local capability.
     await fs.writeFile(
       path.join(codexHome, 'config.toml'),

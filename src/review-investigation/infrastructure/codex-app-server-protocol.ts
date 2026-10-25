@@ -16,7 +16,7 @@ export type CodexAppServerProtocolRequest = Readonly<{
   prompt: string;
   clientTurnId: string;
   requestedModel: string;
-  reasoningEffort: CodexAppServerReasoningEffort;
+  reasoningEffort: CodexAppServerReasoningEffort | null;
   outputSchema?: Readonly<Record<string, unknown>>;
   allowedTools: readonly string[];
   maxOutputBytes: number;
@@ -223,9 +223,12 @@ export class CodexAppServerProtocolClient {
           approvalPolicy: 'never',
           approvalsReviewer: 'user',
           sandbox: 'read-only',
-          config: {
-            model_reasoning_effort: this.request.reasoningEffort,
-          },
+          config:
+            this.request.reasoningEffort === null
+              ? {}
+              : {
+                  model_reasoning_effort: this.request.reasoningEffort,
+                },
           ephemeral: true,
           environments: [],
           dynamicTools: [],
@@ -259,7 +262,9 @@ export class CodexAppServerProtocolClient {
             type: 'readOnly',
             networkAccess: false,
           },
-          effort: this.request.reasoningEffort,
+          ...(this.request.reasoningEffort === null
+            ? {}
+            : { effort: this.request.reasoningEffort }),
           ...(this.request.outputSchema === undefined
             ? {}
             : { outputSchema: this.request.outputSchema }),

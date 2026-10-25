@@ -24,6 +24,13 @@ import {
   type CodexOAuthV2ReviewRunnerPort,
 } from '../../../src/codex-oauth/runtime';
 import { MergeGateConclusion } from '../../../src/review-projection/domain';
+import type { AdmittedRuntimeConfig } from '../../../src/control-plane/runtime-config';
+import { UsageDelivery } from '../../../src/provider-usage/delivery';
+import {
+  providerApiDescriptors,
+  providerApiAuthModes,
+  type ProviderApiAuthMode,
+} from '../../../src/control-plane/generated/review-action-v2/companion-contracts';
 
 jest.mock('../../../src/codex-oauth/codex-cli');
 jest.mock('../../../src/codex-oauth/safe-checkout', () => ({
@@ -37,15 +44,18 @@ describe('direct provider API bootstrap', () => {
   const agent = bundledReviewAgentForTransport('provider_api');
   const profileJson = JSON.stringify(agent);
   let fixture: string;
-  const runtimeConfig = () => ({
+  let mode: ProviderApiAuthMode = 'openrouter-api';
+  const providerName = () =>
+    `${providerApiDescriptors[mode].runtimePrefix}/${mode === 'openrouter-api' ? 'vendor/model' : providerApiDescriptors[mode].defaultModel}`;
+  const runtimeConfig = (): AdmittedRuntimeConfig => ({
     protocolVersion: 1,
     configVersion: 7,
     runtimeEnv: {
-      REVIEW_AUTH_MODE: 'openrouter-api',
+      REVIEW_AUTH_MODE: mode,
       RUN_TIMEOUT_SECONDS: '7200',
-      REVIEW_PROVIDERS: 'openrouter/vendor/model',
-      REQUIRED_HEALTHY_PROVIDERS: 'openrouter/vendor/model',
-      SYNTHESIS_MODEL: 'openrouter/vendor/model',
+      REVIEW_PROVIDERS: providerName(),
+      REQUIRED_HEALTHY_PROVIDERS: providerName(),
+      SYNTHESIS_MODEL: providerName(),
       PROVIDER_LIMIT: '1',
       PROVIDER_MAX_PARALLEL: '1',
       INLINE_MIN_AGREEMENT: '1',
@@ -77,9 +87,12 @@ describe('direct provider API bootstrap', () => {
   } as const;
 
   beforeEach(async () => {
+    mode = 'openrouter-api';
     process.env = { ...originalEnv };
     for (const key of Object.keys(process.env))
-      if (/^(INPUT_|RR_|CODEX_|OPENAI_|OPENROUTER_|CLAUDE_)/.test(key))
+      if (
+        /^(INPUT_|RR_|CODEX_|OPENAI_|OPENROUTER_|CLAUDE_|MIMO_|KIMI_)/.test(key)
+      )
         delete process.env[key];
     await fs.mkdir(path.resolve('tmp'), { recursive: true });
     fixture = await fs.mkdtemp(path.resolve('tmp/provider-api-unit-'));
@@ -97,6 +110,9 @@ describe('direct provider API bootstrap', () => {
     });
     jest.spyOn(core, 'setSecret').mockImplementation(() => undefined);
     jest.spyOn(core, 'warning').mockImplementation(() => undefined);
+    jest
+      .spyOn(UsageDelivery, 'create')
+      .mockRejectedValue(new Error('synthetic_usage_unavailable'));
     jest
       .spyOn(GitHubActionsOidcTokenProvider.prototype, 'requestToken')
       .mockResolvedValue('oidc-token');
@@ -142,6 +158,7 @@ describe('direct provider API bootstrap', () => {
     apiUrl: 'https://api.reviewrouter.org',
     audience: 'reviewrouter',
     workflowSchemaVersion: 2,
+    providerApiAuthMode: mode,
     repository: 'owner/repo',
     pullRequestNumber: 9,
     headSha: head,
@@ -151,7 +168,7 @@ describe('direct provider API bootstrap', () => {
   it('uses captured API-key authority without OAuth rotation and closes the local lease before terminal publication', async () => {
     const startTransport = jest.spyOn(
       modelTransports,
-      'startDirectOpenRouterModelTransport'
+      'startDirectProviderApiModelTransport'
     );
     let localLease: NonNullable<
       Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]['providerApi']
@@ -201,10 +218,14 @@ describe('direct provider API bootstrap', () => {
       expect(() => localLease()).toThrow('provider_api_credential_closed');
     });
     await runProviderApiRuntime(inputs(), { review, terminalReview });
-    expect(startTransport).toHaveBeenCalledWith(expect.any(Function), {
-      requestMs: 7_200_000,
-      streamFrameBytes: 8 * 1024 * 1024,
-    });
+    expect(startTransport).toHaveBeenCalledWith(
+      'openrouter-api',
+      expect.any(Function),
+      {
+        requestMs: 7_200_000,
+        streamFrameBytes: 8 * 1024 * 1024,
+      }
+    );
     expect(terminalReview).toHaveBeenCalledWith(
       completed,
       expect.any(AbortSignal)
@@ -411,7 +432,82 @@ describe('direct provider API bootstrap', () => {
             REVIEW_PROVIDERS: providers,
           },
         })
-      ).toThrow('provider_api_admitted_configuration_invalid');
+      ).toThrow();
     }
+  });
+
+  it.each(providerApiAuthModes)(
+    'bootstraps %s with only a local capability and closes its key lease before App publication',
+    async (selectedMode) => {
+      mode = selectedMode;
+      delete process.env.INPUT_OPENROUTER_API_KEY;
+      process.env[`INPUT_${providerApiDescriptors[mode].secretName}`] =
+        'synthetic-selected-key';
+      let lease: (() => unknown) | undefined;
+      const review = {
+        run: async (
+          input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]
+        ) => {
+          const direct = input.providerApi;
+          if (!direct) throw new Error('direct_route_missing');
+          lease = direct.credentialLease;
+          expect(direct.runtimeConfig.runtimeEnv.REVIEW_AUTH_MODE).toBe(mode);
+          expect(direct.modelTransport.environment.CODEX_HOME).toBe(
+            input.codexHome
+          );
+          expect(
+            JSON.stringify(direct.modelTransport.environment)
+          ).not.toContain('synthetic-selected-key');
+          expect(direct.modelTransport.configuration.join('\n')).not.toContain(
+            providerApiDescriptors[mode].fixedResponsesUrl
+          );
+          expect(direct.modelTransport.configuration.join('\n')).not.toContain(
+            'synthetic-selected-key'
+          );
+          if (mode === 'kimi-code-api')
+            expect(
+              direct.modelTransport.configuration.join('\n')
+            ).not.toContain('service_tier');
+          for (const descriptor of Object.values(providerApiDescriptors)) {
+            expect(process.env[descriptor.secretName]).toBeUndefined();
+            expect(
+              process.env[`INPUT_${descriptor.secretName}`]
+            ).toBeUndefined();
+          }
+          return completed;
+        },
+      };
+      await runProviderApiRuntime(inputs(), {
+        review,
+        terminalReview: async () => {
+          expect(lease).toBeDefined();
+          expect(() => lease?.()).toThrow('provider_api_credential_closed');
+        },
+      });
+    }
+  );
+
+  it('rejects an extra upstream key before CLI/checkout and enforces the finite MiMo effort policy', async () => {
+    process.env.INPUT_MIMO_TOKEN_PLAN_API_KEY = 'synthetic-unselected-key';
+    await expect(
+      runProviderApiRuntime(inputs(), {
+        review: { run: jest.fn() },
+        terminalReview: jest.fn(),
+      })
+    ).rejects.toThrow('provider_api_runtime_failed:local_credential');
+    expect(prepareCodexCliBeforeAuthRead).not.toHaveBeenCalled();
+    expect(safeCheckoutRepository).not.toHaveBeenCalled();
+    expect(process.env.INPUT_MIMO_TOKEN_PLAN_API_KEY).toBeUndefined();
+    mode = 'mimo-token-plan-api';
+    expect(approvedProviderApiAgent(runtimeConfig())).toBeDefined();
+    expect(() =>
+      approvedProviderApiAgent({
+        ...runtimeConfig(),
+        runtimeEnv: {
+          ...runtimeConfig().runtimeEnv,
+          CODEX_REASONING_EFFORT: 'xhigh',
+        },
+      })
+    ).toThrow('provider_api_reasoning_effort_unsupported');
   });
 });

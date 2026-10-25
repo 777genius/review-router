@@ -41,7 +41,7 @@ export type CodexReviewAgentAdapterOptions = Readonly<{
   executionSessions: ReviewAgentExecutionSessionResolverPort;
   providerCredentialEnvironment?: () => Readonly<NodeJS.ProcessEnv>;
   binary?: string;
-  reasoningEffort?: CodexAppServerReasoningEffort;
+  reasoningEffort?: CodexAppServerReasoningEffort | null;
   /** Trusted production composition only; independent of the turn's model. */
   modelProvider?: CodexModelProvider;
   appServerRunner?: CodexAppServerTurnRunnerPort;
@@ -100,7 +100,10 @@ export class CodexReviewAgentAdapter extends StrictCliReviewAgent {
       ? `${request.prompt}\n\nOUTPUT JSON SCHEMA:\n${JSON.stringify(outputSchema)}\nReturn exactly one JSON object matching this schema, with no markdown or prose.`
       : request.prompt;
     const execution = this.prepareExecution({ ...request, prompt });
-    const reasoningEffort = this.options.reasoningEffort ?? 'xhigh';
+    const reasoningEffort =
+      this.options.reasoningEffort === null
+        ? null
+        : (this.options.reasoningEffort ?? 'xhigh');
     const result = await this.appServerRunner.executeTurn({
       invocationId: request.invocationId,
       fencingToken: request.fencingToken,

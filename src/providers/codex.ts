@@ -76,7 +76,8 @@ export interface CodexProviderOptions {
     | 'codex'
     | 'codex-openrouter'
     | 'openrouter'
-    | 'codex-mimo';
+    | 'codex-mimo'
+    | 'kimi';
   providerNameModel?: string;
 }
 
@@ -440,12 +441,13 @@ export class CodexProvider extends Provider {
     const forkSandbox =
       !this.modelTransport && this.shouldUseForkSandboxCodexHomeConfig();
     const reasoningEffort = this.resolveReasoningEffort(false);
-    const gateway = this.options.accountGateway;
+    const gateway = this.modelTransport;
     const modelCatalogSetting = gateway
       ? await prepareAccountGatewayModelCatalog(
           this.model,
           gateway.environment.CODEX_HOME,
-          gateway.configuration
+          gateway.configuration,
+          this.options.providerApiTransport !== undefined
         )
       : undefined;
     const frozenCliConfig: CodexFrozenCliConfig = {
@@ -1543,6 +1545,7 @@ export class CodexProvider extends Provider {
   }
 
   private resolveReasoningEffort(healthCheck: boolean): string | undefined {
+    if (this.options.modelProvider === 'kimi') return undefined;
     return healthCheck
       ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || 'low'
       : process.env.CODEX_REASONING_EFFORT;

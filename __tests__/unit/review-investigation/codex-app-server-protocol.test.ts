@@ -49,6 +49,25 @@ const supportedCodexErrorInfo = [
 ];
 
 describe('CodexAppServerProtocolClient', () => {
+  it('omits reasoning controls for an explicitly unsupported model and requires the native null echo', async () => {
+    const fixture = await activeTurn({
+      omitReasoning: true,
+      omitOutputSchema: true,
+    });
+    const started = fixture.writes.find(
+      (message) => message.method === 'thread/start'
+    );
+    const turnStart = fixture.writes.find(
+      (message) => message.method === 'turn/start'
+    );
+    expect(started).toBeDefined();
+    expect(started?.params).toHaveProperty('config', {});
+    expect(turnStart?.params).not.toHaveProperty('effort');
+    completeMessage(fixture.client, 'final', 'final_answer', '{"ok":true}');
+    completeUsage(fixture.client);
+    completeTurn(fixture.client);
+    await expect(fixture.result).resolves.toBeDefined();
+  });
   it.each([true, false])(
     'writes turn/start with schema present=%s',
     async (nativeSchema) => {
@@ -2203,6 +2222,7 @@ async function activeTurn(
     omitTurnNotificationError?: boolean;
     omitTurnResponseError?: boolean;
     allowedTools?: readonly string[];
+    omitReasoning?: boolean;
   }> = {}
 ) {
   const writes: Array<Record<string, unknown>> = [];
@@ -2213,6 +2233,7 @@ async function activeTurn(
   const client = new CodexAppServerProtocolClient(
     {
       ...request,
+      ...(options.omitReasoning ? { reasoningEffort: null } : {}),
       ...(options.allowedTools === undefined
         ? {}
         : { allowedTools: options.allowedTools }),
@@ -2234,7 +2255,13 @@ async function activeTurn(
   });
   await waitForWrite(writes, 'thread/start');
   client.receive(notification('thread/started', { thread: thread() }));
-  client.receive({ id: 2, result: threadStartResponse() });
+  client.receive({
+    id: 2,
+    result: {
+      ...threadStartResponse(),
+      ...(options.omitReasoning ? { reasoningEffort: null } : {}),
+    },
+  });
   await waitForWrite(writes, 'turn/start');
   const notificationTurn = options.omitTurnNotificationError
     ? { id: turnId, status: 'inProgress', items: [] }

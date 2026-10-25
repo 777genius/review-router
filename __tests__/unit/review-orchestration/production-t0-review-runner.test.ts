@@ -585,7 +585,9 @@ describe('ProductionT0ReviewRunner policy', () => {
           })
         ).rejects.toBe(stoppedAtBoundary);
         expect(configuration).not.toHaveBeenCalled();
-        expect(captured).toHaveBeenCalledWith(runtimeEnv);
+        expect(captured).toHaveBeenCalledWith(runtimeEnv, {
+          modelTransport: true,
+        });
         const resolved = captured.mock.results[0].value as ReviewConfig;
         expect(resolved.providers).toEqual([
           'openrouter/vendor/captured-model',

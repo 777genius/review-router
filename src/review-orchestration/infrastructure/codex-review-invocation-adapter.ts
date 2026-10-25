@@ -193,7 +193,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     private readonly agenticContext: boolean,
     private readonly contextGateway?: ContextGatewayInvocationSessionFactoryPort,
     private readonly investigationManifestBindingEnabled = false,
-    private readonly investigationReasoningEffort: CodexAppServerReasoningEffort = 'xhigh',
+    private readonly investigationReasoningEffort: CodexAppServerReasoningEffort | null = 'xhigh',
     private readonly directCredentialLease?: () => ProviderCredentialLease
   ) {
     for (const assignment of assignments) {

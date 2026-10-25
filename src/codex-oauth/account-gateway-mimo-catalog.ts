@@ -97,7 +97,8 @@ export function isAccountGatewayMiMoModel(model: string | undefined): boolean {
 export async function prepareAccountGatewayModelCatalog(
   model: string,
   codexHome: string | undefined,
-  gatewayConfiguration: readonly string[]
+  gatewayConfiguration: readonly string[],
+  providerApi = false
 ): Promise<string | undefined> {
   // Frozen GPT metadata from codex-rs/models-manager/models.json at be6e8eac.
   // Source SHA256: 384ff2e0ca67f65d2866e422e2ec7dfa5ed9e3fec7a84fe14005247a7087a302.
@@ -108,7 +109,32 @@ export async function prepareAccountGatewayModelCatalog(
       ? { ...gptSolModel, tool_mode: 'direct', supports_search_tool: false }
       : isAccountGatewayMiMoModel(model)
         ? mimoModel
-        : undefined;
+        : providerApi && model === 'k3-256k'
+          ? {
+              ...gptSolModel,
+              slug: 'k3-256k',
+              display_name: 'Kimi Code K3',
+              description: 'Kimi Code native Responses model.',
+              base_instructions: '',
+              model_messages: null,
+              default_reasoning_level: null,
+              supported_reasoning_levels: [],
+              supports_reasoning_summary_parameter: false,
+              default_reasoning_summary: 'none',
+              support_verbosity: false,
+              apply_patch_tool_type: null,
+              tool_mode: 'direct',
+              use_responses_lite: false,
+              supports_search_tool: false,
+              experimental_supported_tools: [],
+              additional_speed_tiers: [],
+              service_tiers: [],
+              default_service_tier: null,
+              input_modalities: ['text'],
+              context_window: 256000,
+              max_context_window: 256000,
+            }
+          : undefined;
   if (!catalogModel) return undefined;
   if (!codexHome || !path.isAbsolute(codexHome))
     throw new Error('account_gateway_catalog_home_unavailable');

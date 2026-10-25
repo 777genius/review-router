@@ -29,7 +29,11 @@ type ScenarioReceipt = Readonly<{
   reasoningControlsAbsent: boolean;
   reasoningEnvelopes: readonly string[];
   omittedServiceTier: boolean;
-  functionToolsOnly: boolean;
+  functionLeavesOnly: boolean;
+  toolEnvelopes: readonly Readonly<{
+    topLevelTypes: readonly string[];
+    functionLeaves: readonly string[];
+  }>[];
   exitCode: number | null;
 }>;
 
@@ -81,13 +85,89 @@ function containsFunctionOutput(value: unknown): boolean {
 }
 
 function containsFinalOutput(value: unknown): boolean {
-  if (typeof value === 'string' && value === finalOutput) {
-    const parsed: unknown = JSON.parse(value);
-    assert.deepEqual(parsed, { findings: [], revalidations: [] });
-    return true;
-  }
-  if (Array.isArray(value)) return value.some(containsFinalOutput);
-  return record(value) && Object.values(value).some(containsFinalOutput);
+  if (!record(value)) return false;
+  const item =
+    value.type === 'item.completed' && record(value.item)
+      ? value.item
+      : value.method === 'item/completed' &&
+          record(value.params) &&
+          record(value.params.item)
+        ? value.params.item
+        : undefined;
+  if (
+    !item ||
+    !['agent_message', 'agentMessage'].includes(String(item.type)) ||
+    typeof item.text !== 'string'
+  )
+    return false;
+  const parsed: unknown = JSON.parse(item.text);
+  assert.deepEqual(parsed, { findings: [], revalidations: [] });
+  return true;
+}
+
+function functionTool(
+  value: unknown
+): value is JsonRecord & {
+  type: 'function';
+  name: string;
+  parameters: JsonRecord;
+} {
+  return (
+    record(value) &&
+    value.type === 'function' &&
+    typeof value.name === 'string' &&
+    value.name.length > 0 &&
+    record(value.parameters)
+  );
+}
+
+/** Namespace is routing metadata; every executable leaf must remain a function. */
+function functionToolEnvelope(value: unknown): boolean {
+  if (functionTool(value)) return true;
+  return (
+    record(value) &&
+    value.type === 'namespace' &&
+    typeof value.name === 'string' &&
+    value.name.length > 0 &&
+    typeof value.description === 'string' &&
+    Object.keys(value).every((key) =>
+      ['type', 'name', 'description', 'tools'].includes(key)
+    ) &&
+    Array.isArray(value.tools) &&
+    value.tools.length > 0 &&
+    value.tools.every(functionTool)
+  );
+}
+
+function toolEnvelopeReceipt(
+  body: JsonRecord
+): Readonly<{
+  topLevelTypes: readonly string[];
+  functionLeaves: readonly string[];
+}> {
+  const tools: unknown[] = Array.isArray(body.tools) ? body.tools : [];
+  return {
+    topLevelTypes: [
+      ...new Set(
+        tools.flatMap((tool) =>
+          record(tool) && typeof tool.type === 'string' ? [tool.type] : []
+        )
+      ),
+    ],
+    functionLeaves: tools.flatMap((tool) => {
+      if (functionTool(tool)) return [tool.name];
+      if (
+        !record(tool) ||
+        !Array.isArray(tool.tools) ||
+        typeof tool.name !== 'string'
+      )
+        return [];
+      const members: unknown[] = tool.tools;
+      return members.flatMap((member) =>
+        functionTool(member) ? [`${tool.name}.${member.name}`] : []
+      );
+    }),
+  };
 }
 
 /** Bounded public fixture metadata; no provider/system instructions are copied. */
@@ -179,20 +259,22 @@ async function scenario(
         'function_tools_required'
       );
       const tools: unknown[] = body.tools;
-      assert(
-        tools.every((tool) => record(tool) && tool.type === 'function'),
-        'function_tools_only'
-      );
-      const selected = tools.find(
+      assert(tools.every(functionToolEnvelope), 'function_leaves_only');
+      const namespace = tools.find(
         (tool) =>
           record(tool) &&
-          typeof tool.name === 'string' &&
-          tool.name.endsWith('read_fixture')
+          tool.type === 'namespace' &&
+          tool.name === 'mcp__reviewrouter'
       );
       assert(
-        record(selected) && typeof selected.name === 'string',
-        'fixture_function_missing'
+        record(namespace) && Array.isArray(namespace.tools),
+        'fixture_namespace_missing'
       );
+      const members: unknown[] = namespace.tools;
+      const selected = members.find(
+        (tool) => functionTool(tool) && tool.name === 'read_fixture'
+      );
+      assert(functionTool(selected), 'fixture_function_missing');
       assert(requests.length <= 2, 'native_dispatch_count_exceeded');
       if (requests.length === 2) {
         functionRoundTrip = containsFunctionOutput(body.input);
@@ -210,6 +292,7 @@ async function scenario(
               type: 'function_call',
               id: 'qualification-function',
               call_id: 'qualification-call',
+              namespace: 'mcp__reviewrouter',
               name: selected.name,
               arguments: '{}',
               status: 'completed',
@@ -467,7 +550,8 @@ async function scenario(
         body.reasoning === undefined ? 'omitted' : 'empty_object'
       ),
       omittedServiceTier: true,
-      functionToolsOnly: true,
+      functionLeavesOnly: true,
+      toolEnvelopes: requests.map(({ body }) => toolEnvelopeReceipt(body)),
       exitCode,
     };
   } catch (error) {

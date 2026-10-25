@@ -37,6 +37,11 @@ const CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES = {
     'INPUT_CLAUDE_CODE_OAUTH_TOKEN',
   ],
   openRouterApiKey: ['INPUT_OPENROUTER-API-KEY', 'INPUT_OPENROUTER_API_KEY'],
+  mimoTokenPlanApiKey: [
+    'INPUT_MIMO-TOKEN-PLAN-API-KEY',
+    'INPUT_MIMO_TOKEN_PLAN_API_KEY',
+  ],
+  kimiCodeApiKey: ['INPUT_KIMI-CODE-API-KEY', 'INPUT_KIMI_CODE_API_KEY'],
 } as const;
 
 export type CodexRotatingProviderSecretInputs = {
@@ -130,6 +135,8 @@ export function clearCodexRotatingProviderSecretEnv(
 ): void {
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
   delete env.OPENROUTER_API_KEY;
+  delete env.MIMO_TOKEN_PLAN_API_KEY;
+  delete env.KIMI_CODE_API_KEY;
 }
 
 export function clearCodexRotatingOidcRequestEnv(

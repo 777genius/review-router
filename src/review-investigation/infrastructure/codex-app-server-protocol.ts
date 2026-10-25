@@ -235,7 +235,9 @@ export class CodexAppServerProtocolClient {
           ...(this.request.reasoningEffort === null
             ? {}
             : {
-                config: { model_reasoning_effort: this.request.reasoningEffort },
+                config: {
+                  model_reasoning_effort: this.request.reasoningEffort,
+                },
               }),
           ephemeral: true,
           environments: [],

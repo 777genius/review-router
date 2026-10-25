@@ -75,6 +75,9 @@ describe('Codex T0 prepared invocation', () => {
     });
     const provider = {
       prepareInvocation: jest.fn().mockResolvedValue(prepared),
+      describePreparedEnvironmentContract: jest
+        .fn()
+        .mockReturnValue({ PATH: '/usr/bin' }),
     } as unknown as CodexProvider;
     const promptBuilder = {
       buildPreparedV2: jest.fn().mockResolvedValue({

@@ -632,6 +632,79 @@ describe('compact summary publication contract', () => {
   const outsideDetails = (markdown: string) =>
     markdown.replace(/<details>[\s\S]*?<\/details>/g, '');
 
+  it('joins rechecked history by stable identity and keeps unknown history neutral', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [
+        { ...finding, lineageId: 'new', title: 'New defect' },
+        {
+          ...finding,
+          lineageId: 'prior',
+          previous: true,
+          title: 'Reconfirmed defect',
+        },
+        {
+          ...finding,
+          lineageId: 'changed',
+          previous: true,
+          title: 'Changed defect',
+        },
+      ],
+      lifecycle: [
+        {
+          lineageId: 'prior',
+          kind: 'active',
+          title: 'Reconfirmed defect',
+          message: 'Same occurrence in history.',
+          locationLabel: 'src/auth.ts:44',
+        },
+        {
+          kind: 'active',
+          title: 'Legacy finding without a detailed counterpart',
+          message: 'Still valid.',
+          locationLabel: 'src/legacy.ts:2',
+        },
+        {
+          lineageId: 'inconclusive',
+          kind: 'uncertain',
+          title: 'Previous inconclusive result',
+          message:
+            'The provider attempted revalidation but could not establish a result.',
+          locationLabel: 'src/old.ts:3',
+        },
+        {
+          lineageId: 'unattempted',
+          kind: 'carried',
+          title: 'Previous finding outside scope',
+          message: 'Not attempted in this run.',
+          locationLabel: 'src/other.ts:4',
+        },
+      ],
+    });
+    const visible = outsideDetails(markdown);
+    const rechecked = visible
+      .split('### 3 previous issues rechecked')[1]
+      .split('### 2 previous issues not verified')[0];
+    expect(visible).toContain('### 1 new');
+    expect(visible.match(/Reconfirmed defect/g)).toHaveLength(1);
+    expect(visible.match(/### 3 previous issues rechecked/g)).toHaveLength(1);
+    expect(rechecked).toContain('Changed defect');
+    expect(rechecked).toContain(
+      'Legacy finding without a detailed counterpart'
+    );
+    expect(visible).toContain('### 2 previous issues not verified');
+    expect(visible).toContain('Previous inconclusive result');
+    expect(visible).toContain('Previous finding outside scope');
+    expect(visible).not.toMatch(
+      /needs attention|not rechecked|carried, not revalidated/
+    );
+    expect(markdown).toContain(
+      'The provider attempted revalidation but could not establish a result.'
+    );
+    expect(markdown).toContain('Not attempted in this run.');
+  });
+
   it('compacts an OCR paragraph-derived title without repeating it or changing the finding', () => {
     const message =
       'The `* line.quantity` factor was dropped, so the subtotal only sums unit prices. ' +
@@ -678,6 +751,36 @@ describe('compact summary publication contract', () => {
     expect(visible).not.toContain('`');
     expect(markdown).toContain(normalized.message);
     expect(JSON.stringify(normalized)).toBe(original);
+  });
+
+  it('starts the preview at a complete sentence after a long derived title', () => {
+    const message =
+      '`Math.round` rounds ties toward +Infinity, so tie cases are asymmetric between charges and credits: `Math.round(0.5) === 1` but `Math.round(-0.5) === -0`. For example, `calculateTax(1, 0.5)` returns `0.01` while `calculateTax(-1, 0.5)` returns `0` instead of `-0.01`.';
+    const normalized = normalizeOcrFindings({
+      comments: [
+        {
+          path: 'src/tax.js',
+          content: message,
+          severity: 'low',
+          category: 'bug',
+          existingCode: null,
+          suggestionCode: null,
+          startLine: null,
+          endLine: null,
+        },
+      ],
+      headFiles: new Map(),
+    }).findings[0];
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics: { ...metrics, critical: 0, minor: 1 },
+      findings: [normalized],
+    });
+    const visible = outsideDetails(markdown);
+    expect(visible).toContain('Math.round rounds ties toward +Infinity');
+    expect(visible).not.toMatch(/\n\n1 but/);
+    expect(visible).toContain('\n\nFor example, calculateTax');
+    expect(markdown).toContain(message);
   });
 
   it.each(['en', 'zh'])(
@@ -1175,7 +1278,8 @@ describe('compact summary publication contract', () => {
     expect(visible).toContain('1 of 2 review providers failed.');
     expect(visible).toContain('Required auth.ts was not reviewed.');
     expect(visible).toContain('A human reply requires attention.');
-    expect(visible).toContain('needs attention');
+    expect(visible).toContain('1 previous issue not verified');
+    expect(visible).not.toContain('needs attention');
     expect(visible).toContain('Previous authentication issue');
     expect(visible).toContain(
       'Full findings remain in the review JSON artifact.'
@@ -1302,7 +1406,7 @@ describe('compact summary publication contract', () => {
     );
     expect(markdown).toContain('## Review incomplete');
     expect(markdown).toContain(
-      '1 new · 2 resolved · 2 open · 1 unverified (included in open)'
+      '1 new · 2 resolved · 1 confirmed open · 1 previous issue not verified'
     );
     expect(markdown).toContain('width="100%"');
     expect(markdown).not.toMatch(/height=|width="640"/);

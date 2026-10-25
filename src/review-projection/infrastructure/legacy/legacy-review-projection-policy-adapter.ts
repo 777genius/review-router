@@ -349,9 +349,13 @@ export class LegacyReviewProjectionPolicyAdapter
           : {}),
         language: this.config.outputLanguage,
         reviewPresentation: query.reviewPresentation,
-        findings: currentOccurrences
-          .map(toLegacyFinding)
-          .map(toReviewerSummaryFinding),
+        findings: currentOccurrences.map((occurrence) => ({
+          ...toReviewerSummaryFinding(toLegacyFinding(occurrence)),
+          lineageId: occurrence.lineageId,
+          previous:
+            query.reviewPresentation?.variant === 'update' &&
+            occurrence.state !== FindingOccurrenceState.New,
+        })),
         metrics: review.metrics,
         incomplete,
         incompleteCauses: query.incompleteCauses,
@@ -573,6 +577,7 @@ function lifecycleLinesForSummary(
     if (fact) representedTargetIds.add(fact.targetId);
     lines.push({
       kind,
+      lineageId: occurrence.lineageId,
       title: occurrence.title,
       message: fact
         ? `${occurrence.message} (${attentionReasons.get(fact.targetId)})`
@@ -601,6 +606,7 @@ function lifecycleLinesForSummary(
     if (!target) continue;
     lines.push({
       kind: 'uncertain',
+      ...(fact.lineageId ? { lineageId: fact.lineageId } : {}),
       title: target.title,
       message: `${target.message} (${attentionReasons.get(fact.targetId)})`,
       locationLabel: findingLocationLabel({

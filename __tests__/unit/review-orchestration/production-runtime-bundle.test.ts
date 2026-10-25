@@ -1,8 +1,10 @@
 import { readFileSync } from 'fs';
 
 type ProductionSourceMap = Readonly<{
+  version: number;
   sources: readonly string[];
-  sourcesContent: readonly (string | null)[];
+  mappings: string;
+  sourcesContent?: readonly (string | null)[];
 }>;
 
 const bundledReviewSources = Object.freeze([
@@ -58,8 +60,19 @@ describe('committed production review runtime bundle', () => {
     expect(source).not.toContain('readCodexRotatingProviderSecretInputs');
   });
 
+  it('retains source-map metadata without embedding duplicate source text', () => {
+    const sourceMap = JSON.parse(
+      readFileSync('dist/index.js.map', 'utf8')
+    ) as ProductionSourceMap;
+
+    expect(sourceMap.version).toBe(3);
+    expect(sourceMap.mappings.length).toBeGreaterThan(0);
+    expect(sourceMap.sourcesContent).toBeUndefined();
+  });
+
+  // CI's normal rebuild and clean-tree gate verify exact source/artifact freshness.
   it.each(bundledReviewSources)(
-    'embeds current source for %s',
+    'retains source mappings for %s',
     (sourcePath) => {
       const sourceMap = JSON.parse(
         readFileSync('dist/index.js.map', 'utf8')
@@ -68,9 +81,6 @@ describe('committed production review runtime bundle', () => {
       const sourceIndex = sourceMap.sources.indexOf(bundledPath);
 
       expect(sourceIndex).toBeGreaterThanOrEqual(0);
-      expect(sourceMap.sourcesContent[sourceIndex]).toBe(
-        readFileSync(sourcePath, 'utf8')
-      );
     }
   );
 });

@@ -2,6 +2,7 @@ import {
   projectReviewSkillsForPaths,
   type ReviewSkillsExecutionInput,
 } from '../../review-skills/review-skills';
+import type { FreshReviewSkillsSupply } from '../../review-skills/review-skills-receipt';
 import { CONTEXT_TOOLS_PROFILE } from '../../context-tools/contract';
 import {
   ReviewInvocationConfigurationMismatchError,
@@ -168,6 +169,7 @@ export type OcrReviewInvocationOptions = Readonly<{
   /** Controlled additive rule text; also the full reviewPrompt (§4.2). */
   ruleText: string;
   reviewSkills?: ReviewSkillsExecutionInput;
+  freshReviewSkillsSupply?: (supply: FreshReviewSkillsSupply) => void;
   /** Untrusted PR business context; repository text, never tool policy. */
   backgroundText: string | null;
   checkoutRoot: string;
@@ -941,6 +943,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
   private async runInvocation(
     input: {
       readonly invocation: PreparedReviewInvocation;
+      readonly manifest: ProviderInvocationManifest;
       readonly signal: AbortSignal;
       readonly lease: ReviewInvocationLease;
       readonly currentLease?: () => ReviewInvocationLease;
@@ -968,6 +971,8 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     this.options.contextTools?.beginNativeSession();
     let processResult: OcrReviewProcessResult;
     this.dispatchedSlots.add(assignment.workSlot.workSlotId);
+    const requestsBefore = this.options.bridge.requestCount();
+    let requestsAfter: number | undefined;
     try {
       processResult = await this.options.processRunner({
         binaryPath: this.options.binaryPath,
@@ -980,6 +985,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         cwd: this.options.run.runDirectory,
         signal: input.signal,
       });
+      requestsAfter = this.options.bridge.requestCount();
     } finally {
       const receipt = this.options.contextTools?.receipt();
       if (receipt)
@@ -1101,6 +1107,23 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     // explicitly with the shared output-too-large error, never silently.
     if (observation.byteCount > OCR_NORMALIZATION_LIMITS.maxPayloadBytes) {
       throw new OcrOutputTooLargeError('payload');
+    }
+    if (
+      typeof requestsBefore === 'number' &&
+      Number.isFinite(requestsBefore) &&
+      requestsBefore >= 0 &&
+      typeof requestsAfter === 'number' &&
+      Number.isFinite(requestsAfter) &&
+      requestsAfter > requestsBefore
+    ) {
+      try {
+        this.options.freshReviewSkillsSupply?.({
+          providerInvocationKey: input.manifest.providerInvocationKey,
+          payloadHash: observation.payloadHash,
+        });
+      } catch {
+        /* Optional local reporting never changes engine acceptance. */
+      }
     }
     return observation;
   }

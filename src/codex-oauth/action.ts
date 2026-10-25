@@ -1,4 +1,8 @@
 import * as fs from 'fs';
+import {
+  ReviewSkillsMaterializationError,
+  renderReviewSkillsDiagnosticText,
+} from '../review-skills/review-skills-error';
 import { runProviderApiRuntime } from './provider-api-runtime';
 import { providerApiCheckoutCompanionContract } from '../control-plane/generated/review-action-v2/companion-contracts';
 import {
@@ -720,6 +724,30 @@ type V2ActionFailure = Readonly<{
 }>;
 
 function classifyV2ActionFailure(error: unknown): V2ActionFailure {
+  if (error instanceof ReviewSkillsMaterializationError) {
+    const failure = error;
+    return {
+      code: failure.code,
+      report: (inputs) =>
+        terminalOutcomeReport({
+          inputs,
+          kind: CodexOAuthTerminalOutcomeKind.Failed,
+          title: 'Repository Skills need attention',
+          summary:
+            'ReviewRouter could not load the captured repository Skills. Review inference did not start.',
+          rows: [
+            ['Failure code', failure.code],
+            ...Object.entries(failure.diagnostic).map(
+              ([field, value]) =>
+                [field, renderReviewSkillsDiagnosticText(value)] as const
+            ),
+          ],
+          note: failure.remediation,
+          statusState: 'error',
+          statusDescription: 'Review failed: repository Skills need attention.',
+        }),
+    };
+  }
   if (
     !(error instanceof ReviewActionV2ClientError) &&
     error instanceof Error &&

@@ -658,7 +658,7 @@ describe('production reusable workflows', () => {
     }
   );
 
-  it('traces the MiMo token secret through the legacy-only workflow contract', () => {
+  it('confines the MiMo token secret to direct provider API and legacy execution', () => {
     const secretName = 'MIMO_TOKEN_PLAN_API_KEY';
     const secretExpression = '${{ secrets.MIMO_TOKEN_PLAN_API_KEY }}';
     const parentWorkflow = parseWorkflow(
@@ -704,6 +704,12 @@ describe('production reusable workflows', () => {
     );
     expect(childWorkflow.jobs?.review?.env).not.toHaveProperty(secretName);
     expect(traceSecretEnvBindings(childWorkflow, secretName)).toEqual([
+      {
+        job: 'review',
+        step: 'Run ReviewRouter T0 provider API',
+        environmentVariable: `INPUT_${secretName}`,
+        value: secretExpression,
+      },
       {
         job: 'review',
         step: 'Run ReviewRouter legacy',

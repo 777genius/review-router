@@ -11,12 +11,14 @@ const auditedActionShas: Readonly<Record<string, string>> = {
   'actions/create-github-app-token': 'bcd2ba49218906704ab6c1aa796996da409d3eb1',
   'actions/setup-go': 'b7ad1dad31e06c5925ef5d2fc7ad053ef454303e',
   'actions/setup-node': '820762786026740c76f36085b0efc47a31fe5020',
+  'actions/upload-artifact': 'ea165f8d65b6e75b540449e92b4886f43607fa02',
 };
 const auditedExternalUseCounts: Readonly<Record<string, number>> = {
-  [checkoutActionReference]: 16,
+  [checkoutActionReference]: 17,
   'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1': 2,
   'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e': 1,
-  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 11,
+  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 12,
+  'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02': 1,
 };
 const checkoutCredentialException = {
   workflow: 'release.yml',
@@ -142,7 +144,7 @@ describe('workflow security and release', () => {
         (total, count) => total + count,
         0
       )
-    ).toBe(30);
+    ).toBe(33);
   });
 
   it('finds semantic uses keys without scanning block scalar text', () => {

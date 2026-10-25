@@ -377,6 +377,7 @@ describe('OcrReviewInvocationAdapter', () => {
   }
 
   function adapterFixture(options: {
+    readonly freshReviewSkillsSupply?: import('../../../src/review-orchestration/infrastructure/ocr-review-invocation-adapter').OcrReviewInvocationOptions['freshReviewSkillsSupply'];
     readonly contextTools?: Pick<
       ContextToolsBroker,
       'receipt' | 'beginNativeSession'
@@ -439,6 +440,7 @@ describe('OcrReviewInvocationAdapter', () => {
       processRunner: options.processRunner,
       previewRunner: options.previewRunner,
       acceptanceDiagnostic: options.acceptanceDiagnostic,
+      freshReviewSkillsSupply: options.freshReviewSkillsSupply,
     });
     return {
       adapter,
@@ -473,6 +475,42 @@ describe('OcrReviewInvocationAdapter', () => {
       signal: signal ?? new AbortController().signal,
     };
   }
+
+  it.each([
+    { before: 0, after: 1, witnessed: true },
+    { before: 9, after: 9, witnessed: false },
+    { before: undefined, after: undefined, witnessed: false },
+    { before: undefined, after: 2, witnessed: false },
+    { before: Number.NaN, after: 2, witnessed: false },
+    { before: 2, after: Number.POSITIVE_INFINITY, witnessed: false },
+  ])(
+    'requires a finite positive request delta around dispatch: $before → $after',
+    async ({ before, after, witnessed }) => {
+      let count = before;
+      const bridge = bridgeFixture({ requestCount: () => count }).bridge;
+      const runner = processRunnerWriting(nativeResultBody());
+      const freshReviewSkillsSupply = jest.fn();
+      const { adapter, workSlot } = adapterFixture({
+        bridge,
+        previewRunner: previewRunner().runner,
+        freshReviewSkillsSupply,
+        processRunner: async (input) => {
+          const result = await runner.runner(input);
+          count = after;
+          return result;
+        },
+      });
+      const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+      expect(freshReviewSkillsSupply).not.toHaveBeenCalled();
+      const observation = await adapter.execute(executionInput(prepared));
+      expect(freshReviewSkillsSupply).toHaveBeenCalledTimes(witnessed ? 1 : 0);
+      if (witnessed)
+        expect(freshReviewSkillsSupply).toHaveBeenCalledWith({
+          providerInvocationKey: 'pk',
+          payloadHash: observation.payloadHash,
+        });
+    }
+  );
 
   const unusedRunner: OcrReviewProcessRunner = async () => {
     throw new Error('execute must not run on this path');

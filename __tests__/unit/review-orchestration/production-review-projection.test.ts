@@ -1,6 +1,16 @@
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import type { TargetWitness } from '../../../src/finding-revalidation';
 import { lifecycleVerificationDescriptorDigest } from '../../../src/control-plane/generated/review-action-v2/companion-contracts';
+import {
+  ReviewSkillsReceiptCollector,
+  REVIEW_SKILLS_RECEIPT_UNAVAILABLE,
+} from '../../../src/review-skills/review-skills-receipt';
+import { createCapturedReviewSkills } from '../../../src/control-plane/generated/review-action-v2/review-skills-contract';
+import {
+  createMaterializedReviewSkills,
+  LEGACY_REVIEW_SKILLS,
+} from '../../../src/review-skills/review-skills';
+import { CurrentReviewProjectionBuilderAdapter } from '../../../src/review-orchestration/infrastructure/current-review-projection-builder-adapter';
 import { acceptOcrManagedReviewResult } from '../../../src/review-orchestration/infrastructure/ocr-review-managed-run';
 import type { OcrNativeComment } from '../../../src/review-orchestration/infrastructure/ocr-review-outcome-contract';
 import { normalizeReviewObservation } from '../../../src/review-orchestration/infrastructure/review-observation-normalizer';
@@ -27,6 +37,165 @@ import {
 } from '../../../src/review-projection/domain';
 
 describe('production review projection coverage', () => {
+  it('freezes a private-safe receipt into the real canonical publication before hashing', async () => {
+    const collector = new ReviewSkillsReceiptCollector();
+    const skills = createMaterializedReviewSkills(
+      createCapturedReviewSkills({
+        baseSha: pr.baseSha,
+        gitSources: [],
+        webSkills: [
+          {
+            skillId: 'PRIVATE_ID',
+            revisionId: 'PRIVATE_REVISION',
+            sourceWorkspaceId: 'PRIVATE_WORKSPACE',
+            name: 'PRIVATE_NAME',
+            description: 'PRIVATE_DESCRIPTION',
+            instructions: 'PRIVATE_BODY',
+            includePaths: ['**'],
+            excludePaths: [],
+          },
+        ],
+      }),
+      []
+    );
+    const evidence = acceptedEvidence('slot', fullCoverageManifest('slot'));
+    const command = {
+      acceptedEvidence: [evidence],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    };
+    const core = await projectionBuilder([assignment('slot', true)]).build(
+      command
+    );
+    collector.record({
+      providerInvocationKey: evidence.observation.providerInvocationKey,
+      payloadHash: evidence.observation.payloadHash,
+      paths: ['src/a.ts'],
+    });
+    const withReceipt = await projectionBuilder([assignment('slot', true)], {
+      skillsReceipt: {
+        render: (acceptedEvidence) =>
+          collector.render({
+            skills,
+            changedPaths: ['src/a.ts'],
+            acceptedEvidence,
+          }),
+        unavailable: jest.fn(),
+      },
+    }).build(command);
+    const envelope = JSON.parse(withReceipt.projectionEnvelopeCanonicalJson);
+    expect(envelope.publishing.summary.body).toContain(
+      'Instructions supplied with accepted review evidence from this run: 1'
+    );
+    expect(envelope.publishing.check.summary).toContain(
+      '<summary>Review skills</summary>'
+    );
+    expect(withReceipt.operationsCanonicalJson).toContain('Captured identity:');
+    expect(withReceipt.projectionHash).not.toBe(core.projectionHash);
+    expect(withReceipt.artifactHash).not.toBe(core.artifactHash);
+    expect(withReceipt.projectionEnvelopeCanonicalJson).not.toContain(
+      'PRIVATE_'
+    );
+    for (const input of [
+      LEGACY_REVIEW_SKILLS,
+      createMaterializedReviewSkills(
+        createCapturedReviewSkills({
+          baseSha: pr.baseSha,
+          webSkills: [],
+          gitSources: [],
+        }),
+        []
+      ),
+    ]) {
+      const unchanged = await projectionBuilder([assignment('slot', true)], {
+        skillsReceipt: {
+          render: (acceptedEvidence) =>
+            collector.render({
+              skills: input,
+              changedPaths: ['src/a.ts'],
+              acceptedEvidence,
+            }),
+          unavailable: jest.fn(),
+        },
+      }).build(command);
+      expect(unchanged).toEqual(core);
+    }
+  });
+
+  it.each(['summary', 'check', 'projection', 'operations'] as const)(
+    'falls back atomically when the %s byte budget cannot hold a full receipt',
+    async (limit) => {
+      const command = {
+        acceptedEvidence: [
+          acceptedEvidence('slot', fullCoverageManifest('slot')),
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      };
+      const core = await projectionBuilder([assignment('slot', true)]).build(
+        command
+      );
+      const envelope = JSON.parse(core.projectionEnvelopeCanonicalJson);
+      const unavailable = jest.fn();
+      const limits = {
+        maxSummaryBytes: 65_000,
+        maxCheckSummaryBytes: 65_000,
+        maxProjectionBytes: 200_000,
+        maxPublicationBodyBytes: 200_000,
+      };
+      const property = {
+        summary: 'maxSummaryBytes',
+        check: 'maxCheckSummaryBytes',
+        projection: 'maxProjectionBytes',
+        operations: 'maxPublicationBodyBytes',
+      }[limit] as keyof typeof limits;
+      const originalSize = Buffer.byteLength(
+        limit === 'summary'
+          ? envelope.publishing.summary.body
+          : limit === 'check'
+            ? envelope.publishing.check.summary
+            : limit === 'projection'
+              ? core.projectionEnvelopeCanonicalJson
+              : core.operationsCanonicalJson
+      );
+      limits[property] =
+        originalSize +
+        (limit === 'projection' || limit === 'operations' ? 500 : 100);
+      const build = () =>
+        new CurrentReviewProjectionBuilderAdapter(
+          {
+            execute: async () => ({
+              envelope,
+              canonicalJson: core.projectionEnvelopeCanonicalJson,
+              projectionHash: core.projectionHash,
+              findingCount: core.findingCount,
+            }),
+          } as never,
+          {
+            create: async () => ({
+              scope: {
+                reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+              },
+            }),
+          } as never,
+          undefined,
+          { render: () => 'RECEIPT_SENTINEL'.repeat(500), limits, unavailable }
+        ).build(command);
+      const compact = await build();
+      expect(compact.operationsCanonicalJson).toContain(
+        REVIEW_SKILLS_RECEIPT_UNAVAILABLE
+      );
+      expect(compact.operationsCanonicalJson).not.toContain('RECEIPT_SENTINEL');
+      expect(unavailable).not.toHaveBeenCalled();
+      limits[property] = originalSize;
+      const unchanged = await build();
+      expect(unchanged.operationsCanonicalJson).toBe(
+        core.operationsCanonicalJson
+      );
+      expect(unchanged.projectionHash).toBe(core.projectionHash);
+      expect(unavailable).toHaveBeenCalledTimes(1);
+    }
+  );
   it.each([
     { kind: 'concrete', eligible: true, mode: 'resolve' as const },
     { kind: 'concrete', eligible: false, mode: 'report' as const },
@@ -1408,7 +1577,10 @@ function projectionBuilder(
     providerKind: ReviewExecutionProviderKind;
     required: boolean;
     filePaths: string[];
-  }>
+  }>,
+  extra: Partial<
+    Parameters<typeof createProductionReviewProjectionBuilder>[0]
+  > = {}
 ) {
   return createProductionReviewProjectionBuilder({
     authorizationFacts,
@@ -1419,6 +1591,7 @@ function projectionBuilder(
     uncoveredPaths: [],
     uncoveredLifecycleTargetIds: [],
     lifecycleInventory: completeLifecycleInventory(),
+    ...extra,
   });
 }
 

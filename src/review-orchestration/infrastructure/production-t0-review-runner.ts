@@ -1,6 +1,14 @@
 import type { ReviewAgentProfile } from '../../control-plane/generated/review-action-v2/review-agent-profile';
 import { fetchCapturedReviewSkills } from '../../review-skills/review-skills-transport';
-import { materializeReviewSkills } from '../../review-skills/materialize-review-skills';
+import {
+  materializeReviewSkills,
+  materializeReviewSkillsWithDiagnostics,
+} from '../../review-skills/materialize-review-skills';
+import {
+  ReviewSkillsReceiptCollector,
+  observeNativeReviewSkillsSupply,
+  REVIEW_SKILLS_RECEIPT_UNAVAILABLE,
+} from '../../review-skills/review-skills-receipt';
 import {
   LEGACY_REVIEW_SKILLS,
   assertReviewSkillsExecutionInput,
@@ -11,6 +19,7 @@ import { tmpdir } from 'os';
 import { UsageDelivery } from '../../provider-usage/delivery';
 import { uploadUsageArtifact } from '../../provider-usage/github-artifact';
 import { writeFile } from 'node:fs/promises';
+import { appendFileSync } from 'node:fs';
 import { prepareOcrContextTools } from '../../context-tools/ocr-session';
 import {
   CONTEXT_TOOLS_PLAN_ENV,
@@ -470,9 +479,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         ],
       });
       const admittedAgent = approvedOcrAgent ?? approvedAgent;
-      const reviewSkills: ReviewSkillsExecutionInput =
+      const skillsMaterialization =
         admittedAgent?.reviewSkillsVersion === 1
-          ? await materializeReviewSkills({
+          ? await materializeReviewSkillsWithDiagnostics({
               capture: await fetchCapturedReviewSkills({
                 apiUrl: input.apiUrl,
                 authorizationToken: authorization.authorizationToken,
@@ -485,7 +494,33 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               checkoutRoot: path.resolve(input.workspacePath),
               signal,
             })
-          : LEGACY_REVIEW_SKILLS;
+          : { executionInput: LEGACY_REVIEW_SKILLS, gitRoots: [] };
+      const reviewSkills = skillsMaterialization.executionInput;
+      const skillsReceiptCollector = new ReviewSkillsReceiptCollector();
+      const skillsReceipt = {
+        render: (
+          acceptedEvidence: readonly import('../application').AcceptedReviewWorkSlotEvidence[]
+        ) =>
+          skillsReceiptCollector.render({
+            skills: reviewSkills,
+            gitRoots: skillsMaterialization.gitRoots,
+            changedPaths: pr.files.map((file) => file.filename),
+            acceptedEvidence,
+          }),
+        unavailable: () => {
+          core.warning(REVIEW_SKILLS_RECEIPT_UNAVAILABLE);
+          try {
+            if (process.env.GITHUB_STEP_SUMMARY)
+              appendFileSync(
+                process.env.GITHUB_STEP_SUMMARY,
+                `\n${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}\n`,
+                'utf8'
+              );
+          } catch {
+            /* Optional diagnostics cannot change publication. */
+          }
+        },
+      };
       assertReviewSkillsExecutionInput(
         reviewSkills,
         admittedAgent ?? {},
@@ -713,6 +748,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               modelReasoningEffort: ocrModelReasoningEffort,
               language: ocrLanguage,
               reviewSkills,
+              freshReviewSkillsSupply: (supply) =>
+                skillsReceiptCollector.record(supply),
               ruleText:
                 reviewSkills.kind === 'legacy'
                   ? buildOcrControlledRuleText({
@@ -817,6 +854,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               ...(lifecycle?.lifecycleVerification
                 ? { lifecycleVerification: lifecycle.lifecycleVerification }
                 : {}),
+              skillsReceipt,
             }),
             identities,
             clock: new SystemReviewOrchestrationClock(),
@@ -1206,6 +1244,15 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         core.warning(
           'AI PR description omitted: no optional task budget remains.'
         );
+      const nativeDiscoveryInvocations = observeNativeReviewSkillsSupply(
+        invocationAdapter,
+        skillsReceiptCollector,
+        () =>
+          (
+            input.providerApi?.modelTransport ??
+            input.accountGateway?.modelTransport
+          )?.requestCount?.()
+      );
       const useCase = new RunT0ReviewOrchestration({
         ...(prDescription ? { prDescription } : {}),
         controlPlane,
@@ -1222,10 +1269,13 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           )
         ),
         invocations: preplanningRestore?.persistedPlan
-          ? restoredLifecycleInvocations(preplanningRestore, invocationAdapter)
+          ? restoredLifecycleInvocations(
+              preplanningRestore,
+              nativeDiscoveryInvocations
+            )
           : lifecycle && lifecycleCapability
             ? compositeLifecycleInvocations({
-                discovery: invocationAdapter,
+                discovery: nativeDiscoveryInvocations,
                 packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
                 capability: lifecycleCapability,
                 outputCap: lifecycle.outputCap,
@@ -1233,7 +1283,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
                 transport: input.accountGateway!.modelTransport,
               })
-            : invocationAdapter,
+            : nativeDiscoveryInvocations,
         ...(investigationInvocationAdapter
           ? { investigationInvocations: investigationInvocationAdapter }
           : {}),
@@ -1270,6 +1320,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           ...(lifecycle?.lifecycleVerification
             ? { lifecycleVerification: lifecycle.lifecycleVerification }
             : {}),
+          skillsReceipt,
         }),
         ...(contextGateway
           ? {

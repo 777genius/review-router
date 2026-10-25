@@ -211765,6 +211765,7 @@ async function materializeReviewSkillsWithDiagnostics(input) {
             source.budget
           );
         } catch (error4) {
+          input.signal?.throwIfAborted();
           const attributed = attributeReviewSkillsError(error4, {
             baseSha: input.baseSha
           });

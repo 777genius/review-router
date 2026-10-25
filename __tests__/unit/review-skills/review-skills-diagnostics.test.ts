@@ -140,6 +140,66 @@ describe('repository Skills diagnostic boundaries', () => {
     });
   });
 
+  it('preserves cancellation during a Markdown reference read', async () => {
+    fs.writeFileSync(
+      path.join(repo, source),
+      '---\nname: review\ndescription: Review\n---\nRead [rules](rules.md).'
+    );
+    fs.writeFileSync(
+      path.join(repo, '.agents/skills/review/rules.md'),
+      'Reference instructions.'
+    );
+    const baseSha = commit();
+    const referenceOid = git(
+      'rev-parse',
+      `${baseSha}:.agents/skills/review/rules.md`
+    );
+    const controller = new AbortController();
+    const reason = new Error('account_gateway_cancelled');
+    try {
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('node:util', () => {
+          const actual =
+            jest.requireActual<typeof import('node:util')>('node:util');
+          return {
+            ...actual,
+            promisify: (fn: Parameters<typeof actual.promisify>[0]) => {
+              const invoke = actual.promisify(fn);
+              return (...args: unknown[]) => {
+                const argv = args[1];
+                if (
+                  Array.isArray(argv) &&
+                  argv.includes('cat-file') &&
+                  argv.includes('blob') &&
+                  argv.at(-1) === referenceOid
+                )
+                  controller.abort(reason);
+                return invoke(...args);
+              };
+            },
+          };
+        });
+        const materializer =
+          await import('../../../src/review-skills/materialize-review-skills');
+        await expect(
+          materializer.materializeReviewSkillsWithDiagnostics({
+            capture: createCapturedReviewSkills({
+              baseSha,
+              webSkills: [],
+              gitSources: [{ root: '.agents/skills' }],
+            }),
+            baseSha,
+            checkoutRoot: repo,
+            signal: controller.signal,
+          })
+        ).rejects.toBe(reason);
+        expect(controller.signal.aborted).toBe(true);
+      });
+    } finally {
+      jest.dontMock('node:util');
+    }
+  });
+
   it('attributes fatal UTF-8 at the tree enumeration boundary', async () => {
     fs.writeFileSync(
       Buffer.concat([Buffer.from(`${repo}/`), Buffer.from([255])]),

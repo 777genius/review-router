@@ -368,6 +368,7 @@ export async function materializeReviewSkillsWithDiagnostics(input: {
             source.budget
           );
         } catch (error) {
+          input.signal?.throwIfAborted();
           // Source and requested reference are useful; no raw read/parser error is retained.
           const attributed = attributeReviewSkillsError(error, {
             baseSha: input.baseSha,

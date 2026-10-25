@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { REVIEW_SKILLS_RECEIPT_UNAVAILABLE } from '../../review-skills/review-skills-receipt';
 import {
   BuildCurrentReviewProjection,
   type BuildCurrentReviewProjectionCommand,
@@ -37,6 +38,18 @@ export class CurrentReviewProjectionBuilderAdapter implements CurrentReviewProje
     private readonly commands: ReviewProjectionCommandFactoryPort,
     private readonly description?: {
       limits: ReviewProtocolLimits;
+      unavailable(): void;
+    },
+    private readonly skillsReceipt?: {
+      render(
+        evidence: readonly AcceptedReviewWorkSlotEvidence[]
+      ): string | undefined;
+      limits: {
+        maxSummaryBytes: number;
+        maxCheckSummaryBytes: number;
+        maxProjectionBytes: number;
+        maxPublicationBodyBytes: number;
+      };
       unavailable(): void;
     }
   ) {}
@@ -77,6 +90,43 @@ export class CurrentReviewProjectionBuilderAdapter implements CurrentReviewProje
         projectionCanonicalJson = candidateJson;
         projectionHash = hashReviewProjectionCanonicalJson(candidateJson);
       } else this.description.unavailable();
+    }
+    const receipt = this.skillsReceipt?.render(input.acceptedEvidence);
+    if (receipt && this.skillsReceipt) {
+      let appended = false;
+      for (const block of [receipt, REVIEW_SKILLS_RECEIPT_UNAVAILABLE]) {
+        const summaryBody = `${envelope.publishing.summary.body}\n\n${block}`;
+        const checkSummary = `${envelope.publishing.check.summary}\n\n${block}`;
+        if (
+          Buffer.byteLength(summaryBody) >
+            this.skillsReceipt.limits.maxSummaryBytes ||
+          Buffer.byteLength(checkSummary) >
+            this.skillsReceipt.limits.maxCheckSummaryBytes
+        )
+          continue;
+        const candidate = {
+          ...envelope,
+          publishing: {
+            ...envelope.publishing,
+            summary: { ...envelope.publishing.summary, body: summaryBody },
+            check: { ...envelope.publishing.check, summary: checkSummary },
+          },
+        };
+        const candidateJson = canonicalizeReviewProjection(candidate);
+        if (
+          Buffer.byteLength(candidateJson) >
+            this.skillsReceipt.limits.maxProjectionBytes ||
+          Buffer.byteLength(canonicalJson(candidate.publishing)) >
+            this.skillsReceipt.limits.maxPublicationBodyBytes
+        )
+          continue;
+        envelope = candidate;
+        projectionCanonicalJson = candidateJson;
+        projectionHash = hashReviewProjectionCanonicalJson(candidateJson);
+        appended = true;
+        break;
+      }
+      if (!appended) this.skillsReceipt.unavailable();
     }
     const operationsCanonicalJson = canonicalJson(envelope.publishing);
     const artifactHash = sha256(

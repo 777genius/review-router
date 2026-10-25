@@ -383,6 +383,8 @@ git diff --check
 
 The action bundle is committed in `dist/`, so run `npm run build` before committing code changes that affect the action runtime.
 
+The main Action source map retains file and line mappings without embedding duplicate source text. Viewing original source text in a debugger requires the matching checkout and dependencies.
+
 ## Release Process
 
 Stable installs use the moving major tag `v1`. Do not move it by hand. To publish a release:

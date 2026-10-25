@@ -125261,25 +125261,99 @@ function deepFreeze(value) {
   return value;
 }
 
+// src/review-skills/review-skills-error.ts
+var remedies = {
+  review_skills_capture_mismatch: "Retry with the captured trusted base commit available.",
+  review_skills_git_root_invalid: "Select a supported repository Skills root.",
+  review_skills_git_tree_too_large: "Reduce the number or size of files under this Skills root.",
+  review_skills_git_read_failed: "Ensure the captured base commit and its Git objects are available, then retry.",
+  review_skills_git_path_invalid: "Use repository paths without control characters or backslashes.",
+  review_skills_git_nonregular: "Replace symbolic links and Git links with regular files and directories.",
+  review_skills_git_blob_too_large: "Reduce SKILL.md to 32 KiB or a Markdown reference to 16 KiB.",
+  review_skills_git_text_invalid: "Save this repository file as valid UTF-8 text without NUL characters.",
+  review_skills_count_invalid: "Keep the combined captured set to at most 32 Skills.",
+  review_skills_bundle_too_large: "Reduce the combined instructions and references to at most 256 KiB.",
+  review_skills_frontmatter_invalid: "Provide YAML frontmatter with a nonblank name and description, followed by nonblank instructions.",
+  review_skills_frontmatter_unsupported: "Remove unsupported frontmatter fields. Executable Skills are not supported.",
+  review_skills_reference_missing: "Add the referenced Markdown file or correct its relative link.",
+  review_skills_reference_invalid: "Use unique Markdown reference definitions.",
+  review_skills_reference_unsupported: "Use a supported relative Markdown link without spaces, encoding, or a title.",
+  review_skills_reference_traversal: "Keep each reference inside its originating Skill directory.",
+  review_skills_reference_cycle: "Remove the circular Markdown reference.",
+  review_skills_reference_depth: "Keep Markdown references within four levels.",
+  review_skills_reference_count: "Keep each Skill to at most eight Markdown references."
+};
+function bounded(value) {
+  if (value === void 0) return void 0;
+  const characters = Array.from(value);
+  return characters.slice(0, characters.length > 256 ? 255 : 256).map((character) => {
+    const code = character.codePointAt(0);
+    return code < 32 || code === 127 ? " " : character;
+  }).join("") + (characters.length > 256 ? "\u2026" : "");
+}
+var ReviewSkillsMaterializationError = class extends Error {
+  constructor(code, context5 = {}) {
+    super(code);
+    this.code = code;
+    this.name = "ReviewSkillsMaterializationError";
+    this.remediation = remedies[code];
+    this.diagnostic = Object.freeze({
+      ...context5.baseSha && /^[a-f0-9]{40}$/.test(context5.baseSha) ? { baseSha: context5.baseSha } : {},
+      ...context5.path === void 0 ? {} : { path: bounded(context5.path) },
+      ...context5.field === void 0 ? {} : { field: context5.field },
+      ...context5.reference === void 0 ? {} : { reference: bounded(context5.reference) }
+    });
+  }
+  diagnostic;
+  remediation;
+};
+function attributeReviewSkillsError(error3, context5) {
+  const code = error3 instanceof Error && Object.hasOwn(remedies, error3.message) ? error3.message : "review_skills_git_read_failed";
+  return new ReviewSkillsMaterializationError(code, {
+    ...context5,
+    ...error3 instanceof ReviewSkillsMaterializationError ? error3.diagnostic : {}
+  });
+}
+function renderReviewSkillsDiagnosticText(value) {
+  return `<code>${(bounded(value) ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("`", "&#96;").replaceAll("@", "&#64;").replaceAll("[", "&#91;").replaceAll("]", "&#93;").replaceAll("|", "&#124;")}</code>`;
+}
+
 // src/review-skills/materialize-review-skills.ts
 var run = (0, import_node_util.promisify)(import_node_child_process.execFile);
 var TREE_BYTES = reviewSkillsLimits.treeBytes;
 var decoder = new TextDecoder("utf-8", { fatal: true });
 async function materializeReviewSkills(input) {
+  return (await materializeReviewSkillsWithDiagnostics(input)).executionInput;
+}
+async function materializeReviewSkillsWithDiagnostics(input) {
+  const fail2 = (code, context5 = {}) => {
+    throw new ReviewSkillsMaterializationError(code, {
+      baseSha: input.baseSha,
+      ...context5
+    });
+  };
+  const decode = (bytes, context5) => {
+    try {
+      return decoder.decode(bytes);
+    } catch {
+      return fail2("review_skills_git_text_invalid", context5);
+    }
+  };
+  const gitRoots = [];
   const capture = structuredClone(input.capture);
   if (!/^[a-f0-9]{40}$/.test(input.baseSha) || capture.baseSha !== input.baseSha)
-    throw new Error("review_skills_capture_mismatch");
+    fail2("review_skills_capture_mismatch");
   const trees = /* @__PURE__ */ new Map();
   const charge = (bytes, entries, path19, budget) => {
     if (!budget || !(path19 === budget.root || path19.startsWith(`${budget.root}/`)) || budget.paths.has(path19))
       return;
     if (budget.bytes + bytes > TREE_BYTES || budget.entries + entries > reviewSkillsLimits.treeEntries)
-      throw new Error("review_skills_git_tree_too_large");
+      fail2("review_skills_git_tree_too_large", { path: path19, field: "root" });
     budget.bytes += bytes;
     budget.entries += entries;
     budget.paths.add(path19);
   };
-  const git = async (args, maxBuffer) => {
+  const git = async (args, maxBuffer, path19) => {
     input.signal?.throwIfAborted();
     try {
       const result2 = await run(
@@ -125302,7 +125376,7 @@ async function materializeReviewSkills(input) {
       return result2.stdout;
     } catch {
       input.signal?.throwIfAborted();
-      throw new Error("review_skills_git_read_failed");
+      fail2("review_skills_git_read_failed", { path: path19 });
     }
   };
   const tree = async (oid, path19, budget) => {
@@ -125311,18 +125385,18 @@ async function materializeReviewSkills(input) {
       charge(previous.bytes, previous.entries.length, path19, budget);
       return previous.entries;
     }
-    const bytes = await git(["ls-tree", "-z", oid], TREE_BYTES);
+    const bytes = await git(["ls-tree", "-z", oid], TREE_BYTES, path19);
     let count2 = 0;
     for (const byte of bytes) if (byte === 0) count2++;
     if (count2 > reviewSkillsLimits.treeEntries)
-      throw new Error("review_skills_git_tree_too_large");
+      fail2("review_skills_git_tree_too_large", { path: path19, field: "root" });
     charge(bytes.byteLength, count2, path19, budget);
-    const entries = decoder.decode(bytes).split("\0").filter(Boolean).map((row) => {
+    const entries = decode(bytes, { path: path19, field: "root" }).split("\0").filter(Boolean).map((row) => {
       const matched = /^(\d{6}) (blob|tree|commit) ([a-f0-9]{40})\t([^\0]+)$/u.exec(row);
       if (!matched || [...matched[4]].some(
         (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 || character === "/" || character === "\\"
       ))
-        throw new Error("review_skills_git_path_invalid");
+        fail2("review_skills_git_path_invalid", { path: path19, field: "root" });
       return {
         mode: matched[1],
         type: matched[2],
@@ -125331,7 +125405,7 @@ async function materializeReviewSkills(input) {
       };
     });
     if (entries.length > reviewSkillsLimits.treeEntries)
-      throw new Error("review_skills_git_tree_too_large");
+      fail2("review_skills_git_tree_too_large", { path: path19, field: "root" });
     trees.set(oid, { entries, bytes: bytes.byteLength });
     return entries;
   };
@@ -125346,7 +125420,7 @@ async function materializeReviewSkills(input) {
       if (!entry) return null;
       if (i === parts.length - 1) return entry;
       if (entry.mode !== "040000" || entry.type !== "tree")
-        throw new Error("review_skills_git_nonregular");
+        fail2("review_skills_git_nonregular", { path: path19 });
       oid = entry.oid;
       directory = directory ? `${directory}/${parts[i]}` : parts[i];
     }
@@ -125354,25 +125428,29 @@ async function materializeReviewSkills(input) {
   };
   const read = async (path19, limit, budget) => {
     const entry = await find(path19, budget);
-    if (!entry) throw new Error("review_skills_reference_missing");
+    if (!entry)
+      fail2("review_skills_reference_missing", { path: path19, field: "reference" });
     if (!/^100(?:644|755)$/.test(entry.mode) || entry.type !== "blob")
-      throw new Error("review_skills_git_nonregular");
+      fail2("review_skills_git_nonregular", { path: path19 });
     const size = Number(
-      decoder.decode(await git(["cat-file", "-s", entry.oid], 128)).trim()
+      decode(await git(["cat-file", "-s", entry.oid], 128, path19), {
+        path: path19
+      }).trim()
     );
     if (!Number.isSafeInteger(size) || size > limit)
-      throw new Error("review_skills_git_blob_too_large");
-    const content = decoder.decode(
-      await git(["cat-file", "blob", entry.oid], limit + 1)
+      fail2("review_skills_git_blob_too_large", { path: path19 });
+    const content = decode(
+      await git(["cat-file", "blob", entry.oid], limit + 1, path19),
+      { path: path19 }
     );
     if (content.includes("\0"))
-      throw new Error("review_skills_git_text_invalid");
+      fail2("review_skills_git_text_invalid", { path: path19 });
     return content;
   };
   const sources = [];
   for (const source of capture.gitSources) {
     if (source.root !== ".reviewrouter/skills" && source.root !== ".agents/skills")
-      throw new Error("review_skills_git_root_invalid");
+      fail2("review_skills_git_root_invalid", { field: "root" });
     const budget = {
       root: source.root,
       bytes: 0,
@@ -125380,22 +125458,42 @@ async function materializeReviewSkills(input) {
       paths: /* @__PURE__ */ new Set()
     };
     const root = await find(source.root, budget);
-    if (!root) continue;
+    if (!root) {
+      gitRoots.push({ root: source.root, status: "missing", skillCount: 0 });
+      continue;
+    }
     if (root.mode !== "040000" || root.type !== "tree")
-      throw new Error("review_skills_git_nonregular");
+      fail2("review_skills_git_nonregular", {
+        path: source.root,
+        field: "root"
+      });
+    const before = sources.length;
     for (const child of await tree(root.oid, source.root, budget)) {
       if (child.mode === "120000" || child.mode === "160000")
-        throw new Error("review_skills_git_nonregular");
+        fail2("review_skills_git_nonregular", {
+          path: `${source.root}/${child.name}`
+        });
       if (child.type !== "tree") continue;
       const skill = (await tree(child.oid, `${source.root}/${child.name}`, budget)).find((entry) => entry.name === "SKILL.md");
       if (!skill) continue;
       if (!/^100(?:644|755)$/.test(skill.mode) || skill.type !== "blob")
-        throw new Error("review_skills_git_nonregular");
+        fail2("review_skills_git_nonregular", {
+          path: `${source.root}/${child.name}/SKILL.md`
+        });
       const directory = `${source.root}/${child.name}`;
       sources.push({ directory, path: `${directory}/SKILL.md`, budget });
       if (sources.length + capture.webSkills.length > reviewSkillsLimits.skillsPerRun)
-        throw new Error("review_skills_count_invalid");
+        fail2("review_skills_count_invalid", {
+          path: source.root,
+          field: "root"
+        });
     }
+    const skillCount = sources.length - before;
+    gitRoots.push({
+      root: source.root,
+      status: skillCount ? "loaded" : "empty",
+      skillCount
+    });
   }
   let totalBytes = Buffer.byteLength(JSON.stringify(capture));
   const skills = [];
@@ -125407,31 +125505,79 @@ async function materializeReviewSkills(input) {
       reviewSkillsLimits.instructionsBytes,
       source.budget
     );
-    const parsed = parseGitReviewSkill(content);
+    let parsed;
+    try {
+      parsed = parseGitReviewSkill(content);
+    } catch (error3) {
+      throw attributeReviewSkillsError(error3, {
+        baseSha: input.baseSha,
+        path: source.path,
+        field: "frontmatter"
+      });
+    }
     const resources = /* @__PURE__ */ new Map();
     const visiting = /* @__PURE__ */ new Set([source.path]);
     const visit = async (current, text3, depth) => {
       totalBytes += Buffer.byteLength(text3);
       if (totalBytes > reviewSkillsLimits.bundleBytes)
-        throw new Error("review_skills_bundle_too_large");
-      for (const target of markdownReferences(text3)) {
+        fail2("review_skills_bundle_too_large", { path: current });
+      let references;
+      try {
+        references = markdownReferences(text3);
+      } catch (error3) {
+        throw attributeReviewSkillsError(error3, {
+          baseSha: input.baseSha,
+          path: current,
+          field: "reference"
+        });
+      }
+      for (const target of references) {
         if (depth >= reviewSkillsLimits.referenceDepth)
-          throw new Error("review_skills_reference_depth");
+          fail2("review_skills_reference_depth", {
+            path: current,
+            field: "reference",
+            reference: target
+          });
         const resolved = import_node_path.posix.normalize(
           import_node_path.posix.join(import_node_path.posix.dirname(current), target)
         );
         if (!resolved.startsWith(`${source.directory}/`) || resolved === source.directory)
-          throw new Error("review_skills_reference_traversal");
+          fail2("review_skills_reference_traversal", {
+            path: current,
+            field: "reference",
+            reference: target
+          });
         if (visiting.has(resolved))
-          throw new Error("review_skills_reference_cycle");
+          fail2("review_skills_reference_cycle", {
+            path: current,
+            field: "reference",
+            reference: target
+          });
         if (resources.has(resolved)) continue;
         if (resources.size >= reviewSkillsLimits.referencesPerSkill)
-          throw new Error("review_skills_reference_count");
-        const reference = await read(
-          resolved,
-          reviewSkillsLimits.referenceBytes,
-          source.budget
-        );
+          fail2("review_skills_reference_count", {
+            path: current,
+            field: "reference",
+            reference: target
+          });
+        let reference;
+        try {
+          reference = await read(
+            resolved,
+            reviewSkillsLimits.referenceBytes,
+            source.budget
+          );
+        } catch (error3) {
+          const attributed = attributeReviewSkillsError(error3, {
+            baseSha: input.baseSha
+          });
+          throw new ReviewSkillsMaterializationError(attributed.code, {
+            baseSha: input.baseSha,
+            path: current,
+            field: "reference",
+            reference: target
+          });
+        }
         resources.set(resolved, reference);
         visiting.add(resolved);
         await visit(resolved, reference, depth + 1);
@@ -125449,7 +125595,14 @@ async function materializeReviewSkills(input) {
       resources: [...resources.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([path19, content2]) => ({ path: path19, content: content2 }))
     });
   }
-  return createMaterializedReviewSkills(capture, skills);
+  try {
+    return Object.freeze({
+      executionInput: createMaterializedReviewSkills(capture, skills),
+      gitRoots: Object.freeze(gitRoots.map((root) => Object.freeze(root)))
+    });
+  } catch (error3) {
+    throw attributeReviewSkillsError(error3, { baseSha: input.baseSha });
+  }
 }
 function parseGitReviewSkill(content) {
   const match2 = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u.exec(
@@ -125476,8 +125629,21 @@ function parseGitReviewSkill(content) {
     ].includes(key)
   ))
     throw new Error("review_skills_frontmatter_unsupported");
-  if (typeof row.name !== "string" || !row.name.trim() || [...row.name].length > reviewSkillsLimits.nameCharacters || typeof row.description !== "string" || !row.description.trim() || [...row.description].length > reviewSkillsLimits.descriptionCharacters || !match2[2].trim())
-    throw new Error("review_skills_frontmatter_invalid");
+  if (typeof row.name !== "string" || !row.name.trim() || [...row.name].length > reviewSkillsLimits.nameCharacters)
+    throw new ReviewSkillsMaterializationError(
+      "review_skills_frontmatter_invalid",
+      { field: "name" }
+    );
+  if (typeof row.description !== "string" || !row.description.trim() || [...row.description].length > reviewSkillsLimits.descriptionCharacters)
+    throw new ReviewSkillsMaterializationError(
+      "review_skills_frontmatter_invalid",
+      { field: "description" }
+    );
+  if (!match2[2].trim())
+    throw new ReviewSkillsMaterializationError(
+      "review_skills_frontmatter_invalid",
+      { field: "instructions" }
+    );
   for (const key of ["license", "compatibility"])
     if (row[key] !== void 0 && typeof row[key] !== "string")
       throw new Error("review_skills_frontmatter_invalid");
@@ -125529,6 +125695,136 @@ function markdownReferences(text3) {
   if (/<[^>]+(?:href|src)\s*=\s*["'][^"']*\.md/iu.test(withoutCode))
     throw new Error("review_skills_reference_unsupported");
   return [...refs].sort();
+}
+
+// src/review-skills/review-skills-receipt.ts
+var REVIEW_SKILLS_RECEIPT_UNAVAILABLE = "Review skills receipt unavailable: publication limits.";
+var ReviewSkillsReceiptCollector = class {
+  fresh = /* @__PURE__ */ new Map();
+  record(input) {
+    this.fresh.set(
+      `${input.providerInvocationKey}\0${input.payloadHash}`,
+      Object.freeze({
+        ...input,
+        ...input.paths ? { paths: Object.freeze([...input.paths]) } : {}
+      })
+    );
+  }
+  render(input) {
+    if (input.skills.kind === "legacy" || !input.skills.capture.webSkills.length && !input.skills.capture.gitSources.length)
+      return void 0;
+    const skills = input.skills;
+    const acceptedPaths = new Set(
+      input.acceptedEvidence.flatMap(
+        (item) => item.coverageManifest.paths.filter(
+          (path19) => path19.kind !== "unavailable" && path19.kind !== "policy_excluded"
+        ).map((path19) => path19.path)
+      )
+    );
+    const witnessedByKey = /* @__PURE__ */ new Map();
+    for (const { observation } of input.acceptedEvidence) {
+      const key = `${observation.providerInvocationKey}\0${observation.payloadHash}`;
+      const supply = this.fresh.get(key);
+      if (supply) witnessedByKey.set(key, supply);
+    }
+    const witnessed = [...witnessedByKey.values()];
+    const suppliedPaths = new Set(
+      witnessed.flatMap((supply) => supply.paths ?? [])
+    );
+    const statuses = [
+      "Instructions supplied with accepted review evidence from this run",
+      "Accepted evidence available; fresh instruction supply unconfirmed",
+      "Matching paths have no accepted review evidence",
+      "No changed paths matched"
+    ];
+    const changedPaths = [...new Set(input.changedPaths)];
+    const status = (skill) => {
+      if (!changedPaths.some((path19) => reviewSkillMatchesPath(skill, path19)))
+        return 3;
+      if ([...suppliedPaths].some((path19) => reviewSkillMatchesPath(skill, path19)))
+        return 0;
+      return [...acceptedPaths].some(
+        (path19) => reviewSkillMatchesPath(skill, path19)
+      ) ? 1 : 2;
+    };
+    const lines = [
+      "<details>",
+      "<summary>Review skills</summary>",
+      "",
+      "This records instruction supply, not whether a model followed or verified a Skill.",
+      ""
+    ];
+    const web = skills.bundle.skills.filter((skill) => skill.origin === "web");
+    if (web.length) {
+      const counts = [0, 0, 0, 0];
+      for (const skill of web) counts[status(skill)]++;
+      lines.push(`Web skills captured: ${web.length}.`);
+      statuses.forEach((label, index) => {
+        const count2 = counts[index];
+        if (count2) lines.push(`- ${label}: ${count2}`);
+      });
+      lines.push("");
+    }
+    const ocr = witnessed.filter((supply) => supply.paths === void 0).length;
+    if (ocr)
+      lines.push(
+        `Fresh accepted OCR invocations received the controlled Skills rules: ${ocr}. Delivery for individual Skills and paths is unconfirmed.`,
+        ""
+      );
+    const git = skills.bundle.skills.filter((skill) => skill.origin === "git");
+    let omitted = 0;
+    for (const skill of git) {
+      const directory = skill.skillId.startsWith("git:") ? skill.skillId.slice(4) : "";
+      if (!skills.capture.gitSources.some(
+        ({ root }) => directory.startsWith(`${root}/`) && !directory.slice(root.length + 1).includes("/")
+      )) {
+        omitted++;
+        continue;
+      }
+      const count2 = [...acceptedPaths].filter(
+        (path19) => reviewSkillMatchesPath(skill, path19)
+      ).length;
+      const row = `- ${renderReviewSkillsDiagnosticText(`${directory}/SKILL.md`)} \u2014 ${statuses[status(skill)]}; matching paths in accepted scope: ${count2}`;
+      if (Buffer.byteLength([...lines, row].join("\n")) > 4e3) {
+        omitted++;
+        continue;
+      }
+      lines.push(row);
+    }
+    if (omitted) lines.push(`Repository Skill rows omitted: ${omitted}.`);
+    for (const root of input.gitRoots ?? [])
+      lines.push(
+        `- ${renderReviewSkillsDiagnosticText(root.root)}: ${root.status === "missing" ? "root missing at captured base" : root.status === "empty" ? "no discoverable SKILL.md files at captured base" : `${root.skillCount} Skills loaded`}`
+      );
+    lines.push(
+      "",
+      `Trusted base: ${renderReviewSkillsDiagnosticText(skills.capture.baseSha)}`,
+      `Captured identity: ${renderReviewSkillsDiagnosticText(skills.capture.digest)}`,
+      `Materialized identity: ${renderReviewSkillsDiagnosticText(skills.bundle.executionDigest)}`,
+      "",
+      "</details>"
+    );
+    return lines.join("\n");
+  }
+};
+function observeNativeReviewSkillsSupply(delegate, collector, requestCount) {
+  return {
+    prepare: (input) => delegate.prepare(input),
+    execute: async (input) => {
+      const before = requestCount();
+      const observation = await delegate.execute(input);
+      const after = requestCount();
+      if (observation.schemaValidated && observation.fullyConsumed && typeof before === "number" && Number.isFinite(before) && before >= 0 && typeof after === "number" && Number.isFinite(after) && after > before)
+        collector.record({
+          providerInvocationKey: input.manifest.providerInvocationKey,
+          payloadHash: observation.payloadHash,
+          paths: input.invocation.coverageManifest.paths.map(
+            (path19) => path19.path
+          )
+        });
+      return observation;
+    }
+  };
 }
 
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
@@ -126141,6 +126437,7 @@ async function uploadUsageArtifact(name, file) {
 
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
 var import_promises12 = require("node:fs/promises");
+var import_node_fs2 = require("node:fs");
 
 // src/utils/redaction.ts
 function redactSensitiveText(value) {
@@ -147573,7 +147870,7 @@ var package_default = {
     "build:action": "npm run build:action:main && npm run build:context-gateway && npm run build:newtest-job && npm run build:single-t0-plan",
     "build:newtest-job": "esbuild src/newtest-one-shot-job.ts --bundle --platform=node --target=node24 --outfile=dist/newtest-one-shot-job.js",
     "build:single-t0-plan": "esbuild src/review-orchestration/infrastructure/production-t0-review-runner.ts --bundle --platform=node --target=node24 --outfile=dist/single-t0-plan.js --external:tree-sitter --external:tree-sitter-*",
-    "build:action:main": "esbuild src/main.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --sourcemap --external:tree-sitter --external:tree-sitter-*",
+    "build:action:main": "esbuild src/main.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --sourcemap --sources-content=false --external:tree-sitter --external:tree-sitter-*",
     "build:context-gateway": "npm run build:context-gateway:bundle && node scripts/generate-context-gateway-release-metadata.mjs",
     "build:context-gateway:bundle": "esbuild src/context-gateway/stdio-entry.ts --bundle --platform=node --target=node24 --outfile=dist/context-gateway.js --sourcemap",
     "check:context-gateway-release-metadata": "node scripts/generate-context-gateway-release-metadata.mjs --check",
@@ -209520,10 +209817,11 @@ function sortedUnique3(values) {
 // src/review-orchestration/infrastructure/current-review-projection-builder-adapter.ts
 var import_crypto29 = require("crypto");
 var CurrentReviewProjectionBuilderAdapter = class {
-  constructor(projection, commands, description) {
+  constructor(projection, commands, description, skillsReceipt) {
     this.projection = projection;
     this.commands = commands;
     this.description = description;
+    this.skillsReceipt = skillsReceipt;
   }
   async build(input) {
     const command = await this.commands.create(input);
@@ -209550,6 +209848,37 @@ var CurrentReviewProjectionBuilderAdapter = class {
         projectionCanonicalJson = candidateJson;
         projectionHash = hashReviewProjectionCanonicalJson(candidateJson);
       } else this.description.unavailable();
+    }
+    const receipt = this.skillsReceipt?.render(input.acceptedEvidence);
+    if (receipt && this.skillsReceipt) {
+      let appended = false;
+      for (const block of [receipt, REVIEW_SKILLS_RECEIPT_UNAVAILABLE]) {
+        const summaryBody = `${envelope.publishing.summary.body}
+
+${block}`;
+        const checkSummary = `${envelope.publishing.check.summary}
+
+${block}`;
+        if (Buffer.byteLength(summaryBody) > this.skillsReceipt.limits.maxSummaryBytes || Buffer.byteLength(checkSummary) > this.skillsReceipt.limits.maxCheckSummaryBytes)
+          continue;
+        const candidate = {
+          ...envelope,
+          publishing: {
+            ...envelope.publishing,
+            summary: { ...envelope.publishing.summary, body: summaryBody },
+            check: { ...envelope.publishing.check, summary: checkSummary }
+          }
+        };
+        const candidateJson = canonicalizeReviewProjection(candidate);
+        if (Buffer.byteLength(candidateJson) > this.skillsReceipt.limits.maxProjectionBytes || Buffer.byteLength(canonicalJson13(candidate.publishing)) > this.skillsReceipt.limits.maxPublicationBodyBytes)
+          continue;
+        envelope = candidate;
+        projectionCanonicalJson = candidateJson;
+        projectionHash = hashReviewProjectionCanonicalJson(candidateJson);
+        appended = true;
+        break;
+      }
+      if (!appended) this.skillsReceipt.unavailable();
     }
     const operationsCanonicalJson = canonicalJson13(envelope.publishing);
     const artifactHash = sha25614(
@@ -209618,7 +209947,16 @@ function createProductionReviewProjectionBuilder(input) {
       unavailable: () => logger7.warn(
         "AI PR description omitted: publication limits leave no optional space."
       )
-    }
+    },
+    input.skillsReceipt ? {
+      ...input.skillsReceipt,
+      limits: {
+        maxSummaryBytes: limits.maxSummaryBytes,
+        maxCheckSummaryBytes: limits.maxCheckSummaryBytes,
+        maxProjectionBytes: limits.maxProjectionBytes,
+        maxPublicationBodyBytes: input.protocolLimits.maxPublicationBodyBytes
+      }
+    } : void 0
   );
 }
 var ProductionReviewProjectionCommandFactory = class {
@@ -212563,6 +212901,8 @@ var OcrReviewInvocationAdapter = class {
     this.options.contextTools?.beginNativeSession();
     let processResult2;
     this.dispatchedSlots.add(assignment.workSlot.workSlotId);
+    const requestsBefore = this.options.bridge.requestCount();
+    let requestsAfter;
     try {
       processResult2 = await this.options.processRunner({
         binaryPath: this.options.binaryPath,
@@ -212575,6 +212915,7 @@ var OcrReviewInvocationAdapter = class {
         cwd: this.options.run.runDirectory,
         signal: input.signal
       });
+      requestsAfter = this.options.bridge.requestCount();
     } finally {
       const receipt = this.options.contextTools?.receipt();
       if (receipt)
@@ -212664,6 +213005,15 @@ var OcrReviewInvocationAdapter = class {
     });
     if (observation.byteCount > OCR_NORMALIZATION_LIMITS.maxPayloadBytes) {
       throw new OcrOutputTooLargeError("payload");
+    }
+    if (typeof requestsBefore === "number" && Number.isFinite(requestsBefore) && requestsBefore >= 0 && typeof requestsAfter === "number" && Number.isFinite(requestsAfter) && requestsAfter > requestsBefore) {
+      try {
+        this.options.freshReviewSkillsSupply?.({
+          providerInvocationKey: input.manifest.providerInvocationKey,
+          payloadHash: observation.payloadHash
+        });
+      } catch {
+      }
     }
     return observation;
   }
@@ -218182,7 +218532,7 @@ var ProductionT0ReviewRunner = class {
         ]
       });
       const admittedAgent = approvedOcrAgent ?? approvedAgent;
-      const reviewSkills = admittedAgent?.reviewSkillsVersion === 1 ? await materializeReviewSkills({
+      const skillsMaterialization = admittedAgent?.reviewSkillsVersion === 1 ? await materializeReviewSkillsWithDiagnostics({
         capture: await fetchCapturedReviewSkills({
           apiUrl: input.apiUrl,
           authorizationToken: authorization.authorizationToken,
@@ -218194,7 +218544,31 @@ var ProductionT0ReviewRunner = class {
         baseSha: authorization.facts.baseSha,
         checkoutRoot: path18.resolve(input.workspacePath),
         signal
-      }) : LEGACY_REVIEW_SKILLS;
+      }) : { executionInput: LEGACY_REVIEW_SKILLS, gitRoots: [] };
+      const reviewSkills = skillsMaterialization.executionInput;
+      const skillsReceiptCollector = new ReviewSkillsReceiptCollector();
+      const skillsReceipt = {
+        render: (acceptedEvidence) => skillsReceiptCollector.render({
+          skills: reviewSkills,
+          gitRoots: skillsMaterialization.gitRoots,
+          changedPaths: pr.files.map((file) => file.filename),
+          acceptedEvidence
+        }),
+        unavailable: () => {
+          warning2(REVIEW_SKILLS_RECEIPT_UNAVAILABLE);
+          try {
+            if (process.env.GITHUB_STEP_SUMMARY)
+              (0, import_node_fs2.appendFileSync)(
+                process.env.GITHUB_STEP_SUMMARY,
+                `
+${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
+`,
+                "utf8"
+              );
+          } catch {
+          }
+        }
+      };
       assertReviewSkillsExecutionInput(
         reviewSkills,
         admittedAgent ?? {},
@@ -218344,6 +218718,7 @@ var ProductionT0ReviewRunner = class {
               modelReasoningEffort: ocrModelReasoningEffort,
               language: ocrLanguage,
               reviewSkills,
+              freshReviewSkillsSupply: (supply) => skillsReceiptCollector.record(supply),
               ruleText: reviewSkills.kind === "legacy" ? buildOcrControlledRuleText({
                 language: ocrLanguage,
                 assignedPaths: pr.files.map((file) => file.filename).sort()
@@ -218405,7 +218780,8 @@ var ProductionT0ReviewRunner = class {
               })),
               uncoveredPaths: planned2.uncoveredPaths,
               uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
-              lifecycleInventory
+              lifecycleInventory,
+              skillsReceipt
             }),
             identities: identities2,
             clock: new SystemReviewOrchestrationClock(),
@@ -218689,7 +219065,11 @@ var ProductionT0ReviewRunner = class {
           config2,
           compatibilityKey
         ),
-        invocations: invocationAdapter,
+        invocations: observeNativeReviewSkillsSupply(
+          invocationAdapter,
+          skillsReceiptCollector,
+          () => (input.providerApi?.modelTransport ?? input.accountGateway?.modelTransport)?.requestCount?.()
+        ),
         ...investigationInvocationAdapter ? { investigationInvocations: investigationInvocationAdapter } : {},
         invocationFailureClassifier: new ProviderInvocationFailureClassifier(
           input.accountGateway?.modelTransport.failureFact
@@ -218714,7 +219094,8 @@ var ProductionT0ReviewRunner = class {
           })),
           uncoveredPaths: planned.uncoveredPaths,
           uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
-          lifecycleInventory
+          lifecycleInventory,
+          skillsReceipt
         }),
         ...contextGateway ? {
           contextReplay: contextReplayRunner,

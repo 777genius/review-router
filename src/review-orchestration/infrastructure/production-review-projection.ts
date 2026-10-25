@@ -62,6 +62,12 @@ export function createProductionReviewProjectionBuilder(input: {
   readonly uncoveredPaths: readonly string[];
   readonly uncoveredLifecycleTargetIds: readonly string[];
   readonly lifecycleInventory: CurrentLifecycleInventoryPort;
+  readonly skillsReceipt?: {
+    render(
+      evidence: readonly AcceptedReviewWorkSlotEvidence[]
+    ): string | undefined;
+    unavailable(): void;
+  };
 }) {
   const limits = projectionLimits(input.config, input.protocolLimits);
   const policy = new LegacyReviewProjectionPolicyAdapter(input.config, {
@@ -91,7 +97,19 @@ export function createProductionReviewProjectionBuilder(input: {
         logger.warn(
           'AI PR description omitted: publication limits leave no optional space.'
         ),
-    }
+    },
+    input.skillsReceipt
+      ? {
+          ...input.skillsReceipt,
+          limits: {
+            maxSummaryBytes: limits.maxSummaryBytes,
+            maxCheckSummaryBytes: limits.maxCheckSummaryBytes,
+            maxProjectionBytes: limits.maxProjectionBytes,
+            maxPublicationBodyBytes:
+              input.protocolLimits.maxPublicationBodyBytes,
+          },
+        }
+      : undefined
   );
 }
 

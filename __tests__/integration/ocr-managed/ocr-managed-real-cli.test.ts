@@ -1,8 +1,12 @@
 import { createCapturedReviewSkills } from '../../../src/control-plane/generated/review-action-v2/review-skills-contract';
+import { type ReviewSkillsExecutionInput } from '../../../src/review-skills/review-skills';
 import {
-  createMaterializedReviewSkills,
-  type ReviewSkillsExecutionInput,
-} from '../../../src/review-skills/review-skills';
+  materializeReviewSkillsWithDiagnostics,
+  type ReviewSkillsGitRootDiagnostic,
+} from '../../../src/review-skills/materialize-review-skills';
+import { ReviewSkillsReceiptCollector } from '../../../src/review-skills/review-skills-receipt';
+import { createProductionReviewProjectionBuilder } from '../../../src/review-orchestration/infrastructure/production-review-projection';
+import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 /**
  * Plan 56 §12 real-CLI harness: the pinned managed OCR binary
  * (tools/ocr/out/opencodereview) runs against a synthetic Git repository and a
@@ -435,6 +439,8 @@ function startScriptedStub(script: ScriptedStubScript): Promise<{
 }
 
 interface ScriptedScenarioResult {
+  projection?: import('../../../src/review-orchestration/application').CurrentReviewProjection;
+  replayProjection?: import('../../../src/review-orchestration/application').CurrentReviewProjection;
   observation?: ReviewObservationPayload;
   rejection?: unknown;
   /** Rejection of the first attempt when reopenRetry ran a second one. */
@@ -461,6 +467,8 @@ async function runScriptedScenario(input: {
   readonly script: ScriptedStubScript;
   readonly maxTokens?: number;
   readonly reviewSkills?: ReviewSkillsExecutionInput;
+  readonly skillsGitRoots?: readonly ReviewSkillsGitRootDiagnostic[];
+  readonly projectSkills?: boolean;
   readonly assignedPaths?: readonly string[];
   /** Poison the consumer after the truncated attempt and reopen it once. */
   readonly reopenRetry?: boolean;
@@ -614,6 +622,7 @@ async function runScriptedScenario(input: {
           }
         : {}),
     };
+    const collector = new ReviewSkillsReceiptCollector();
     const adapter = new OcrReviewInvocationAdapter(planned.assignments, {
       model: 'stub-model',
       binaryPath: BINARY_PATH,
@@ -632,6 +641,7 @@ async function runScriptedScenario(input: {
       modelReasoningEffort: 'medium',
       language: 'en',
       reviewSkills: input.reviewSkills,
+      freshReviewSkillsSupply: (supply) => collector.record(supply),
       ruleText:
         input.reviewSkills?.kind === 'captured'
           ? buildOcrSkillsControlledRuleText({
@@ -709,7 +719,74 @@ async function runScriptedScenario(input: {
           unknown
         >)
       : undefined;
+    let projection:
+      | import('../../../src/review-orchestration/application').CurrentReviewProjection
+      | undefined;
+    let replayProjection: typeof projection;
+    if (observation && input.reviewSkills && input.projectSkills) {
+      const evidence = [
+        {
+          workSlotId: prepared.workSlotId,
+          coverageManifest: prepared.coverageManifest,
+          observation: {
+            ...observation,
+            observationId: 'accepted-real-ocr',
+            eligibilityPolicyVersion: 'fixture',
+            providerKind: ReviewExecutionProviderKind.Ocr,
+            providerInvocationKey: 'pk',
+            providerVoteIdentityHash: 'f'.repeat(64),
+          },
+        },
+      ];
+      const project = (receipt: ReviewSkillsReceiptCollector) =>
+        createProductionReviewProjectionBuilder({
+          authorizationFacts: authorization.facts,
+          pr,
+          config: DEFAULT_CONFIG,
+          protocolLimits: authorization.limits,
+          assignments: planned.assignments.map(({ workSlot, context }) => ({
+            workSlotId: workSlot.workSlotId,
+            taskKind: workSlot.taskKind,
+            providerKind: workSlot.providerKind,
+            required: workSlot.required,
+            filePaths: context.files.map((file) => file.filename),
+          })),
+          uncoveredPaths: planned.uncoveredPaths,
+          uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
+          lifecycleInventory: {
+            loadCurrent: async () => ({
+              inventoryVersion: 'review_lifecycle_inventory.v1',
+              loadedForHeadSha: headSha,
+              lifecycleStateHash: 'fixture-state',
+              commandLedgerWatermark: 'fixture-ledger',
+              complete: true,
+              warnings: [],
+              targets: [],
+            }),
+          },
+          skillsReceipt: {
+            render: (acceptedEvidence) =>
+              receipt.render({
+                skills: input.reviewSkills!,
+                changedPaths: pr.files.map((file) => file.filename),
+                gitRoots: input.skillsGitRoots,
+                acceptedEvidence,
+              }),
+            unavailable: () => {
+              throw new Error('fixture_receipt_did_not_fit');
+            },
+          },
+        }).build({
+          acceptedEvidence: evidence,
+          exhaustedWorkSlotIds: [],
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+        });
+      projection = await project(collector);
+      // A new local collector models a restored/cache evidence path: no fresh witness is invented.
+      replayProjection = await project(new ReviewSkillsReceiptCollector());
+    }
     return {
+      ...(projection ? { projection, replayProjection } : {}),
       ...(observation !== undefined ? { observation } : {}),
       ...(rejection !== undefined ? { rejection } : {}),
       ...(firstRejection !== undefined ? { firstRejection } : {}),
@@ -1008,6 +1085,13 @@ describeHarness(
         path.join(repo, 'calc.ts'),
         'export const oldValue = 1;\n'
       );
+      fs.mkdirSync(path.join(repo, '.agents/skills/review'), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(repo, '.agents/skills/review/SKILL.md'),
+        '---\nname: review\ndescription: Repository review rules\n---\nGIT_SKILL_PRIVATE_BODY_MARKER'
+      );
       git(repo, 'add', '.');
       git(repo, 'commit', '-qm', 'base');
       const baseSha = git(repo, 'rev-parse', 'HEAD').trim();
@@ -1046,8 +1130,8 @@ describeHarness(
         includePaths,
         excludePaths: [],
       });
-      const reviewSkills = createMaterializedReviewSkills(
-        createCapturedReviewSkills({
+      const materialized = await materializeReviewSkillsWithDiagnostics({
+        capture: createCapturedReviewSkills({
           baseSha,
           webSkills: [
             skill('global-one', 'GLOBAL_ONE_MARKER', ['**']),
@@ -1056,18 +1140,53 @@ describeHarness(
             skill('lower', 'LOWER_ONLY_MARKER', ['src/foo.ts']),
             skill('other', 'UNRELATED_POLICY_MARKER', ['other/**']),
           ],
-          gitSources: [],
+          gitSources: [{ root: '.agents/skills' }],
         }),
-        []
-      );
+        baseSha,
+        checkoutRoot: repo,
+      });
+      const reviewSkills = materialized.executionInput;
       const scenario = await runScriptedScenario({
         workspace,
         checkoutRoot: repo,
         script: { nComments: 0, contentLen: 0, filterMode: 'approve' },
         assignedPaths: ['calc.ts', 'src/Foo.ts', 'src/foo.ts'],
         reviewSkills,
+        skillsGitRoots: materialized.gitRoots,
       });
       expect(scenario.rejection).toBeUndefined();
+      // Projection currently enforces case-folded unique revision paths. Preserve
+      // the case-distinct engine proof above and qualify publication on a second
+      // real invocation whose assigned paths satisfy that existing invariant.
+      const publishedScenario = await runScriptedScenario({
+        workspace,
+        checkoutRoot: repo,
+        script: { nComments: 0, contentLen: 0, filterMode: 'approve' },
+        assignedPaths: ['calc.ts', 'src/Foo.ts'],
+        reviewSkills,
+        skillsGitRoots: materialized.gitRoots,
+        projectSkills: true,
+      });
+      expect(publishedScenario.rejection).toBeUndefined();
+      const publication = publishedScenario.projection!.operationsCanonicalJson;
+      expect(publication).toContain(
+        'Fresh accepted OCR invocations received the controlled Skills rules: 1'
+      );
+      expect(publication).toContain('.agents/skills/review/SKILL.md');
+      expect(publication).toContain(baseSha);
+      expect(publication).toContain('Captured identity:');
+      expect(publication).not.toMatch(
+        /GLOBAL_ONE_MARKER|GLOBAL_TWO_MARKER|UPPER_ONLY_MARKER|LOWER_ONLY_MARKER|GIT_SKILL_PRIVATE_BODY_MARKER|global-one|revision-1|sourceWorkspaceId/
+      );
+      expect(
+        publishedScenario.replayProjection!.operationsCanonicalJson
+      ).toContain('fresh instruction supply unconfirmed');
+      expect(
+        publishedScenario.replayProjection!.operationsCanonicalJson
+      ).not.toContain('Fresh accepted OCR invocations received');
+      expect(publishedScenario.projection!.projectionHash).not.toBe(
+        publishedScenario.replayProjection!.projectionHash
+      );
       expect(scenario.requests.some((request) => request.kind === 'plan')).toBe(
         true
       );

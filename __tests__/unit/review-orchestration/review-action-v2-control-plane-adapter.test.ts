@@ -1607,6 +1607,58 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     ).rejects.toThrow('restore_accepted_manifest_scope_mismatch');
   });
 
+  it('rejects malformed nested persisted manifests with a safe semantic error', async () => {
+    const execute = jest.fn();
+    const adapter = createAdapter(execute);
+    const restore = (
+      json: string,
+      version = 1,
+      manifestHash = hash(`rr.review-assignment-manifest.v${version}\0${json}`)
+    ) => {
+      const raw = JSON.parse(canonicalExecution());
+      raw.persistedPlan = {
+        planHash: startInput.planHash,
+        assignmentManifestVersion: version,
+        assignmentManifestCanonicalJson: json,
+        assignmentManifestHash: manifestHash,
+        workSlots: [workSlot],
+        artifact: null,
+      };
+      execute.mockResolvedValueOnce({
+        status: ReviewExecutionRestoreResultStatus.Found,
+        executionId: 'execution-1',
+        generation: '1',
+        streamVersion: '1',
+        executionState: RestoredReviewExecutionState.Running,
+        executionCanonicalJson: canonicalJson(raw),
+      });
+      return adapter.restoreExecution({
+        authorization,
+        reviewRevisionHash: startInput.reviewRevisionHash,
+      });
+    };
+    await expect(restore('{"manifestVersion":1}')).resolves.toMatchObject({
+      persistedPlan: { assignmentManifestVersion: 1 },
+    });
+    for (const [json, version, manifestHash] of [
+      ['{"manifestVersion":1,"private":"RAW_UNTRUSTED_PAYLOAD', 1, undefined],
+      ['null', 1, undefined],
+      ['[]', 1, undefined],
+      ['{"manifestVersion":3}', 3, undefined],
+      ['{"manifestVersion":1}', 1, '0'.repeat(64)],
+    ] as const) {
+      const error = await restore(json, version, manifestHash).catch(
+        (caught: unknown) => caught
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(
+        'review_action_v2_persisted_manifest_invalid'
+      );
+      expect(error).not.toHaveProperty('cause');
+      expect(String(error)).not.toContain('RAW_UNTRUSTED_PAYLOAD');
+    }
+  });
+
   it('restores a bounded exact-revision execution instead of dropping it', async () => {
     const execute = jest.fn().mockResolvedValue({
       status: ReviewExecutionRestoreResultStatus.Found,

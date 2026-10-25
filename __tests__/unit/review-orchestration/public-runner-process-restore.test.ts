@@ -15,6 +15,7 @@ import { canonicalizeReviewProjection } from '../../../src/review-projection/dom
 test.each([false, true])(
   'full production runner restart resumes frozen A/B without inference; crash before publication request=%s',
   (beforeRequest) => {
+    mkdirSync(path.join(process.cwd(), 'tmp'), { recursive: true });
     const root = mkdtempSync(path.join(process.cwd(), 'tmp/public-restore-'));
     const workspace = path.join(root, 'checkout');
     mkdirSync(workspace);

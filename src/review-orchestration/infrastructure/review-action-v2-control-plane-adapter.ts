@@ -1624,7 +1624,12 @@ function parsePersistedReviewPlan(
           'persisted_assignment_manifest_hash'
         );
   if (json !== null) {
-    const manifest = JSON.parse(json) as { manifestVersion?: unknown };
+    let manifest: Record<string, unknown>;
+    try {
+      manifest = parseCanonicalObject(json);
+    } catch {
+      throw new Error('review_action_v2_persisted_manifest_invalid');
+    }
     if (
       ![1, 2].includes(manifest.manifestVersion as number) ||
       manifest.manifestVersion !== value.assignmentManifestVersion ||

@@ -103,8 +103,8 @@ export type OcrLoopbackBridge = Readonly<{
   /** Releases only positively proven unpaid pre-dispatch denials (§8.4 step 2);
    * false for unknown/paid effects. */
   releaseRetrySafeFailure?(): boolean;
-  /** Reopens a failure-fact consumer for one fresh bounded attempt; false for
-   * terminal/cancelled consumers keeps the fence. */
+  /** Compatibility seam only. OCR dispatch uses the positive unpaid-denial
+   * release above and never reopens an ambiguous dispatch through this seam. */
   reopenConsumer?(): boolean;
 }>;
 
@@ -907,26 +907,10 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     // One engine invocation in flight; aborting callers never dispatch late.
     // The effect fence runs inside the gate so no check outlives a dispatch.
     const run = this.gate(async () => {
-      this.reopenPoisonedConsumer();
       this.assertDispatchPermitted(assignment.workSlot.workSlotId);
       return await this.runInvocation(input, assignment);
     });
     return await run;
-  }
-
-  /** A recorded failure fact poisoned this consumer against replays; one fresh
-   * bounded attempt may reopen it so a transport failure cannot burn the whole
-   * attempt budget fenced. The per-consumer dispatch record restarts with the
-   * consumer. */
-  private reopenPoisonedConsumer(): void {
-    const effectBefore = this.options.bridge.effectFacts?.();
-    if (
-      effectBefore === undefined ||
-      effectBefore.effect === 'none' ||
-      this.options.bridge.reopenConsumer?.() !== true
-    )
-      return;
-    this.dispatchedSlots.clear();
   }
 
   /** §8.4 step 2: known-terminal/unknown Gateway effect fences new calls. A

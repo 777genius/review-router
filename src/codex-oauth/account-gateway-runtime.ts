@@ -319,6 +319,7 @@ async function runAccountGatewayRuntimeInternal(
         requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
         modelReasoningEffort:
           capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
+        admittedRuntimeConfig: capability.runtimeConfig,
         language:
           capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
         signal: run.signal,

@@ -58,6 +58,7 @@ import { readApprovedReviewAgent } from '../../control-plane/approved-review-age
 import {
   readAdmittedGatewayCodexModelSettings,
   resolveAdmittedGatewayCodexReasoningEffort,
+  resolveAdmittedGatewayOcrReasoningEffort,
   type AdmittedGatewayCodexModelSettings,
 } from '../../control-plane/admitted-gateway-codex-model-settings';
 export { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
@@ -594,7 +595,11 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         }
         const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
         const ocrModelReasoningEffort =
-          ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
+          resolveAdmittedGatewayOcrReasoningEffort(
+            input.accountGateway!.runtimeConfig,
+            ocrModel,
+            ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
+          );
         const modelTransport = input.accountGateway!.modelTransport;
         const capabilityAuthorization =
           modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
@@ -637,6 +642,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                   requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
                 },
                 modelReasoningEffort: ocrModelReasoningEffort,
+                admittedRuntimeConfig: input.accountGateway!.runtimeConfig,
                 language: ocrLanguage,
                 contextTools: contextTools.config,
               }),

@@ -20,6 +20,8 @@ import {
   type OcrNormalizedFindings,
 } from './ocr-review-normalization';
 import type { TokenUsage } from '../../types';
+import type { AdmittedRuntimeConfig } from '../../control-plane/runtime-config';
+import { resolveAdmittedGatewayOcrReasoningEffort } from '../../control-plane/admitted-gateway-codex-model-settings';
 
 /** Managed result file bound from the OCR release manifest (§9). */
 export const OCR_RESULT_FILE_LIMIT_BYTES = 16 * 1024 * 1024;
@@ -143,6 +145,7 @@ export function buildOcrManagedConfigJson(input: {
   readonly model: string;
   readonly limits: OcrManagedLimits;
   readonly modelReasoningEffort: string | null;
+  readonly admittedRuntimeConfig?: AdmittedRuntimeConfig;
   readonly language: string | null;
   readonly contextTools?: Readonly<{
     url: string;
@@ -158,8 +161,13 @@ export function buildOcrManagedConfigJson(input: {
   }
   requirePositiveSetting(input.limits.timeoutMinutes, 'timeout');
   const extraBody: Record<string, unknown> = { service_tier: 'default' };
-  if (input.modelReasoningEffort !== null) {
-    extraBody.reasoning = { effort: input.modelReasoningEffort };
+  const modelReasoningEffort = resolveAdmittedGatewayOcrReasoningEffort(
+    input.admittedRuntimeConfig,
+    input.model,
+    input.modelReasoningEffort
+  );
+  if (modelReasoningEffort !== null) {
+    extraBody.reasoning = { effort: modelReasoningEffort };
   }
   const provider: Record<string, unknown> = {
     protocol: 'openai-responses',

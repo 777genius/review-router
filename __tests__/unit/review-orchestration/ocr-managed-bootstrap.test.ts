@@ -18,6 +18,8 @@ import {
   verifyApprovedOcrBinary,
   type ApprovedOcrReviewAgent,
 } from '../../../src/codex-oauth/ocr-managed-bootstrap';
+import { buildOcrManagedConfigJson } from '../../../src/review-orchestration/infrastructure/ocr-review-managed-run';
+import { GATEWAY_CODEX_MODEL_SETTINGS_ENV } from '../../../src/control-plane/admitted-gateway-codex-model-settings';
 
 function profileJson(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -215,6 +217,113 @@ describe('verifyApprovedOcrBinary / prepareOcrManagedRun (§5.2)', () => {
       );
     } finally {
       await handle.cleanup();
+    }
+  });
+
+  it.each([
+    { reasoning: null, saved: 'high', expected: undefined },
+    {
+      reasoning: { allowed: ['minimal', 'high'], default: 'minimal' },
+      saved: 'high',
+      expected: { effort: 'high' },
+    },
+    {
+      reasoning: { allowed: ['minimal', 'high'], default: 'minimal' },
+      saved: null,
+      expected: { effort: 'minimal' },
+    },
+  ])(
+    'uses admitted model reasoning in initial and context-tools configs %#',
+    async ({ reasoning, saved, expected }) => {
+      const admittedRuntimeConfig = {
+        protocolVersion: 1 as const,
+        configVersion: 1,
+        runtimeEnv: {
+          CODEX_MODEL: 'admitted-model',
+          [GATEWAY_CODEX_MODEL_SETTINGS_ENV]: JSON.stringify({
+            model: 'admitted-model',
+            reasoning,
+          }),
+        },
+      };
+      const input = {
+        approvedAgent,
+        baseUrl: 'http://127.0.0.1:41000',
+        rawCapability: 'a'.repeat(64),
+        model: 'admitted-model',
+        requestTimeoutSec: 600,
+        modelReasoningEffort: saved,
+        admittedRuntimeConfig,
+        language: 'en',
+        env: { REVIEWROUTER_OCR_BINARY: binaryPath, PATH: process.env.PATH },
+      };
+      const handle = await prepareOcrManagedRun(input);
+      try {
+        const initial = JSON.parse(fs.readFileSync(handle.configPath, 'utf8'));
+        const rewrite = JSON.parse(
+          buildOcrManagedConfigJson({
+            ...input,
+            limits: { requestTimeoutSec: input.requestTimeoutSec },
+            contextTools: {
+              url: 'http://127.0.0.1:41001/mcp',
+              capability: 'b'.repeat(64),
+              tools: ['approved_context_tool'],
+            },
+          })
+        );
+        for (const config of [initial, rewrite]) {
+          const extra = config.custom_providers.reviewrouter.extra_body;
+          expect(extra.reasoning).toEqual(expected);
+          expect(Object.hasOwn(extra, 'reasoning')).toBe(
+            expected !== undefined
+          );
+        }
+        expect(rewrite.mcp_servers.reviewrouter_context.tools).toEqual([
+          'approved_context_tool',
+        ]);
+      } finally {
+        await handle.cleanup();
+      }
+    }
+  );
+
+  it('rejects foreign admitted model settings before creating managed configuration', async () => {
+    const input = {
+      approvedAgent,
+      baseUrl: 'http://127.0.0.1:41000',
+      rawCapability: 'a'.repeat(64),
+      model: 'admitted-model',
+      requestTimeoutSec: 600,
+      modelReasoningEffort: 'high',
+      admittedRuntimeConfig: {
+        protocolVersion: 1 as const,
+        configVersion: 1,
+        runtimeEnv: {
+          [GATEWAY_CODEX_MODEL_SETTINGS_ENV]: JSON.stringify({
+            model: 'foreign-model',
+            reasoning: null,
+          }),
+        },
+      },
+      language: null,
+      env: { REVIEWROUTER_OCR_BINARY: binaryPath, PATH: process.env.PATH },
+    };
+    const prepared = prepareOcrManagedRun(input);
+    try {
+      await expect(prepared).rejects.toThrow(
+        'account_gateway_codex_model_settings_invalid'
+      );
+      expect(() =>
+        buildOcrManagedConfigJson({
+          ...input,
+          limits: { requestTimeoutSec: 600 },
+        })
+      ).toThrow('account_gateway_codex_model_settings_invalid');
+    } finally {
+      await prepared.then(
+        (handle) => handle.cleanup(),
+        () => undefined
+      );
     }
   });
 

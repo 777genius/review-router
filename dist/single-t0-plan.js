@@ -143741,6 +143741,80 @@ function normalizeOcrFindings(input) {
   });
 }
 
+// src/control-plane/admitted-gateway-codex-model-settings.ts
+var GATEWAY_CODEX_MODEL_SETTINGS_ENV = "REVIEW_ROUTER_GATEWAY_MODEL_SETTINGS_JSON";
+var canonicalEfforts = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max"
+];
+function readAdmittedGatewayCodexModelSettings(runtime, selectedModel) {
+  const raw = runtime?.runtimeEnv[GATEWAY_CODEX_MODEL_SETTINGS_ENV];
+  if (raw === void 0) return void 0;
+  const invalid4 = () => new Error("account_gateway_codex_model_settings_invalid");
+  if (Buffer.byteLength(raw, "utf8") > 2048) throw invalid4();
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw invalid4();
+  }
+  if (!hasKeys(value, ["model", "reasoning"])) throw invalid4();
+  if (typeof value.model !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(value.model) || value.model !== selectedModel)
+    throw invalid4();
+  if (value.reasoning === null)
+    return Object.freeze({ model: value.model, reasoning: null });
+  if (!hasKeys(value.reasoning, ["allowed", "default"])) throw invalid4();
+  const { allowed, default: defaultEffort } = value.reasoning;
+  if (!Array.isArray(allowed) || allowed.length === 0 || allowed.length > 7 || allowed.some((effort) => !isCanonicalEffort(effort)) || new Set(allowed).size !== allowed.length || !isCanonicalEffort(defaultEffort) || !allowed.includes(defaultEffort))
+    throw invalid4();
+  return Object.freeze({
+    model: value.model,
+    reasoning: Object.freeze({
+      allowed: Object.freeze(
+        canonicalEfforts.filter((effort) => allowed.includes(effort))
+      ),
+      default: defaultEffort
+    })
+  });
+}
+function resolveAdmittedGatewayCodexReasoningEffort(settings, savedEffort) {
+  const effective = savedEffort === "ultra" ? "max" : savedEffort;
+  if (settings.reasoning === null) {
+    if (effective !== void 0)
+      throw new Error("account_gateway_codex_reasoning_effort_unsupported");
+    return null;
+  }
+  const selected = effective ?? settings.reasoning.default;
+  if (!isCanonicalEffort(selected) || !settings.reasoning.allowed.includes(selected))
+    throw new Error("account_gateway_codex_reasoning_effort_unsupported");
+  return selected;
+}
+function resolveAdmittedGatewayOcrReasoningEffort(runtime, selectedModel, savedEffort) {
+  const settings = readAdmittedGatewayCodexModelSettings(
+    runtime,
+    selectedModel
+  );
+  if (settings === void 0) return savedEffort;
+  if (settings.reasoning === null) return null;
+  const selected = resolveAdmittedGatewayCodexReasoningEffort(
+    settings,
+    savedEffort ?? void 0
+  );
+  if (selected === "max")
+    throw new Error("account_gateway_ocr_reasoning_effort_unsupported");
+  return selected;
+}
+function isCanonicalEffort(value) {
+  return typeof value === "string" && canonicalEfforts.includes(value);
+}
+function hasKeys(value, keys3) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(",") === [...keys3].sort().join(",");
+}
+
 // src/review-orchestration/infrastructure/ocr-review-managed-run.ts
 var OCR_RESULT_FILE_LIMIT_BYTES = 16 * 1024 * 1024;
 var OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES = 64 * 1024;
@@ -143811,8 +143885,13 @@ function buildOcrManagedConfigJson(input) {
   }
   requirePositiveSetting(input.limits.timeoutMinutes, "timeout");
   const extraBody = { service_tier: "default" };
-  if (input.modelReasoningEffort !== null) {
-    extraBody.reasoning = { effort: input.modelReasoningEffort };
+  const modelReasoningEffort = resolveAdmittedGatewayOcrReasoningEffort(
+    input.admittedRuntimeConfig,
+    input.model,
+    input.modelReasoningEffort
+  );
+  if (modelReasoningEffort !== null) {
+    extraBody.reasoning = { effort: modelReasoningEffort };
   }
   const provider = {
     protocol: "openai-responses",
@@ -148241,7 +148320,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.217",
+  version: "1.0.218",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -187893,65 +187972,6 @@ function clampInteger(value, minimum, maximum) {
   return value;
 }
 
-// src/control-plane/admitted-gateway-codex-model-settings.ts
-var GATEWAY_CODEX_MODEL_SETTINGS_ENV = "REVIEW_ROUTER_GATEWAY_MODEL_SETTINGS_JSON";
-var canonicalEfforts = [
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max"
-];
-function readAdmittedGatewayCodexModelSettings(runtime, selectedModel) {
-  const raw = runtime?.runtimeEnv[GATEWAY_CODEX_MODEL_SETTINGS_ENV];
-  if (raw === void 0) return void 0;
-  const invalid4 = () => new Error("account_gateway_codex_model_settings_invalid");
-  if (Buffer.byteLength(raw, "utf8") > 2048) throw invalid4();
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    throw invalid4();
-  }
-  if (!hasKeys(value, ["model", "reasoning"])) throw invalid4();
-  if (typeof value.model !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(value.model) || value.model !== selectedModel)
-    throw invalid4();
-  if (value.reasoning === null)
-    return Object.freeze({ model: value.model, reasoning: null });
-  if (!hasKeys(value.reasoning, ["allowed", "default"])) throw invalid4();
-  const { allowed, default: defaultEffort } = value.reasoning;
-  if (!Array.isArray(allowed) || allowed.length === 0 || allowed.length > 7 || allowed.some((effort) => !isCanonicalEffort(effort)) || new Set(allowed).size !== allowed.length || !isCanonicalEffort(defaultEffort) || !allowed.includes(defaultEffort))
-    throw invalid4();
-  return Object.freeze({
-    model: value.model,
-    reasoning: Object.freeze({
-      allowed: Object.freeze(
-        canonicalEfforts.filter((effort) => allowed.includes(effort))
-      ),
-      default: defaultEffort
-    })
-  });
-}
-function resolveAdmittedGatewayCodexReasoningEffort(settings, savedEffort) {
-  const effective = savedEffort === "ultra" ? "max" : savedEffort;
-  if (settings.reasoning === null) {
-    if (effective !== void 0)
-      throw new Error("account_gateway_codex_reasoning_effort_unsupported");
-    return null;
-  }
-  const selected = effective ?? settings.reasoning.default;
-  if (!isCanonicalEffort(selected) || !settings.reasoning.allowed.includes(selected))
-    throw new Error("account_gateway_codex_reasoning_effort_unsupported");
-  return selected;
-}
-function isCanonicalEffort(value) {
-  return typeof value === "string" && canonicalEfforts.includes(value);
-}
-function hasKeys(value, keys3) {
-  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(",") === [...keys3].sort().join(",");
-}
-
 // src/review-investigation/fixtures/review-investigation-capability-v1.golden.json
 var review_investigation_capability_v1_golden_default = {
   coverageProfile: {
@@ -215329,21 +215349,10 @@ var OcrReviewInvocationAdapter = class {
     }
     assertOcrInvocationLive(input);
     const run2 = this.gate(async () => {
-      this.reopenPoisonedConsumer();
       this.assertDispatchPermitted(assignment.workSlot.workSlotId);
       return await this.runInvocation(input, assignment);
     });
     return await run2;
-  }
-  /** A recorded failure fact poisoned this consumer against replays; one fresh
-   * bounded attempt may reopen it so a transport failure cannot burn the whole
-   * attempt budget fenced. The per-consumer dispatch record restarts with the
-   * consumer. */
-  reopenPoisonedConsumer() {
-    const effectBefore = this.options.bridge.effectFacts?.();
-    if (effectBefore === void 0 || effectBefore.effect === "none" || this.options.bridge.reopenConsumer?.() !== true)
-      return;
-    this.dispatchedSlots.clear();
   }
   /** §8.4 step 2: known-terminal/unknown Gateway effect fences new calls. A
    * positively proven not_dispatched denial paid nothing, so releasing it
@@ -221136,7 +221145,11 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           throw new Error("review_action_v2_ocr_model_missing");
         }
         const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
-        const ocrModelReasoningEffort = ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
+        const ocrModelReasoningEffort = resolveAdmittedGatewayOcrReasoningEffort(
+          input.accountGateway.runtimeConfig,
+          ocrModel,
+          ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
+        );
         const modelTransport = input.accountGateway.modelTransport;
         const capabilityAuthorization = modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
         if (!capabilityAuthorization) {
@@ -221176,6 +221189,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                   requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
                 },
                 modelReasoningEffort: ocrModelReasoningEffort,
+                admittedRuntimeConfig: input.accountGateway.runtimeConfig,
                 language: ocrLanguage,
                 contextTools: contextTools.config
               }),

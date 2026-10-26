@@ -1,9 +1,9 @@
 {
   "canonicalizerDigest": "bf61d04d42e158b26e4b651b62700b10212496487d7e20ac6e705272dc1d6a5f",
   "contractExportVersion": 1,
-  "expectedPublicActionBaseCommit": "1381fa481bfba3755bf9135b243486505b5c2563",
+  "expectedPublicActionBaseCommit": "8ce8de505b79771060cac668abbf4bc2197cc16d",
   "generatedFileDigests": {
-    "companion-contracts.ts": "8216881b7b78fafc1b81d753f6adc1421856553e1e8d94cffe8071cbeb69a8c0",
+    "companion-contracts.ts": "6394d8b5b1b922da6ae6fa6fec7897bb414676dbb847f9ba9e80192ce293749b",
     "fixtures/context-tools-v1.json": "bfb01a041ade951c16ae6f4066a1a160338191ec8ef3a1c5a059eff1a2c7a19b",
     "fixtures/pr-description-invocation-manifest-v1.golden.json": "03a33c85b5d3ef9070b592f2c2e3c39654891ca0ccef93ac6c55b6330aa38334",
     "fixtures/provider-invocation-manifest-v1.golden.json": "9e0369a80cb91c458befaf0b2aeb41be5b98246e0217b032e8fca414dab579bb",
@@ -59,11 +59,11 @@
     "schemas/review_snapshot_restore.schema.json": "066a962e48da0b6df1d8b2e529510140ee133e9bf21c6bb3ea55e84a80625e28",
     "usage-price-v1.ts": "e6b8dba84ed5032f4c68fb7d29f4802a51173faa956de20a47683ef0a6075cf4",
     "usage-producer-v1.ts": "62757092d80bd472f1c4d64125ee8152acf2bb450148acd18539cd5372cfd1f2",
-    "usage-responses-v1.ts": "00c2c3d916530e07341afc1b8369999e228f193f1579265991c43afcb0b4881e",
+    "usage-responses-v1.ts": "e24d658ffe99a0112dfe2bef7bffea514d9880690e3ab5768be22ff8826645f9",
     "usage-v1.ts": "1c57f859af274c26e7fb8d3f0759d1b64c2ef6d532960df1e0c02bff38e4a61c"
   },
   "goldenFixtureDigest": "25cbbf9c205d69c8bb9f32d074ce4df8d81a77a3fce070383abbd282245a6b9f",
   "protocolVersion": "2",
-  "saasSourceCommit": "7900c92cde056d3f4320beec13c8f7a84cb79d16",
+  "saasSourceCommit": "cd266b631968aab399a7246d741745d9067935df",
   "schemaDigest": "71f316821909667e1b7cc704bed330ef6cfa7ac44cf51d58935ba3238ab92504"
 }

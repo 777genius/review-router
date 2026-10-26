@@ -375,7 +375,8 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('needs attention');
+      expect(output).toContain('### 1 previous issue not verified');
+      expect(output).not.toContain('needs attention');
       expect(output).toContain('Lifecycle attention required');
       expect(output).not.toContain('## All Clear!');
     });

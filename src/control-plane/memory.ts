@@ -113,7 +113,7 @@ export interface ActionMemoryInteractionPort {
   ): Promise<ActionMemoryMutationResponse>;
   submitCommands(
     commands: readonly ActionMemoryCommand[],
-    source?: ActionMemorySourceMetadata
+    source: ActionMemorySourceMetadata
   ): Promise<readonly ActionMemoryMutationResponse[]>;
 }
 
@@ -172,18 +172,17 @@ export class ControlPlaneMemoryClient
 
   async submitCommands(
     commands: readonly ActionMemoryCommand[],
-    source?: ActionMemorySourceMetadata
+    source: ActionMemorySourceMetadata
   ): Promise<readonly ActionMemoryMutationResponse[]> {
+    if (!source) throw new Error('memory_v2_source_required');
     const wireCommands = [];
     for (const command of commands) {
-      const commandId = memoryCommandId({ command, source: source ?? null });
-      if (!source) throw new Error('memory_v2_source_required');
+      const commandId = memoryCommandId({ command, source });
       if (
         command.kind === 'update_memory' ||
         command.kind === 'disable_memory' ||
         command.kind === 'forget_memory'
       ) {
-        if (!source) throw new Error('memory_v2_source_required');
         const detail = await this.getEntry(
           command.memoryItemId,
           source,
@@ -204,7 +203,7 @@ export class ControlPlaneMemoryClient
     const response = await this.postJson('/api/action/v2/memory/commands', {
       protocolVersion: 2,
       commands: wireCommands,
-      ...(source ? { source } : {}),
+      source,
     });
     if (!response || typeof response !== 'object') {
       throw new Error('memory_command_invalid_response');

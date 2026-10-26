@@ -81,6 +81,18 @@ describe('ControlPlaneMemoryClient v2', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('fails closed before transport when an untyped caller omits required command source metadata', async () => {
+    const fetchImpl = jest.fn();
+    const client = new ControlPlaneMemoryClient(runtimeConfig, env, fetchImpl);
+    await expect(
+      client.submitCommands(
+        [{ kind: 'forget_memory', memoryItemId: 'mem_1' }],
+        undefined as never
+      )
+    ).rejects.toThrow('memory_v2_source_required');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('updates the same entry with authorized CAS and uses the stable command ID when reading original retry preconditions', async () => {
     const fetchImpl = jest
       .fn()

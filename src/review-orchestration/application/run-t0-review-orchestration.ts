@@ -104,6 +104,9 @@ export type RunT0ReviewOrchestrationCommand = {
   readonly sourceRunAttempt: string;
   readonly ownerIdHash: string;
   readonly allowPartial: boolean;
+  readonly restoredExecution?: RestoredReviewExecution;
+  /** Preserve persisted identities and one-shot/uncertain effects; never-started discovery may resume native admission. */
+  readonly restoreOnly?: boolean;
 };
 
 export type ReviewOrchestrationResult = {
@@ -306,25 +309,46 @@ export class RunT0ReviewOrchestration {
           }),
       ]);
 
-      execution = await this.dependencies.controlPlane.startExecution({
-        authorization,
-        idempotencyKey: this.idempotencyKey('start', [
-          authorization.authorizationId,
-          command.reviewRevisionHash,
-          command.planHash,
-        ]),
-        executionId: command.executionId,
-        reviewRevisionHash: command.reviewRevisionHash,
-        compatibilityKey: command.compatibilityKey,
-        planHash: command.planHash,
-        workSlotsCanonicalJson: command.workSlotsCanonicalJson,
-        assignmentManifestCanonicalJson:
-          command.assignmentManifestCanonicalJson,
-        assignmentManifestHash: command.assignmentManifestHash,
-        workSlots: command.workSlots,
-        sourceRunId: command.sourceRunId,
-        sourceRunAttempt: command.sourceRunAttempt,
-      });
+      if (
+        command.restoredExecution &&
+        restoredExecution &&
+        (restoredExecution.executionId !==
+          command.restoredExecution.executionId ||
+          restoredExecution.generation !==
+            command.restoredExecution.generation ||
+          restoredExecution.planHash !== command.planHash)
+      )
+        throw new Error('review_orchestration_restored_execution_drift');
+      const continuingExecution = command.restoredExecution
+        ? (restoredExecution ?? command.restoredExecution)
+        : undefined;
+      execution = continuingExecution
+        ? {
+            executionId: continuingExecution.executionId,
+            generation: continuingExecution.generation,
+            streamVersion: continuingExecution.streamVersion,
+            executionVersion: continuingExecution.version,
+            restoredExecution: continuingExecution,
+          }
+        : await this.dependencies.controlPlane.startExecution({
+            authorization,
+            idempotencyKey: this.idempotencyKey('start', [
+              authorization.authorizationId,
+              command.reviewRevisionHash,
+              command.planHash,
+            ]),
+            executionId: command.executionId,
+            reviewRevisionHash: command.reviewRevisionHash,
+            compatibilityKey: command.compatibilityKey,
+            planHash: command.planHash,
+            workSlotsCanonicalJson: command.workSlotsCanonicalJson,
+            assignmentManifestCanonicalJson:
+              command.assignmentManifestCanonicalJson,
+            assignmentManifestHash: command.assignmentManifestHash,
+            workSlots: command.workSlots,
+            sourceRunId: command.sourceRunId,
+            sourceRunAttempt: command.sourceRunAttempt,
+          });
       this.dependencies.progress?.report({
         type: 'initialized',
         workSlots: command.workSlots,
@@ -365,7 +389,29 @@ export class RunT0ReviewOrchestration {
         if (!restoredSlot) {
           throw new Error('review_orchestration_restored_work_slot_missing');
         }
+        const persistedSlot =
+          execution.restoredExecution.persistedPlan?.workSlots.find(
+            (slot) => slot.workSlotId === workSlot.workSlotId
+          );
+        const restoredSatisfied =
+          restoredSlot.state === RestoredReviewWorkSlotState.Satisfied;
+        const lifecycleEvidenceUnavailable =
+          workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation &&
+          (!restoredSatisfied ||
+            !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
+              (manifest) => manifest.workSlotId === workSlot.workSlotId
+            ));
+        // Pending/ordinal 1 is before any lease acquisition. Older restore
+        // responses omit the ordinal; retain their native admission behavior.
+        const discoveryDispatchUncertain =
+          workSlot.taskKind === ReviewTaskKind.FindingDiscovery &&
+          !restoredSatisfied &&
+          (restoredSlot.state === RestoredReviewWorkSlotState.Leased ||
+            restoredSlot.activeLeaseId !== null ||
+            (persistedSlot?.nextAttemptOrdinal ?? 1) > 1);
         if (
+          (command.restoreOnly &&
+            (lifecycleEvidenceUnavailable || discoveryDispatchUncertain)) ||
           restoredSlot.state === RestoredReviewWorkSlotState.Exhausted ||
           restoredSlot.state === RestoredReviewWorkSlotState.Cancelled
         ) {
@@ -421,6 +467,7 @@ export class RunT0ReviewOrchestration {
           ownerIdHash: command.ownerIdHash,
           revision: command,
           restoredSlot,
+          restoreOnly: command.restoreOnly === true,
           busyPollsByProviderLane,
           admissionLimited,
           onEvent: (event) => {
@@ -548,15 +595,16 @@ export class RunT0ReviewOrchestration {
         };
       }
 
-      const prDescription = descriptionSlots[0]
-        ? await this.generatePrDescription({
-            command,
-            authorization,
-            execution,
-            workSlot: descriptionSlots[0],
-            restored: restoredExecution !== null,
-          })
-        : undefined;
+      const prDescription =
+        !command.restoreOnly && descriptionSlots[0]
+          ? await this.generatePrDescription({
+              command,
+              authorization,
+              execution,
+              workSlot: descriptionSlots[0],
+              restored: restoredExecution !== null,
+            })
+          : undefined;
       const projection = await this.dependencies.projectionBuilder.build({
         comparisonBaseline,
         acceptedEvidence,
@@ -928,6 +976,7 @@ export class RunT0ReviewOrchestration {
     readonly ownerIdHash: string;
     readonly revision: ReviewRevisionFacts;
     readonly restoredSlot: RestoredReviewWorkSlot;
+    readonly restoreOnly: boolean;
     readonly busyPollsByProviderLane: Map<string, number>;
     readonly admissionLimited: boolean;
     readonly onEvent: (event: {
@@ -947,6 +996,7 @@ export class RunT0ReviewOrchestration {
   }> {
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest: ProviderInvocationManifest | null = null;
+    let handledInvestigationOrdinal: number | null = null;
     for (
       let attemptOrdinal = 1;
       attemptOrdinal <= input.workSlot.attemptBudget;
@@ -973,7 +1023,8 @@ export class RunT0ReviewOrchestration {
             authoritativeInvocation
           );
         validateManifest(authoritativeManifest);
-        await this.assertMemoryEligible(authoritativeInvocation);
+        if (!isOriginalAcceptedManifest(input, authoritativeManifest))
+          await this.assertMemoryEligible(authoritativeInvocation);
         if (
           authoritativeManifest.providerVoteIdentityHash !==
             input.workSlot.providerVoteIdentityHash ||
@@ -1025,7 +1076,16 @@ export class RunT0ReviewOrchestration {
         }
 
         let investigationCandidate = null;
+        // The initial profile has no atomic memory admission at investigation
+        // grants. Keep this ordinal on ordinary review, even after memory drops.
+        if (authoritativeInvocation.manifestFacts.memoryBundleHash != null)
+          handledInvestigationOrdinal = attemptOrdinal;
         if (
+          // A restored pending authoritative slot cannot prove that its
+          // separate investigation did not already execute before the crash.
+          !input.restoreOnly &&
+          authoritativeInvocation.manifestFacts.memoryBundleHash == null &&
+          handledInvestigationOrdinal !== attemptOrdinal &&
           !authoritativeInvocation.manifestFacts.taskKindSet.includes(
             ReviewTaskKind.LifecycleRevalidation
           )
@@ -1039,6 +1099,10 @@ export class RunT0ReviewOrchestration {
               ownerIdHash: input.ownerIdHash,
               revision: input.revision,
             });
+            // Memory can change before the authoritative lease is granted.
+            // A retry must not repeat completed investigation provider work or
+            // reuse its observation under a different memory-free manifest.
+            handledInvestigationOrdinal = attemptOrdinal;
           } catch (error) {
             if (error instanceof ReviewExecutionDeadlineReachedSignal) {
               input.onEvent({
@@ -1499,8 +1563,9 @@ export class RunT0ReviewOrchestration {
         }
       } catch (error) {
         if (!(error instanceof ReviewMemoryAdmissionChangedSignal)) throw error;
-        // No provider attempt was made under this new context. Prepare a new
-        // memory-free prompt/manifest at the same attempt ordinal.
+        // No authoritative lease was granted for this stale input. Prepare a
+        // memory-free prompt/manifest at the same attempt ordinal; completed
+        // investigation work is not repeated or reused under the new manifest.
         attemptOrdinal -= 1;
       }
     }
@@ -1534,11 +1599,7 @@ export class RunT0ReviewOrchestration {
     readonly revision: ReviewRevisionFacts;
     readonly workSlot: ReviewWorkSlotPlan;
   }): Promise<string> {
-    const acquireRequestId = this.identity('acquire-request-exhaustion', [
-      input.execution.executionId,
-      input.workSlot.workSlotId,
-      input.manifest.providerInvocationKey,
-    ]);
+    let manifest = input.manifest;
     const busyPollBudget = this.providerLaneBusyPollBudget();
     for (
       let busyPollCount = 0;
@@ -1546,6 +1607,11 @@ export class RunT0ReviewOrchestration {
       busyPollCount += 1
     ) {
       await this.assertRevisionCurrent(input.revision);
+      const acquireRequestId = this.identity('acquire-request-exhaustion', [
+        input.execution.executionId,
+        input.workSlot.workSlotId,
+        manifest.providerInvocationKey,
+      ]);
       const acquire =
         await this.dependencies.controlPlane.acquireInvocationLease({
           authorization: input.authorization,
@@ -1556,10 +1622,50 @@ export class RunT0ReviewOrchestration {
           ]),
           execution: input.execution,
           workSlot: input.workSlot,
-          manifest: input.manifest,
+          manifest,
           acquireRequestId,
           ownerIdHash: input.ownerIdHash,
         });
+      if (
+        acquire.status === ReviewInvocationLeaseAcquireOutcomeStatus.InputStale
+      ) {
+        const staleManifest = JSON.parse(manifest.manifestCanonicalJson) as {
+          readonly memoryBundleHash?: unknown;
+        };
+        if (
+          typeof staleManifest.memoryBundleHash !== 'string' ||
+          !this.dependencies.memoryAdmission
+        ) {
+          throw new Error('review_memory_stale_without_snapshot');
+        }
+        this.dependencies.memoryAdmission.discard();
+        // This ordinal is used only to reconcile the exhausted server slot.
+        // Preparation builds a fresh identity; it never executes inference.
+        const invocation = await this.dependencies.invocations.prepare({
+          workSlot: input.workSlot,
+          attemptOrdinal: input.workSlot.attemptBudget + 1,
+        });
+        manifest =
+          await this.dependencies.invocationManifestAssembler.assemble(
+            invocation
+          );
+        validateManifest(manifest);
+        const preparedManifest = JSON.parse(manifest.manifestCanonicalJson) as {
+          readonly memoryBundleHash?: unknown;
+        };
+        if (
+          invocation.manifestFacts.memoryBundleHash != null ||
+          preparedManifest.memoryBundleHash != null ||
+          manifest.providerVoteIdentityHash !==
+            input.workSlot.providerVoteIdentityHash ||
+          invocation.workSlotId !== input.workSlot.workSlotId ||
+          invocation.attemptOrdinal !== input.workSlot.attemptBudget + 1
+        ) {
+          throw new Error('review_orchestration_manifest_scope_mismatch');
+        }
+        busyPollCount -= 1;
+        continue;
+      }
       if (
         acquire.status ===
         ReviewInvocationLeaseAcquireOutcomeStatus.AttemptBudgetExhausted
@@ -1646,7 +1752,8 @@ export class RunT0ReviewOrchestration {
     readonly observation: AcceptedReviewObservation;
     readonly streamVersion: string;
   } | null> {
-    await this.assertMemoryEligible(input.invocation);
+    if (!isOriginalAcceptedManifest(input, input.manifest))
+      await this.assertMemoryEligible(input.invocation);
     const lookup = await this.dependencies.controlPlane.lookupEvidence({
       authorization: input.authorization,
       execution: input.execution,
@@ -1657,13 +1764,28 @@ export class RunT0ReviewOrchestration {
     if (lookup.kind === ReviewEvidenceLookupKind.Miss) return null;
 
     await this.assertRevisionCurrent(input.revision);
-    await this.assertMemoryEligible(input.invocation);
+    if (!isOriginalAcceptedManifest(input, input.manifest))
+      await this.assertMemoryEligible(input.invocation);
     validateObservationAgainstLimits(
       lookup.observation,
       input.authorization.limits
     );
 
     let streamVersion = input.execution.streamVersion;
+    if (input.restoredSlot.state === RestoredReviewWorkSlotState.Satisfied) {
+      if (
+        lookup.kind !== ReviewEvidenceLookupKind.Hit ||
+        input.restoredSlot.acceptedObservationRefId !==
+          observationRefId(
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            lookup.observation.observationId
+          )
+      )
+        throw new Error(
+          'review_orchestration_restored_observation_identity_mismatch'
+        );
+    }
     if (lookup.kind === ReviewEvidenceLookupKind.ReplayRequired) {
       const replayed = await this.replayCandidate({
         authorization: input.authorization,
@@ -1674,7 +1796,8 @@ export class RunT0ReviewOrchestration {
       });
       if (!replayed) return null;
       await this.assertRevisionCurrent(input.revision);
-      await this.assertMemoryEligible(input.invocation);
+      if (!isOriginalAcceptedManifest(input, input.manifest))
+        await this.assertMemoryEligible(input.invocation);
       const attached = await this.dependencies.controlPlane.attachObservation({
         authorization: input.authorization,
         idempotencyKey: this.idempotencyKey('attach-replayed', [
@@ -2264,6 +2387,7 @@ export class RunT0ReviewOrchestration {
             },
             (watchedSignal) =>
               generator.execute({
+                sourceExecutionId: input.execution.executionId,
                 invocation,
                 manifest,
                 lease: currentLease(),
@@ -2938,4 +3062,32 @@ class ReviewProviderUnavailableSignal extends Error {
   constructor(failureCode: string) {
     super(failureCode);
   }
+}
+
+/** Exact same-execution accepted evidence is read-only continuation, never a new memory admission. */
+function isOriginalAcceptedManifest(
+  input: {
+    readonly execution: ReviewExecutionAdmission;
+    readonly restoredSlot: RestoredReviewWorkSlot;
+    readonly workSlot: ReviewWorkSlotPlan;
+  },
+  manifest: ProviderInvocationManifest
+): boolean {
+  if (
+    input.restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied ||
+    input.execution.restoredExecution.executionId !==
+      input.execution.executionId
+  )
+    return false;
+  const original =
+    input.execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
+      (value) => value.workSlotId === input.workSlot.workSlotId
+    );
+  return (
+    original !== undefined &&
+    original.manifestCanonicalJson === manifest.manifestCanonicalJson &&
+    original.manifestKey === manifest.manifestKey &&
+    original.providerInvocationKey === manifest.providerInvocationKey &&
+    original.providerVoteIdentityHash === manifest.providerVoteIdentityHash
+  );
 }

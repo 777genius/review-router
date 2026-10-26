@@ -1,3 +1,4 @@
+import { resolveRevalidationConfidenceThresholds } from '../finding-revalidation/domain/resolve-confidence-policy';
 import {
   Finding,
   LifecycleAssignmentRecord,
@@ -34,13 +35,6 @@ export interface ThreadLifecycleAggregationInput {
   config?: Pick<ReviewConfig, 'reviewThreadLifecycleResolveConfidence'>;
 }
 
-const DEFAULT_RESOLVE_CONFIDENCE: Record<LifecycleSeverity, number> = {
-  critical: 0.9,
-  major: 0.85,
-  minor: 0.8,
-  unknown: 0.9,
-};
-
 export class ThreadLifecycleAggregator {
   aggregate(
     input: ThreadLifecycleAggregationInput
@@ -48,7 +42,7 @@ export class ThreadLifecycleAggregator {
     const plannedProviders = unique(input.plannedProviders);
     const quorumMode: LifecycleQuorumMode =
       plannedProviders.length >= 2 ? 'multi-provider' : 'single-provider';
-    const thresholds = resolveConfidenceThresholds(
+    const thresholds = resolveRevalidationConfidenceThresholds(
       input.config?.reviewThreadLifecycleResolveConfidence
     );
     const currentFingerprints = new Set(
@@ -515,25 +509,7 @@ function hasConcreteEvidence(
   );
 }
 
-function resolveConfidenceThresholds(
-  overrides?: Partial<Record<LifecycleSeverity, number>>
-): Record<LifecycleSeverity, number> {
-  const thresholds = { ...DEFAULT_RESOLVE_CONFIDENCE };
-  for (const severity of Object.keys(thresholds) as LifecycleSeverity[]) {
-    const value = overrides?.[severity];
-    if (
-      typeof value === 'number' &&
-      Number.isFinite(value) &&
-      value >= 0 &&
-      value <= 1
-    ) {
-      thresholds[severity] = value;
-    }
-  }
-  return thresholds;
-}
-
-function currentFindingMatchesTarget(
+export function currentFindingMatchesTarget(
   finding: Finding,
   target: LifecycleTarget
 ): boolean {

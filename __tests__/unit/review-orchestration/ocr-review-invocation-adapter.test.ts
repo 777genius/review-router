@@ -1,3 +1,5 @@
+import { restoredLifecycleInvocations } from '../../../src/review-orchestration/infrastructure/restored-lifecycle-invocations';
+import { canonicalJson } from '../../../src/context-gateway/context-gateway-contract';
 import {
   freezeReviewMemorySnapshot,
   type ReviewMemorySnapshot,
@@ -29,6 +31,8 @@ import {
 import type { OcrManagedLimits } from '../../../src/review-orchestration/infrastructure/ocr-review-managed-run';
 import {
   ReviewExecutionProviderKind,
+  RestoredReviewWorkSlotState,
+  type RestoredReviewExecution,
   ReviewTaskKind,
   type PreparedReviewInvocation,
   type ProviderInvocationManifest,
@@ -382,6 +386,7 @@ describe('OcrReviewInvocationAdapter', () => {
   }
 
   function adapterFixture(options: {
+    readonly freshReviewSkillsSupply?: import('../../../src/review-orchestration/infrastructure/ocr-review-invocation-adapter').OcrReviewInvocationOptions['freshReviewSkillsSupply'];
     readonly contextTools?: Pick<
       ContextToolsBroker,
       'receipt' | 'beginNativeSession'
@@ -446,6 +451,7 @@ describe('OcrReviewInvocationAdapter', () => {
       processRunner: options.processRunner,
       previewRunner: options.previewRunner,
       acceptanceDiagnostic: options.acceptanceDiagnostic,
+      freshReviewSkillsSupply: options.freshReviewSkillsSupply,
     });
     return {
       adapter,
@@ -481,6 +487,42 @@ describe('OcrReviewInvocationAdapter', () => {
     };
   }
 
+  it.each([
+    { before: 0, after: 1, witnessed: true },
+    { before: 9, after: 9, witnessed: false },
+    { before: undefined, after: undefined, witnessed: false },
+    { before: undefined, after: 2, witnessed: false },
+    { before: Number.NaN, after: 2, witnessed: false },
+    { before: 2, after: Number.POSITIVE_INFINITY, witnessed: false },
+  ])(
+    'requires a finite positive request delta around dispatch: $before → $after',
+    async ({ before, after, witnessed }) => {
+      let count = before;
+      const bridge = bridgeFixture({ requestCount: () => count }).bridge;
+      const runner = processRunnerWriting(nativeResultBody());
+      const freshReviewSkillsSupply = jest.fn();
+      const { adapter, workSlot } = adapterFixture({
+        bridge,
+        previewRunner: previewRunner().runner,
+        freshReviewSkillsSupply,
+        processRunner: async (input) => {
+          const result = await runner.runner(input);
+          count = after;
+          return result;
+        },
+      });
+      const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+      expect(freshReviewSkillsSupply).not.toHaveBeenCalled();
+      const observation = await adapter.execute(executionInput(prepared));
+      expect(freshReviewSkillsSupply).toHaveBeenCalledTimes(witnessed ? 1 : 0);
+      if (witnessed)
+        expect(freshReviewSkillsSupply).toHaveBeenCalledWith({
+          providerInvocationKey: 'pk',
+          payloadHash: observation.payloadHash,
+        });
+    }
+  );
+
   const unusedRunner: OcrReviewProcessRunner = async () => {
     throw new Error('execute must not run on this path');
   };
@@ -512,6 +554,35 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(first.reviewPrompt).toContain(
       'All outbound calls require a bounded timeout.'
     );
+    const original = {
+      workSlotId: workSlot.workSlotId,
+      manifestCanonicalJson: canonicalJson({
+        ...first.manifestFacts,
+        requestedModel: first.requestedModel,
+      }),
+      manifestKey: 'a'.repeat(64),
+      providerInvocationKey: 'b'.repeat(64),
+      providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+    };
+    const restored = {
+      reviewRevisionHash: REVIEW_REVISION_HASH,
+      workSlots: [
+        {
+          workSlotId: workSlot.workSlotId,
+          state: RestoredReviewWorkSlotState.Satisfied,
+        },
+      ],
+      persistedPlan: { acceptedManifests: [original] },
+    } as unknown as RestoredReviewExecution;
+    const readonly = restoredLifecycleInvocations(restored, adapter);
+    const recovered = await readonly.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(recovered.coverageManifest).toEqual(first.coverageManifest);
+    expect(recovered.manifestFacts.memoryBundleHash).toBe(snapshot.hash);
+    expect(recovered.reviewPrompt).toBe('');
+    expect(recovered.immutableRequest).toBeNull();
+    await expect(
+      readonly.execute({ invocation: recovered } as never)
+    ).rejects.toThrow('review_restore_inference_forbidden');
   });
 
   it('prepares model-free with a deterministic preview and no credentials in the request', async () => {
@@ -693,6 +764,14 @@ describe('OcrReviewInvocationAdapter', () => {
       planDigest: 'sha256:' + 'a'.repeat(64),
       schemaDigest: 'sha256:' + 'b'.repeat(64),
       availableTools: ['rr_repository_docs_read'],
+      toolCalls: [
+        {
+          toolName: 'rr_repository_docs_read',
+          started: 1,
+          succeeded: 1,
+          failed: 0,
+        },
+      ],
       nativeConnected: true,
       calls: 1,
       hadFailure: false,
@@ -758,6 +837,9 @@ describe('OcrReviewInvocationAdapter', () => {
       planDigest: 'sha256:' + 'a'.repeat(64),
       schemaDigest: 'sha256:' + 'b'.repeat(64),
       availableTools: ['rr_mcp_docs_read'],
+      toolCalls: [
+        { toolName: 'rr_mcp_docs_read', started: 1, succeeded: 0, failed: 1 },
+      ],
       nativeConnected: true,
       calls: 1,
       hadFailure: true,

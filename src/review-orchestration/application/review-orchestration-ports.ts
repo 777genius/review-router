@@ -358,6 +358,34 @@ export type RestoredReviewWorkSlot = Readonly<{
   acceptedObservationRefId: string | null;
 }>;
 
+export type PersistedReviewExecutionPlan = Readonly<{
+  compatibilityKey?: string;
+  acceptedManifests?: readonly (ProviderInvocationManifest & {
+    readonly workSlotId: string;
+  })[];
+  planHash: string;
+  assignmentManifestVersion: number | null;
+  assignmentManifestHash: string | null;
+  assignmentManifestCanonicalJson: string | null;
+  workSlots: readonly (ReviewWorkSlotPlan & {
+    state?: string;
+    nextAttemptOrdinal?: number;
+  })[];
+  artifact: null | Readonly<{
+    artifactId: string;
+    executionId: string;
+    generation: string;
+    reviewedHeadSha: string;
+    reviewRevisionHash: string;
+    projectionHash: string;
+    projectionEnvelopeVersion: number;
+    projectionEnvelopeCanonicalJson: string;
+    lifecycleStateHash: string;
+    commandLedgerWatermark: string;
+    publicationAttemptId: string;
+  }>;
+}>;
+
 export type RestoredReviewExecution = Readonly<{
   executionId: string;
   version: string;
@@ -368,6 +396,7 @@ export type RestoredReviewExecution = Readonly<{
   reviewRevisionHash: string;
   planHash: string;
   workSlots: readonly RestoredReviewWorkSlot[];
+  persistedPlan?: PersistedReviewExecutionPlan;
 }>;
 
 export type ReviewInvocationLease = {
@@ -456,6 +485,7 @@ export interface ReviewActionV2ControlPlanePort {
     readonly authorization: ReviewRunAuthorization;
     readonly reviewRevisionHash: string;
   }): Promise<void>;
+  readCapturedResolutionHistory?(): readonly unknown[] | null;
   restoreComparisonBaseline?(input: {
     readonly authorization: ReviewRunAuthorization;
     readonly reviewRevisionHash: string;
@@ -678,6 +708,7 @@ export interface PrDescriptionGenerationPort {
     readonly manifest: ProviderInvocationManifest;
     readonly lease: ReviewInvocationLease;
     readonly signal: AbortSignal;
+    readonly sourceExecutionId?: string;
   }): Promise<GeneratedPrDescription>;
   unavailable(): void;
 }

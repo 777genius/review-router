@@ -64,6 +64,55 @@ no additional tools, commands, network access or file scope. Provenance means th
 instructions were supplied; it does not certify that a model performed each
 requested check.
 
+## Review output
+
+When Skills are configured, the published review and check summary include one
+collapsed **Review skills** section. It reports web Skills as aggregate counts;
+names, instructions, IDs and source workspaces are not published. Repository
+Skills are identified only by paths from the reviewed repository at the captured
+trusted base. Captured/materialized digests and the base SHA identify the input.
+Missing roots and roots with no immediate discoverable `SKILL.md` files have
+separate status messages. These local diagnostics do not change captured bytes or
+cache identity.
+
+Matching changed paths, accepted review evidence, and fresh instruction supply
+are distinct. Native execution requires a finite positive transport request-count
+delta across successful execution; its witnesses include actual prompt paths even
+when code coverage is partial. Managed OCR requires a finite positive
+request-count delta around the actual process dispatch. Its receipt confirms
+aggregate delivery of the controlled rules, while individual Skill/path delivery
+remains unconfirmed. Preparation, deterministic previews, and materialization
+never establish fresh supply. A local execution witness must match both the
+invocation key and payload hash of evidence accepted for publication.
+
+If no such witness exists, the receipt says fresh supply is unconfirmed; it does
+not infer cache reuse. Authoritative investigation can restore a terminal result
+without a new model turn, so it remains unconfirmed without a narrow turn witness.
+Receipt statements never assert that the model followed or verified instructions.
+Existing incomplete-review status and coverage remain authoritative.
+
+Receipt paths and mentions are escaped, rows are bounded, and omitted rows are
+counted. The block enters the canonical projection before publication hashes are
+computed. If field or overall publication limits prevent it fitting, a compact
+notice replaces it. If even that notice cannot fit, the original valid review is
+retained and the same closed notice appears in Actions. Legacy and explicit empty
+captures without configured sources retain their existing output bytes.
+
+## Correcting repository Skill errors
+
+Invalid repository Skills fail before review inference and cache reuse. The
+workflow's actual Actions failure summary identifies the closed failure code,
+trusted base, source path, field or referenced path where known, and a correction.
+For example, a missing Markdown reference identifies its source `SKILL.md` and
+relative target. Invalid UTF-8, nonregular files, unsupported frontmatter,
+reference traversal/cycles/depth, and size limits have specific guidance. Reports
+never include YAML values/bodies, Git stderr, raw parser exceptions or credentials.
+
+The default Account Gateway failure route reports this in Actions; it does not
+post an additional PR failure advisory. No additional publication credentials or
+permissions are introduced. Successful review receipts use the existing App
+publication route.
+
 ## OCR rules and agent integrations
 
 OCR accepts `--rule <path>` for a JSON review-rule file, `--background` / `-b`
@@ -118,8 +167,10 @@ missing references, cycles, traversal, symlinks or Git links fail explicitly.
 
 Limits are 32 combined web/Git Skills, 32 KiB per Skill, eight references per Skill,
 16 KiB per reference, four reference levels and a 256 KiB materialized bundle.
-Tree enumeration is bounded to 1 MiB and 4096 entries per tree; Skill counts are
-checked before loading bodies. Limits never cause silent truncation.
+Tree enumeration is cumulatively bounded to 1 MiB and 4096 entries per selected
+Git root across Skill discovery and Markdown-reference traversal. Separate roots
+have independent budgets. Skill counts are checked before loading bodies. Limits
+never cause silent truncation.
 
 ## Offline qualification
 
@@ -136,7 +187,10 @@ REVIEWROUTER_OCR_BINARY=/tmp/qualified-ocr/opencodereview \
 
 The synthetic Git/loopback Responses test checks actual main and plan request
 content, merged built-ins, two applicable Skills, case-distinct paths and excluded
-inventory. It uses deterministic local responses, with no paid model calls.
+inventory. It also materializes a Git Skill from the captured base and projects
+the accepted output through the receipt collector into the canonical production
+publication. An unwitnessed replay cannot claim fresh supply. It uses
+deterministic local responses, with no paid model calls.
 `REVIEWROUTER_OCR_REQUIRED=1` makes a missing binary fail instead of skipping.
 
 The runtime CI installs Go 1.26.9 through an immutable `actions/setup-go` pin,

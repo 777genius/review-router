@@ -10,6 +10,10 @@ import {
 import { GitReviewRevisionMaterializer } from '../../../src/review-orchestration/infrastructure/git-review-revision-materializer';
 import { PullRequestLoader } from '../../../src/github/pr-loader';
 import { reviewMemoryBundle } from '../../helpers/review-memory-v2-fixture';
+import {
+  readAdmittedGatewayCodexModelSettings,
+  GATEWAY_CODEX_MODEL_SETTINGS_ENV,
+} from '../../../src/control-plane/admitted-gateway-codex-model-settings';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -55,12 +59,15 @@ import {
   mapOrchestrationResultToCodexOutcome,
   mapRevisionGuardErrorToCodexOutcome,
   planAssignments,
+  assertLegacyReviewPlanRestorable,
+  selectLegacyLifecycleTargets,
   resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions,
   resolveT0AttemptBudget,
   resolveProductionInvestigationReasoningEffort,
   selectDirectOpenRouterProvider,
 } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
+import { restoreProductionLifecycleVerification } from '../../../src/review-orchestration/infrastructure/restored-lifecycle-invocations';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../../src/context-gateway/context-gateway-release-contract';
 import {
   ReviewCapabilityKind,
@@ -72,6 +79,9 @@ import {
   ReviewOrchestrationResultStatus,
   ReviewPublicationUnavailableFact,
   ReviewTaskKind,
+  RestoredReviewExecutionState,
+  RestoredReviewWorkSlotState,
+  type RestoredReviewExecution,
   type ReviewRunAuthorization,
 } from '../../../src/review-orchestration/application';
 import {
@@ -87,6 +97,7 @@ import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import {
   ReviewDepth,
   type PRContext,
+  type LifecycleTarget,
   type ReviewConfig,
 } from '../../../src/types';
 import { compareCodeUnits } from '../../../src/review-orchestration/infrastructure/production-review-projection';
@@ -118,9 +129,15 @@ import {
 } from '../../../src/review-orchestration/infrastructure/production-review-investigation-composition';
 
 describe('ProductionT0ReviewRunner policy', () => {
-  it.each(['available', 'disabled', 'outage'] as const)(
-    'composes the real T0 runner with %s memory and hashes only the prompt actually prepared',
-    async (mode) => {
+  it.each([
+    ['available', 'codex'],
+    ['disabled', 'codex'],
+    ['outage', 'codex'],
+    ['restore', 'codex'],
+    ['restore', 'ocr'],
+  ] as const)(
+    'composes the real T0 runner with %s memory on %s and preserves execution identity on restore',
+    async (mode, engine) => {
       const root = fs.realpathSync(
         fs.mkdtempSync(path.join(os.tmpdir(), 't0-memory-production-'))
       );
@@ -167,6 +184,16 @@ describe('ProductionT0ReviewRunner policy', () => {
       const admitted = authorization(3);
       admitted.facts = {
         ...admitted.facts,
+        ...(engine === 'ocr'
+          ? {
+              providerVoteLanes: admitted.facts.providerVoteLanes.map(
+                (lane) => ({
+                  ...lane,
+                  providerKind: ReviewExecutionProviderKind.Ocr,
+                })
+              ),
+            }
+          : {}),
         baseSha,
         mergeBaseSha: baseSha,
         headSha,
@@ -238,12 +265,17 @@ describe('ProductionT0ReviewRunner policy', () => {
           .mockReturnValue({}),
       ];
       const prepared: { prompt: string; hash: string | null }[] = [];
+      const commands: Parameters<
+        RunT0ReviewOrchestration['executeAuthorized']
+      >[0][] = [];
+      let restored: RestoredReviewExecution | null = null;
       const execute = jest
         .spyOn(RunT0ReviewOrchestration.prototype, 'executeAuthorized')
         .mockImplementation(async function (
           this: RunT0ReviewOrchestration,
           command
         ) {
+          commands.push(command);
           const dependencies = (
             this as unknown as {
               dependencies: RunT0ReviewOrchestrationDependencies;
@@ -252,7 +284,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           const workSlot = command.workSlots.find(
             (slot) => slot.taskKind === ReviewTaskKind.FindingDiscovery
           )!;
-          for (let count = 0; count < 2; count += 1) {
+          for (let count = 0; engine === 'codex' && count < 2; count += 1) {
             const invocation = await dependencies.invocations.prepare({
               workSlot,
               attemptOrdinal: 1,
@@ -292,45 +324,143 @@ describe('ProductionT0ReviewRunner policy', () => {
             UPDATE_PR_DESCRIPTION: 'false',
           },
         });
-        await expect(
-          new ProductionT0ReviewRunner(fetchImpl).run({
-            apiUrl: 'https://fixture.invalid',
-            audience: 'reviewrouter',
-            workflowSchemaVersion: 1,
-            repository: 'fixture/repository',
-            pullRequestNumber: 1,
-            headSha,
-            workspacePath: root,
-            codexHome: path.join(root, 'home'),
-            scmReadToken: 'fixture-scm',
-            scmReadTokenExpiresAt: new Date(
-              Date.now() + 3_600_000
-            ).toISOString(),
-            refreshScmReadToken: async () => {
-              throw new Error('unexpected refresh');
-            },
-            accountGateway: {
-              runtimeConfig,
-              controlPlane: { currentAuthorization: () => admitted } as never,
-              modelTransport: {
-                baseUrl: 'http://127.0.0.1:1/v1',
-                configuration: [],
-                environment: {},
-                actualModel: () => 'gpt-memory-test',
-                failureFact: () => undefined,
-                dispose: async () => {},
+        const profile =
+          engine === 'ocr'
+            ? JSON.stringify({
+                profileRef: 'ocr-managed-v1',
+                agentKind: 'ocr',
+                binarySha256: '1'.repeat(64),
+                packageVersion: '1.2.3',
+                modelTransports: ['account_gateway'],
+                contextGateway: false,
+                cancellation: true,
+              })
+            : null;
+        const runnerInput = {
+          apiUrl: 'https://fixture.invalid',
+          audience: 'reviewrouter',
+          workflowSchemaVersion: 1,
+          repository: 'fixture/repository',
+          pullRequestNumber: 1,
+          headSha,
+          workspacePath: root,
+          codexHome: path.join(root, 'home'),
+          scmReadToken: 'fixture-scm',
+          scmReadTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          refreshScmReadToken: async () => {
+            throw new Error('unexpected refresh');
+          },
+          ...(engine === 'ocr'
+            ? {
+                ocr: {
+                  run: {
+                    binaryPath: '/never-run',
+                    runDirectory: root,
+                    homeDirectory: path.join(root, 'home'),
+                    configPath: path.join(root, 'config'),
+                    rulePath: path.join(root, 'rule'),
+                    backgroundPath: null,
+                    cleanup: async () => {},
+                  },
+                  effectFacts: () => ({ effect: 'not_dispatched' as const }),
+                },
+              }
+            : {}),
+          accountGateway: {
+            runtimeConfig: profile
+              ? parseAdmittedRuntimeConfig({
+                  protocolVersion: 1,
+                  configVersion: 1,
+                  runtimeEnv: {
+                    ...runtimeConfig.runtimeEnv,
+                    REVIEW_ROUTER_AGENT_PROFILE_JSON: profile,
+                    REVIEW_ROUTER_AGENT_PROFILE_DIGEST: createHash('sha256')
+                      .update(profile)
+                      .digest('hex'),
+                  },
+                })
+              : runtimeConfig,
+            controlPlane: {
+              currentAuthorization: () => admitted,
+              restoreExecution: async () => restored,
+            } as never,
+            modelTransport: {
+              baseUrl: 'http://127.0.0.1:1/v1',
+              configuration: [],
+              environment: {
+                REVIEWROUTER_LOCAL_MODEL_TOKEN: `Bearer ${'a'.repeat(64)}`,
               },
+              actualModel: () => 'gpt-memory-test',
+              failureFact: () => undefined,
+              dispose: async () => {},
             },
-          })
+          },
+        } as Parameters<ProductionT0ReviewRunner['run']>[0];
+        await expect(
+          new ProductionT0ReviewRunner(fetchImpl).run(runnerInput)
         ).rejects.toBe(boundary);
-        expect(prepared).toHaveLength(2);
-        expect(prepared[0]).toEqual(prepared[1]);
+        if (mode === 'restore') {
+          const original = commands[0]!;
+          restored = {
+            executionId: original.executionId,
+            version: '1',
+            streamVersion: '1',
+            generation: '1',
+            state: RestoredReviewExecutionState.Running,
+            authorizationId: admitted.authorizationId,
+            reviewRevisionHash: original.reviewRevisionHash,
+            planHash: original.planHash,
+            workSlots: original.workSlots.map((slot) => ({
+              ...slot,
+              state: RestoredReviewWorkSlotState.Pending,
+              activeLeaseId: null,
+              acceptedObservationRefId: null,
+            })),
+            persistedPlan: {
+              compatibilityKey: original.compatibilityKey,
+              planHash: original.planHash,
+              assignmentManifestVersion: 1,
+              assignmentManifestHash: original.assignmentManifestHash,
+              assignmentManifestCanonicalJson:
+                original.assignmentManifestCanonicalJson,
+              workSlots: original.workSlots.map((slot) => ({
+                ...slot,
+                nextAttemptOrdinal: 1,
+              })),
+              acceptedManifests: [],
+              artifact: null,
+            },
+          };
+          await expect(
+            new ProductionT0ReviewRunner(fetchImpl).run(runnerInput)
+          ).rejects.toBe(boundary);
+          expect(commands).toHaveLength(2);
+          expect(commands[1]).toMatchObject({
+            executionId: original.executionId,
+            compatibilityKey: original.compatibilityKey,
+            planHash: original.planHash,
+            workSlotsCanonicalJson: original.workSlotsCanonicalJson,
+            restoredExecution: restored,
+            restoreOnly: true,
+          });
+          if (engine === 'codex') {
+            expect(prepared).toHaveLength(4);
+            expect(prepared[0]!.hash).not.toBeNull();
+            expect(prepared[2]!.hash).toBeNull();
+            expect(prepared[2]!.prompt).not.toContain(
+              'AUTHORIZED REVIEWROUTER MEMORY'
+            );
+          }
+        } else {
+          expect(prepared).toHaveLength(2);
+          expect(prepared[0]).toEqual(prepared[1]);
+        }
         if (mode === 'available') {
           expect(prepared[0].prompt).toContain(
             'All outbound calls require a bounded timeout.'
           );
           expect(prepared[0].hash).toMatch(/^[a-f0-9]{64}$/);
-        } else {
+        } else if (mode !== 'restore') {
           expect(prepared[0].prompt).not.toContain(
             'AUTHORIZED REVIEWROUTER MEMORY'
           );
@@ -380,6 +510,47 @@ describe('ProductionT0ReviewRunner policy', () => {
         selectDirectOpenRouterProvider({ ...config, ...mismatch })
       ).toThrow('review_action_v2_direct_provider_policy_invalid');
   });
+  it.each([
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', undefined, 'high'],
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'low', 'low'],
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'medium', 'medium'],
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'high', 'high'],
+    ['kimi-code-api', 'k3-256k', undefined, null],
+  ] as const)(
+    'preserves direct %s reasoning for %s with saved effort %s',
+    (providerApiAuthMode, codexModel, serverReasoningEffort, expected) => {
+      expect(
+        resolveProductionInvestigationReasoningEffort({
+          codexModel,
+          accountGateway: false,
+          providerApi: true,
+          providerApiAuthMode,
+          serverReasoningEffort,
+        })
+      ).toBe(expected);
+    }
+  );
+
+  it.each([
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'xhigh'],
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'ultra'],
+    ['kimi-code-api', 'k3-256k', 'low'],
+    ['kimi-code-api', 'k3-256k', 'high'],
+  ] as const)(
+    'rejects unsupported direct %s reasoning for %s: %s',
+    (providerApiAuthMode, codexModel, serverReasoningEffort) => {
+      expect(() =>
+        resolveProductionInvestigationReasoningEffort({
+          codexModel,
+          accountGateway: false,
+          providerApi: true,
+          providerApiAuthMode,
+          serverReasoningEffort,
+        })
+      ).toThrow('provider_api_reasoning_effort_unsupported');
+    }
+  );
+
   const admittedAgentJson = JSON.stringify({
     profileRef: 'fixture-codex',
     agentKind: 'codex',
@@ -436,6 +607,50 @@ describe('ProductionT0ReviewRunner policy', () => {
     ['mimo-v2.6-pro', 'gpt-caller', true, 'low', 'mimo-v2.6-pro'],
     ['gpt-selected', 'mimo-v2.6-pro', false, undefined, 'mimo-v2.6-pro'],
     ['gpt-selected', 'mimo-v2.6-pro', false, 'high', 'mimo-v2.6-pro'],
+    [
+      'gpt-unseen-minimal',
+      'gpt-caller',
+      false,
+      'minimal',
+      'gpt-unseen-minimal',
+    ],
+    [
+      'gpt-unseen-high-only',
+      'gpt-caller',
+      false,
+      'high',
+      'gpt-unseen-high-only',
+    ],
+    [
+      'gpt-unseen-default',
+      'gpt-caller',
+      false,
+      undefined,
+      'gpt-unseen-default',
+    ],
+    ['gpt-unseen-max', 'gpt-caller', false, 'max', 'gpt-unseen-max'],
+    ['gpt-unseen-ultra', 'gpt-caller', false, 'ultra', 'gpt-unseen-ultra'],
+    [
+      'gpt-5.4-future-default',
+      'gpt-caller',
+      false,
+      undefined,
+      'gpt-5.4-future-default',
+    ],
+    [
+      'gpt-5.4-future-disabled',
+      'gpt-caller',
+      false,
+      undefined,
+      'gpt-5.4-future-disabled',
+    ],
+    [
+      'gpt-5.4-future-ultra',
+      'gpt-caller',
+      false,
+      'ultra',
+      'gpt-5.4-future-ultra',
+    ],
   ] as const)(
     'pins AppServer catalog and effort from selected %s independently of caller %s (gateway %s, effort %s)',
     async (
@@ -490,7 +705,28 @@ describe('ProductionT0ReviewRunner policy', () => {
         });
         if (runtimeResult.status !== 'applied')
           throw new Error('expected applied runtime config');
+        const gatewayModelSettings = selectedModel.startsWith('gpt-5.4-future')
+          ? readAdmittedGatewayCodexModelSettings(
+              {
+                protocolVersion: 1,
+                configVersion: 7,
+                runtimeEnv: {
+                  [GATEWAY_CODEX_MODEL_SETTINGS_ENV]: JSON.stringify({
+                    model: selectedModel,
+                    reasoning: selectedModel.endsWith('disabled')
+                      ? null
+                      : {
+                          allowed: ['minimal', 'high', 'max'],
+                          default: 'minimal',
+                        },
+                  }),
+                },
+              },
+              selectedModel
+            )
+          : undefined;
         const effectiveEffort = resolveProductionInvestigationReasoningEffort({
+          gatewayModelSettings,
           codexModel: selectedModel,
           accountGateway: true,
           serverReasoningEffort: runtimeResult.reasoningEffort,
@@ -499,6 +735,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           codexModel: selectedModel,
           ...{ admittedGatewayModel },
           reasoningEffort: effectiveEffort,
+          gatewayModelSettings,
           codexBinaryPath: '/mock/codex',
           modelTransport: {
             baseUrl: 'http://127.0.0.1:1/v1',
@@ -608,7 +845,9 @@ describe('ProductionT0ReviewRunner policy', () => {
             }),
           } as unknown as ContextGatewayInvocationSessionFactoryPort,
           true,
-          effectiveEffort
+          effectiveEffort,
+          undefined,
+          gatewayModelSettings
         ).prepare({ workSlot, attemptOrdinal: 1 });
         const manifest = await new GeneratedProviderInvocationManifestAssembler(
           authorization(1),
@@ -616,7 +855,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           '7'.repeat(64)
         ).assemble(invocation);
         // Ambient effort changes after preparation cannot change the launch.
-        process.env.CODEX_REASONING_EFFORT = 'low';
+        process.env.CODEX_REASONING_EFFORT = 'xhigh';
         // Real adapter/session/config preparation, stopped before any subprocess.
         await expect(agents[0].agent.executeTurn(request)).rejects.toBe(
           stoppedAtBoundary
@@ -639,7 +878,15 @@ describe('ProductionT0ReviewRunner policy', () => {
         }
         const investigationLaunch = execute.mock.calls[1][0];
         expect(launch.protocol.reasoningEffort).toBe(
-          enabled ? (reasoningEffort ?? 'high') : 'xhigh'
+          gatewayModelSettings
+            ? selectedModel.endsWith('disabled')
+              ? null
+              : reasoningEffort === 'ultra'
+                ? 'max'
+                : 'minimal'
+            : enabled
+              ? (reasoningEffort ?? 'high')
+              : (reasoningEffort ?? 'xhigh')
         );
         expect(investigationLaunch.protocol.requestedModel).toBe(
           invocation.requestedModel
@@ -662,6 +909,7 @@ describe('ProductionT0ReviewRunner policy', () => {
               probeLimits: invocation.investigationProbePlan!.limits,
               probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
               reasoningEffort: investigationLaunch.protocol.reasoningEffort,
+              ...(gatewayModelSettings ? { gatewayModelSettings } : {}),
               requestedModel: investigationLaunch.protocol.requestedModel,
               searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
               turnPromptContractHash:
@@ -678,7 +926,7 @@ describe('ProductionT0ReviewRunner policy', () => {
         const catalogSettings = launch.args.filter((arg) =>
           arg.startsWith('model_catalog_json=')
         );
-        if (enabled) {
+        if (enabled || gatewayModelSettings) {
           const catalogPath = path.join(
             home,
             'reviewrouter-model-catalog.json'
@@ -690,8 +938,14 @@ describe('ProductionT0ReviewRunner policy', () => {
             JSON.parse(fs.readFileSync(catalogPath, 'utf8')).models[0]
           ).toMatchObject({
             slug: selectedModel,
-            use_responses_lite: true,
+            use_responses_lite: !gatewayModelSettings,
             apply_patch_tool_type: 'freeform',
+            ...(gatewayModelSettings
+              ? {
+                  default_reasoning_level:
+                    gatewayModelSettings.reasoning?.default ?? null,
+                }
+              : {}),
           });
           expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(
             [...configuration, setting].join('\n') + '\n'
@@ -710,6 +964,19 @@ describe('ProductionT0ReviewRunner policy', () => {
         execute.mockRestore();
         fs.rmSync(root, { recursive: true, force: true });
       }
+    }
+  );
+
+  it.each(['none', 'unsupported'])(
+    'rejects a Gateway Codex effort outside saved policy: %s',
+    (serverReasoningEffort) => {
+      expect(() =>
+        resolveProductionInvestigationReasoningEffort({
+          codexModel: 'gpt-unseen',
+          accountGateway: true,
+          serverReasoningEffort,
+        })
+      ).toThrow('account_gateway_codex_reasoning_effort_unsupported');
     }
   );
 
@@ -824,7 +1091,9 @@ describe('ProductionT0ReviewRunner policy', () => {
           })
         ).rejects.toBe(stoppedAtBoundary);
         expect(configuration).not.toHaveBeenCalled();
-        expect(captured).toHaveBeenCalledWith(runtimeEnv);
+        expect(captured).toHaveBeenCalledWith(runtimeEnv, {
+          modelTransport: true,
+        });
         const resolved = captured.mock.results[0].value as ReviewConfig;
         expect(resolved.providers).toEqual([
           'openrouter/vendor/captured-model',
@@ -1241,6 +1510,117 @@ process.stdin.once('data', () => {
     expect(resolveT0AttemptBudget(5, 2)).toBe(2);
   });
 
+  it.each([
+    ['off', undefined, 0],
+    ['off', '{invalid', 0],
+    ['report', undefined, 1],
+    ['resolve', undefined, 1],
+    ['resolve', '{invalid', 0],
+    ['resolve', '', 0],
+  ] as const)(
+    'selects legacy lifecycle targets with mode=%s and captured profile=%s',
+    (mode, capabilityJson, count) => {
+      const target = { targetId: 'old-target' } as LifecycleTarget;
+      expect(
+        selectLegacyLifecycleTargets(mode, capabilityJson, [target])
+      ).toEqual(count ? [target] : []);
+    }
+  );
+
+  it('continues exact legacy discovery with a present invalid cap and no frozen metadata', () => {
+    const admitted = authorization(1);
+    const planned = planAssignments({
+      authorization: admitted,
+      pr: pullRequest(['src/a.ts']),
+      config: DEFAULT_CONFIG,
+      providerName: 'codex/gpt-test',
+      compatibilityKey: '7'.repeat(64),
+      lifecycleTargets: selectLegacyLifecycleTargets('resolve', '{invalid', [
+        { targetId: 'old-target' } as LifecycleTarget,
+      ]),
+      liveLifecycleStateHash: '8'.repeat(64),
+    });
+    const restored: RestoredReviewExecution = {
+      executionId: 'existing-native-execution',
+      version: '9',
+      streamVersion: '8',
+      generation: '3',
+      state: RestoredReviewExecutionState.Running,
+      authorizationId: admitted.authorizationId,
+      reviewRevisionHash: admitted.facts.reviewRevisionHash,
+      planHash: planned.plan.planHash,
+      workSlots: planned.plan.assignments.map(({ workSlot }) => ({
+        workSlotId: workSlot.workSlotId,
+        required: workSlot.required,
+        providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+        state: RestoredReviewWorkSlotState.Pending,
+        activeLeaseId: null,
+        acceptedObservationRefId: null,
+      })),
+    };
+    const restoredLifecycle = restoreProductionLifecycleVerification(
+      restored,
+      planned.plan,
+      DEFAULT_CONFIG
+    );
+    expect(restoredLifecycle.plan).toBe(planned.plan);
+    expect(restoredLifecycle.packetsByWorkSlotId.size).toBe(0);
+    expect(restoredLifecycle.lifecycleVerification).toBeUndefined();
+    expect(planned.assignments[0].lifecycleTargets).toEqual([]);
+    const original = canonicalJson(restored);
+    expect(() =>
+      assertLegacyReviewPlanRestorable(restored, planned.plan)
+    ).not.toThrow();
+    expect(canonicalJson(restored)).toBe(original);
+    for (const incompatible of [
+      { ...restored, planHash: '9'.repeat(64) },
+      { ...restored, workSlots: [] },
+      {
+        ...restored,
+        workSlots: [
+          ...restored.workSlots,
+          { ...restored.workSlots[0], workSlotId: 'original-lifecycle-slot' },
+        ],
+      },
+      {
+        ...restored,
+        workSlots: [...restored.workSlots, restored.workSlots[0]],
+      },
+      ...[
+        { workSlotId: 'different-slot' },
+        { required: false },
+        { providerVoteIdentityHash: '9'.repeat(64) },
+      ].map((change) => ({
+        ...restored,
+        workSlots: [{ ...restored.workSlots[0], ...change }],
+      })),
+    ]) {
+      expect(() =>
+        assertLegacyReviewPlanRestorable(incompatible, planned.plan)
+      ).toThrow('review_restore_legacy_plan_unavailable');
+    }
+    expect(() =>
+      assertLegacyReviewPlanRestorable(null, planned.plan)
+    ).not.toThrow();
+    expect(() =>
+      assertLegacyReviewPlanRestorable(
+        {
+          ...restored,
+          persistedPlan: {
+            planHash: restored.planHash,
+            assignmentManifestVersion: 1,
+            assignmentManifestHash: planned.plan.assignmentManifestHash,
+            assignmentManifestCanonicalJson:
+              planned.plan.assignmentManifestCanonicalJson,
+            workSlots: planned.plan.assignments.map(({ workSlot }) => workSlot),
+            artifact: null,
+          },
+        },
+        planned.plan
+      )
+    ).not.toThrow();
+  });
+
   it('pins agentic reviews to the release gateway policy independently of investigation rollout', () => {
     expect(
       resolveProductionContextGatewayPolicyVersion({ agenticContext: true })
@@ -1337,6 +1717,10 @@ process.stdin.once('data', () => {
         liveLifecycleStateHash: '8'.repeat(64),
       };
       const planned = planAssignments(options);
+      // Old inventory is prompt input, not a member of the legacy frozen plan.
+      expect(
+        planAssignments({ ...options, lifecycleTargets: [] }).plan.planHash
+      ).toBe(planned.plan.planHash);
       expect(planned.assignments).toHaveLength(1);
       expect(
         planned.assignments.flatMap((a) => a.lifecycleTargets)

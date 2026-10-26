@@ -64,6 +64,44 @@ const scope = (n: number) => ({
 });
 
 describe('authoritative review comparison', () => {
+  it.each([
+    'review-projection-policy.v6-comparison',
+    'review-projection-policy.v7-lifecycle-verification',
+  ] as const)(
+    'restores bounded typed lineage hints and confirmed receipts for %s',
+    (projectionPolicyVersion) => {
+      const restoredBaseline: ReviewComparisonBaseline = {
+        ...baseline,
+        projectionPolicyVersion,
+        priorLineageHints: [
+          {
+            ...hint,
+            trustedMarker: lineageId,
+            startLine: 1,
+            endLine: 1,
+            lastSeenHeadSha: head(2),
+          },
+        ],
+        appliedResolutions: [
+          {
+            lineageId,
+            targetId: 'rrt_resolved',
+            threadId: 'resolved-thread',
+            markerFingerprint: lineageId,
+            resolvedAt: '2026-10-25T01:00:00.000Z',
+          },
+        ],
+      };
+      const restored = parseReviewComparisonBaseline(
+        JSON.stringify(restoredBaseline)
+      );
+      expect(restored).toEqual(restoredBaseline);
+      expect(Object.isFrozen(restored)).toBe(true);
+      expect(Object.isFrozen(restored?.priorLineageHints[0])).toBe(true);
+      expect(Object.isFrozen(restored?.appliedResolutions[0])).toBe(true);
+    }
+  );
+
   it('keeps valid empty history explicit and falls back on malformed or unsupported history', () => {
     expect(
       parseReviewComparisonBaseline(
@@ -91,6 +129,11 @@ describe('authoritative review comparison', () => {
       { ...baseline, priorLineageHints: [hint, hint] },
       { ...baseline, priorLineageHints: [{ ...hint, secret: true }] },
       { ...baseline, projectionPolicyVersion: 'unknown' },
+      {
+        ...baseline,
+        projectionPolicyVersion:
+          'review-projection-policy.v8-lifecycle-verification',
+      },
     ])
       expect(parseReviewComparisonBaseline(JSON.stringify(bad))).toBeNull();
     expect(

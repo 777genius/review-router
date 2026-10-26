@@ -100,6 +100,9 @@ export function createStableReviewWorkPlan(input: {
   readonly eligiblePaths: readonly string[];
   readonly uncoveredPaths: readonly string[];
   readonly excludedPaths: readonly string[];
+  readonly lifecyclePlan?: (
+    assignments: readonly StableReviewWorkAssignment[]
+  ) => unknown;
   readonly maxWorkSlots: number;
   readonly maxAttemptsPerSlot: number;
 }): StableReviewWorkPlan {
@@ -154,9 +157,14 @@ export function createStableReviewWorkPlan(input: {
       'batch_scheduling_ordinal'
     );
     const description = batch.taskKind === ReviewTaskKind.PrDescription;
+    const lifecycle = batch.taskKind === ReviewTaskKind.LifecycleRevalidation;
+    if (lifecycle && (batch.required || batch.paths.length))
+      throw new Error('review_lifecycle_slot_scope_invalid');
     if (description && (batch.required || batch.paths.length))
       throw new Error('review_description_slot_scope_invalid');
-    for (const provider of description ? [input.providers[0]] : providers) {
+    for (const provider of description || lifecycle
+      ? [input.providers[0]]
+      : providers) {
       requireIdentity(provider.providerName, 'provider_name');
       requireIdentity(provider.retryPolicyVersion, 'retry_policy_version');
       if (
@@ -199,10 +207,12 @@ export function createStableReviewWorkPlan(input: {
           providerVoteIdentityHash: provider.providerVoteIdentityHash,
           shardKey: batch.batchId,
           required: batch.required && provider.required,
-          attemptBudget: description ? 1 : provider.attemptBudget,
-          retryPolicyVersion: description
-            ? 'pr-description-no-replay.v1'
-            : provider.retryPolicyVersion,
+          attemptBudget: description || lifecycle ? 1 : provider.attemptBudget,
+          retryPolicyVersion: lifecycle
+            ? 'lifecycle-verification-no-replay.v1'
+            : description
+              ? 'pr-description-no-replay.v1'
+              : provider.retryPolicyVersion,
         },
       });
     }
@@ -228,6 +238,9 @@ export function createStableReviewWorkPlan(input: {
       workSlotId: assignment.workSlot.workSlotId,
       paths: pathsByBatchId.get(assignment.batchId) ?? [],
     })),
+    ...(input.lifecyclePlan
+      ? { lifecyclePlan: input.lifecyclePlan(assignments) }
+      : {}),
     eligiblePaths: input.eligiblePaths,
     uncoveredPaths: input.uncoveredPaths,
     excludedPaths: input.excludedPaths,
@@ -259,6 +272,7 @@ export function createStableReviewWorkPlan(input: {
 }
 
 export function createStableReviewAssignmentManifest(input: {
+  readonly lifecyclePlan?: unknown;
   readonly assignments: readonly {
     readonly workSlotId: string;
     readonly paths: readonly string[];
@@ -324,11 +338,19 @@ export function createStableReviewAssignmentManifest(input: {
   if (pathCount > assignmentManifestMaxPaths) {
     throw new Error('review_assignment_manifest_path_count_out_of_bounds');
   }
+  if (
+    input.lifecyclePlan !== undefined &&
+    Buffer.byteLength(canonicalJson(input.lifecyclePlan), 'utf8') > 64 * 1024
+  )
+    throw new Error('review_lifecycle_plan_too_large');
   const assignmentManifestCanonicalJson = canonicalJson({
+    ...(input.lifecyclePlan !== undefined
+      ? { lifecyclePlan: input.lifecyclePlan }
+      : {}),
     assignments,
     eligiblePaths,
     excludedPaths,
-    manifestVersion: 1,
+    manifestVersion: input.lifecyclePlan !== undefined ? 2 : 1,
     uncoveredPaths,
   });
   if (
@@ -340,7 +362,7 @@ export function createStableReviewAssignmentManifest(input: {
   return Object.freeze({
     assignmentManifestCanonicalJson,
     assignmentManifestHash: sha256(
-      `rr.review-assignment-manifest.v1\0${assignmentManifestCanonicalJson}`
+      `rr.review-assignment-manifest.v${input.lifecyclePlan !== undefined ? 2 : 1}\0${assignmentManifestCanonicalJson}`
     ),
   });
 }

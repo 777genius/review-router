@@ -7,6 +7,7 @@ import {
   InlineCommentReference,
   stripInlineFingerprintMarkers,
 } from './comment-fingerprint';
+import { revalidationHash } from '../finding-revalidation/domain/packet';
 import { logger } from '../utils/logger';
 import { REVIEW_PROJECTION_ABSOLUTE_LIMITS } from '../review-projection/domain/review-projection-limits';
 import {
@@ -68,6 +69,12 @@ export interface ReviewThreadMarkerIssue {
 export interface ReviewThreadLifecycleTarget extends LifecycleTarget {
   readonly threadStateHash: string;
   readonly managedObservation?: boolean;
+  readonly parentCommentCreatedAt?: string;
+  readonly parentCommentBodyHash?: string;
+  readonly claimHash?: string;
+  /** Undefined means GitHub did not supply an edit timestamp. */
+  readonly parentCommentEdited?: boolean;
+  readonly findingMarkerAmbiguous?: boolean;
 }
 
 export interface ReviewThreadLifecycleRecord {
@@ -474,6 +481,28 @@ export class ReviewThreadInventoryLoader {
       diffHunk: parent.diffHunk ?? undefined,
       parentCommentId: parent.id,
       parentCommentDatabaseId: parent.databaseId ?? undefined,
+      parentCommentCreatedAt: normalizeCommentTimestamp(
+        requireCommentTimestamp(parent.createdAt)
+      ),
+      parentCommentBodyHash: createHash('sha256')
+        .update(body, 'utf8')
+        .digest('hex'),
+      claimHash: revalidationHash('claim', {
+        title,
+        message,
+        diffHunk: parent.diffHunk ?? null,
+      }),
+      ...(parent.updatedAt
+        ? {
+            parentCommentEdited:
+              normalizeCommentTimestamp(parent.updatedAt) !==
+              normalizeCommentTimestamp(
+                requireCommentTimestamp(parent.createdAt)
+              ),
+          }
+        : {}),
+      // Only the valid-marker branch can construct this target.
+      findingMarkerAmbiguous: false,
       parentCommentUpdatedAt: normalizeCommentTimestamp(
         parent.updatedAt ?? requireCommentTimestamp(parent.createdAt)
       ),

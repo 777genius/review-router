@@ -1,3 +1,5 @@
+import type { AdmittedGatewayCodexModelSettings } from '../../control-plane/admitted-gateway-codex-model-settings';
+import { lifecycleVerificationContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import { createHash } from 'crypto';
 import type {
   ReviewMemorySession,
@@ -91,6 +93,9 @@ export async function prepareCodexReviewPrompt(
   investigationManifestBindingEnabled: boolean,
   memorySnapshot?: ReviewMemorySnapshot | null
 ) {
+  // The initial investigation grant has no atomic memory admission. Explicitly
+  // exclude memory at this preparation boundary, including direct callers.
+  if (investigationManifestBindingEnabled) memorySnapshot = null;
   const effectiveLifecycleTargets = investigationManifestBindingEnabled
     ? []
     : assignment.lifecycleTargets;
@@ -207,8 +212,9 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     private readonly agenticContext: boolean,
     private readonly contextGateway?: ContextGatewayInvocationSessionFactoryPort,
     private readonly investigationManifestBindingEnabled = false,
-    private readonly investigationReasoningEffort: CodexAppServerReasoningEffort = 'xhigh',
+    private readonly investigationReasoningEffort: CodexAppServerReasoningEffort | null = 'xhigh',
     private readonly directCredentialLease?: () => ProviderCredentialLease,
+    private readonly gatewayModelSettings?: AdmittedGatewayCodexModelSettings,
     private readonly reviewMemory?: Pick<ReviewMemorySession, 'current'>
   ) {
     for (const assignment of assignments) {
@@ -317,6 +323,9 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
           probeLimits: preparedPrompt.investigationProbePlan.limits,
           probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
           reasoningEffort: this.investigationReasoningEffort,
+          ...(this.gatewayModelSettings
+            ? { gatewayModelSettings: this.gatewayModelSettings }
+            : {}),
           requestedModel: prepared.requestedModel,
           searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
           turnPromptContractHash:
@@ -348,6 +357,12 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
             : null,
           preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
           providerKind: prepared.providerKind,
+          ...(this.gatewayModelSettings
+            ? {
+                gatewayModelSettings: this.gatewayModelSettings,
+                reasoningEffort: this.investigationReasoningEffort,
+              }
+            : {}),
         }),
       providerRequestEnvelopeHash:
         investigationSeedEnvelope?.canonicalJson ??
@@ -706,9 +721,13 @@ export class GeneratedProviderInvocationManifestAssembler implements ProviderInv
       providerKind: facts.providerKind,
       providerCapabilityHash: facts.providerCapabilityHash,
       requestedModel: invocation.requestedModel,
-      providerPolicyVersion: description
-        ? 'pr-description-provider-policy.v1'
-        : 'codex-provider-policy.v2-t0',
+      providerPolicyVersion:
+        facts.taskKindSet.length === 1 &&
+        facts.taskKindSet[0] === ReviewTaskKind.LifecycleRevalidation
+          ? lifecycleVerificationContract.policyVersion
+          : description
+            ? 'pr-description-provider-policy.v1'
+            : 'codex-provider-policy.v2-t0',
       producerReleaseId: this.authorization.facts.producerReleaseId,
       selectedProtocolVersion: this.authorization.facts.selectedProtocolVersion,
       providerRequestEnvelopeHash: facts.providerRequestEnvelopeHash,

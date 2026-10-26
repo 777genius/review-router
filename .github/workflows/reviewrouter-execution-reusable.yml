@@ -94,6 +94,8 @@ on:
         required: false
       MIMO_TOKEN_PLAN_API_KEY:
         required: false
+      KIMI_CODE_API_KEY:
+        required: false
 
 jobs:
   newtest-one-shot:
@@ -201,10 +203,10 @@ jobs:
           const hostedPoolSessionMode = 'codex_subscription_oauth_hosted_pool';
           const accountGateway = codexSessionMode === 'account-gateway';
           const providerApiAuthMode = process.env.RR_PROVIDER_API_AUTH_MODE || '';
-          if (!['', 'openrouter-api'].includes(providerApiAuthMode)) {
+          if (!['', 'openrouter-api', 'mimo-token-plan-api', 'kimi-code-api'].includes(providerApiAuthMode)) {
             fail('Invalid provider_api_auth_mode.');
           }
-          const providerApi = providerApiAuthMode === 'openrouter-api';
+          const providerApi = providerApiAuthMode !== '';
           if (providerApi) {
             if (reviewActionLane !== 't0' || codexSessionMode ||
                 process.env.RR_PROVIDER_INSTANCE_ID ||
@@ -535,7 +537,7 @@ jobs:
         run: node .reviewrouter-runtime/dist/index.js
 
       - name: Run ReviewRouter T0 provider API
-        if: ${{ inputs.review_action_lane == 't0' && inputs.provider_api_auth_mode == 'openrouter-api' && steps.runtime.outputs.can_run == 'true' }}
+        if: ${{ inputs.review_action_lane == 't0' && inputs.provider_api_auth_mode != '' && steps.runtime.outputs.can_run == 'true' }}
         shell: bash
         env:
           REVIEWROUTER_ACTION_V2_MODE: t0
@@ -544,6 +546,8 @@ jobs:
           INPUT_CONTROL_PLANE_URL: ${{ inputs.control_plane_url }}
           INPUT_PROVIDER_API_AUTH_MODE: ${{ inputs.provider_api_auth_mode }}
           INPUT_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          INPUT_MIMO_TOKEN_PLAN_API_KEY: ${{ secrets.MIMO_TOKEN_PLAN_API_KEY }}
+          INPUT_KIMI_CODE_API_KEY: ${{ secrets.KIMI_CODE_API_KEY }}
           REVIEW_REQUEST_ID: ${{ inputs.review_request_id }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.review_head_sha }}

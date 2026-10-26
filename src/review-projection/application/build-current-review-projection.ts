@@ -1,3 +1,8 @@
+import { projectLifecycleVerification } from '../domain/lifecycle-verification';
+import type {
+  LifecycleVerificationContext,
+  LifecycleVerificationFact,
+} from '../domain/review-projection';
 import {
   BuiltCurrentReviewProjection,
   CheckConclusion,
@@ -71,6 +76,7 @@ export interface BuildCurrentReviewProjectionCommand {
   readonly presentation: ReviewProjectionPresentationContext;
   readonly providerExecution: ProviderExecutionSummaryFact;
   readonly currentFindings: readonly CurrentFindingCandidate[];
+  readonly lifecycleVerification?: LifecycleVerificationContext;
   readonly priorLineageHints: readonly PriorLineageHint[];
   readonly lifecycleRevalidations: readonly LifecycleRevalidation[];
   readonly coverage: ReviewCoverageFact;
@@ -113,6 +119,22 @@ export class BuildCurrentReviewProjection {
     this.validateInventory(command.scope, inventory);
 
     const coverage = normalizeCoverage(command.coverage, inventory);
+    const recurrenceVetoTargetIds = command.lifecycleVerification
+      ? (this.dependencies.lifecyclePolicy.recurrenceVetoTargetIds?.({
+          findings: command.currentFindings,
+          inventory,
+        }) ?? [])
+      : [];
+    let verificationFacts = command.lifecycleVerification
+      ? projectLifecycleVerification({
+          context: command.lifecycleVerification,
+          inventory,
+          coverage,
+          priorLineageHints: command.priorLineageHints,
+          authoritativeObservationIds: command.authoritativeObservationIds,
+          recurrenceVetoTargetIds,
+        })
+      : undefined;
     const selectedFindings =
       await this.dependencies.findingPolicy.selectCurrent({
         findings: command.currentFindings,
@@ -131,14 +153,25 @@ export class BuildCurrentReviewProjection {
       this.limits
     );
 
-    const lifecycleDecisions =
+    let lifecycleDecisions =
       await this.dependencies.lifecyclePolicy.projectLifecycle({
         scope: command.scope,
         findings: selectedFindings,
         priorLineageHints: command.priorLineageHints,
         inventory,
         revalidations: command.lifecycleRevalidations,
+        lifecycleVerification: command.lifecycleVerification,
+        recurrenceVetoTargetIds,
       });
+    if (verificationFacts)
+      lifecycleDecisions = verificationFacts.map((fact) => ({
+        currentSourceFindingIds: lifecycleDecisions.find(
+          (decision) => decision.targetId === fact.targetId
+        )?.currentSourceFindingIds,
+        targetId: fact.targetId,
+        verdict: fact.semanticVerdict,
+        reasonCodes: fact.reasonCodes,
+      }));
     validateLifecycleDecisions(inventory, lifecycleDecisions);
 
     let occurrences = this.currentReviewProjector.projectOccurrences({
@@ -148,6 +181,20 @@ export class BuildCurrentReviewProjection {
       inventory,
       lifecycleDecisions,
     });
+    if (verificationFacts)
+      verificationFacts = verificationFacts.map((fact) => {
+        if (fact.lineageId) return fact;
+        const sourceIds =
+          lifecycleDecisions.find(
+            (decision) => decision.targetId === fact.targetId
+          )?.currentSourceFindingIds ?? [];
+        const matches = occurrences.filter((occurrence) =>
+          occurrence.sourceFindingIds.some((id) => sourceIds.includes(id))
+        );
+        return matches.length === 1
+          ? { ...fact, lineageId: matches[0].lineageId }
+          : fact;
+      });
     assertWithinProjectionLimit('maxFindings', occurrences.length, this.limits);
     assertUnique(
       'occurrence lineageId',
@@ -159,8 +206,9 @@ export class BuildCurrentReviewProjection {
       occurrences,
       coverage,
       lifecycleInventoryComplete: inventory.complete,
+      lifecycleVerificationFacts: verificationFacts,
     });
-    validateGateDecision(occurrences, gate);
+    validateGateDecision(occurrences, gate, verificationFacts);
     occurrences = applyBlockingDecision(occurrences, gate);
 
     // Preserve target identities even for partial coverage so the control plane
@@ -173,9 +221,24 @@ export class BuildCurrentReviewProjection {
       command.priorLineageHints,
       coverage,
       occurrences,
-      command.revisionFiles
+      command.revisionFiles,
+      verificationFacts
     );
 
+    const linkedCurrentTargets = new Set(
+      lifecycleDecisions
+        .filter(
+          (decision) =>
+            decision.verdict === LifecycleRevalidationVerdict.StillValid &&
+            decision.reasonCodes.includes('current_finding_present') &&
+            decision.currentSourceFindingIds?.some((id) =>
+              occurrences.some((occurrence) =>
+                occurrence.sourceFindingIds.includes(id)
+              )
+            )
+        )
+        .map((decision) => decision.targetId)
+    );
     const reviewPresentation = deriveReviewPresentation({
       reviewedHeadSha: command.scope.reviewedHeadSha,
       baseline: command.comparisonBaseline,
@@ -185,13 +248,17 @@ export class BuildCurrentReviewProjection {
           command.providerExecution.plannedProviders > 0) ||
         lifecycleFacts.some(
           (fact) =>
-            fact.verdict !== 'suppressed_by_human' &&
+            (fact.verification
+              ? fact.verification.confirmationState === 'unverified'
+              : fact.verdict !== 'suppressed_by_human') &&
+            !linkedCurrentTargets.has(fact.targetId) &&
             !occurrences.some(
               (item) =>
                 item.lineageId === (fact.lineageId ?? fact.markerFingerprint)
             )
         ),
       occurrences,
+      lifecycleVerificationFacts: verificationFacts,
     });
     const presentation =
       await this.dependencies.presentationPolicy.projectPresentation({
@@ -264,6 +331,13 @@ export class BuildCurrentReviewProjection {
       mergeGate: {
         conclusion: gate.conclusion,
         blockingLineageIds: sortedUnique(gate.blockingLineageIds),
+        ...(gate.blockingConfirmedLifecycleTargetIds
+          ? {
+              blockingConfirmedLifecycleTargetIds: sortedUnique(
+                gate.blockingConfirmedLifecycleTargetIds
+              ),
+            }
+          : {}),
         reasonCodes: sortedUnique(gate.reasonCodes),
       },
       publishing: {
@@ -618,7 +692,8 @@ function buildLifecycleFacts(
   hints: readonly PriorLineageHint[],
   coverage: ReviewCoverageFact,
   occurrences: readonly FindingOccurrence[],
-  revisionFiles: readonly RevisionFile[]
+  revisionFiles: readonly RevisionFile[],
+  verificationFacts?: readonly LifecycleVerificationFact[]
 ): ReviewProjectionLifecycleFact[] {
   const decisionByTarget = new Map(
     decisions.map((decision) => [decision.targetId, decision])
@@ -627,6 +702,9 @@ function buildLifecycleFacts(
     .sort((left, right) => left.targetId.localeCompare(right.targetId))
     .map((target) => {
       const decision = decisionByTarget.get(target.targetId);
+      const verification = verificationFacts?.find(
+        (fact) => fact.targetId === target.targetId
+      );
       const matchingHints = hints.filter(
         (candidate) =>
           candidate.lineageId === target.trustedMarker && candidate.active
@@ -642,6 +720,7 @@ function buildLifecycleFacts(
             occurrence.state === FindingOccurrenceState.Changed)
       );
       const trustedResolved =
+        !verification &&
         !currentOccurrencePresent &&
         target.disposition === LifecycleTargetDisposition.Active &&
         hasValidTrustedResolutionMarker(target);
@@ -680,15 +759,21 @@ function buildLifecycleFacts(
         threadId: target.threadId,
         markerFingerprint: target.trustedMarker,
         threadStateHash: target.threadStateHash,
-        ...(hint ? { lineageId: hint.lineageId } : {}),
+        ...(hint
+          ? { lineageId: hint.lineageId }
+          : verification?.lineageId
+            ? { lineageId: verification.lineageId }
+            : {}),
         verdict,
         reasonCodes,
+        ...(verification ? { verification } : {}),
         mutationEligible:
           inventory.complete &&
           coverage.state === ProjectionCoverageState.Complete &&
           target.disposition === LifecycleTargetDisposition.Active &&
           target.viewerCanResolve &&
           !trustedResolved &&
+          (!verification || verification.mutationStatus === 'pending') &&
           decision?.verdict === LifecycleRevalidationVerdict.Resolved,
       };
     });
@@ -983,11 +1068,29 @@ function validateLifecycleDecisions(
 
 function validateGateDecision(
   occurrences: readonly FindingOccurrence[],
-  gate: MergeGateDecision
+  gate: MergeGateDecision,
+  verificationFacts?: readonly LifecycleVerificationFact[]
 ): void {
   const lineageIds = new Set(
     occurrences.map((occurrence) => occurrence.lineageId)
   );
+  const blockingTargets = gate.blockingConfirmedLifecycleTargetIds ?? [];
+  assertUnique('blocking lifecycle targetId', blockingTargets);
+  for (const targetId of blockingTargets) {
+    if (
+      !verificationFacts?.some(
+        (fact) =>
+          fact.targetId === targetId &&
+          fact.confirmationState === 'confirmed_open'
+      )
+    )
+      throw new Error('merge gate references unconfirmed lifecycle target');
+  }
+  if (
+    (gate.blockingLineageIds.length || blockingTargets.length) &&
+    gate.conclusion !== MergeGateConclusion.Fail
+  )
+    throw new Error('blocking merge gate must fail');
   assertUnique('blocking lineageId', gate.blockingLineageIds);
   for (const lineageId of gate.blockingLineageIds) {
     if (!lineageIds.has(lineageId)) {

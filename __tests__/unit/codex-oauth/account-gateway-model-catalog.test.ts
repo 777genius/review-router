@@ -6,6 +6,90 @@ import { prepareAccountGatewayModelCatalog } from '../../../src/codex-oauth/acco
 import pinnedModel from '../../../src/codex-oauth/gpt-5.6-sol-model-0.147.0.json';
 
 describe('account gateway model catalog', () => {
+  it('bounds direct Kimi to ordinary Responses function tools and no reasoning/service tier defaults', async () => {
+    const home = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'direct-kimi-catalog-')
+    );
+    try {
+      expect(
+        await prepareAccountGatewayModelCatalog('k3-256k', home, [])
+      ).toBeUndefined();
+      const setting = await prepareAccountGatewayModelCatalog(
+        'k3-256k',
+        home,
+        ['model_provider="kimi"'],
+        undefined,
+        true
+      );
+      expect(setting).toContain('model_catalog_json=');
+      const catalog: unknown = JSON.parse(
+        await fs.readFile(
+          path.join(home, 'reviewrouter-model-catalog.json'),
+          'utf8'
+        )
+      );
+      expect(catalog).toMatchObject({
+        models: [
+          {
+            slug: 'k3-256k',
+            use_responses_lite: false,
+            tool_mode: 'direct',
+            default_reasoning_level: null,
+            supported_reasoning_levels: [],
+            supports_reasoning_summary_parameter: false,
+            service_tiers: [],
+            default_service_tier: null,
+            apply_patch_tool_type: null,
+            model_messages: null,
+          },
+        ],
+      });
+    } finally {
+      await fs.rm(home, { recursive: true, force: true });
+    }
+  });
+  it.each([
+    null,
+    { allowed: ['minimal', 'high'], default: 'minimal' },
+  ] as const)(
+    'overrides bundled prefix defaults with exact captured settings %j',
+    async (reasoning) => {
+      const home = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'managed-codex-catalog-')
+      );
+      try {
+        const model = 'gpt-5.4-future';
+        const settings = { model, reasoning };
+        await prepareAccountGatewayModelCatalog(model, home, [], settings);
+        const descriptor = JSON.parse(
+          await fs.readFile(
+            path.join(home, 'reviewrouter-model-catalog.json'),
+            'utf8'
+          )
+        ).models[0];
+        expect(descriptor).toMatchObject({
+          slug: model,
+          default_reasoning_level: reasoning?.default ?? null,
+          supported_reasoning_levels: reasoning
+            ? [
+                { effort: 'minimal', description: 'minimal' },
+                { effort: 'high', description: 'high' },
+              ]
+            : [],
+          supports_reasoning_summary_parameter: false,
+          default_reasoning_summary: 'none',
+          use_responses_lite: false,
+          tool_mode: 'direct',
+          base_instructions: '',
+        });
+        expect(descriptor).not.toHaveProperty('model_messages');
+        expect(descriptor).not.toHaveProperty('instructions_template');
+      } finally {
+        await fs.rm(home, { recursive: true, force: true });
+      }
+    }
+  );
+
   it('exposes direct MCP for the pinned GPT model without changing its instructions or other metadata', async () => {
     const home = await fs.mkdtemp(
       path.join(os.tmpdir(), 'gateway-gpt-catalog-')

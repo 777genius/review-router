@@ -1,6 +1,13 @@
 import * as fs from 'fs';
+import {
+  ReviewSkillsMaterializationError,
+  renderReviewSkillsDiagnosticText,
+} from '../review-skills/review-skills-error';
 import { runProviderApiRuntime } from './provider-api-runtime';
-import { providerApiCheckoutCompanionContract } from '../control-plane/generated/review-action-v2/companion-contracts';
+import {
+  providerApiCheckoutCompanionContract,
+  isProviderApiAuthMode,
+} from '../control-plane/generated/review-action-v2/companion-contracts';
 import {
   ACCOUNT_GATEWAY_ACTION_MODE,
   runAccountGatewayRuntime,
@@ -336,12 +343,12 @@ export async function runCodexOAuthRotatingAction(
 export async function runProviderApiAction(
   activation: ReviewActionV2Activation
 ): Promise<void> {
+  const providerApiAuthMode = readInput('provider-api-auth-mode');
   if (
     activation.mode !== ReviewActionV2RuntimeMode.T0 ||
     process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'oidc' ||
     process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== 'false' ||
-    readInput('provider-api-auth-mode') !==
-      providerApiCheckoutCompanionContract.providerApiAuthMode ||
+    !isProviderApiAuthMode(providerApiAuthMode) ||
     !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$/.test(
       process.env.REVIEW_REQUEST_ID ?? ''
     )
@@ -363,6 +370,7 @@ export async function runProviderApiAction(
         ...inputs,
         workflowSchemaVersion:
           providerApiCheckoutCompanionContract.workflowSchemaVersion,
+        providerApiAuthMode,
       },
       {
         review: createProductionT0ReviewRunner({
@@ -720,6 +728,30 @@ type V2ActionFailure = Readonly<{
 }>;
 
 function classifyV2ActionFailure(error: unknown): V2ActionFailure {
+  if (error instanceof ReviewSkillsMaterializationError) {
+    const failure = error;
+    return {
+      code: failure.code,
+      report: (inputs) =>
+        terminalOutcomeReport({
+          inputs,
+          kind: CodexOAuthTerminalOutcomeKind.Failed,
+          title: 'Repository Skills need attention',
+          summary:
+            'ReviewRouter could not load the captured repository Skills. Review inference did not start.',
+          rows: [
+            ['Failure code', failure.code],
+            ...Object.entries(failure.diagnostic).map(
+              ([field, value]) =>
+                [field, renderReviewSkillsDiagnosticText(value)] as const
+            ),
+          ],
+          note: failure.remediation,
+          statusState: 'error',
+          statusDescription: 'Review failed: repository Skills need attention.',
+        }),
+    };
+  }
   if (
     !(error instanceof ReviewActionV2ClientError) &&
     error instanceof Error &&

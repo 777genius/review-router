@@ -1,10 +1,14 @@
 import { createHash } from 'crypto';
+import { REVIEW_SKILLS_RECEIPT_UNAVAILABLE } from '../../review-skills/review-skills-receipt';
 import {
   BuildCurrentReviewProjection,
   type BuildCurrentReviewProjectionCommand,
 } from '../../review-projection/application';
 import { ProjectionCoverageState } from '../../review-projection/domain';
-import type { ReviewComparisonBaseline } from '../../review-projection/domain';
+import type {
+  ReviewComparisonBaseline,
+  ReviewProjectionEnvelopeV1,
+} from '../../review-projection/domain';
 import {
   canonicalizeReviewProjection,
   hashReviewProjectionCanonicalJson,
@@ -37,6 +41,18 @@ export class CurrentReviewProjectionBuilderAdapter implements CurrentReviewProje
     private readonly commands: ReviewProjectionCommandFactoryPort,
     private readonly description?: {
       limits: ReviewProtocolLimits;
+      unavailable(): void;
+    },
+    private readonly skillsReceipt?: {
+      render(
+        evidence: readonly AcceptedReviewWorkSlotEvidence[]
+      ): string | undefined;
+      limits: {
+        maxSummaryBytes: number;
+        maxCheckSummaryBytes: number;
+        maxProjectionBytes: number;
+        maxPublicationBodyBytes: number;
+      };
       unavailable(): void;
     }
   ) {}
@@ -78,35 +94,86 @@ export class CurrentReviewProjectionBuilderAdapter implements CurrentReviewProje
         projectionHash = hashReviewProjectionCanonicalJson(candidateJson);
       } else this.description.unavailable();
     }
-    const operationsCanonicalJson = canonicalJson(envelope.publishing);
-    const artifactHash = sha256(
-      `rr.review-artifact.v1\0${canonicalJson({
-        operationsCanonicalJson,
-        projectionHash,
-      })}`
-    );
-    return Object.freeze({
-      artifactId: `rr:artifact:${artifactHash}`,
-      artifactHash,
-      projectionEnvelopeVersion: 1,
-      projectionEnvelopeCanonicalJson: projectionCanonicalJson,
+    const receipt = this.skillsReceipt?.render(input.acceptedEvidence);
+    if (receipt && this.skillsReceipt) {
+      let appended = false;
+      for (const block of [receipt, REVIEW_SKILLS_RECEIPT_UNAVAILABLE]) {
+        const summaryBody = `${envelope.publishing.summary.body}\n\n${block}`;
+        const checkSummary = `${envelope.publishing.check.summary}\n\n${block}`;
+        if (
+          Buffer.byteLength(summaryBody) >
+            this.skillsReceipt.limits.maxSummaryBytes ||
+          Buffer.byteLength(checkSummary) >
+            this.skillsReceipt.limits.maxCheckSummaryBytes
+        )
+          continue;
+        const candidate = {
+          ...envelope,
+          publishing: {
+            ...envelope.publishing,
+            summary: { ...envelope.publishing.summary, body: summaryBody },
+            check: { ...envelope.publishing.check, summary: checkSummary },
+          },
+        };
+        const candidateJson = canonicalizeReviewProjection(candidate);
+        if (
+          Buffer.byteLength(candidateJson) >
+            this.skillsReceipt.limits.maxProjectionBytes ||
+          Buffer.byteLength(canonicalJson(candidate.publishing)) >
+            this.skillsReceipt.limits.maxPublicationBodyBytes
+        )
+          continue;
+        envelope = candidate;
+        projectionCanonicalJson = candidateJson;
+        projectionHash = hashReviewProjectionCanonicalJson(candidateJson);
+        appended = true;
+        break;
+      }
+      if (!appended) this.skillsReceipt.unavailable();
+    }
+    return currentReviewProjectionFromEnvelope(
+      envelope,
+      projectionCanonicalJson,
       projectionHash,
-      lifecycleStateHash: built.envelope.lifecycleStateHash,
-      commandLedgerWatermark: built.envelope.commandLedgerWatermark,
-      operationsCanonicalJson,
-      findingCount: built.findingCount,
-      mergeGateConclusion: built.envelope.mergeGate.conclusion,
-      publicationOperationCount:
-        2 +
-        (envelope.publishing.prDescription ? 1 : 0) +
-        built.envelope.publishing.inlineReviewChunks.length +
-        built.envelope.publishing.lifecycle.length,
-      publicationChunkCount:
-        built.envelope.publishing.inlineReviewChunks.length,
-      coverageComplete:
-        built.envelope.coverage.state === ProjectionCoverageState.Complete,
-    });
+      built.findingCount
+    );
   }
+}
+
+/** Shared immutable transport mapping, also used when resuming a persisted artifact. */
+export function currentReviewProjectionFromEnvelope(
+  envelope: ReviewProjectionEnvelopeV1,
+  projectionCanonicalJson = canonicalizeReviewProjection(envelope),
+  projectionHash = hashReviewProjectionCanonicalJson(projectionCanonicalJson),
+  findingCount = envelope.occurrences.length
+): CurrentReviewProjection {
+  const operationsCanonicalJson = canonicalJson(envelope.publishing);
+  const artifactHash = sha256(
+    `rr.review-artifact.v1\0${canonicalJson({
+      operationsCanonicalJson,
+      projectionHash,
+    })}`
+  );
+  return Object.freeze({
+    artifactId: `rr:artifact:${artifactHash}`,
+    artifactHash,
+    projectionEnvelopeVersion: 1,
+    projectionEnvelopeCanonicalJson: projectionCanonicalJson,
+    projectionHash,
+    lifecycleStateHash: envelope.lifecycleStateHash,
+    commandLedgerWatermark: envelope.commandLedgerWatermark,
+    operationsCanonicalJson,
+    findingCount,
+    mergeGateConclusion: envelope.mergeGate.conclusion,
+    publicationOperationCount:
+      2 +
+      (envelope.publishing.prDescription ? 1 : 0) +
+      envelope.publishing.inlineReviewChunks.length +
+      envelope.publishing.lifecycle.length,
+    publicationChunkCount: envelope.publishing.inlineReviewChunks.length,
+    coverageComplete:
+      envelope.coverage.state === ProjectionCoverageState.Complete,
+  });
 }
 
 function canonicalJson(value: unknown): string {

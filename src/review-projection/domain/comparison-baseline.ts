@@ -68,6 +68,7 @@ const baselineSchema = z
     projectionPolicyVersion: z.enum([
       'review-projection-policy.v5-t0',
       'review-projection-policy.v6-comparison',
+      'review-projection-policy.v7-lifecycle-verification',
     ]),
     projectionEnvelopeVersion: z.literal('review_projection.v1'),
     priorLineageHints: z.array(hintSchema).max(limits.maxLineageHints),
@@ -85,7 +86,8 @@ export interface ReviewComparisonBaseline {
   readonly snapshotVersion: number;
   readonly projectionPolicyVersion:
     | 'review-projection-policy.v5-t0'
-    | 'review-projection-policy.v6-comparison';
+    | 'review-projection-policy.v6-comparison'
+    | 'review-projection-policy.v7-lifecycle-verification';
   readonly projectionEnvelopeVersion: 'review_projection.v1';
   readonly priorLineageHints: readonly PriorLineageHint[];
   readonly appliedResolutions: readonly AppliedReviewResolution[];

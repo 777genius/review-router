@@ -72,6 +72,10 @@ type SeverityCounts = {
 };
 
 export type ReviewerSummaryFinding = {
+  /** Display-only classification supplied by the occurrence projection. */
+  readonly previous?: boolean;
+  /** Stable occurrence identity, when available; never inferred from prose. */
+  readonly lineageId?: string;
   readonly severity: Severity;
   readonly title: string;
   readonly message: string;
@@ -87,6 +91,7 @@ export type ReviewerSummaryFinding = {
 };
 
 export type ReviewerLifecycleLine = {
+  readonly lineageId?: string;
   readonly kind: 'resolved' | 'active' | 'carried' | 'uncertain' | 'suppressed';
   readonly title: string;
   readonly message: string;
@@ -401,18 +406,28 @@ export function renderReviewerSummaryMarkdown(
     for (const warning of input.lifecycleWarnings ?? [])
       pushWarning(escapeMarkdownText(warning));
   }
-  const visibleLifecycle = (input.lifecycle ?? []).filter(
-    (line) =>
-      line.kind === 'active' ||
-      line.kind === 'uncertain' ||
-      line.kind === 'carried'
+  const detailedLineages = new Set(
+    input.findings.flatMap((finding) =>
+      finding.lineageId ? [finding.lineageId] : []
+    )
   );
-  if (visibleLifecycle.length) {
-    lines.push('', `**${labels.previous} (${visibleLifecycle.length})**`);
-    for (const line of visibleLifecycle) {
-      pushWarning(
-        `- **${copy.lifecycle[line.kind]}** · ${escapeMarkdownText(compactFindingPresentation(line, locale).title)} · ${escapeCoverageManifestPath(line.locationLabel)}`
-      );
+  const history = (input.lifecycle ?? []).filter(
+    (line) => !line.lineageId || !detailedLineages.has(line.lineageId)
+  );
+  const lifecycleGroups = [
+    history.filter((line) => line.kind === 'active'),
+    history.filter(
+      (line) => line.kind === 'uncertain' || line.kind === 'carried'
+    ),
+  ];
+  const historyLines: string[][] = [[], []];
+  for (const [index, group] of lifecycleGroups.entries()) {
+    if (!group.length) continue;
+    for (const line of group) {
+      const overview = `- ${index === 0 ? `**${copy.lifecycle[line.kind]}** · ` : ''}${escapeMarkdownText(compactFindingPresentation(line, locale).title)} · ${escapeCoverageManifestPath(line.locationLabel)}`;
+      if (utf8Bytes([...historyLines[index], overview].join('\n')) <= 12_000)
+        historyLines[index].push(overview);
+      else omitted = true;
     }
   }
   const diagnostics: string[] = [];
@@ -496,7 +511,6 @@ export function renderReviewerSummaryMarkdown(
     const hiddenFiles = manifestFiles.length - manifestLines.length;
     if (hiddenFiles > 0) diagnostics.push('', copy.moreFiles(hiddenFiles));
   }
-  const history = input.lifecycle ?? [];
   if (history.length)
     diagnostics.push(
       '',
@@ -504,7 +518,7 @@ export function renderReviewerSummaryMarkdown(
       '',
       ...history.map(
         (line) =>
-          `- **${copy.lifecycle[line.kind]}** · ${escapeMarkdownText(line.title)} · ${escapeCoverageManifestPath(line.locationLabel)}\n\n${safeFindingBody(line.message)}`
+          `- ${line.kind === 'uncertain' || line.kind === 'carried' ? '' : `**${copy.lifecycle[line.kind]}** · `}${escapeMarkdownText(line.title)} · ${escapeCoverageManifestPath(line.locationLabel)}\n\n${safeFindingBody(line.message)}`
       )
     );
   const measured = input.measurements;
@@ -605,30 +619,55 @@ export function renderReviewerSummaryMarkdown(
     return true;
   };
   const findings = [...input.findings].sort(compareSummaryFindings);
-  for (const finding of findings) {
-    const presentation = compactFindingPresentation(finding, locale);
-    const overview = compactFindingLine(
-      finding,
-      presentation.title,
-      input.source
-    );
-    const excerpt = findings.length <= 3 ? presentation.excerpt : '';
-    const preview = [
-      overview,
-      ...(excerpt
-        ? [
-            '',
-            escapeMarkdownText(excerpt)
-              .replace(/^([#+-])/, '\\$1')
-              .replace(/^(\d+)([.)])(?=\s)/, '$1\\$2'),
-          ]
-        : []),
-    ].join('\n');
-    const details = renderFindingDetails(copy, finding, chrome);
-    if (!append(`${preview}\n\n${details}`, maxSummaryBytes - 6_000)) {
-      append(preview, maxSummaryBytes - 6_000);
+  const newFindings = findings.filter((finding) => !finding.previous);
+  const previousFindings = findings.filter((finding) => finding.previous);
+  const findingBudget =
+    maxSummaryBytes - 6_000 - utf8Bytes(historyLines.flat().join('\n'));
+  for (const [kind, group] of [
+    ['new', newFindings],
+    ['rechecked', previousFindings],
+  ] as const) {
+    const groupCount =
+      group.length + (kind === 'rechecked' ? lifecycleGroups[0].length : 0);
+    if (
+      groupCount ||
+      (kind === 'new' && input.reviewPresentation?.variant === 'update')
+    )
+      append(
+        `### ${findingGroupHeading(locale, kind, groupCount)}`,
+        findingBudget
+      );
+    for (const finding of group) {
+      const presentation = compactFindingPresentation(finding, locale);
+      const overview = compactFindingLine(
+        finding,
+        presentation.title,
+        input.source
+      );
+      const excerpt = findings.length <= 3 ? presentation.excerpt : '';
+      const preview = [
+        overview,
+        ...(excerpt
+          ? [
+              '',
+              escapeMarkdownText(excerpt)
+                .replace(/^([#+-])/, '\\$1')
+                .replace(/^(\d+)([.)])(?=\s)/, '$1\\$2'),
+            ]
+          : []),
+      ].join('\n');
+      const details = renderFindingDetails(copy, finding, chrome);
+      if (!append(`${preview}\n\n${details}`, findingBudget)) {
+        append(preview, findingBudget);
+      }
     }
+    if (kind === 'rechecked' && historyLines[0].length)
+      append(historyLines[0].join('\n'));
   }
+  if (historyLines[1].length)
+    append(
+      `### ${findingGroupHeading(locale, 'unverified', lifecycleGroups[1].length)}\n\n${historyLines[1].join('\n')}`
+    );
   // Keep the diagnostic header/table even when a later large block does not fit.
   const details: string[] = [];
   for (const block of markdownBlocks(diagnostics.join('\n'))) {
@@ -1051,6 +1090,61 @@ function slavicFindingWord(
 
 function englishFindingWord(count: number): string {
   return count === 1 ? 'finding' : 'findings';
+}
+
+function findingGroupHeading(
+  locale: ReviewerSummaryLocale,
+  kind: 'new' | 'rechecked' | 'unverified',
+  count: number
+): string {
+  if (locale === 'en') {
+    if (kind === 'new') return `${count} new`;
+    return `${count} previous ${count === 1 ? 'issue' : 'issues'} ${kind === 'rechecked' ? 'rechecked' : 'not verified'}`;
+  }
+  const words: Record<
+    Exclude<ReviewerSummaryLocale, 'en'>,
+    readonly [string, string, string]
+  > = {
+    ru: [
+      'Новые',
+      'Предыдущие замечания перепроверены',
+      'Предыдущие замечания не подтверждены',
+    ],
+    uk: [
+      'Нові',
+      'Попередні зауваження перевірено повторно',
+      'Попередні зауваження не підтверджено',
+    ],
+    es: [
+      'Nuevos',
+      'Problemas anteriores revisados',
+      'Problemas anteriores sin verificar',
+    ],
+    pt: [
+      'Novos',
+      'Problemas anteriores revistos',
+      'Problemas anteriores não verificados',
+    ],
+    fr: [
+      'Nouveaux',
+      'Problèmes précédents revérifiés',
+      'Problèmes précédents non vérifiés',
+    ],
+    de: [
+      'Neu',
+      'Frühere Probleme erneut geprüft',
+      'Frühere Probleme nicht bestätigt',
+    ],
+    it: [
+      'Nuovi',
+      'Problemi precedenti ricontrollati',
+      'Problemi precedenti non verificati',
+    ],
+    zh: ['新问题', '已复查的先前问题', '未经证实的先前问题'],
+    ja: ['新しい指摘', '再確認済みの過去の指摘', '未確認の過去の指摘'],
+    ko: ['새 이슈', '다시 검토한 이전 이슈', '확인되지 않은 이전 이슈'],
+  };
+  return `${words[locale][kind === 'new' ? 0 : kind === 'rechecked' ? 1 : 2]}: ${count}`;
 }
 
 const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
@@ -2276,7 +2370,10 @@ function compactFindingPresentation(
       120,
       locale
     ) || '…';
-  const consumed = title.endsWith('…') ? title.slice(0, -1) : title;
+  // A clipped title can end halfway through an expression. Continue after its
+  // complete sentence, rather than presenting the leftover fragment as prose.
+  // The full sentence remains available in the finding details.
+  const consumed = title.endsWith('…') ? firstSentence(paragraph) : title;
   const remaining =
     derived && paragraph.startsWith(consumed)
       ? paragraph.slice(consumed.length).trimStart()

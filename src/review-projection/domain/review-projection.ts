@@ -238,10 +238,55 @@ export interface LifecycleRevalidation {
   readonly rationale?: string;
 }
 
+/** Scoped, accepted companion evidence; the captured roster is never inferred from responders. */
+export interface LifecycleVerificationContext {
+  readonly plannedProviderVoteKeys: readonly string[];
+  readonly mode: 'report' | 'resolve';
+  readonly resolveConfidence?: Partial<
+    Readonly<Record<FindingSeverity | 'unknown', number>>
+  >;
+  readonly targetReasonCodes?: Readonly<Record<string, readonly string[]>>;
+  readonly observations: readonly {
+    readonly targetId: string;
+    readonly threadId: string;
+    readonly fingerprint: string;
+    readonly threadStateHash: string;
+    readonly parentCommentUpdatedAt: string;
+    readonly reviewedHeadSha: string;
+    readonly providerVoteKey: string;
+    readonly observationId: string;
+    readonly verdict: LifecycleRevalidationVerdict;
+    readonly confidence?: number;
+    readonly reasonCodes: readonly string[];
+  }[];
+}
+
+export interface LifecycleVerificationFact {
+  readonly targetId: string;
+  readonly lineageId?: string;
+  readonly semanticVerdict: LifecycleRevalidationVerdict;
+  readonly confirmationState:
+    | 'confirmed_open'
+    | 'fix_confirmed_thread_open'
+    | 'unverified'
+    | 'native_resolved';
+  readonly severity: FindingSeverity | 'unknown';
+  readonly observationIds: readonly string[];
+  readonly providerVoteKeys: readonly string[];
+  readonly reasonCodes: readonly string[];
+  readonly mutationStatus:
+    | 'report_only'
+    | 'pending'
+    | 'blocked_partial_review'
+    | 'not_eligible'
+    | 'native_resolved';
+}
+
 export interface LifecycleProjectionDecision {
   readonly targetId: string;
   readonly verdict: LifecycleRevalidationVerdict;
   readonly reasonCodes: readonly string[];
+  readonly currentSourceFindingIds?: readonly string[];
 }
 
 export interface FindingPlacementDecision {
@@ -323,6 +368,7 @@ export interface ReviewProjectionLifecycleFact {
   readonly verdict: LifecycleRevalidationVerdict | 'suppressed_by_human';
   readonly reasonCodes: readonly string[];
   readonly mutationEligible: boolean;
+  readonly verification?: LifecycleVerificationFact;
 }
 
 export interface OccurrenceProvenanceFact {
@@ -380,6 +426,7 @@ export interface ReviewProjectionEnvelopeV1 {
   readonly mergeGate: {
     readonly conclusion: MergeGateConclusion;
     readonly blockingLineageIds: readonly string[];
+    readonly blockingConfirmedLifecycleTargetIds?: readonly string[];
     readonly reasonCodes: readonly string[];
   };
   readonly publishing: ReviewProjectionPublishingFacts;

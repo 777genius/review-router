@@ -131203,6 +131203,21 @@ function resolveAdmittedGatewayCodexReasoningEffort(settings, savedEffort) {
     throw new Error("account_gateway_codex_reasoning_effort_unsupported");
   return selected;
 }
+function resolveAdmittedGatewayOcrReasoningEffort(runtime, selectedModel, savedEffort) {
+  const settings = readAdmittedGatewayCodexModelSettings(
+    runtime,
+    selectedModel
+  );
+  if (settings === void 0) return savedEffort;
+  if (settings.reasoning === null) return null;
+  const selected = resolveAdmittedGatewayCodexReasoningEffort(
+    settings,
+    savedEffort ?? void 0
+  );
+  if (selected === "max")
+    throw new Error("account_gateway_ocr_reasoning_effort_unsupported");
+  return selected;
+}
 function isCanonicalEffort(value) {
   return typeof value === "string" && canonicalEfforts.includes(value);
 }
@@ -131490,16 +131505,10 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     this.inferenceDenied = false;
     return true;
   }
-  /** A recorded failure fact is a proven failure and fresh dispatch stays
-   * bounded by the server-counted attempt budget, so one later attempt may
-   * reopen this consumer instead of burning the budget fenced. Terminal or
-   * cancelled consumers never reopen. */
+  /** Compatibility entry point with the same positive unpaid proof as release.
+   * An ambiguous dispatch remains fenced regardless of the attempt budget. */
   reopenConsumer() {
-    if (this.terminal || this.inferenceCancelled) return false;
-    this.inferenceDenied = false;
-    this.mayHaveDispatched = false;
-    this.failure = void 0;
-    return true;
+    return this.releaseRetrySafeFailure();
   }
   get actualModel() {
     return this.inferenceDenied || this.modelUncertain ? void 0 : this.observedModel;
@@ -225390,8 +225399,13 @@ function buildOcrManagedConfigJson(input) {
   }
   requirePositiveSetting(input.limits.timeoutMinutes, "timeout");
   const extraBody = { service_tier: "default" };
-  if (input.modelReasoningEffort !== null) {
-    extraBody.reasoning = { effort: input.modelReasoningEffort };
+  const modelReasoningEffort = resolveAdmittedGatewayOcrReasoningEffort(
+    input.admittedRuntimeConfig,
+    input.model,
+    input.modelReasoningEffort
+  );
+  if (modelReasoningEffort !== null) {
+    extraBody.reasoning = { effort: modelReasoningEffort };
   }
   const provider = {
     protocol: "openai-responses",
@@ -240286,21 +240300,10 @@ var OcrReviewInvocationAdapter = class {
     }
     assertOcrInvocationLive(input);
     const run3 = this.gate(async () => {
-      this.reopenPoisonedConsumer();
       this.assertDispatchPermitted(assignment.workSlot.workSlotId);
       return await this.runInvocation(input, assignment);
     });
     return await run3;
-  }
-  /** A recorded failure fact poisoned this consumer against replays; one fresh
-   * bounded attempt may reopen it so a transport failure cannot burn the whole
-   * attempt budget fenced. The per-consumer dispatch record restarts with the
-   * consumer. */
-  reopenPoisonedConsumer() {
-    const effectBefore = this.options.bridge.effectFacts?.();
-    if (effectBefore === void 0 || effectBefore.effect === "none" || this.options.bridge.reopenConsumer?.() !== true)
-      return;
-    this.dispatchedSlots.clear();
   }
   /** §8.4 step 2: known-terminal/unknown Gateway effect fences new calls. A
    * positively proven not_dispatched denial paid nothing, so releasing it
@@ -240742,6 +240745,7 @@ async function prepareOcrManagedRun(input) {
         model: input.model,
         limits: { requestTimeoutSec: input.requestTimeoutSec },
         modelReasoningEffort: input.modelReasoningEffort,
+        admittedRuntimeConfig: input.admittedRuntimeConfig,
         language: input.language
       }),
       { mode: 384 }
@@ -243571,7 +243575,11 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           throw new Error("review_action_v2_ocr_model_missing");
         }
         const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
-        const ocrModelReasoningEffort = ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
+        const ocrModelReasoningEffort = resolveAdmittedGatewayOcrReasoningEffort(
+          input.accountGateway.runtimeConfig,
+          ocrModel,
+          ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
+        );
         const modelTransport = input.accountGateway.modelTransport;
         const capabilityAuthorization = modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
         if (!capabilityAuthorization) {
@@ -243611,6 +243619,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                   requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
                 },
                 modelReasoningEffort: ocrModelReasoningEffort,
+                admittedRuntimeConfig: input.accountGateway.runtimeConfig,
                 language: ocrLanguage,
                 contextTools: contextTools.config
               }),
@@ -245431,6 +245440,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         model,
         requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3,
         modelReasoningEffort: capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
+        admittedRuntimeConfig: capability.runtimeConfig,
         language: capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
         signal: run3.signal,
         env: {

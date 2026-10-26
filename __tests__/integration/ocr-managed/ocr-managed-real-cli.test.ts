@@ -470,7 +470,7 @@ async function runScriptedScenario(input: {
   readonly skillsGitRoots?: readonly ReviewSkillsGitRootDiagnostic[];
   readonly projectSkills?: boolean;
   readonly assignedPaths?: readonly string[];
-  /** Poison the consumer after the truncated attempt and reopen it once. */
+  /** Offer an unsafe reopen seam after truncation; the adapter must ignore it. */
   readonly reopenRetry?: boolean;
 }): Promise<ScriptedScenarioResult> {
   let poisoned = false;
@@ -601,9 +601,8 @@ async function runScriptedScenario(input: {
       liveLifecycleStateHash: '8'.repeat(64),
     });
 
-    // With reopenRetry the truncated terminal event records the production
-    // unknown-effect failure fact; reopenConsumer clears it once for one
-    // fresh bounded attempt.
+    // The truncated terminal event records an unknown effect. Even an offered
+    // unsafe reopen implementation must never be consulted by the adapter.
     const bridge: OcrLoopbackBridge = {
       baseUrl: stub.baseUrl,
       capabilityAuthorization: BEARER,
@@ -1468,12 +1467,7 @@ describeHarness(
       expect(group.filterDecisionValid).toBeNull();
     }, 120_000);
 
-    it('a recorded failure fact reopens the consumer and the fresh real-CLI attempt completes', async () => {
-      // Production class behind required_work_exhausted: the truncated
-      // terminal event poisons the consumer with an unknown-effect fact.
-      // The fact is a proven failure, so one fresh bounded attempt reopens
-      // the consumer and re-runs the real binary to a complete observation
-      // instead of burning the whole attempt budget fenced.
+    it('a truncated real-CLI response keeps the unknown effect fenced on a later attempt', async () => {
       const scenario = await runScriptedScenario({
         workspace,
         checkoutRoot,
@@ -1492,17 +1486,15 @@ describeHarness(
         'gateway_effect_unknown'
       );
 
-      // Exactly one reopen; the second real-CLI run re-dispatches through the
-      // same consumer and completes with all findings accepted.
-      expect(scenario.reopened).toBe(1);
-      expect(scenario.rejection).toBeUndefined();
-      expect(scenario.observation).toBeDefined();
-      expect(scenario.observation!.findingCount).toBe(3);
-      expect(scenario.observation!.transportAttemptCount).toBe(1);
-      expect(scenario.requests.length).toBeGreaterThan(1);
+      expect(scenario.reopened).toBe(0);
+      expect(scenario.rejection).toBeInstanceOf(Error);
+      expect((scenario.rejection as Error).message).toMatch(
+        /gateway_effect_unknown/u
+      );
+      expect(scenario.observation).toBeUndefined();
       expect(
         scenario.requests.filter((request) => request.kind === 'main').length
-      ).toBeGreaterThanOrEqual(2);
+      ).toBe(1);
     }, 120_000);
 
     // ------------------------------------------------------------------

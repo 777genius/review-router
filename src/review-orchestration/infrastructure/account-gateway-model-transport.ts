@@ -154,8 +154,8 @@ export type LocalGatewayModelTransport = Readonly<{
   /** Releases only positively proven unpaid pre-dispatch denials; false keeps
    * the inference fence for unknown/paid effects. */
   releaseRetrySafeFailure?(): boolean;
-  /** Reopens a failure-fact consumer for one fresh bounded attempt; false for
-   * terminal/cancelled consumers keeps the fence. */
+  /** Compatibility alias for positive unpaid-denial release; unknown/paid,
+   * terminal and cancelled consumers keep their fence. */
   reopenConsumer?(): boolean;
   setContextToolsGuard?(guard: (() => void) | undefined): void;
   /** Trusted parent only; its receipt never contributes review-engine evidence. */
@@ -282,16 +282,10 @@ export class AccountGatewayModelTransport {
     this.inferenceDenied = false;
     return true;
   }
-  /** A recorded failure fact is a proven failure and fresh dispatch stays
-   * bounded by the server-counted attempt budget, so one later attempt may
-   * reopen this consumer instead of burning the budget fenced. Terminal or
-   * cancelled consumers never reopen. */
+  /** Compatibility entry point with the same positive unpaid proof as release.
+   * An ambiguous dispatch remains fenced regardless of the attempt budget. */
   reopenConsumer(): boolean {
-    if (this.terminal || this.inferenceCancelled) return false;
-    this.inferenceDenied = false;
-    this.mayHaveDispatched = false;
-    this.failure = undefined;
-    return true;
+    return this.releaseRetrySafeFailure();
   }
   get actualModel(): string | undefined {
     return this.inferenceDenied || this.modelUncertain

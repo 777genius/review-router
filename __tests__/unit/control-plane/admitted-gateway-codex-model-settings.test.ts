@@ -2,6 +2,7 @@ import {
   GATEWAY_CODEX_MODEL_SETTINGS_ENV,
   readAdmittedGatewayCodexModelSettings,
   resolveAdmittedGatewayCodexReasoningEffort,
+  resolveAdmittedGatewayOcrReasoningEffort,
 } from '../../../src/control-plane/admitted-gateway-codex-model-settings';
 import type { AdmittedRuntimeConfig } from '../../../src/control-plane/runtime-config';
 
@@ -76,6 +77,46 @@ describe('admitted Gateway Codex model settings', () => {
         model
       )
     ).toBeUndefined();
+  });
+
+  it('retains legacy OCR effort only when captured metadata is absent', () => {
+    expect(
+      resolveAdmittedGatewayOcrReasoningEffort(undefined, model, 'high')
+    ).toBe('high');
+    expect(
+      resolveAdmittedGatewayOcrReasoningEffort(
+        capture({ model, reasoning: null }),
+        model,
+        'high'
+      )
+    ).toBeNull();
+    expect(() =>
+      resolveAdmittedGatewayOcrReasoningEffort(
+        capture({ model: 'foreign-model', reasoning: null }),
+        model,
+        'high'
+      )
+    ).toThrow('account_gateway_codex_model_settings_invalid');
+    expect(() =>
+      resolveAdmittedGatewayOcrReasoningEffort(
+        capture({
+          model,
+          reasoning: { allowed: ['minimal'], default: 'minimal' },
+        }),
+        model,
+        'high'
+      )
+    ).toThrow('account_gateway_codex_reasoning_effort_unsupported');
+    expect(() =>
+      resolveAdmittedGatewayOcrReasoningEffort(
+        capture({ model, reasoning: { allowed: ['max'], default: 'max' } }),
+        model,
+        null
+      )
+    ).toThrow('account_gateway_ocr_reasoning_effort_unsupported');
+    expect(
+      resolveAdmittedGatewayOcrReasoningEffort(undefined, model, 'max')
+    ).toBe('max');
   });
 
   it.each([

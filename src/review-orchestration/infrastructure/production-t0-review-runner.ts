@@ -1,4 +1,9 @@
 import type { ReviewAgentProfile } from '../../control-plane/generated/review-action-v2/review-agent-profile';
+import { scopedModelInvocations } from './prepared-model-dispatch';
+import {
+  reviewModelDispatchContract,
+  parseReviewModelDispatchCapabilityV2,
+} from '../../control-plane/generated/review-action-v2/review-model-dispatch-contract';
 import { fetchCapturedReviewSkills } from '../../review-skills/review-skills-transport';
 import {
   materializeReviewSkills,
@@ -263,7 +268,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
   private async runInWorkspace(
     input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]
   ): Promise<CodexOAuthV2ReviewResult> {
-    const signal = input.accountGateway?.signal ?? input.providerApi?.signal;
+    const preparedRoute =
+      input.preparedRoute ?? input.accountGateway ?? input.providerApi;
+    const signal = preparedRoute?.signal;
     signal?.throwIfAborted();
     const fetchImpl = signal
       ? createAccountGatewayRunFetch(this.fetchImpl, signal)
@@ -271,16 +278,26 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     validateInput(input);
     if (
       input.providerApi &&
-      (input.accountGateway || input.ocr || input.providerInstanceId)
+      (input.accountGateway || input.preparedRoute || input.providerInstanceId)
     ) {
       throw new Error('review_action_v2_direct_auth_route_invalid');
     }
-    if (input.ocr && !input.accountGateway) {
-      // Managed OCR exists only on the account gateway transport (§4.1).
-      throw new Error('review_action_v2_ocr_account_gateway_required');
+    if (
+      (input.preparedRoute && input.accountGateway) ||
+      (input.ocr && !preparedRoute)
+    ) {
+      throw new Error('review_action_v2_prepared_route_required');
     }
-    const admittedRuntime =
-      input.accountGateway?.runtimeConfig ?? input.providerApi?.runtimeConfig;
+    const admittedRuntime = preparedRoute?.runtimeConfig;
+    const dispatchJson =
+      admittedRuntime?.runtimeEnv[
+        reviewModelDispatchContract.capabilityRuntimeEnvKey
+      ];
+    const modelDispatchCapability = dispatchJson
+      ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson))
+      : undefined;
+    if (input.preparedRoute && !modelDispatchCapability)
+      throw new Error('review_action_v2_prepared_route_unqualified');
     if (
       admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== undefined &&
       !input.ocr
@@ -321,9 +338,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         authoritativeDeadlineEpochMs;
     }
     signal?.throwIfAborted();
-    const loadedConfig = input.providerApi
+    const loadedConfig = preparedRoute
       ? ConfigLoader.loadRuntimeEnvironment(
-          input.providerApi.runtimeConfig.runtimeEnv,
+          preparedRoute.runtimeConfig.runtimeEnv,
           { modelTransport: true }
         )
       : ConfigLoader.load();
@@ -336,7 +353,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       throw new Error('review_action_v2_description_policy_invalid');
     const config = {
       ...loadedConfig,
-      ...(input.accountGateway ? { providerRetries: 1 } : {}),
+      ...(preparedRoute ? { providerRetries: 1 } : {}),
       // A missing captured flag means ON; ambient runner input cannot disable it.
       updatePrDescription: admittedRuntime
         ? capturedDescriptionFlag !== 'false'
@@ -360,14 +377,18 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             model
           )
         : undefined;
-    const reasoningEffort = resolveProductionInvestigationReasoningEffort({
-      codexModel: model,
-      accountGateway: input.accountGateway !== undefined,
-      providerApi: input.providerApi !== undefined,
-      ...(directProvider ? { providerApiAuthMode: directProvider.mode } : {}),
-      serverReasoningEffort,
-      gatewayModelSettings,
-    });
+    const reasoningEffort = input.ocr
+      ? null
+      : resolveProductionInvestigationReasoningEffort({
+          codexModel: model,
+          accountGateway: preparedRoute !== undefined,
+          providerApi: input.providerApi !== undefined,
+          ...(directProvider
+            ? { providerApiAuthMode: directProvider.mode }
+            : {}),
+          serverReasoningEffort,
+          gatewayModelSettings,
+        });
     if (
       input.providerApi ||
       (input.accountGateway && model === 'mimo-v2.6-pro')
@@ -380,7 +401,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       1_000,
       config.runTimeoutSeconds * 1_000
     );
-    const providerTimeoutMs = input.accountGateway
+    const providerTimeoutMs = preparedRoute
       ? Math.min(ACCOUNT_GATEWAY_BOUNDS.requestMs, configuredTimeoutMs)
       : configuredTimeoutMs;
     const reviewActionClient = new ReviewActionV2Client({
@@ -388,19 +409,17 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       fetchImpl,
     });
     const controlPlane =
-      input.accountGateway?.controlPlane ??
-      input.providerApi?.controlPlane ??
+      preparedRoute?.controlPlane ??
       new ReviewActionV2ControlPlaneAdapter(reviewActionClient);
-    const authorization =
-      input.accountGateway || input.providerApi
-        ? controlPlane.currentAuthorization()
-        : await controlPlane.authorize({
-            oidcToken: await oidc.requestToken(input.audience),
-          });
+    const authorization = preparedRoute
+      ? controlPlane.currentAuthorization()
+      : await controlPlane.authorize({
+          oidcToken: await oidc.requestToken(input.audience),
+        });
     validateAuthorizationInput(input, authorization);
 
     let usageDelivery: UsageDelivery | undefined;
-    if (!input.accountGateway && !input.providerApi) {
+    if (!preparedRoute) {
       try {
         usageDelivery = await UsageDelivery.create({
           apiUrl: input.apiUrl,
@@ -569,19 +588,21 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         // Managed OCR review (plan 56): one FindingDiscovery slot over the whole
         // inventory, no CodexProvider/PromptBuilder/Context Gateway and no RR
         // investigation composition on this path.
-        const ocrRuntimeEnv = input.accountGateway!.runtimeConfig.runtimeEnv;
-        const ocrModel = ocrRuntimeEnv.CODEX_MODEL;
+        const ocrRuntimeEnv = preparedRoute!.runtimeConfig.runtimeEnv;
+        const ocrModel =
+          modelDispatchCapability?.model ?? ocrRuntimeEnv.CODEX_MODEL;
         if (!ocrModel || !approvedOcrAgent) {
           throw new Error('review_action_v2_ocr_model_missing');
         }
         const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
-        const ocrModelReasoningEffort =
-          resolveAdmittedGatewayOcrReasoningEffort(
-            input.accountGateway!.runtimeConfig,
-            ocrModel,
-            ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
-          );
-        const modelTransport = input.accountGateway!.modelTransport;
+        const ocrModelReasoningEffort = input.accountGateway
+          ? resolveAdmittedGatewayOcrReasoningEffort(
+              preparedRoute!.runtimeConfig,
+              ocrModel,
+              ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
+            )
+          : (ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null);
+        const modelTransport = preparedRoute!.modelTransport;
         const capabilityAuthorization =
           modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
         if (!capabilityAuthorization) {
@@ -623,7 +644,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                   requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
                 },
                 modelReasoningEffort: ocrModelReasoningEffort,
-                admittedRuntimeConfig: input.accountGateway!.runtimeConfig,
+                ...(input.accountGateway
+                  ? { admittedRuntimeConfig: preparedRoute!.runtimeConfig }
+                  : {}),
+                protocol:
+                  modelDispatchCapability?.transport ===
+                  'runner_local_anthropic'
+                    ? 'anthropic-messages'
+                    : 'openai-responses',
                 language: ocrLanguage,
                 contextTools: contextTools.config,
               }),
@@ -671,16 +699,18 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             warn: core.warning,
           });
           const lifecycleCapability =
-            config.reviewThreadLifecycle !== 'off' && input.accountGateway
+            config.reviewThreadLifecycle !== 'off' && preparedRoute
               ? readLifecycleCapability(
                   admittedRuntime?.runtimeEnv[
                     lifecycleVerificationContract.capabilityRuntimeEnvKey
                   ],
                   ocrModel,
-                  ReviewExecutionProviderKind.Ocr
+                  ReviewExecutionProviderKind.Ocr,
+                  modelDispatchCapability
                 )
               : undefined;
           let planned = planOcrReviewAssignments({
+            ...(modelDispatchCapability ? { attemptBudget: 1 } : {}),
             prDescriptionEnabled: prDescription !== undefined,
             authorization,
             pr,
@@ -814,6 +844,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 logger.info('Managed OCR acceptance', diagnostic),
             }
           );
+          const discoveryInvocations = scopedModelInvocations(
+            invocationAdapter,
+            modelTransport
+          );
           const identities = new DeterministicReviewOrchestrationIdentity();
           if (
             prDescription &&
@@ -843,11 +877,11 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             invocations: preplanningRestore?.persistedPlan
               ? restoredLifecycleInvocations(
                   preplanningRestore,
-                  invocationAdapter
+                  discoveryInvocations
                 )
               : lifecycle && lifecycleCapability
                 ? compositeLifecycleInvocations({
-                    discovery: invocationAdapter,
+                    discovery: discoveryInvocations,
                     packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
                     capability: lifecycleCapability,
                     outputCap: lifecycle.outputCap,
@@ -855,7 +889,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                     liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
                     transport: modelTransport,
                   })
-                : invocationAdapter,
+                : discoveryInvocations,
             invocationFailureClassifier:
               new ProviderInvocationFailureClassifier(
                 modelTransport.failureFact
@@ -982,8 +1016,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           ? directProvider!.modelProvider
           : resolveAccountGatewayModelProvider(
               model,
-              input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-              input.accountGateway?.modelTransport
+              preparedRoute?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+              preparedRoute?.modelTransport
             ),
         ...(input.providerApi
           ? {
@@ -998,9 +1032,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               waitForProcessClose: true,
             }
           : {}),
-        ...(input.accountGateway
+        ...(preparedRoute && !input.providerApi
           ? {
-              accountGateway: input.accountGateway.modelTransport,
+              accountGateway: preparedRoute.modelTransport,
               ...(gatewayModelSettings
                 ? {
                     accountGatewayModelSettings: gatewayModelSettings,
@@ -1054,19 +1088,18 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         providerKind: ReviewExecutionProviderKind.Codex,
         language: config.outputLanguage,
         config,
-        transport:
-          input.providerApi?.modelTransport ??
-          input.accountGateway?.modelTransport,
+        transport: preparedRoute?.modelTransport,
         warn: core.warning,
       });
       const lifecycleCapability =
-        config.reviewThreadLifecycle !== 'off' && input.accountGateway
+        config.reviewThreadLifecycle !== 'off' && preparedRoute
           ? readLifecycleCapability(
               admittedRuntime?.runtimeEnv[
                 lifecycleVerificationContract.capabilityRuntimeEnvKey
               ],
               model,
-              ReviewExecutionProviderKind.Codex
+              ReviewExecutionProviderKind.Codex,
+              modelDispatchCapability
             )
           : undefined;
       let planned = planAssignments({
@@ -1084,7 +1117,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           initialLifecycle.promptTargets
         ),
         liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
-        accountGateway: input.accountGateway !== undefined,
+        accountGateway: preparedRoute !== undefined,
       });
       assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
       // Existing executions never select new companion work or reset its allowance.
@@ -1141,7 +1174,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         agenticContext,
         contextGateway,
         false,
-        input.providerApi || gatewayModelSettings ? reasoningEffort : 'xhigh',
+        preparedRoute ? reasoningEffort : 'xhigh',
         input.providerApi?.credentialLease,
         gatewayModelSettings
       );
@@ -1179,7 +1212,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               (recordingInput) => {
                 const legacyFallbackGate =
                   new ReviewInvestigationLegacyFallbackGate();
-                if (input.accountGateway) legacyFallbackGate.close();
+                if (preparedRoute) legacyFallbackGate.close();
                 const investigationControlPlane =
                   new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
                     investigationProtocol,
@@ -1237,12 +1270,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                       codexModel: model,
                       codexBinaryPath: input.codexBinaryPath,
                       executionSessions: gateway,
-                      modelTransport:
-                        input.providerApi?.modelTransport ??
-                        input.accountGateway?.modelTransport,
+                      modelTransport: preparedRoute?.modelTransport,
                       admittedGatewayModel:
-                        input.accountGateway?.runtimeConfig.runtimeEnv
-                          .CODEX_MODEL,
+                        preparedRoute?.runtimeConfig.runtimeEnv.CODEX_MODEL,
                       reasoningEffort,
                       gatewayModelSettings,
                     }),
@@ -1303,13 +1333,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           'AI PR description omitted: no optional task budget remains.'
         );
       const nativeDiscoveryInvocations = observeNativeReviewSkillsSupply(
-        invocationAdapter,
+        preparedRoute
+          ? scopedModelInvocations(
+              invocationAdapter,
+              preparedRoute.modelTransport
+            )
+          : invocationAdapter,
         skillsReceiptCollector,
-        () =>
-          (
-            input.providerApi?.modelTransport ??
-            input.accountGateway?.modelTransport
-          )?.requestCount?.()
+        () => preparedRoute?.modelTransport.requestCount?.()
       );
       const useCase = new RunT0ReviewOrchestration({
         ...(prDescription ? { prDescription } : {}),
@@ -1339,14 +1370,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 outputCap: lifecycle.outputCap,
                 reviewRevisionHash: authorization.facts.reviewRevisionHash,
                 liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
-                transport: input.accountGateway!.modelTransport,
+                transport: preparedRoute!.modelTransport,
               })
             : nativeDiscoveryInvocations,
         ...(investigationInvocationAdapter
           ? { investigationInvocations: investigationInvocationAdapter }
           : {}),
         invocationFailureClassifier: new ProviderInvocationFailureClassifier(
-          input.accountGateway?.modelTransport.failureFact
+          preparedRoute?.modelTransport.failureFact
         ),
         invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
         investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
@@ -2736,9 +2767,10 @@ async function applyReviewRuntimeConfig(
   fetchImpl: typeof fetch,
   oidc: GitHubActionsOidcTokenProvider
 ): Promise<string | undefined> {
-  if (input.accountGateway || input.providerApi) {
+  if (input.preparedRoute || input.accountGateway || input.providerApi) {
     return applyAdmittedRuntimeConfig(
-      (input.accountGateway ?? input.providerApi)!.runtimeConfig
+      (input.preparedRoute ?? input.accountGateway ?? input.providerApi)!
+        .runtimeConfig
     );
   }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = 'oidc';

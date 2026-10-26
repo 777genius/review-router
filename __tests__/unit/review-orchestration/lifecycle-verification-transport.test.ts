@@ -79,6 +79,7 @@ test('parent transport forwards exact normalized hashed bytes and complete lease
       dispatch,
       signal: new AbortController().signal,
       maxResponseBytes: 32768,
+      maxOutputTokens: 4096,
       deadlineMs: 60000,
     });
     expect(upstream.seen).toHaveLength(1);
@@ -125,6 +126,7 @@ test('positively unpaid companion denial still makes exactly one HTTP attempt', 
         dispatch,
         signal: new AbortController().signal,
         maxResponseBytes: 32768,
+        maxOutputTokens: 4096,
         deadlineMs: 60000,
       })
     ).rejects.toThrow('dispatch_unavailable');

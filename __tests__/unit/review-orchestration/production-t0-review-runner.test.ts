@@ -884,6 +884,21 @@ describe('ProductionT0ReviewRunner policy', () => {
           }
         | undefined;
       const stoppedAtBoundary = new Error('mock authorization boundary');
+      const observeEnvironment = () => {
+        observedEnvironment = {
+          cwd: process.cwd(),
+          path: process.env.PATH,
+          binary: process.env.REVIEWROUTER_CODEX_BINARY,
+        };
+      };
+      const loadAdmitted =
+        ConfigLoader.loadRuntimeEnvironment.bind(ConfigLoader);
+      const admittedConfiguration = jest
+        .spyOn(ConfigLoader, 'loadRuntimeEnvironment')
+        .mockImplementation((...args) => {
+          observeEnvironment();
+          return loadAdmitted(...args);
+        });
       const configuration = jest
         .spyOn(ConfigLoader, 'load')
         .mockImplementation(() => {
@@ -1031,6 +1046,7 @@ describe('ProductionT0ReviewRunner policy', () => {
         }
       } finally {
         process.env = previousEnv;
+        admittedConfiguration.mockRestore();
         configuration.mockRestore();
         oidc.mockRestore();
         authorize.mockRestore();

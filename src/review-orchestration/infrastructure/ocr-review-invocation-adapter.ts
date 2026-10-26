@@ -391,6 +391,7 @@ export function buildOcrSemanticInvocationPreimage(input: {
  * instead of revalidated.
  */
 export function planOcrReviewAssignments(input: {
+  readonly attemptBudget?: 1;
   readonly prDescriptionEnabled?: boolean;
   readonly authorization: ReviewRunAuthorization;
   readonly pr: PRContext;
@@ -429,7 +430,7 @@ export function planOcrReviewAssignments(input: {
         providerVoteIdentityHash: ocrLanes[0].providerVoteIdentityHash,
         required: true,
         attemptBudget: Math.min(
-          OCR_ATTEMPT_BUDGET,
+          input.attemptBudget ?? OCR_ATTEMPT_BUDGET,
           Math.max(1, input.authorization.limits.maxAttemptsPerSlot)
         ),
         retryPolicyVersion: OCR_RETRY_POLICY_VERSION,

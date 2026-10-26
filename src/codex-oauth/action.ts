@@ -5,6 +5,10 @@ import {
 } from '../review-skills/review-skills-error';
 import { runProviderApiRuntime } from './provider-api-runtime';
 import {
+  createPreparedCodexSubscriptionReviewRunner,
+  runPreparedSubscriptionRuntime,
+} from './subscription-model-runtime';
+import {
   providerApiCheckoutCompanionContract,
   isProviderApiAuthMode,
 } from '../control-plane/generated/review-action-v2/companion-contracts';
@@ -146,6 +150,9 @@ export async function runCodexOAuthRotatingAction(
     fetchImpl: options.fetchImpl,
   });
   const terminalOutcomeOidcEnv = snapshotCodexOAuthTerminalOutcomeOidcEnv();
+  const runController = new AbortController();
+  const cancelRun = () =>
+    runController.abort(new Error('codex_oauth_cancelled'));
   const sharedRuntimePorts = {
     oidc: new GitHubActionsOidcTokenProvider({
       fetchImpl: options.fetchImpl,
@@ -174,6 +181,7 @@ export async function runCodexOAuthRotatingAction(
     codex: {
       prepareCli: () =>
         prepareCodexCliBeforeAuthRead({
+          signal: runController.signal,
           ...(reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0
             ? { approvedAgent: bundledReviewAgentForTransport('provider_api') }
             : {}),
@@ -185,10 +193,14 @@ export async function runCodexOAuthRotatingAction(
       refreshAuth: (input: {
         authJsonBytes: string;
         codexBinaryPath?: string;
+        signal?: AbortSignal;
+        requiredValidUntil?: number;
       }) =>
         refreshCodexAuthWithOfficialCli({
           authJsonBytes: input.authJsonBytes,
           codexBinaryPath: input.codexBinaryPath,
+          signal: input.signal,
+          requiredValidUntil: input.requiredValidUntil,
           logger: {
             info: core.info,
             warn: (message) => core.warning(message),
@@ -236,6 +248,8 @@ export async function runCodexOAuthRotatingAction(
     ? new CiOrchestrationProgressReporter(ciProgress)
     : null;
   try {
+    process.on('SIGINT', cancelRun);
+    process.on('SIGTERM', cancelRun);
     const runtime =
       reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0
         ? await runCodexOAuthRotatingRuntime(
@@ -243,19 +257,24 @@ export async function runCodexOAuthRotatingAction(
               ...inputs,
               workspacePath: t0WorkspacePath!,
               reviewMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+              signal: runController.signal,
             },
             {
               ...sharedRuntimePorts,
-              v2Review:
-                options.v2ReviewRunner ??
-                createProductionT0ReviewRunner({
-                  fetchImpl: options.fetchImpl,
-                  ...(ciProgressReporter
-                    ? {
-                        progress: ciProgressReporter,
-                      }
-                    : {}),
-                }),
+              v2Review: createPreparedCodexSubscriptionReviewRunner({
+                signal: runController.signal,
+                fetchImpl: options.fetchImpl,
+                review:
+                  options.v2ReviewRunner ??
+                  createProductionT0ReviewRunner({
+                    fetchImpl: options.fetchImpl,
+                    ...(ciProgressReporter
+                      ? {
+                          progress: ciProgressReporter,
+                        }
+                      : {}),
+                  }),
+              }),
             }
           )
         : await runCodexOAuthRotatingRuntime(inputs, {
@@ -334,6 +353,8 @@ export async function runCodexOAuthRotatingAction(
     await publishTerminalOutcomeReportSafely(terminalOutcomeReporter, report);
     core.setFailed(failure.code);
   } finally {
+    process.removeListener('SIGINT', cancelRun);
+    process.removeListener('SIGTERM', cancelRun);
     if (t0WorkspacePath) {
       fs.rmSync(t0WorkspacePath, { recursive: true, force: true });
     }
@@ -356,6 +377,55 @@ export async function runProviderApiAction(
     throw new Error('provider_api_requires_authorized_t0');
   }
   const inputs = readReviewActionContext();
+  await runModelRouteAction(inputs, (ports) =>
+    runProviderApiRuntime(
+      {
+        ...inputs,
+        workflowSchemaVersion:
+          providerApiCheckoutCompanionContract.workflowSchemaVersion,
+        providerApiAuthMode,
+      },
+      ports
+    )
+  );
+}
+
+export async function runPreparedSubscriptionAction(
+  activation: ReviewActionV2Activation
+): Promise<void> {
+  if (
+    activation.mode !== ReviewActionV2RuntimeMode.T0 ||
+    process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'oidc' ||
+    process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== 'false' ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$/.test(
+      process.env.REVIEW_REQUEST_ID ?? ''
+    )
+  )
+    throw new Error('prepared_subscription_requires_authorized_t0');
+  const inputs = readReviewActionContext();
+  await runModelRouteAction(inputs, (ports) =>
+    runPreparedSubscriptionRuntime(
+      {
+        ...inputs,
+        workflowSchemaVersion: 2,
+      },
+      ports
+    )
+  );
+}
+
+async function runModelRouteAction(
+  inputs: ReturnType<typeof readReviewActionContext>,
+  runRuntime: (
+    ports: Readonly<{
+      review: CodexOAuthV2ReviewRunnerPort;
+      terminalReview(
+        result: CodexOAuthV2ReviewResult,
+        signal: AbortSignal
+      ): Promise<void>;
+    }>
+  ) => Promise<void>
+): Promise<void> {
   const publisher = createCiReviewProgressPublisher({
     repository: inputs.repository,
     pullRequestNumber: inputs.pullRequestNumber,
@@ -365,21 +435,13 @@ export async function runProviderApiAction(
     ? new CiOrchestrationProgressReporter(publisher)
     : null;
   try {
-    await runProviderApiRuntime(
-      {
-        ...inputs,
-        workflowSchemaVersion:
-          providerApiCheckoutCompanionContract.workflowSchemaVersion,
-        providerApiAuthMode,
-      },
-      {
-        review: createProductionT0ReviewRunner({
-          ...(progress ? { progress } : {}),
-        }),
-        terminalReview: (review, signal) =>
-          finishAccountGatewayActionReview(inputs, review, progress, signal),
-      }
-    );
+    await runRuntime({
+      review: createProductionT0ReviewRunner({
+        ...(progress ? { progress } : {}),
+      }),
+      terminalReview: (review, signal) =>
+        finishAccountGatewayActionReview(inputs, review, progress, signal),
+    });
     core.setOutput('reviewrouter_state', 'completed');
   } catch (error) {
     await progress?.finish('failed');

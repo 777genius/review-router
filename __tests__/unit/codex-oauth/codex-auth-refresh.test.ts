@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { refreshCodexAuthWithOfficialCli } from '../../../src/codex-oauth/codex-bootstrap';
+import { readPreparedCodexCredential } from '../../../src/codex-oauth/codex-auth-refresh-validation';
 
 function jwt(claims: Record<string, unknown>): string {
   return `${Buffer.from('{"alg":"RS256"}').toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.synthetic-signature`;
@@ -102,6 +103,17 @@ readline.createInterface({input:process.stdin}).on('line', line => {
     expect(JSON.parse(result.authJsonBytes).tokens.refresh_token).toBe(
       'synthetic-refresh-after'
     );
+    const prepared = readPreparedCodexCredential(
+      result.authJsonBytes,
+      requiredValidUntil
+    );
+    expect(prepared).toEqual({
+      accessToken: JSON.parse(result.authJsonBytes).tokens.access_token,
+      accountId: result.accountId,
+      credentialValidUntil: result.credentialValidUntil,
+    });
+    expect(prepared).not.toHaveProperty('refreshToken');
+    expect(prepared).not.toHaveProperty('authJsonBytes');
     const requests = (
       await fs.readFile(path.join(directory, 'requests.jsonl'), 'utf8')
     )
@@ -120,6 +132,21 @@ readline.createInterface({input:process.stdin}).on('line', line => {
     await result.clearAuthMaterial();
     await result.clearAuthMaterial();
     expect(await remainingHomes()).toEqual([]);
+  });
+
+  it('rechecks lifetime and account consistency without invoking another helper process', () => {
+    const original = JSON.parse(auth());
+    expect(() =>
+      readPreparedCodexCredential(JSON.stringify(original), Date.now() + 60_000)
+    ).toThrow('codex_oauth_refresh_lifetime_insufficient');
+    original.tokens.access_token = 'opaque-fixture-token';
+    expect(() =>
+      readPreparedCodexCredential(JSON.stringify(original), Date.now() + 60_000)
+    ).toThrow('codex_oauth_refresh_expiry_unavailable');
+    original.tokens.account_id = 'different-account';
+    expect(() =>
+      readPreparedCodexCredential(JSON.stringify(original), Date.now() + 60_000)
+    ).toThrow('codex_oauth_refresh_account_mismatch');
   });
 
   it.each([

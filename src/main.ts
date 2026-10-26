@@ -60,6 +60,8 @@ import {
 } from './codex-oauth/auth-input';
 import { ACCOUNT_GATEWAY_ACTION_MODE } from './codex-oauth/account-gateway-runtime';
 import { PROVIDER_API_ACTION_MODE } from './codex-oauth/provider-api-runtime';
+import { PREPARED_SUBSCRIPTION_ACTION_MODE } from './codex-oauth/subscription-model-runtime';
+import { runPreparedSubscriptionAction } from './codex-oauth/action';
 import {
   resolveReviewActionV2Activation,
   ReviewActionV2RuntimeMode,
@@ -187,7 +189,8 @@ async function run(): Promise<void> {
       core.getInput('REVIEW_ROUTER_MODE');
     gatewaySelected =
       requestedMode === ACCOUNT_GATEWAY_ACTION_MODE ||
-      requestedMode === PROVIDER_API_ACTION_MODE;
+      requestedMode === PROVIDER_API_ACTION_MODE ||
+      requestedMode === PREPARED_SUBSCRIPTION_ACTION_MODE;
     const reviewActionV2Activation = resolveReviewActionV2Activation({
       env: process.env,
     });
@@ -196,6 +199,10 @@ async function run(): Promise<void> {
     }
     if (requestedMode === PROVIDER_API_ACTION_MODE) {
       await runProviderApiAction(reviewActionV2Activation);
+      return;
+    }
+    if (requestedMode === PREPARED_SUBSCRIPTION_ACTION_MODE) {
+      await runPreparedSubscriptionAction(reviewActionV2Activation);
       return;
     }
     const lifecycleResolveTokenFromEnv =

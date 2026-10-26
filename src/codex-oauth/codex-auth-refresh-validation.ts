@@ -15,6 +15,12 @@ type AuthFacts = Readonly<{
   refreshedAt: number;
 }>;
 
+export type PreparedCodexCredential = Readonly<{
+  accessToken: string;
+  accountId: string;
+  credentialValidUntil: number;
+}>;
+
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -78,9 +84,39 @@ export function validateCodexRefreshedAuth(input: {
       before.refreshToken === after.refreshToken)
   )
     throw new Error('codex_oauth_refresh_not_confirmed');
+  const credential = preparedCredentialFromFacts(
+    after,
+    input.requiredValidUntil,
+    input.now
+  );
+  return Object.freeze({
+    authJsonBytes: after.compact,
+    credentialValidUntil: credential.credentialValidUntil,
+    accountId: credential.accountId,
+  });
+}
+
+/** Read only material whose refresh/generation was already approved by its
+ * credential adapter. This performs no OAuth call and grants no refresh proof. */
+export function readPreparedCodexCredential(
+  authJsonBytes: string,
+  requiredValidUntil: number
+): PreparedCodexCredential {
+  return preparedCredentialFromFacts(
+    authFacts(authJsonBytes),
+    requiredValidUntil,
+    Date.now()
+  );
+}
+
+function preparedCredentialFromFacts(
+  facts: AuthFacts,
+  requiredValidUntil: number,
+  now: number
+): PreparedCodexCredential {
   let claims: unknown;
   try {
-    const parts = after.accessToken.split('.');
+    const parts = facts.accessToken.split('.');
     if (parts.length !== 3 || !/^[A-Za-z0-9_-]+$/.test(parts[1]!))
       throw new Error();
     claims = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8'));
@@ -97,16 +133,15 @@ export function validateCodexRefreshedAuth(input: {
     throw new Error('codex_oauth_refresh_expiry_unavailable');
   const credentialValidUntil = claims.exp * 1_000;
   if (
-    !Number.isSafeInteger(input.requiredValidUntil) ||
-    input.requiredValidUntil < input.now ||
-    credentialValidUntil <
-      input.requiredValidUntil + CODEX_AUTH_EXPIRY_MARGIN_MS
+    !Number.isSafeInteger(requiredValidUntil) ||
+    requiredValidUntil < now ||
+    credentialValidUntil < requiredValidUntil + CODEX_AUTH_EXPIRY_MARGIN_MS
   )
     throw new Error('codex_oauth_refresh_lifetime_insufficient');
   return Object.freeze({
-    authJsonBytes: after.compact,
+    accessToken: facts.accessToken,
     credentialValidUntil,
-    accountId: after.accountId,
+    accountId: facts.accountId,
   });
 }
 

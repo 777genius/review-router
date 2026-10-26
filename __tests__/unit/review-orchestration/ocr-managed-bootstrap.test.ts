@@ -47,6 +47,26 @@ describe('approved OCR profile parser (legacy plus optional Skills capability)',
     expect(profile.modelTransports).toEqual(['account_gateway']);
   });
 
+  it('accepts a newly approved direct profile without changing old gateway profiles', () => {
+    const json = profileJson({
+      profileRef: 'ocr-unified-v1',
+      modelTransports: ['account_gateway', 'provider_api'],
+    });
+    expect(
+      readApprovedOcrReviewAgent(json, digestOf(json)).modelTransports
+    ).toEqual(['account_gateway', 'provider_api']);
+    const legacy = profileJson();
+    expect(
+      readApprovedOcrReviewAgent(legacy, digestOf(legacy)).modelTransports
+    ).toEqual(['account_gateway']);
+    const duplicate = profileJson({
+      modelTransports: ['provider_api', 'provider_api'],
+    });
+    expect(() =>
+      readApprovedOcrReviewAgent(duplicate, digestOf(duplicate))
+    ).toThrow('review_agent_profile_capabilities_invalid');
+  });
+
   it('preserves explicit capability and leaves legacy absence byte-compatible', () => {
     const legacyJson = profileJson();
     expect(

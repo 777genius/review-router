@@ -350,6 +350,7 @@ describe('production reusable workflows', () => {
               review_action_lane: 't0',
               codex_session_mode: '',
               provider_api_auth_mode: mode,
+              subscription_auth_mode: '',
             },
             steps: {
               runtime: {
@@ -399,6 +400,98 @@ describe('production reusable workflows', () => {
         expect(runExecutionPreparation({ ...env, ...mismatch }).status).toBe(1);
     }
   );
+
+  it('executes exactly the native Claude prepared route and rejects credential or authority substitution', () => {
+    const workflow = parseWorkflow(
+      '.github/workflows/reviewrouter-execution-reusable.yml'
+    );
+    expect(
+      workflow.on?.workflow_call?.inputs?.subscription_auth_mode?.default
+    ).toBe('');
+    const env: NodeJS.ProcessEnv = {
+      RR_REVIEW_ACTION_LANE: 't0',
+      RR_SUBSCRIPTION_AUTH_MODE: 'claude-oauth',
+      RR_REVIEW_REQUEST_ID: 'review-request-claude',
+      RR_RUNTIME_REF: '0123456789abcdef0123456789abcdef01234567',
+      RR_WORKFLOW_REPOSITORY: '777genius/review-router',
+      RR_WORKFLOW_SHA: '0123456789abcdef0123456789abcdef01234567',
+      RR_REVIEW_TIMEOUT_MINUTES: '240',
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+      CLAUDE_CODE_OAUTH_TOKEN_PRESENT: '1',
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_REPOSITORY: 'owner/repo',
+    };
+    expect(runExecutionPreparation(env).status).toBe(0);
+    const selected = (workflow.jobs?.review?.steps ?? []).filter((step) =>
+      runInNewContext(
+        (step.if ?? '${{ true }}')
+          .slice(3, -2)
+          .replaceAll('steps.provider-tooling', 'steps["provider-tooling"]'),
+        {
+          inputs: {
+            review_action_lane: 't0',
+            codex_session_mode: '',
+            provider_api_auth_mode: '',
+            subscription_auth_mode: 'claude-oauth',
+          },
+          steps: {
+            runtime: {
+              outputs: { can_run: 'true', app_token_needed: 'false' },
+            },
+            'provider-tooling': { outputs: {} },
+          },
+          env: {},
+        }
+      )
+    );
+    expect(
+      selected
+        .filter((step) => step.uses?.startsWith('actions/checkout@'))
+        .map((step) => step.name)
+    ).toEqual(['Checkout ReviewRouter runtime']);
+    expect(
+      selected
+        .filter((step) => step.name?.startsWith('Run ReviewRouter'))
+        .map((step) => step.name)
+    ).toEqual(['Run ReviewRouter T0 Claude subscription']);
+    expect(
+      selected.some((step) =>
+        /Install .*CLI|runtime provider tooling/.test(step.name ?? '')
+      )
+    ).toBe(false);
+    const run = selected.find(
+      (step) => step.name === 'Run ReviewRouter T0 Claude subscription'
+    )!;
+    expect(run.env).toMatchObject({
+      REVIEWROUTER_ACTION_V2_MODE: 't0',
+      REVIEW_ROUTER_MODE: 'prepared-subscription',
+      REVIEWROUTER_PREPARED_MODEL_TRANSPORT: 'runner_local_anthropic',
+      INPUT_CLAUDE_CODE_OAUTH_TOKEN: '${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}',
+    });
+    expect(
+      Object.keys(run.env!).filter((name) => /TOKEN|KEY|AUTH_JSON/.test(name))
+    ).toEqual(['INPUT_CLAUDE_CODE_OAUTH_TOKEN']);
+    for (const mismatch of [
+      { RR_REVIEW_ACTION_LANE: 'legacy' },
+      { RR_SUBSCRIPTION_AUTH_MODE: 'codex-oauth' },
+      { RR_PROVIDER_API_AUTH_MODE: 'openrouter-api' },
+      { RR_CODEX_SESSION_MODE: 'account-gateway' },
+      { RR_PROVIDER_INSTANCE_ID: 'codex-rotating:1' },
+      { RR_SESSION_BINDING_ID: 'hosted-binding' },
+      { CLAUDE_CODE_OAUTH_TOKEN_PRESENT: '0' },
+      { CODEX_AUTH_JSON_PRESENT: '1' },
+      { OPENROUTER_API_KEY_PRESENT: '1' },
+      { MIMO_TOKEN_PLAN_API_KEY_PRESENT: '1' },
+      { KIMI_CODE_API_KEY_PRESENT: '1' },
+      { REVIEW_APP_PRIVATE_KEY_PRESENT: '1' },
+      { RR_STATIC_RUNTIME_ENV_JSON: '{"REVIEW_AUTH_MODE":"codex-oauth"}' },
+      { REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static' },
+      { GITHUB_EVENT_NAME: 'pull_request' },
+      { RR_REVIEW_REQUEST_ID: '' },
+    ])
+      expect(runExecutionPreparation({ ...env, ...mismatch }).status).toBe(1);
+  });
 
   it.each(['', 'codex-oauth', 'openai-api', 'mimo-token-plan-api'])(
     'validates the explicit discussion backend %s before checkout',
@@ -725,7 +818,6 @@ describe('production reusable workflows', () => {
   it('selects gateway tooling directly and preserves other provider preflight paths', () => {
     const workflowPath =
       '.github/workflows/reviewrouter-execution-reusable.yml';
-    const workflowSource = readRepoFile(workflowPath);
     const workflow = parseWorkflow(workflowPath);
     const codexInstall = workflow.jobs?.review?.steps?.find(
       (step) => step.name === 'Install Codex CLI'
@@ -769,6 +861,7 @@ describe('production reusable workflows', () => {
               review_action_lane: lane,
               codex_session_mode: mode,
               provider_api_auth_mode: '',
+              subscription_auth_mode: '',
             },
             steps: {
               runtime: { outputs: { can_run: canRun } },
@@ -787,10 +880,10 @@ describe('production reusable workflows', () => {
         selected: expected,
       });
     }
-    expect(workflow.jobs?.review?.env).not.toHaveProperty(
-      'MIMO_TOKEN_PLAN_API_KEY_PRESENT'
+    expect(workflow.jobs?.review?.env?.MIMO_TOKEN_PLAN_API_KEY_PRESENT).toBe(
+      "${{ secrets.MIMO_TOKEN_PLAN_API_KEY != '' && '1' || '0' }}"
     );
-    expect(workflowSource).not.toContain('MIMO_TOKEN_PLAN_API_KEY_PRESENT');
+    expect(preflight?.if).not.toContain('MIMO_TOKEN_PLAN_API_KEY_PRESENT');
   });
 
   it('keeps the shared execution workflow sandbox-safe in both lanes', () => {
@@ -993,19 +1086,13 @@ describe('production reusable workflows', () => {
     );
     expect(t0Run?.env).not.toHaveProperty('REVIEW_APP_PRIVATE_KEY');
 
-    expect(hostedPoolCheckout?.if).toContain(
-      "inputs.codex_session_mode == 'codex_subscription_oauth_hosted_pool'"
-    );
-    expect(hostedPoolCheckout?.with).toMatchObject({
-      ref: '${{ inputs.review_head_sha }}',
-      path: '.reviewrouter-pr',
-      'persist-credentials': false,
-    });
+    // The prepared route materializes its admitted exact head in isolation.
+    expect(hostedPoolCheckout).toBeUndefined();
     expect(hostedPoolRun?.if).toContain(
       "inputs.codex_session_mode == 'codex_subscription_oauth_hosted_pool'"
     );
     expect(hostedPoolRun?.env).toMatchObject({
-      REVIEWROUTER_ACTION_V2_MODE: 'disabled',
+      REVIEWROUTER_ACTION_V2_MODE: 't0',
       INPUT_MODE: 'fork-agentic-sandbox-hosted-pool',
       INPUT_API_URL: '${{ inputs.api_url }}',
       INPUT_CONTROL_PLANE_URL: '${{ inputs.control_plane_url }}',
@@ -1013,8 +1100,8 @@ describe('production reusable workflows', () => {
       INPUT_WORKFLOW_SCHEMA_VERSION: '${{ inputs.workflow_schema_version }}',
       INPUT_SESSION_BINDING_ID: '${{ inputs.session_binding_id }}',
       INPUT_SESSION_BINDING_VERSION: '${{ inputs.session_binding_version }}',
-      REVIEW_ROUTER_PR_WORKSPACE: '${{ github.workspace }}/.reviewrouter-pr',
     });
+    expect(hostedPoolRun?.env).not.toHaveProperty('REVIEW_ROUTER_PR_WORKSPACE');
     expect(hostedPoolRun?.env).not.toHaveProperty('INPUT_AUTH_JSON');
     expect(hostedPoolRun?.env).not.toHaveProperty('CODEX_AUTH_JSON');
     expect(hostedPoolRun?.env).not.toHaveProperty('CODEX_CONFIG_TOML');

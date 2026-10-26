@@ -1,4 +1,17 @@
 import { UsageDelivery } from '../provider-usage/delivery';
+import { PreparedModelDispatch } from '../review-orchestration/infrastructure/prepared-model-dispatch';
+import {
+  reviewModelDispatchContract,
+  parseReviewModelDispatchCapabilityV2,
+} from '../control-plane/generated/review-action-v2/review-model-dispatch-contract';
+import {
+  prepareOcrManagedRun,
+  readApprovedOcrReviewAgent,
+  readApprovedReviewAgentKind,
+  resolveApprovedOcrBinary,
+  type OcrManagedRunHandle,
+} from './ocr-managed-bootstrap';
+import { extractRawLoopbackCapability } from '../review-orchestration/infrastructure/ocr-review-managed-run';
 import { uploadUsageArtifact } from '../provider-usage/github-artifact';
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
@@ -23,6 +36,7 @@ import {
   AccountGatewayModelTransport,
   createAccountGatewayRunFetch,
   startDirectProviderApiModelTransport,
+  LOCAL_MODEL_CAPABILITY_ENV,
   type LocalGatewayModelTransport,
 } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import { ReviewActionV2ControlPlaneAdapter } from '../review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
@@ -97,6 +111,29 @@ export function approvedProviderApiAgent(
     providerApiAuthMode: selection.mode,
     serverReasoningEffort: env.CODEX_REASONING_EFFORT,
   });
+  const kind = readApprovedReviewAgentKind(
+    env.REVIEW_ROUTER_AGENT_PROFILE_JSON ?? '',
+    env.REVIEW_ROUTER_AGENT_PROFILE_DIGEST ?? ''
+  );
+  if (kind === 'ocr') {
+    const agent = readApprovedOcrReviewAgent(
+      env.REVIEW_ROUTER_AGENT_PROFILE_JSON ?? '',
+      env.REVIEW_ROUTER_AGENT_PROFILE_DIGEST ?? ''
+    );
+    const cap = parseReviewModelDispatchCapabilityV2(
+      JSON.parse(
+        env[reviewModelDispatchContract.capabilityRuntimeEnvKey] ?? 'null'
+      )
+    );
+    if (
+      cap.transport !== 'runner_local_responses' ||
+      cap.model !== selection.model ||
+      !agent.modelTransports.includes('provider_api') ||
+      env.CODEX_AGENTIC_CONTEXT === 'false'
+    )
+      throw new Error('provider_api_approved_agent_invalid');
+    return agent;
+  }
   const agent = readApprovedReviewAgent(
     env.REVIEW_ROUTER_AGENT_PROFILE_JSON ?? '',
     env.REVIEW_ROUTER_AGENT_PROFILE_DIGEST ?? ''
@@ -129,6 +166,10 @@ export async function runProviderApiRuntime(
   process.on('SIGTERM', cancel);
   process.on('SIGINT', cancel);
   let cli: PreparedCodexCli | undefined;
+  let ocrBinary:
+    | Awaited<ReturnType<typeof resolveApprovedOcrBinary>>
+    | undefined;
+  let ocrRun: OcrManagedRunHandle | undefined;
   let workspacePath: string | undefined;
   let codexHome: string | undefined;
   let apiKey: string | undefined;
@@ -215,22 +256,29 @@ export async function runProviderApiRuntime(
     phase = 'local_credential';
     apiKey = readProviderApiSecret(selection.mode);
     phase = 'prepare_cli';
-    cli = await prepareCodexCliBeforeAuthRead({
-      signal: run.signal,
-      approvedAgent: agent,
-      logger: { info: core.info, warn: core.warning },
-    });
-    const version = await promisify(execFile)(cli.binaryPath, ['--version'], {
-      signal: run.signal,
-      killSignal: 'SIGKILL',
-      timeout: 10_000,
-      maxBuffer: 16_384,
-      env: { PATH: process.env.PATH, HOME: os.tmpdir() },
-    });
-    assertApprovedReviewAgentVersion(
-      agent,
-      version.stdout.trim().replace(/^codex-cli /, '')
-    );
+    if (agent.agentKind === 'ocr') {
+      ocrBinary = await resolveApprovedOcrBinary({
+        approvedAgent: agent,
+        signal: run.signal,
+      });
+    } else {
+      cli = await prepareCodexCliBeforeAuthRead({
+        signal: run.signal,
+        approvedAgent: agent,
+        logger: { info: core.info, warn: core.warning },
+      });
+      const version = await promisify(execFile)(cli.binaryPath, ['--version'], {
+        signal: run.signal,
+        killSignal: 'SIGKILL',
+        timeout: 10_000,
+        maxBuffer: 16_384,
+        env: { PATH: process.env.PATH, HOME: os.tmpdir() },
+      });
+      assertApprovedReviewAgentVersion(
+        agent,
+        version.stdout.trim().replace(/^codex-cli /, '')
+      );
+    }
     phase = 'checkout';
     workspacePath = await createIsolatedCheckoutWorkspace({
       runnerTempPath: process.env.RUNNER_TEMP,
@@ -239,17 +287,22 @@ export async function runProviderApiRuntime(
     await safeCheckoutRepository({
       repository: capability.repository,
       headSha: capability.headSha,
+      ...(agent.agentKind === 'ocr'
+        ? { mergeBaseSha: authorization.facts.mergeBaseSha }
+        : {}),
       workspacePath,
       token: capability.token,
       signal: run.signal,
     });
-    codexHome = await fs.mkdtemp(
-      path.join(
-        process.env.RUNNER_TEMP || os.tmpdir(),
-        'reviewrouter-provider-api-'
-      )
-    );
-    await fs.chmod(codexHome, 0o700);
+    if (agent.agentKind !== 'ocr') {
+      codexHome = await fs.mkdtemp(
+        path.join(
+          process.env.RUNNER_TEMP || os.tmpdir(),
+          'reviewrouter-provider-api-'
+        )
+      );
+      await fs.chmod(codexHome, 0o700);
+    }
     phase = 'local_transport';
     modelTransport = await startDirectProviderApiModelTransport(
       selection.mode,
@@ -259,6 +312,22 @@ export async function runProviderApiRuntime(
         return apiKey;
       },
       {
+        ...(capability.runtimeConfig.runtimeEnv[
+          reviewModelDispatchContract.capabilityRuntimeEnvKey
+        ]
+          ? {
+              modelDispatch: new PreparedModelDispatch({
+                apiUrl: input.apiUrl,
+                capability: JSON.parse(
+                  capability.runtimeConfig.runtimeEnv[
+                    reviewModelDispatchContract.capabilityRuntimeEnvKey
+                  ]!
+                ),
+                authorization: () => controlPlane.currentAuthorization(),
+                fetchImpl: ports.fetchImpl,
+              }),
+            }
+          : {}),
         requestMs: Math.max(
           1000,
           ConfigLoader.loadRuntimeEnvironment(
@@ -277,27 +346,57 @@ export async function runProviderApiRuntime(
           : {}),
       }
     );
-    modelTransport = Object.freeze({
-      ...modelTransport,
-      environment: Object.freeze({
-        ...modelTransport.environment,
-        CODEX_HOME: codexHome,
-      }),
-    });
-    // No auth.json or upstream key: exec and app-server share only the local capability.
-    await fs.writeFile(
-      path.join(codexHome, 'config.toml'),
-      [...CODEX_SHELL_ENVIRONMENT_POLICY, ...modelTransport.configuration].join(
-        '\n'
-      ) + '\n',
-      { mode: 0o600 }
-    );
+    if (agent.agentKind === 'ocr') {
+      ocrRun = await prepareOcrManagedRun({
+        approvedAgent: agent,
+        baseUrl: modelTransport.baseUrl,
+        rawCapability: extractRawLoopbackCapability(
+          modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ''
+        ),
+        model: selection.model,
+        requestTimeoutSec: ConfigLoader.loadRuntimeEnvironment(
+          capability.runtimeConfig.runtimeEnv,
+          { modelTransport: true }
+        ).runTimeoutSeconds,
+        modelReasoningEffort:
+          capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
+        language:
+          capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
+        env: { ...process.env, REVIEWROUTER_OCR_BINARY: ocrBinary!.binaryPath },
+        signal: run.signal,
+      });
+    } else {
+      modelTransport = Object.freeze({
+        ...modelTransport,
+        environment: Object.freeze({
+          ...modelTransport.environment,
+          CODEX_HOME: codexHome!,
+        }),
+      });
+      // No auth.json or upstream key: exec and app-server share only the local capability.
+      await fs.writeFile(
+        path.join(codexHome!, 'config.toml'),
+        [
+          ...CODEX_SHELL_ENVIRONMENT_POLICY,
+          ...modelTransport.configuration,
+        ].join('\n') + '\n',
+        { mode: 0o600 }
+      );
+    }
     phase = 'runner';
     const review = await ports.review.run({
       ...input,
       workspacePath,
       codexHome,
-      codexBinaryPath: cli.binaryPath,
+      codexBinaryPath: cli?.binaryPath,
+      ...(ocrRun
+        ? {
+            ocr: {
+              run: ocrRun,
+              effectFacts: () => modelTransport?.failureFact(),
+            },
+          }
+        : {}),
       scmReadToken: capability.token,
       scmReadTokenExpiresAt: capability.expiresAt,
       refreshScmReadToken: readCapability,
@@ -332,6 +431,12 @@ export async function runProviderApiRuntime(
     for (const cleanup of [
       async () => {
         await modelTransport?.dispose();
+      },
+      async () => {
+        await ocrRun?.cleanup();
+      },
+      async () => {
+        await ocrBinary?.cleanup();
       },
       async () => {
         await usageDelivery?.cleanup();

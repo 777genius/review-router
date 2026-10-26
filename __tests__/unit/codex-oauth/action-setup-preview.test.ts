@@ -1018,7 +1018,12 @@ describe('Codex OAuth rotating setup PR preview', () => {
     expect(runtimePorts.controlPlane).not.toHaveProperty('commentToken');
     expect(runtimePorts).not.toHaveProperty('comments');
     expect(runtimePorts).not.toHaveProperty('review');
-    expect(runtimePorts).toHaveProperty('v2Review', v2ReviewRunner);
+    expect(runtimePorts).toHaveProperty(
+      'v2Review.checkoutOwner',
+      'review_runner'
+    );
+    expect(runtimePorts).toHaveProperty('v2Review.run', expect.any(Function));
+    expect(runtimePorts).not.toHaveProperty('v2Review', v2ReviewRunner);
     expect(terminalOutcomeReporter.post).not.toHaveBeenCalled();
     expect(terminalOutcomeReporter.clear).toHaveBeenCalledWith({
       reason: 'review_completed',

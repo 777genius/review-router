@@ -20,6 +20,19 @@ import {
   type ReviewCompanionDispatchContextV1,
 } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import { setTimeout as wait } from 'timers/promises';
+import type { LifecycleRequestEncoder } from '../../finding-revalidation/domain/packet';
+import {
+  PreparedModelDispatch,
+  type PreparedModelDispatchTicket,
+  type PreparedModelInvocationScope,
+} from './prepared-model-dispatch';
+import {
+  CODEX_SUBSCRIPTION_RESPONSES_ROUTE,
+  codexSubscriptionResponsesHeaders,
+  decodeCodexSubscriptionCompletedResponse,
+  encodeCodexSubscriptionVerificationRequest,
+  normalizeCodexSubscriptionResponsesRequest,
+} from './codex-subscription-responses-codec';
 
 const BASE = '/api/action/v2/account-gateway';
 export const LOCAL_MODEL_CAPABILITY_ENV = 'REVIEWROUTER_LOCAL_MODEL_TOKEN';
@@ -67,6 +80,7 @@ export type GatewayResponses = Readonly<{
   contentType: string;
   requestRef?: string;
   body: Readable;
+  providerRequestEnvelopeHash?: string;
   cancel(): void;
 }>;
 export type GatewayTransportDiagnostic = Readonly<{
@@ -97,7 +111,21 @@ type DirectProviderApiLimits = Readonly<{
   requestMs: number;
   streamFrameBytes: number;
   usage?: { delivery: UsageDelivery; requestedModel: string };
+  modelDispatch?: PreparedModelDispatch;
 }>;
+/** Finite native destinations. Only the preparation factories construct these;
+ * credentials, headers, paths and protocol are never supplied by the child. */
+type PreparedCodexResponsesRoute = Readonly<{
+  modelDispatch: PreparedModelDispatch;
+  reasoningEffort?: string | null;
+  signal?: AbortSignal;
+}> &
+  (
+    | Readonly<{ kind: 'subscription'; accountId: string }>
+    | Readonly<{ kind: 'hosted_pool'; readGrant: () => string }>
+  );
+export const HOSTED_POOL_CODEX_RESPONSES_PATH =
+  '/api/action/v2/model-route/hosted-responses';
 type ObserveTransport = (
   diagnostic: GatewayTransportDiagnostic
 ) => void | Promise<void>;
@@ -142,6 +170,8 @@ function observeTransport(
   }
 }
 export type LocalGatewayModelTransport = Readonly<{
+  /** Managed OCR client protocol; native Codex is normalized by the parent. */
+  protocol?: 'openai-responses' | 'anthropic-messages';
   baseUrl: string;
   environment: Readonly<NodeJS.ProcessEnv>;
   configuration: readonly string[];
@@ -158,6 +188,8 @@ export type LocalGatewayModelTransport = Readonly<{
    * terminal and cancelled consumers keep their fence. */
   reopenConsumer?(): boolean;
   setContextToolsGuard?(guard: (() => void) | undefined): void;
+  beginInvocation?(scope: () => PreparedModelInvocationScope): () => void;
+  encodeLifecycleRequest?: LifecycleRequestEncoder;
   /** Trusted parent only; its receipt never contributes review-engine evidence. */
   generatePrDescription?(input: {
     requestBody: Uint8Array;
@@ -169,6 +201,7 @@ export type LocalGatewayModelTransport = Readonly<{
     dispatch: ReviewCompanionDispatchContextV1;
     signal: AbortSignal;
     maxResponseBytes: number;
+    maxOutputTokens: number;
     deadlineMs: number;
   }): Promise<LifecycleVerificationModelReceipt>;
   dispose(): Promise<void>;
@@ -233,6 +266,10 @@ export class AccountGatewayModelTransport {
   private requestRef?: string;
   private observedModel?: string;
   private modelUncertain = false;
+  private observedRequests = 0;
+  private modelDispatch?: PreparedModelDispatch;
+  private contextToolsGuard?: () => void;
+  private readonly pendingSettlements = new Set<Promise<unknown>>();
 
   constructor(
     apiUrl: string,
@@ -240,8 +277,12 @@ export class AccountGatewayModelTransport {
     private readonly observe?: ObserveTransport,
     private readonly directProvider?: DirectProviderApiLimits,
     private readonly auxiliaryDescription: boolean = false,
-    private readonly completedDescriptionResponse?: (response: unknown) => void,
-    private readonly companionDispatch?: ReviewCompanionDispatchContextV1
+    private readonly completedDescriptionResponse?: (
+      response: unknown,
+      nativeBody?: Uint8Array
+    ) => void,
+    private readonly companionDispatch?: ReviewCompanionDispatchContextV1,
+    private readonly codexRoute?: PreparedCodexResponsesRoute
   ) {
     this.origin = trustedGatewayOrigin(apiUrl);
     if (
@@ -253,6 +294,38 @@ export class AccountGatewayModelTransport {
         ).origin
     )
       throw new Error('provider_api_origin_invalid');
+    if (
+      codexRoute &&
+      (directProvider ||
+        (codexRoute.kind === 'subscription' &&
+          this.origin.origin !==
+            new URL(CODEX_SUBSCRIPTION_RESPONSES_ROUTE.endpoint).origin))
+    )
+      throw new Error('codex_prepared_origin_invalid');
+    this.modelDispatch =
+      codexRoute?.modelDispatch ?? directProvider?.modelDispatch;
+  }
+
+  setModelDispatch(controller: PreparedModelDispatch): void {
+    if (
+      this.held.size ||
+      (this.modelDispatch && this.modelDispatch !== controller)
+    )
+      throw new Error('model_dispatch_route_already_prepared');
+    this.modelDispatch = controller;
+  }
+
+  beginInvocation(scope: () => PreparedModelInvocationScope): () => void {
+    return this.modelDispatch?.beginInvocation(scope) ?? (() => undefined);
+  }
+
+  setContextToolsGuard(guard: (() => void) | undefined): void {
+    this.contextToolsGuard = guard;
+  }
+
+  async drainSettlements(): Promise<void> {
+    while (this.pendingSettlements.size)
+      await Promise.allSettled([...this.pendingSettlements]);
   }
 
   get lastFailure(): GatewayFailureFact | undefined {
@@ -292,6 +365,9 @@ export class AccountGatewayModelTransport {
       ? undefined
       : this.observedModel;
   }
+  get requestCount(): number {
+    return this.observedRequests;
+  }
 
   async generatePrDescription(input: {
     requestBody: Uint8Array;
@@ -299,6 +375,8 @@ export class AccountGatewayModelTransport {
     signal: AbortSignal;
   }): Promise<PrDescriptionModelReceipt> {
     input.signal.throwIfAborted();
+    if (this.codexRoute)
+      throw new Error('pr_description_native_route_unavailable');
     if (this.terminal || this.inferenceDenied || this.held.size > 0)
       throw new Error('pr_description_connection_unavailable');
     const bytes = Buffer.from(input.requestBody);
@@ -351,6 +429,7 @@ export class AccountGatewayModelTransport {
       },
       input.dispatch
     );
+    if (this.modelDispatch) auxiliary.setModelDispatch(this.modelDispatch);
     const abort = new AbortController();
     this.held.add(abort);
     const signal = AbortSignal.any([input.signal, abort.signal]);
@@ -391,11 +470,28 @@ export class AccountGatewayModelTransport {
     dispatch: ReviewCompanionDispatchContextV1;
     signal: AbortSignal;
     maxResponseBytes: number;
+    maxOutputTokens: number;
     deadlineMs: number;
   }): Promise<LifecycleVerificationModelReceipt> {
     input.signal.throwIfAborted();
-    if (this.directProvider || this.terminal || this.held.size > 0)
+    if (
+      (this.directProvider && !this.modelDispatch) ||
+      this.terminal ||
+      this.inferenceDenied ||
+      this.held.size > 0
+    )
       throw new Error('lifecycle_verification_connection_unavailable');
+    if (
+      !Number.isSafeInteger(input.maxOutputTokens) ||
+      input.maxOutputTokens < 1 ||
+      !Number.isSafeInteger(input.maxResponseBytes) ||
+      input.maxResponseBytes < 1 ||
+      !Number.isSafeInteger(input.deadlineMs) ||
+      input.deadlineMs < 1 ||
+      (this.modelDispatch &&
+        input.maxOutputTokens > this.modelDispatch.capability.maxOutputTokens)
+    )
+      throw new Error('lifecycle_verification_output_bound');
     const bytes = Buffer.from(input.requestBody);
     if (bytes.length > lifecycleVerificationContract.maxPromptBytes)
       throw new Error('lifecycle_verification_input_bound');
@@ -404,20 +500,34 @@ export class AccountGatewayModelTransport {
       this.origin.origin,
       this.authorization,
       this.observe,
-      undefined,
+      this.directProvider,
       true,
-      (response) => {
-        text = completedPrDescriptionText(
-          response,
-          Math.min(
-            input.maxResponseBytes,
-            lifecycleVerificationContract.maxResponseBytes
-          ),
-          false
-        );
+      (response, nativeBody) => {
+        if (
+          nativeBody &&
+          nativeBody.byteLength >
+            Math.min(
+              input.maxResponseBytes,
+              lifecycleVerificationContract.maxResponseBytes
+            )
+        )
+          throw new Error('lifecycle_verification_output_bound');
+        text = nativeBody
+          ? Buffer.from(nativeBody).toString('utf8')
+          : completedPrDescriptionText(
+              response,
+              Math.min(
+                input.maxResponseBytes,
+                lifecycleVerificationContract.maxResponseBytes
+              ),
+              false
+            );
       },
-      input.dispatch
+      input.dispatch,
+      this.codexRoute
     );
+    if (this.modelDispatch) auxiliary.setModelDispatch(this.modelDispatch);
+    auxiliary.setContextToolsGuard(this.contextToolsGuard);
     const abort = new AbortController();
     this.held.add(abort);
     const signal = AbortSignal.any([input.signal, abort.signal]);
@@ -426,7 +536,11 @@ export class AccountGatewayModelTransport {
       Math.min(input.deadlineMs, lifecycleVerificationContract.deadlineMs)
     );
     try {
-      const response = await auxiliary.responses(bytes, signal);
+      const response = await auxiliary.responses(
+        bytes,
+        signal,
+        input.maxOutputTokens
+      );
       if (response.httpStatus !== 200) {
         response.cancel();
         throw new Error('lifecycle_verification_dispatch_unavailable');
@@ -437,21 +551,23 @@ export class AccountGatewayModelTransport {
       return Object.freeze({
         body: Buffer.from(text, 'utf8'),
         actualModel: auxiliary.actualModel,
-        providerRequestEnvelopeHash: createHash('sha256')
-          .update(bytes)
-          .digest('hex'),
+        providerRequestEnvelopeHash:
+          response.providerRequestEnvelopeHash ??
+          createHash('sha256').update(bytes).digest('hex'),
       });
     } finally {
       clearTimeout(timer);
       this.held.delete(abort);
       abort.abort();
       auxiliary.cancelHeldStreams();
+      await auxiliary.drainSettlements();
     }
   }
 
   async responses(
     bytes: Uint8Array | Readable,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    explicitOutputCap?: number
   ): Promise<GatewayResponses> {
     if (
       this.terminal ||
@@ -462,11 +578,54 @@ export class AccountGatewayModelTransport {
       observeTransport(this.observe, 'upstream_request', false, null, error);
       throw error;
     }
+    this.codexRoute?.signal?.throwIfAborted();
+    this.contextToolsGuard?.();
     // Snapshot before awaiting authorization; no mutable caller payload.
-    const body =
-      this.directProvider && bytes instanceof Readable
-        ? bytes
-        : Buffer.from(bytes as Uint8Array);
+    const captured =
+      this.modelDispatch && bytes instanceof Readable
+        ? await boundedBytes(
+            bytes,
+            this.modelDispatch.capability.maxRequestBytes,
+            signal
+          )
+        : bytes;
+    const cap = this.modelDispatch?.capability;
+    const nativeRequest =
+      this.codexRoute && cap
+        ? normalizeCodexSubscriptionResponsesRequest({
+            requestBytes: captured as Uint8Array,
+            model: cap.model,
+            maxRequestBytes: cap.maxRequestBytes,
+            maxOutputTokens: explicitOutputCap ?? cap.maxOutputTokens,
+            reasoningEffort: this.codexRoute.reasoningEffort,
+          })
+        : undefined;
+    const body = nativeRequest
+      ? Buffer.from(nativeRequest.requestBytes)
+      : this.modelDispatch
+        ? this.modelDispatch.normalizeResponsesRequest(captured as Uint8Array)
+        : this.directProvider && captured instanceof Readable
+          ? captured
+          : Buffer.from(captured as Uint8Array);
+    if (
+      nativeRequest &&
+      this.auxiliaryDescription &&
+      (nativeRequest.allowedToolNames.length !== 0 ||
+        JSON.parse(Buffer.from(nativeRequest.requestBytes).toString('utf8'))
+          .tool_choice !== 'none')
+    )
+      throw new Error('lifecycle_verification_native_tools_forbidden');
+    if (
+      explicitOutputCap !== undefined &&
+      (!Number.isSafeInteger(explicitOutputCap) ||
+        explicitOutputCap < 1 ||
+        (cap && explicitOutputCap > cap.maxOutputTokens) ||
+        (nativeRequest
+          ? nativeRequest.outputTokenAcceptanceCap !== explicitOutputCap
+          : JSON.parse(Buffer.from(body as Uint8Array).toString('utf8'))
+              .max_output_tokens !== explicitOutputCap))
+    )
+      throw new Error('lifecycle_verification_output_bound');
     if (
       !this.directProvider &&
       Buffer.isBuffer(body) &&
@@ -480,14 +639,23 @@ export class AccountGatewayModelTransport {
     this.held.add(controller);
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
+    this.codexRoute?.signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) abort();
+    if (this.codexRoute?.signal?.aborted) abort();
     const timer = setTimeout(
       abort,
-      this.directProvider?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs
+      Math.max(
+        1,
+        Math.min(
+          this.directProvider?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs,
+          cap ? Date.parse(cap.deadline) - Date.now() : Infinity
+        )
+      )
     );
     const dispose = () => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', abort);
+      this.codexRoute?.signal?.removeEventListener('abort', abort);
       this.held.delete(controller);
     };
     const usage = this.directProvider?.usage
@@ -504,7 +672,20 @@ export class AccountGatewayModelTransport {
     let responseReceived = false;
     let httpStatus: number | null = null;
     let currentRequestRef: string | undefined;
+    let ticket: PreparedModelDispatchTicket | undefined;
+    let completedResponse: unknown;
+    let nativeCompleted:
+      | ReturnType<typeof decodeCodexSubscriptionCompletedResponse>
+      | undefined;
     try {
+      if (this.modelDispatch)
+        ticket = await this.modelDispatch.reserve(
+          body as Buffer,
+          controller.signal,
+          this.companionDispatch,
+          nativeRequest?.outputTokenAcceptanceCap ?? explicitOutputCap
+        );
+      this.contextToolsGuard?.();
       const waitUntil = performance.now() + ACCOUNT_GATEWAY_BOUNDS.waitBudgetMs;
       let waits = 0;
       let response: IncomingMessage;
@@ -520,16 +701,48 @@ export class AccountGatewayModelTransport {
         // Socket errors can happen after application dispatch. Never infer non-entry.
         response = await this.request(
           'POST',
-          this.directProvider
-            ? new URL(
-                providerApiDescriptors[
-                  this.directProvider.mode ?? 'openrouter-api'
-                ].fixedResponsesUrl
-              ).pathname
-            : `${BASE}/responses`,
+          this.codexRoute
+            ? this.codexRoute.kind === 'subscription'
+              ? new URL(CODEX_SUBSCRIPTION_RESPONSES_ROUTE.endpoint).pathname
+              : HOSTED_POOL_CODEX_RESPONSES_PATH
+            : this.directProvider
+              ? new URL(
+                  providerApiDescriptors[
+                    this.directProvider.mode ?? 'openrouter-api'
+                  ].fixedResponsesUrl
+                ).pathname
+              : `${BASE}/responses`,
           body,
           controller.signal,
-          usage?.dispatched
+          () => {
+            ticket?.forwarded();
+            this.observedRequests++;
+            usage?.dispatched();
+          },
+          ticket &&
+            !this.directProvider &&
+            this.codexRoute?.kind !== 'subscription'
+            ? {
+                ...Object.fromEntries(
+                  Object.entries(
+                    lifecycleVerificationContract.dispatchHeaders
+                  ).map(([key, header]) => [
+                    header,
+                    String(
+                      ticket!.claim[
+                        key as keyof PreparedModelDispatchTicket['claim']
+                      ]
+                    ),
+                  ])
+                ),
+                'x-reviewrouter-model-dispatch-version': '2',
+                'x-reviewrouter-model-request-ordinal': String(
+                  ticket.claim.requestOrdinal
+                ),
+                'x-reviewrouter-model-route-identity-hash':
+                  ticket.claim.routeIdentityHash,
+              }
+            : undefined
         );
         responseReceived = true;
         usage?.responseReceived();
@@ -561,6 +774,7 @@ export class AccountGatewayModelTransport {
           response.headers['x-reviewrouter-request-ref'] !== undefined;
         if (
           !this.directProvider &&
+          !this.modelDispatch &&
           !this.auxiliaryDescription &&
           httpStatus === 503 &&
           !referenced &&
@@ -609,6 +823,8 @@ export class AccountGatewayModelTransport {
       if (status === 200 && !isStream)
         throw new Error('account_gateway_invalid_stream');
       let count = 0;
+      const responseDigest = createHash('sha256');
+      const terminalChunks: Buffer[] = [];
       const diagnostic: Buffer[] = [];
       const audit = isStream
         ? responsesStreamAudit(
@@ -625,35 +841,102 @@ export class AccountGatewayModelTransport {
               ? ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes
               : this.directProvider?.streamFrameBytes,
             usage?.observe,
-            this.completedDescriptionResponse
+            (value) => {
+              if (ticket) {
+                const terminal = value as {
+                  status?: unknown;
+                  output?: unknown;
+                  error?: unknown;
+                  incomplete_details?: unknown;
+                } | null;
+                if (
+                  !terminal ||
+                  terminal.status !== 'completed' ||
+                  !Array.isArray(terminal.output) ||
+                  terminal.error != null ||
+                  terminal.incomplete_details != null
+                )
+                  throw new Error('model_dispatch_terminal_invalid');
+                completedResponse = value;
+                if (nativeRequest && cap)
+                  nativeCompleted = decodeCodexSubscriptionCompletedResponse({
+                    response: value,
+                    expectedModel: cap.model,
+                    maxOutputTokens: nativeRequest.outputTokenAcceptanceCap,
+                    maxOutputBytes: Math.min(
+                      cap.maxResponseBytes,
+                      this.auxiliaryDescription
+                        ? lifecycleVerificationContract.maxResponseBytes
+                        : cap.maxResponseBytes
+                    ),
+                    allowToolCalls: !this.auxiliaryDescription,
+                    allowedToolNames: nativeRequest.allowedToolNames,
+                  });
+              }
+              this.completedDescriptionResponse?.(value, nativeCompleted?.body);
+            },
+            !!ticket
           )
         : undefined;
       const bounded = new Transform({
         highWaterMark: ACCOUNT_GATEWAY_BOUNDS.bufferBytes,
         transform: (chunk: Buffer, _encoding, done) => {
           count += chunk.length;
-          const maximum = isStream
-            ? this.directProvider && !this.auxiliaryDescription
-              ? Infinity
-              : ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes
-            : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
+          const maximum = this.modelDispatch
+            ? this.modelDispatch.capability.maxResponseBytes
+            : isStream
+              ? this.directProvider && !this.auxiliaryDescription
+                ? Infinity
+                : ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes
+              : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
           if (count > maximum) done(new Error('account_gateway_output_bound'));
           else
             try {
               audit?.accept(chunk);
+              responseDigest.update(chunk);
               if (!isStream) diagnostic.push(chunk);
-              done(null, chunk); // Always the original bytes, no conversion.
+              // Native clients can stop at response.completed without reading
+              // HTTP EOF. Hold the terminal frame's final bytes until the
+              // durable fully-consumed receipt is confirmed by the control plane.
+              if (ticket && isStream && audit?.hasCompleted()) {
+                terminalChunks.push(Buffer.from(chunk));
+                done();
+              } else done(null, chunk); // Original bytes, no conversion.
             } catch {
               done(new Error('account_gateway_stream_unknown'));
             }
         },
         flush: (done) => {
-          try {
+          void (async () => {
             audit?.finish();
-            done();
-          } catch {
-            done(new Error('account_gateway_stream_unknown'));
-          }
+            if (ticket) {
+              if (!isStream) await ticket.failed();
+              else {
+                if (
+                  !response.complete ||
+                  !completedResponse ||
+                  !this.actualModel
+                )
+                  throw new Error('model_dispatch_terminal_unconfirmed');
+                await ticket.complete({
+                  actualModel: this.actualModel,
+                  responseHash: responseDigest.digest('hex'),
+                  responseBytes: count,
+                  usage: nativeCompleted
+                    ? {
+                        inputTokens: nativeCompleted.usage.promptTokens,
+                        outputTokens: nativeCompleted.usage.completionTokens,
+                        totalTokens: nativeCompleted.usage.totalTokens,
+                      }
+                    : terminalUsage(completedResponse),
+                });
+                for (const chunk of terminalChunks) bounded.push(chunk);
+              }
+            }
+          })().then(
+            () => done(),
+            () => done(new Error('account_gateway_stream_unknown'))
+          );
         },
       });
       let upstreamIdleExpired = false;
@@ -668,6 +951,7 @@ export class AccountGatewayModelTransport {
         // Codex ends a turn at response.completed, before the HTTP EOF.
         // Ignore only the propagated Node cancellation of that audited turn.
         if (
+          (!ticket || ticket.isCompleted()) &&
           audit?.hasCompleted() &&
           controller.signal.aborted &&
           signal?.aborted &&
@@ -681,6 +965,7 @@ export class AccountGatewayModelTransport {
           return;
         }
         this.inferenceDenied = true;
+        if (ticket) this.trackSettlement(ticket.failed());
         if (!streamFailureObserved) {
           streamFailureObserved = true;
           observeTransport(
@@ -711,48 +996,62 @@ export class AccountGatewayModelTransport {
       bounded.once('end', dispose);
       bounded.once('close', dispose);
       // pipeline supplies backpressure and tears down both streams on failure/cancel.
-      void pipeline(isStream ? response : Readable.from([denial!]), bounded, {
-        signal: controller.signal,
-      }).then(
-        () => {
-          usage?.finish(status !== 200, controller.signal.aborted);
-          if (!isStream) {
-            this.failure = failureFact(
-              Buffer.concat(diagnostic),
-              requestRef
-            ) ?? {
-              code: status === 202 ? 'pending' : 'relay_unknown',
-              effect: 'effect_unknown',
-              ...(requestRef ? { requestRef } : {}),
-            };
-            if (this.failure.requestRef)
-              this.requestRef = this.failure.requestRef;
+      this.trackSettlement(
+        pipeline(isStream ? response : Readable.from([denial!]), bounded, {
+          signal: controller.signal,
+        }).then(
+          () => {
+            usage?.finish(status !== 200, controller.signal.aborted);
+            if (!isStream) {
+              this.failure =
+                this.codexRoute?.kind === 'subscription' &&
+                (status === 401 || status === 403)
+                  ? {
+                      code: 'codex_subscription_authentication_failed',
+                      effect: 'effect_unknown',
+                    }
+                  : (failureFact(Buffer.concat(diagnostic), requestRef) ?? {
+                      code: status === 202 ? 'pending' : 'relay_unknown',
+                      effect: 'effect_unknown',
+                      ...(requestRef ? { requestRef } : {}),
+                    });
+              if (this.failure.requestRef)
+                this.requestRef = this.failure.requestRef;
+            }
+          },
+          (error) => {
+            // HTTP teardown can reset upstream after the proven terminal abort.
+            if (
+              terminalCancellation &&
+              audit?.hasCompleted() &&
+              controller.signal.aborted &&
+              signal?.aborted &&
+              error instanceof Error &&
+              'code' in error &&
+              error.code === 'ECONNRESET'
+            )
+              return;
+            usage?.finish(true, controller.signal.aborted);
+            fail(error);
           }
-        },
-        (error) => {
-          // HTTP teardown can reset upstream after the proven terminal abort.
-          if (
-            terminalCancellation &&
-            audit?.hasCompleted() &&
-            controller.signal.aborted &&
-            signal?.aborted &&
-            error instanceof Error &&
-            'code' in error &&
-            error.code === 'ECONNRESET'
-          )
-            return;
-          usage?.finish(true, controller.signal.aborted);
-          fail(error);
-        }
+        )
       );
       return {
         httpStatus: status,
         contentType,
         ...(requestRef ? { requestRef } : {}),
         body: bounded,
+        ...(Buffer.isBuffer(body)
+          ? {
+              providerRequestEnvelopeHash: createHash('sha256')
+                .update(body)
+                .digest('hex'),
+            }
+          : {}),
         cancel: abort,
       };
     } catch (error) {
+      await ticket?.failed().catch(() => undefined);
       usage?.finish(true, controller.signal.aborted);
       observeTransport(
         this.observe,
@@ -772,6 +1071,13 @@ export class AccountGatewayModelTransport {
       dispose();
       throw new Error('account_gateway_transport_unknown');
     }
+  }
+
+  private trackSettlement(promise: Promise<unknown>): void {
+    this.pendingSettlements.add(promise);
+    void promise
+      .catch(() => undefined)
+      .finally(() => this.pendingSettlements.delete(promise));
   }
 
   /** Explicit same-operation recovery only; neither method submits Responses. */
@@ -884,8 +1190,18 @@ export class AccountGatewayModelTransport {
     route: string,
     body: Buffer | Readable | undefined,
     signal: AbortSignal,
-    onDispatch?: () => void
+    onDispatch?: () => void,
+    dispatchHeaders?: Readonly<Record<string, string>>
   ): Promise<IncomingMessage> {
+    if (
+      this.codexRoute &&
+      (method !== 'POST' ||
+        route !==
+          (this.codexRoute.kind === 'subscription'
+            ? new URL(CODEX_SUBSCRIPTION_RESPONSES_ROUTE.endpoint).pathname
+            : HOSTED_POOL_CODEX_RESPONSES_PATH))
+    )
+      throw new Error('codex_prepared_control_route_denied');
     if (
       this.directProvider &&
       (method !== 'POST' ||
@@ -897,8 +1213,25 @@ export class AccountGatewayModelTransport {
     )
       throw new Error('provider_api_control_route_denied');
     const token = this.authorization();
-    if (signal.aborted || !/^[A-Za-z0-9._~-]{1,16377}$/.test(token))
+    if (
+      signal.aborted ||
+      (this.codexRoute?.kind !== 'subscription' &&
+        !/^[A-Za-z0-9._~-]{1,16377}$/.test(token))
+    )
       throw new Error('account_gateway_authorization_unavailable');
+    const nativeHeaders =
+      this.codexRoute?.kind === 'subscription'
+        ? codexSubscriptionResponsesHeaders({
+            accessToken: token,
+            accountId: this.codexRoute.accountId,
+          })
+        : undefined;
+    const grant =
+      this.codexRoute?.kind === 'hosted_pool'
+        ? this.codexRoute.readGrant()
+        : undefined;
+    if (grant !== undefined && !/^[A-Za-z0-9._~-]{16,16384}$/.test(grant))
+      throw new Error('hosted_model_grant_invalid');
     return await new Promise((resolve, reject) => {
       onDispatch?.();
       const request = (
@@ -911,14 +1244,20 @@ export class AccountGatewayModelTransport {
           signal,
           maxHeaderSize: ACCOUNT_GATEWAY_BOUNDS.headerBytes,
           headers: {
-            authorization: `Bearer ${token}`,
+            ...(nativeHeaders ?? { authorization: `Bearer ${token}` }),
+            ...(grant !== undefined
+              ? { 'x-reviewrouter-hosted-grant': grant }
+              : {}),
             ...(this.directProvider
               ? {
                   'user-agent': 'ReviewRouter/1.0 provider-api',
                   'x-title': 'ReviewRouter',
                 }
               : {}),
-            ...(this.companionDispatch
+            ...(this.companionDispatch &&
+            !dispatchHeaders &&
+            !this.directProvider &&
+            !this.codexRoute
               ? Object.fromEntries(
                   Object.entries(
                     lifecycleVerificationContract.dispatchHeaders
@@ -932,10 +1271,12 @@ export class AccountGatewayModelTransport {
                   ])
                 )
               : {}),
+            ...dispatchHeaders,
             'content-type': 'application/json',
-            accept: route.endsWith('/responses')
-              ? 'text/event-stream'
-              : 'application/json',
+            accept:
+              this.codexRoute || route.endsWith('/responses')
+                ? 'text/event-stream'
+                : 'application/json',
             ...(Buffer.isBuffer(body)
               ? { 'content-length': String(body.length) }
               : {}),
@@ -995,9 +1336,10 @@ export async function startLocalGatewayModelTransport(
   const capability = randomBytes(32).toString('hex');
   let stopping = false;
   let inFlight = 0;
-  let dispatchedRequests = 0;
   let contextToolsGuard: (() => void) | undefined;
   let contextToolsFailure: GatewayFailureFact | undefined;
+  const flights = new Set<Promise<unknown>>();
+  let disposal: Promise<void> | undefined;
   const server = createServer(
     { maxHeaderSize: ACCOUNT_GATEWAY_BOUNDS.headerBytes },
     (request, reply) => {
@@ -1072,7 +1414,6 @@ export async function startLocalGatewayModelTransport(
                 )
               );
           stage = 'upstream_request';
-          dispatchedRequests++;
           upstream = await transport.responses(normalized, controller.signal);
           stage = 'downstream_stream';
           reply.writeHead(upstream.httpStatus, {
@@ -1110,7 +1451,11 @@ export async function startLocalGatewayModelTransport(
           inFlight--;
         }
       };
-      void handle().catch(() => reply.destroy());
+      const flight = handle();
+      flights.add(flight);
+      void flight
+        .catch(() => reply.destroy())
+        .finally(() => flights.delete(flight));
     }
   );
   server.maxConnections = ACCOUNT_GATEWAY_BOUNDS.localConnections;
@@ -1162,23 +1507,32 @@ export async function startLocalGatewayModelTransport(
           )
       : codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
-    requestCount: () => dispatchedRequests,
+    requestCount: () => transport.requestCount,
     failureFact: () => contextToolsFailure ?? transport.lastFailure,
     releaseRetrySafeFailure: () => transport.releaseRetrySafeFailure(),
     reopenConsumer: () => transport.reopenConsumer(),
     setContextToolsGuard: (guard: (() => void) | undefined) => {
       contextToolsGuard = guard;
+      transport.setContextToolsGuard(guard);
     },
+    beginInvocation: (scope) => transport.beginInvocation(scope),
     generatePrDescription: (input) => transport.generatePrDescription(input),
-    generateLifecycleVerification: (input) =>
-      transport.generateLifecycleVerification(input),
-    async dispose() {
-      stopping = true;
-      transport.cancelHeldStreams();
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
+    generateLifecycleVerification: (input) => {
+      const flight = transport.generateLifecycleVerification(input);
+      flights.add(flight);
+      void flight.catch(() => undefined).finally(() => flights.delete(flight));
+      return flight;
+    },
+    dispose() {
+      disposal ??= (async () => {
+        stopping = true;
+        transport.cancelInference();
         server.closeAllConnections();
-      });
+        await Promise.allSettled([...flights]);
+        await transport.drainSettlements();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      })();
+      return disposal;
     },
   });
 }
@@ -1218,6 +1572,153 @@ export function startDirectProviderApiModelTransport(
     undefined,
     { ...limits, mode }
   );
+}
+
+/** Repository-owned OAuth uses the already refreshed official credential. No
+ * login, account selection, API-key conversion, auth retry or hidden fallback. */
+export function startRunnerLocalCodexSubscriptionModelTransport(input: {
+  readonly credential: Readonly<{
+    accessToken: string;
+    accountId: string;
+    credentialValidUntil: number;
+  }>;
+  readonly modelDispatch: PreparedModelDispatch;
+  readonly reasoningEffort?: string | null;
+  readonly signal?: AbortSignal;
+}): Promise<LocalGatewayModelTransport> {
+  input.signal?.throwIfAborted();
+  const deadline = validatePreparedCodexRoute(
+    input.modelDispatch,
+    'runner_local_responses'
+  );
+  if (
+    !Number.isSafeInteger(input.credential.credentialValidUntil) ||
+    input.credential.credentialValidUntil < deadline + 60_000
+  )
+    throw new Error('codex_prepared_credential_lifetime_invalid');
+  const accountId = input.credential.accountId;
+  let accessToken = input.credential.accessToken;
+  codexSubscriptionResponsesHeaders({ accessToken, accountId });
+  return startPreparedCodexModelTransport({
+    apiUrl: new URL(CODEX_SUBSCRIPTION_RESPONSES_ROUTE.endpoint).origin,
+    authorization: () => accessToken,
+    route: {
+      kind: 'subscription',
+      accountId,
+      modelDispatch: input.modelDispatch,
+      reasoningEffort: input.reasoningEffort ?? null,
+      signal: input.signal,
+    },
+    cleanupCredential: () => {
+      accessToken = '';
+    },
+  });
+}
+
+/** Hosted custody and its original grant remain on the existing relay. The
+ * captured capability deadline already includes that grant's original expiry. */
+export function startHostedPoolCodexModelTransport(input: {
+  readonly apiUrl: string;
+  readonly authorization: () => string;
+  readonly readGrant: () => string;
+  readonly modelDispatch: PreparedModelDispatch;
+  readonly reasoningEffort?: string | null;
+  readonly signal?: AbortSignal;
+}): Promise<LocalGatewayModelTransport> {
+  validatePreparedCodexRoute(input.modelDispatch, 'hosted_pool');
+  input.signal?.throwIfAborted();
+  let grant = input.readGrant();
+  if (!/^[A-Za-z0-9._~-]{16,16384}$/.test(grant))
+    throw new Error('hosted_model_grant_invalid');
+  return startPreparedCodexModelTransport({
+    apiUrl: input.apiUrl,
+    authorization: input.authorization,
+    route: {
+      kind: 'hosted_pool',
+      readGrant: () => grant,
+      modelDispatch: input.modelDispatch,
+      reasoningEffort: input.reasoningEffort ?? null,
+      signal: input.signal,
+    },
+    cleanupCredential: () => {
+      grant = '';
+    },
+  });
+}
+
+function validatePreparedCodexRoute(
+  dispatch: PreparedModelDispatch,
+  transport: 'runner_local_responses' | 'hosted_pool'
+): number {
+  const cap = dispatch.capability;
+  const deadline = Date.parse(cap.deadline);
+  if (
+    cap.transport !== transport ||
+    cap.wireProtocol !== 'codex-responses' ||
+    cap.outputTokenLimit !== 'terminal_acceptance' ||
+    !Number.isSafeInteger(deadline) ||
+    deadline <= Date.now()
+  )
+    throw new Error('codex_prepared_route_invalid');
+  return deadline;
+}
+
+async function startPreparedCodexModelTransport(input: {
+  readonly apiUrl: string;
+  readonly authorization: () => string;
+  readonly route: PreparedCodexResponsesRoute;
+  readonly cleanupCredential: () => void;
+}): Promise<LocalGatewayModelTransport> {
+  let bridge: LocalGatewayModelTransport | undefined;
+  let removeAbort: () => void = () => {};
+  try {
+    input.route.signal?.throwIfAborted();
+    const transport = new AccountGatewayModelTransport(
+      input.apiUrl,
+      input.authorization,
+      undefined,
+      undefined,
+      false,
+      undefined,
+      undefined,
+      input.route
+    );
+    bridge = await startLocalGatewayModelTransport(transport);
+    const abort = () => transport.cancelInference();
+    input.route.signal?.addEventListener('abort', abort, { once: true });
+    removeAbort = () => input.route.signal?.removeEventListener('abort', abort);
+    input.route.signal?.throwIfAborted();
+    let disposal: Promise<void> | undefined;
+    const prepared = bridge;
+    return Object.freeze({
+      ...prepared,
+      protocol: 'openai-responses' as const,
+      encodeLifecycleRequest: (semantic) =>
+        encodeCodexSubscriptionVerificationRequest({
+          ...semantic,
+          reasoningEffort: input.route.reasoningEffort,
+        }).requestBytes,
+      dispose: () => {
+        disposal ??= (async () => {
+          removeAbort();
+          try {
+            await prepared.dispose();
+          } finally {
+            input.cleanupCredential();
+          }
+        })();
+        return disposal;
+      },
+    });
+  } catch (error) {
+    removeAbort();
+    try {
+      await bridge?.dispose();
+    } finally {
+      input.cleanupCredential();
+    }
+    throw error;
+  }
 }
 
 /** Verified in rust-v0.147.0 model-provider-info/src/lib.rs + codex-client/src/retry.rs.
@@ -1331,7 +1832,8 @@ function responsesStreamAudit(
   observe: (model: string | undefined) => void,
   maximumFrameBytes: number = ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes,
   observeUsage?: (frame: unknown) => void,
-  observeCompleted?: (response: unknown) => void
+  observeCompleted?: (response: unknown) => void,
+  strictTerminal = false
 ) {
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let line = '';
@@ -1347,6 +1849,7 @@ function responsesStreamAudit(
       if (data.length) {
         const joined = data.join('\n');
         if (joined !== '[DONE]') {
+          if (strictTerminal && completed) throw new Error();
           const raw: unknown = JSON.parse(joined);
           if (
             !raw ||
@@ -1430,6 +1933,29 @@ function responsesStreamAudit(
       consume(decoder.decode());
       if (line || data.length || !completed) throw new Error();
     },
+  };
+}
+
+function terminalUsage(value: unknown): {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+} {
+  const usage = (value as { usage?: Record<string, unknown> } | null)?.usage;
+  const integer = (raw: unknown): number | null =>
+    typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0
+      ? raw
+      : null;
+  const inputTokens = integer(usage?.input_tokens);
+  const outputTokens = integer(usage?.output_tokens);
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens:
+      integer(usage?.total_tokens) ??
+      (inputTokens !== null && outputTokens !== null
+        ? inputTokens + outputTokens
+        : null),
   };
 }
 

@@ -2,6 +2,8 @@ import {
   parseAdmittedRuntimeConfig,
   type AdmittedRuntimeConfig,
 } from '../control-plane/runtime-config';
+import { PreparedModelDispatch } from '../review-orchestration/infrastructure/prepared-model-dispatch';
+import { reviewModelDispatchContract } from '../control-plane/generated/review-action-v2/review-model-dispatch-contract';
 import {
   readApprovedReviewAgent,
   assertApprovedReviewAgentVersion,
@@ -219,6 +221,19 @@ async function runAccountGatewayRuntimeInternal(
       };
     phase = 'checkout_capability';
     const capability = await readCapability();
+    const dispatchJson =
+      capability.runtimeConfig.runtimeEnv[
+        reviewModelDispatchContract.capabilityRuntimeEnvKey
+      ];
+    if (dispatchJson)
+      transport.setModelDispatch(
+        new PreparedModelDispatch({
+          apiUrl: input.apiUrl,
+          capability: JSON.parse(dispatchJson),
+          authorization: () => controlPlane.currentAuthorization(),
+          fetchImpl: ports.fetchImpl,
+        })
+      );
     run.signal.throwIfAborted();
     const agentProfileJson =
       capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!;

@@ -1,3 +1,7 @@
+import {
+  readAdmittedGatewayCodexModelSettings,
+  GATEWAY_CODEX_MODEL_SETTINGS_ENV,
+} from '../../../src/control-plane/admitted-gateway-codex-model-settings';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -197,6 +201,50 @@ describe('ProductionT0ReviewRunner policy', () => {
     ['mimo-v2.6-pro', 'gpt-caller', true, 'low', 'mimo-v2.6-pro'],
     ['gpt-selected', 'mimo-v2.6-pro', false, undefined, 'mimo-v2.6-pro'],
     ['gpt-selected', 'mimo-v2.6-pro', false, 'high', 'mimo-v2.6-pro'],
+    [
+      'gpt-unseen-minimal',
+      'gpt-caller',
+      false,
+      'minimal',
+      'gpt-unseen-minimal',
+    ],
+    [
+      'gpt-unseen-high-only',
+      'gpt-caller',
+      false,
+      'high',
+      'gpt-unseen-high-only',
+    ],
+    [
+      'gpt-unseen-default',
+      'gpt-caller',
+      false,
+      undefined,
+      'gpt-unseen-default',
+    ],
+    ['gpt-unseen-max', 'gpt-caller', false, 'max', 'gpt-unseen-max'],
+    ['gpt-unseen-ultra', 'gpt-caller', false, 'ultra', 'gpt-unseen-ultra'],
+    [
+      'gpt-5.4-future-default',
+      'gpt-caller',
+      false,
+      undefined,
+      'gpt-5.4-future-default',
+    ],
+    [
+      'gpt-5.4-future-disabled',
+      'gpt-caller',
+      false,
+      undefined,
+      'gpt-5.4-future-disabled',
+    ],
+    [
+      'gpt-5.4-future-ultra',
+      'gpt-caller',
+      false,
+      'ultra',
+      'gpt-5.4-future-ultra',
+    ],
   ] as const)(
     'pins AppServer catalog and effort from selected %s independently of caller %s (gateway %s, effort %s)',
     async (
@@ -251,7 +299,28 @@ describe('ProductionT0ReviewRunner policy', () => {
         });
         if (runtimeResult.status !== 'applied')
           throw new Error('expected applied runtime config');
+        const gatewayModelSettings = selectedModel.startsWith('gpt-5.4-future')
+          ? readAdmittedGatewayCodexModelSettings(
+              {
+                protocolVersion: 1,
+                configVersion: 7,
+                runtimeEnv: {
+                  [GATEWAY_CODEX_MODEL_SETTINGS_ENV]: JSON.stringify({
+                    model: selectedModel,
+                    reasoning: selectedModel.endsWith('disabled')
+                      ? null
+                      : {
+                          allowed: ['minimal', 'high', 'max'],
+                          default: 'minimal',
+                        },
+                  }),
+                },
+              },
+              selectedModel
+            )
+          : undefined;
         const effectiveEffort = resolveProductionInvestigationReasoningEffort({
+          gatewayModelSettings,
           codexModel: selectedModel,
           accountGateway: true,
           serverReasoningEffort: runtimeResult.reasoningEffort,
@@ -260,6 +329,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           codexModel: selectedModel,
           ...{ admittedGatewayModel },
           reasoningEffort: effectiveEffort,
+          gatewayModelSettings,
           codexBinaryPath: '/mock/codex',
           modelTransport: {
             baseUrl: 'http://127.0.0.1:1/v1',
@@ -369,7 +439,9 @@ describe('ProductionT0ReviewRunner policy', () => {
             }),
           } as unknown as ContextGatewayInvocationSessionFactoryPort,
           true,
-          effectiveEffort
+          effectiveEffort,
+          undefined,
+          gatewayModelSettings
         ).prepare({ workSlot, attemptOrdinal: 1 });
         const manifest = await new GeneratedProviderInvocationManifestAssembler(
           authorization(1),
@@ -377,7 +449,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           '7'.repeat(64)
         ).assemble(invocation);
         // Ambient effort changes after preparation cannot change the launch.
-        process.env.CODEX_REASONING_EFFORT = 'low';
+        process.env.CODEX_REASONING_EFFORT = 'xhigh';
         // Real adapter/session/config preparation, stopped before any subprocess.
         await expect(agents[0].agent.executeTurn(request)).rejects.toBe(
           stoppedAtBoundary
@@ -400,7 +472,15 @@ describe('ProductionT0ReviewRunner policy', () => {
         }
         const investigationLaunch = execute.mock.calls[1][0];
         expect(launch.protocol.reasoningEffort).toBe(
-          enabled ? (reasoningEffort ?? 'high') : 'xhigh'
+          gatewayModelSettings
+            ? selectedModel.endsWith('disabled')
+              ? null
+              : reasoningEffort === 'ultra'
+                ? 'max'
+                : 'minimal'
+            : enabled
+              ? (reasoningEffort ?? 'high')
+              : (reasoningEffort ?? 'xhigh')
         );
         expect(investigationLaunch.protocol.requestedModel).toBe(
           invocation.requestedModel
@@ -423,6 +503,7 @@ describe('ProductionT0ReviewRunner policy', () => {
               probeLimits: invocation.investigationProbePlan!.limits,
               probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
               reasoningEffort: investigationLaunch.protocol.reasoningEffort,
+              ...(gatewayModelSettings ? { gatewayModelSettings } : {}),
               requestedModel: investigationLaunch.protocol.requestedModel,
               searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
               turnPromptContractHash:
@@ -439,7 +520,7 @@ describe('ProductionT0ReviewRunner policy', () => {
         const catalogSettings = launch.args.filter((arg) =>
           arg.startsWith('model_catalog_json=')
         );
-        if (enabled) {
+        if (enabled || gatewayModelSettings) {
           const catalogPath = path.join(
             home,
             'reviewrouter-model-catalog.json'
@@ -451,8 +532,14 @@ describe('ProductionT0ReviewRunner policy', () => {
             JSON.parse(fs.readFileSync(catalogPath, 'utf8')).models[0]
           ).toMatchObject({
             slug: selectedModel,
-            use_responses_lite: true,
+            use_responses_lite: !gatewayModelSettings,
             apply_patch_tool_type: 'freeform',
+            ...(gatewayModelSettings
+              ? {
+                  default_reasoning_level:
+                    gatewayModelSettings.reasoning?.default ?? null,
+                }
+              : {}),
           });
           expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(
             [...configuration, setting].join('\n') + '\n'
@@ -471,6 +558,19 @@ describe('ProductionT0ReviewRunner policy', () => {
         execute.mockRestore();
         fs.rmSync(root, { recursive: true, force: true });
       }
+    }
+  );
+
+  it.each(['none', 'unsupported'])(
+    'rejects a Gateway Codex effort outside saved policy: %s',
+    (serverReasoningEffort) => {
+      expect(() =>
+        resolveProductionInvestigationReasoningEffort({
+          codexModel: 'gpt-unseen',
+          accountGateway: true,
+          serverReasoningEffort,
+        })
+      ).toThrow('account_gateway_codex_reasoning_effort_unsupported');
     }
   );
 

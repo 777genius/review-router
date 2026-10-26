@@ -6,6 +6,48 @@ import { prepareAccountGatewayModelCatalog } from '../../../src/codex-oauth/acco
 import pinnedModel from '../../../src/codex-oauth/gpt-5.6-sol-model-0.147.0.json';
 
 describe('account gateway model catalog', () => {
+  it.each([
+    null,
+    { allowed: ['minimal', 'high'], default: 'minimal' },
+  ] as const)(
+    'overrides bundled prefix defaults with exact captured settings %j',
+    async (reasoning) => {
+      const home = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'managed-codex-catalog-')
+      );
+      try {
+        const model = 'gpt-5.4-future';
+        const settings = { model, reasoning };
+        await prepareAccountGatewayModelCatalog(model, home, [], settings);
+        const descriptor = JSON.parse(
+          await fs.readFile(
+            path.join(home, 'reviewrouter-model-catalog.json'),
+            'utf8'
+          )
+        ).models[0];
+        expect(descriptor).toMatchObject({
+          slug: model,
+          default_reasoning_level: reasoning?.default ?? null,
+          supported_reasoning_levels: reasoning
+            ? [
+                { effort: 'minimal', description: 'minimal' },
+                { effort: 'high', description: 'high' },
+              ]
+            : [],
+          supports_reasoning_summary_parameter: false,
+          default_reasoning_summary: 'none',
+          use_responses_lite: false,
+          tool_mode: 'direct',
+          base_instructions: '',
+        });
+        expect(descriptor).not.toHaveProperty('model_messages');
+        expect(descriptor).not.toHaveProperty('instructions_template');
+      } finally {
+        await fs.rm(home, { recursive: true, force: true });
+      }
+    }
+  );
+
   it('exposes direct MCP for the pinned GPT model without changing its instructions or other metadata', async () => {
     const home = await fs.mkdtemp(
       path.join(os.tmpdir(), 'gateway-gpt-catalog-')

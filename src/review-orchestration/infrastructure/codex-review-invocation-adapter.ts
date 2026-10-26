@@ -1,3 +1,4 @@
+import type { AdmittedGatewayCodexModelSettings } from '../../control-plane/admitted-gateway-codex-model-settings';
 import { lifecycleVerificationContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import { createHash } from 'crypto';
 import { PromptBuilder } from '../../analysis/llm/prompt-builder';
@@ -193,8 +194,9 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     private readonly agenticContext: boolean,
     private readonly contextGateway?: ContextGatewayInvocationSessionFactoryPort,
     private readonly investigationManifestBindingEnabled = false,
-    private readonly investigationReasoningEffort: CodexAppServerReasoningEffort = 'xhigh',
-    private readonly directCredentialLease?: () => ProviderCredentialLease
+    private readonly investigationReasoningEffort: CodexAppServerReasoningEffort | null = 'xhigh',
+    private readonly directCredentialLease?: () => ProviderCredentialLease,
+    private readonly gatewayModelSettings?: AdmittedGatewayCodexModelSettings
   ) {
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
@@ -301,6 +303,9 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
           probeLimits: preparedPrompt.investigationProbePlan.limits,
           probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
           reasoningEffort: this.investigationReasoningEffort,
+          ...(this.gatewayModelSettings
+            ? { gatewayModelSettings: this.gatewayModelSettings }
+            : {}),
           requestedModel: prepared.requestedModel,
           searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
           turnPromptContractHash:
@@ -332,6 +337,12 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
             : null,
           preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
           providerKind: prepared.providerKind,
+          ...(this.gatewayModelSettings
+            ? {
+                gatewayModelSettings: this.gatewayModelSettings,
+                reasoningEffort: this.investigationReasoningEffort,
+              }
+            : {}),
         }),
       providerRequestEnvelopeHash:
         investigationSeedEnvelope?.canonicalJson ??

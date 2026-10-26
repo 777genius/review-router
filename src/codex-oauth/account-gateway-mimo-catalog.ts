@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import gptSolModel from './gpt-5.6-sol-model-0.147.0.json';
+import type { AdmittedGatewayCodexModelSettings } from '../control-plane/admitted-gateway-codex-model-settings';
 
 // Private, bounded ModelInfo subset for Codex rust-v0.147.0 / be6e8eac.
 // Values: frozen action-mimo-0147-bounded-catalog-input.json (SHA256 b6190be1...).
@@ -97,14 +98,21 @@ export function isAccountGatewayMiMoModel(model: string | undefined): boolean {
 export async function prepareAccountGatewayModelCatalog(
   model: string,
   codexHome: string | undefined,
-  gatewayConfiguration: readonly string[]
+  gatewayConfiguration: readonly string[],
+  settings?: AdmittedGatewayCodexModelSettings
 ): Promise<string | undefined> {
   // Frozen GPT metadata from codex-rs/models-manager/models.json at be6e8eac.
   // Source SHA256: 384ff2e0ca67f65d2866e422e2ec7dfa5ed9e3fec7a84fe14005247a7087a302.
   // Preserve all other model metadata and instructions; expose the gateway's
   // MCP tools directly instead of code execution or deferred tool search.
-  const catalogModel =
-    model === gptSolModel.slug
+  if (
+    settings &&
+    (settings.model !== model || isAccountGatewayMiMoModel(model))
+  )
+    throw new Error('account_gateway_codex_model_settings_invalid');
+  const catalogModel = settings
+    ? managedCodexModel(settings)
+    : model === gptSolModel.slug
       ? { ...gptSolModel, tool_mode: 'direct', supports_search_tool: false }
       : isAccountGatewayMiMoModel(model)
         ? mimoModel
@@ -131,4 +139,45 @@ export async function prepareAccountGatewayModelCatalog(
   );
   await fs.chmod(configPath, 0o600);
   return setting;
+}
+
+/** Code-owned conservative descriptor; no account-provided instructions or prompts. */
+function managedCodexModel(settings: AdmittedGatewayCodexModelSettings) {
+  return {
+    slug: settings.model,
+    display_name: settings.model,
+    description: 'Managed account model',
+    base_instructions: '',
+    default_reasoning_level: settings.reasoning?.default ?? null,
+    supported_reasoning_levels: (settings.reasoning?.allowed ?? []).map(
+      (effort) => ({ effort, description: effort })
+    ),
+    supports_reasoning_summary_parameter: false,
+    default_reasoning_summary: 'none',
+    use_responses_lite: false,
+    prefer_websockets: false,
+    shell_type: 'unified_exec',
+    visibility: 'list',
+    supported_in_api: true,
+    priority: 0,
+    support_verbosity: false,
+    apply_patch_tool_type: 'freeform',
+    truncation_policy: { mode: 'tokens', limit: 10000 },
+    supports_parallel_tool_calls: false,
+    context_window: 272000,
+    max_context_window: 272000,
+    auto_compact_token_limit: null,
+    comp_hash: '3000',
+    input_modalities: ['text'],
+    supports_image_detail_original: false,
+    experimental_supported_tools: [],
+    tool_mode: 'direct',
+    supports_search_tool: false,
+    multi_agent_version: 'v2',
+    include_skills_usage_instructions: false,
+    include_apps_usage_instructions: false,
+    include_plugin_usage_instructions: false,
+    auto_review_model_override: null,
+    model_specialty: null,
+  };
 }

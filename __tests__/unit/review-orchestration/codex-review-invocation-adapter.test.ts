@@ -1,3 +1,4 @@
+import type { AdmittedGatewayCodexModelSettings } from '../../../src/control-plane/admitted-gateway-codex-model-settings';
 import profiles from '../../../src/control-plane/review-agent-profiles.json';
 import { parseReviewAgentProfiles } from '../../../src/control-plane/generated/review-action-v2/review-agent-profile';
 import { LEGACY_REVIEW_SKILLS } from '../../../src/review-skills/review-skills';
@@ -60,6 +61,91 @@ const emptyProbePlan = createReviewInvestigationProbePlan({
 });
 
 describe('Codex T0 prepared invocation', () => {
+  it('binds discovery capability to captured settings and effective effort at an unchanged catalog path', async () => {
+    const prepared = createPreparedProviderInvocation({
+      providerKind: ProviderKind.CodexCli,
+      providerName: 'codex/gpt-test',
+      requestedModel: 'gpt-test',
+      timeoutMs: 10000,
+      request: {
+        prompt: 'prepared prompt',
+        argsTemplate: ['-c', 'model_catalog_json="/owned/catalog.json"'],
+      },
+      observableRequest: { catalogPath: '/owned/catalog.json' },
+    });
+    const provider = {
+      prepareInvocation: jest.fn().mockResolvedValue(prepared),
+      describePreparedEnvironmentContract: jest
+        .fn()
+        .mockReturnValue({ PATH: '/usr/bin' }),
+    } as unknown as CodexProvider;
+    const promptBuilder = {
+      buildPreparedV2: jest.fn().mockResolvedValue({
+        version: 'prepared_review_prompt.v3',
+        investigationContextPrompt: 'context',
+        prompt: 'prepared prompt',
+        pathCoverage: [],
+        investigationProbePlan: emptyProbePlan,
+      }),
+    } as unknown as PromptBuilder;
+    const captures: readonly AdmittedGatewayCodexModelSettings[] = [
+      {
+        model: 'gpt-test',
+        reasoning: { allowed: ['minimal', 'high'], default: 'minimal' },
+      },
+      {
+        model: 'gpt-test',
+        reasoning: { allowed: ['minimal', 'max'], default: 'minimal' },
+      },
+      {
+        model: 'gpt-test',
+        reasoning: { allowed: ['minimal', 'high'], default: 'high' },
+      },
+    ];
+    const invocations = [];
+    for (const settings of captures) {
+      const adapter = new CodexReviewInvocationAdapter(
+        provider,
+        promptBuilder,
+        [assignment],
+        10000,
+        true,
+        undefined,
+        false,
+        settings.reasoning!.default,
+        undefined,
+        settings
+      );
+      invocations.push(
+        await adapter.prepare({
+          workSlot: assignment.workSlot,
+          attemptOrdinal: 1,
+        })
+      );
+    }
+    expect(
+      new Set(
+        invocations.map(
+          (invocation) =>
+            invocation.manifestPreimages.providerRequestEnvelopeHash
+        )
+      ).size
+    ).toBe(1);
+    expect(
+      new Set(
+        invocations.map(
+          (invocation) => invocation.manifestFacts.providerCapabilityHash
+        )
+      ).size
+    ).toBe(3);
+    expect(invocations[0].manifestPreimages.providerCapabilityHash).toContain(
+      '"reasoningEffort":"minimal"'
+    );
+    expect(invocations[2].manifestPreimages.providerCapabilityHash).toContain(
+      '"reasoningEffort":"high"'
+    );
+  });
+
   it.each([false, true])(
     'leases a direct local capability only at execution, with Context Gateway=%s',
     async (withContext) => {

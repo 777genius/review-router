@@ -436,6 +436,25 @@ describe('direct provider API bootstrap', () => {
     }
   });
 
+  it('scrubs every raw direct-provider key even when alternate auth blocks bootstrap', async () => {
+    process.env.INPUT_AUTH_JSON = 'unselected-auth';
+    for (const descriptor of Object.values(providerApiDescriptors))
+      process.env[descriptor.secretName] = 'untrusted-ambient-key';
+
+    await expect(
+      runProviderApiRuntime(inputs(), {
+        review: { run: jest.fn() },
+        terminalReview: jest.fn(),
+      })
+    ).rejects.toThrow('provider_api_runtime_failed:authorization');
+
+    for (const descriptor of Object.values(providerApiDescriptors))
+      expect(process.env[descriptor.secretName]).toBeUndefined();
+    expect(process.env.INPUT_AUTH_JSON).toBeUndefined();
+    expect(prepareCodexCliBeforeAuthRead).not.toHaveBeenCalled();
+    expect(safeCheckoutRepository).not.toHaveBeenCalled();
+  });
+
   it.each(providerApiAuthModes)(
     'bootstraps %s with only a local capability and closes its key lease before App publication',
     async (selectedMode) => {

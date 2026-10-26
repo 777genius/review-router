@@ -31,7 +31,6 @@ import { validateAccountGatewayCheckout } from './account-gateway-runtime';
 import {
   clearCodexRotatingOidcRequestEnv,
   clearCodexRotatingProcessAuthEnv,
-  clearCodexRotatingProviderSecretEnv,
   CODEX_ROTATING_AUTH_INPUT_ENV_NAMES,
 } from './auth-input';
 import {
@@ -49,6 +48,7 @@ import type {
   CodexOAuthV2ReviewRunnerPort,
 } from './runtime';
 import {
+  clearProviderApiSecretEnv,
   readDirectProviderSelection,
   readProviderApiSecret,
 } from './provider-api-selection';
@@ -157,7 +157,7 @@ export async function runProviderApiRuntime(
       throw new Error('provider_api_workflow_schema_invalid');
     }
     assertProviderApiLocalInputs();
-    clearCodexRotatingProviderSecretEnv();
+    clearProviderApiSecretEnv();
     delete process.env.OPENAI_API_KEY;
     delete process.env.CODEX_HOME;
     const oidc = new GitHubActionsOidcTokenProvider({ fetchImpl });
@@ -324,6 +324,7 @@ export async function runProviderApiRuntime(
     throw new Error(`provider_api_runtime_failed:${phase}`);
   } finally {
     apiKey = undefined;
+    clearProviderApiSecretEnv();
     clearCodexRotatingOidcRequestEnv();
     clearCodexRotatingProcessAuthEnv();
     process.removeListener('SIGTERM', cancel);

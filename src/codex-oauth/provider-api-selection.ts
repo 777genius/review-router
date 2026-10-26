@@ -93,6 +93,15 @@ export function providerApiSecretInputNames(
   return [`INPUT_${secret}`, `INPUT_${secret.replaceAll('_', '-')}`];
 }
 
+/** Raw direct-provider keys must never survive bootstrap or failure cleanup. */
+export function clearProviderApiSecretEnv(
+  env: NodeJS.ProcessEnv = process.env
+): void {
+  clearCodexRotatingProviderSecretEnv(env);
+  for (const descriptor of Object.values(providerApiDescriptors))
+    delete env[descriptor.secretName];
+}
+
 /** Read once into parent custody and scrub every selected/unselected input alias. */
 export function readProviderApiSecret(
   mode: ProviderApiAuthMode,
@@ -117,6 +126,6 @@ export function readProviderApiSecret(
     return selected;
   } finally {
     clearCodexRotatingProviderSecretInputs(env);
-    clearCodexRotatingProviderSecretEnv(env);
+    clearProviderApiSecretEnv(env);
   }
 }

@@ -499,7 +499,12 @@ export class AccountGatewayModelTransport {
     const usage = this.directProvider?.usage
       ? createResponsesUsageObserver(
           this.directProvider.usage.delivery,
-          this.directProvider.usage.requestedModel
+          this.directProvider.usage.requestedModel,
+          this.directProvider.mode === 'mimo-token-plan-api'
+            ? 'mimo'
+            : this.directProvider.mode === 'kimi-code-api'
+              ? 'kimi'
+              : 'openrouter'
         )
       : undefined;
     let responseReceived = false;

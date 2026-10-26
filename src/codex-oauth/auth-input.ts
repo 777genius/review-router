@@ -135,8 +135,6 @@ export function clearCodexRotatingProviderSecretEnv(
 ): void {
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
   delete env.OPENROUTER_API_KEY;
-  delete env.MIMO_TOKEN_PLAN_API_KEY;
-  delete env.KIMI_CODE_API_KEY;
 }
 
 export function clearCodexRotatingOidcRequestEnv(

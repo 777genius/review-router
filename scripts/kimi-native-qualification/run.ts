@@ -399,6 +399,11 @@ async function scenario(
     env: environment,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+  let stdinFailure: Error | undefined;
+  child.stdin.on('error', () => {
+    stdinFailure ??= new Error(`native_${mode}_stdin_failed`);
+    child.kill('SIGKILL');
+  });
   if (mode === 'exec') child.stdin.end();
   let stdout = '';
   let stderr = '';
@@ -518,6 +523,7 @@ async function scenario(
       child.stdin.end();
     }
     const exitCode = await close;
+    if (stdinFailure) throw stdinFailure;
     if (transportFailure) throw transportFailure;
     assert.equal(exitCode, 0, `native_${mode}_failed: ${stderr.slice(-2000)}`);
     assert.equal(requests.length, 2);
@@ -551,7 +557,10 @@ async function scenario(
     };
   } catch (error) {
     protocolFailure =
-      error instanceof Error ? error : new Error('native_qualification_failed');
+      stdinFailure ??
+      (error instanceof Error
+        ? error
+        : new Error('native_qualification_failed'));
     throw protocolFailure;
   } finally {
     child.kill('SIGKILL');

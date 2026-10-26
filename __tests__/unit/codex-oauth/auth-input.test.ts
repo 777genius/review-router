@@ -2,6 +2,7 @@ import {
   CODEX_ROTATING_AUTH_INPUT_ENV_NAMES,
   REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES,
   applyCodexRotatingProviderSecretInputs,
+  clearCodexRotatingProviderSecretEnv,
   assertReviewActionV2ScmMutationEnvAbsent,
   clearCodexRotatingOidcRequestEnv,
   clearCodexRotatingProcessAuthEnv,
@@ -96,6 +97,20 @@ describe('Codex OAuth rotating auth input', () => {
 
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
     expect(env.OPENROUTER_API_KEY).toBe('explicit-openrouter');
+  });
+
+  it('preserves the legacy MiMo key through shared cleanup and provider-secret application', () => {
+    const env: NodeJS.ProcessEnv = {
+      MIMO_TOKEN_PLAN_API_KEY: 'legacy-mimo-key',
+      CLAUDE_CODE_OAUTH_TOKEN: 'inherited-claude',
+      OPENROUTER_API_KEY: 'inherited-openrouter',
+    };
+
+    clearCodexRotatingProviderSecretEnv(env);
+    expect(env).toEqual({ MIMO_TOKEN_PLAN_API_KEY: 'legacy-mimo-key' });
+
+    applyCodexRotatingProviderSecretInputs({}, env);
+    expect(env.MIMO_TOKEN_PLAN_API_KEY).toBe('legacy-mimo-key');
   });
 
   it('clears provider secrets with other rotating auth material', () => {

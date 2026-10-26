@@ -22,6 +22,9 @@ import {
 import type { TokenUsage } from '../../types';
 import type { AdmittedRuntimeConfig } from '../../control-plane/runtime-config';
 import { resolveAdmittedGatewayOcrReasoningEffort } from '../../control-plane/admitted-gateway-codex-model-settings';
+import { anthropicReasoningEffort } from './anthropic-messages-codec';
+
+export type OcrModelProtocol = 'openai-responses' | 'anthropic-messages';
 
 /** Managed result file bound from the OCR release manifest (§9). */
 export const OCR_RESULT_FILE_LIMIT_BYTES = 16 * 1024 * 1024;
@@ -143,6 +146,7 @@ export function buildOcrManagedConfigJson(input: {
   readonly baseUrl: string;
   readonly rawCapability: string;
   readonly model: string;
+  readonly protocol?: OcrModelProtocol;
   readonly limits: OcrManagedLimits;
   readonly modelReasoningEffort: string | null;
   readonly admittedRuntimeConfig?: AdmittedRuntimeConfig;
@@ -160,17 +164,28 @@ export function buildOcrManagedConfigJson(input: {
     throw new Error('review_action_v2_ocr_config_capability_invalid');
   }
   requirePositiveSetting(input.limits.timeoutMinutes, 'timeout');
-  const extraBody: Record<string, unknown> = { service_tier: 'default' };
-  const modelReasoningEffort = resolveAdmittedGatewayOcrReasoningEffort(
-    input.admittedRuntimeConfig,
-    input.model,
-    input.modelReasoningEffort
-  );
-  if (modelReasoningEffort !== null) {
-    extraBody.reasoning = { effort: modelReasoningEffort };
+  const protocol = input.protocol ?? 'openai-responses';
+  if (protocol !== 'openai-responses' && protocol !== 'anthropic-messages')
+    throw new Error('review_action_v2_ocr_protocol_invalid');
+  const extraBody: Record<string, unknown> =
+    protocol === 'anthropic-messages' ? {} : { service_tier: 'default' };
+  if (protocol === 'anthropic-messages') {
+    if (input.modelReasoningEffort !== null)
+      extraBody.output_config = {
+        effort: anthropicReasoningEffort(input.modelReasoningEffort),
+      };
+  } else {
+    const modelReasoningEffort = resolveAdmittedGatewayOcrReasoningEffort(
+      input.admittedRuntimeConfig,
+      input.model,
+      input.modelReasoningEffort
+    );
+    if (modelReasoningEffort !== null)
+      extraBody.reasoning = { effort: modelReasoningEffort };
   }
   const provider: Record<string, unknown> = {
-    protocol: 'openai-responses',
+    protocol:
+      protocol === 'anthropic-messages' ? 'anthropic' : 'openai-responses',
     url: input.baseUrl,
     api_key: input.rawCapability,
     model: input.model,

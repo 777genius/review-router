@@ -18,7 +18,10 @@ import {
   assertApprovedReviewAgentBinary,
   assertApprovedReviewAgentVersion,
 } from '../control-plane/approved-review-agent';
-import { buildOcrManagedConfigJson } from '../review-orchestration/infrastructure/ocr-review-managed-run';
+import {
+  buildOcrManagedConfigJson,
+  type OcrModelProtocol,
+} from '../review-orchestration/infrastructure/ocr-review-managed-run';
 import type { AdmittedRuntimeConfig } from '../control-plane/runtime-config';
 
 /**
@@ -298,6 +301,7 @@ export type OcrManagedRunHandle = Readonly<{
   runDirectory: string;
   homeDirectory: string;
   configPath: string;
+  protocol?: OcrModelProtocol;
   rulePath: string;
   /** Always allocated 0600 in the private run dir; content written at prepare. */
   backgroundPath: string;
@@ -316,6 +320,7 @@ export async function prepareOcrManagedRun(input: {
   readonly baseUrl: string;
   readonly rawCapability: string;
   readonly model: string;
+  readonly protocol?: OcrModelProtocol;
   readonly requestTimeoutSec: number;
   readonly modelReasoningEffort: string | null;
   readonly admittedRuntimeConfig?: AdmittedRuntimeConfig;
@@ -352,6 +357,7 @@ export async function prepareOcrManagedRun(input: {
         baseUrl: input.baseUrl,
         rawCapability: input.rawCapability,
         model: input.model,
+        protocol: input.protocol,
         limits: { requestTimeoutSec: input.requestTimeoutSec },
         modelReasoningEffort: input.modelReasoningEffort,
         admittedRuntimeConfig: input.admittedRuntimeConfig,
@@ -374,6 +380,7 @@ export async function prepareOcrManagedRun(input: {
       runDirectory,
       homeDirectory,
       configPath,
+      protocol: input.protocol ?? 'openai-responses',
       rulePath,
       backgroundPath,
       cleanup,

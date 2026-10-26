@@ -789,7 +789,7 @@ describe('CodexProvider', () => {
       expect.arrayContaining([
         '-c',
         'shell_environment_policy.ignore_default_excludes=false',
-        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
+        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude",KIMI_CODE_API_KEY="exclude"}',
       ])
     );
     expect(args).not.toContain('shell_tool');
@@ -850,7 +850,7 @@ describe('CodexProvider', () => {
         'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
       );
       expect(args).toContain(
-        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
+        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude",KIMI_CODE_API_KEY="exclude"}'
       );
       expect(prepared.providerName).toBe('openrouter/vendor/model');
       expect(prepared.request.environment.OPENROUTER_API_KEY).toBeUndefined();

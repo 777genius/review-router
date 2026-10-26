@@ -66,7 +66,15 @@ import {
 } from '../../review-execution/infrastructure/execution-deadline-from-environment';
 import { GitHubClient } from '../../github/client';
 import { stripOwnedPrDescriptionBlocks } from '../../github/pr-description-markers';
-import { prDescriptionContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
+import {
+  prDescriptionContract,
+  type ProviderApiAuthMode,
+} from '../../control-plane/generated/review-action-v2/companion-contracts';
+import {
+  readDirectProviderSelection,
+  selectDirectProvider,
+} from '../../codex-oauth/provider-api-selection';
+import type { CodexModelProvider } from '../../providers/codex-output-schema';
 import type { GitHubTokenProvider } from '../../github/token-provider';
 import { ReviewLedger } from '../../github/ledger';
 import { PullRequestLoader } from '../../github/pr-loader';
@@ -314,7 +322,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     signal?.throwIfAborted();
     const loadedConfig = input.providerApi
       ? ConfigLoader.loadRuntimeEnvironment(
-          input.providerApi.runtimeConfig.runtimeEnv
+          input.providerApi.runtimeConfig.runtimeEnv,
+          { modelTransport: true }
         )
       : ConfigLoader.load();
     const capturedDescriptionFlag =
@@ -334,10 +343,13 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     };
     // Codex model selection stays before every effect (including on the OCR
     // path where the managed engine owns its own model capture).
+    const directProvider = input.providerApi
+      ? readDirectProviderSelection(input.providerApi.runtimeConfig.runtimeEnv)
+      : undefined;
     const codexProviderName = input.ocr
       ? ''
       : input.providerApi
-        ? selectDirectOpenRouterProvider(config)
+        ? directProvider!.providerName
         : selectCodexProvider(config);
     const model = codexProviderName.slice(codexProviderName.indexOf('/') + 1);
     const gatewayModelSettings =
@@ -351,6 +363,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       codexModel: model,
       accountGateway: input.accountGateway !== undefined,
       providerApi: input.providerApi !== undefined,
+      ...(directProvider ? { providerApiAuthMode: directProvider.mode } : {}),
       serverReasoningEffort,
       gatewayModelSettings,
     });
@@ -358,8 +371,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       input.providerApi ||
       (input.accountGateway && model === 'mimo-v2.6-pro')
     ) {
-      if (reasoningEffort !== null)
-        process.env.CODEX_REASONING_EFFORT = reasoningEffort;
+      if (reasoningEffort === null) delete process.env.CODEX_REASONING_EFFORT;
+      else process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
     const configuredTimeoutMs = Math.max(
@@ -960,7 +973,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         agenticContext,
         eventAudit: config.codexEventAudit,
         modelProvider: input.providerApi
-          ? 'openrouter'
+          ? directProvider!.modelProvider
           : resolveAccountGatewayModelProvider(
               model,
               input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
@@ -968,7 +981,12 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             ),
         ...(input.providerApi
           ? {
-              providerNamePrefix: 'openrouter' as const,
+              providerNamePrefix:
+                directProvider!.mode === 'kimi-code-api'
+                  ? ('kimi' as const)
+                  : directProvider!.mode === 'mimo-token-plan-api'
+                    ? ('codex-mimo' as const)
+                    : ('openrouter' as const),
               providerApiTransport: input.providerApi.modelTransport,
               disableBuiltinTools: true,
               waitForProcessClose: true,
@@ -1207,6 +1225,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                         ? {
                             directCredentialLease:
                               input.providerApi.credentialLease,
+                            directModelProvider: directProvider!.modelProvider,
                           }
                         : {}),
                       codexModel: model,
@@ -1587,16 +1606,23 @@ export function resolveProductionInvestigationReasoningEffort(input: {
   readonly codexModel: string;
   readonly accountGateway: boolean;
   readonly providerApi?: boolean;
+  readonly providerApiAuthMode?: ProviderApiAuthMode;
   readonly serverReasoningEffort?: string;
   readonly gatewayModelSettings?: AdmittedGatewayCodexModelSettings;
 }): Exclude<CodexReviewAgentAdapterOptions['reasoningEffort'], undefined> {
   if (input.providerApi) {
-    const effort = input.serverReasoningEffort ?? 'xhigh';
+    if (input.providerApiAuthMode === 'kimi-code-api') {
+      if (input.serverReasoningEffort !== undefined)
+        throw new Error('provider_api_reasoning_effort_unsupported');
+      return null;
+    }
+    const mimo = input.providerApiAuthMode === 'mimo-token-plan-api';
+    const effort = input.serverReasoningEffort ?? (mimo ? 'high' : 'xhigh');
     if (
       effort !== 'low' &&
       effort !== 'medium' &&
       effort !== 'high' &&
-      effort !== 'xhigh'
+      (effort !== 'xhigh' || mimo)
     )
       throw new Error('provider_api_reasoning_effort_unsupported');
     return effort;
@@ -1659,6 +1685,7 @@ export function createConfiguredProductionInvestigationAgents(input: {
   readonly admittedGatewayModel?: string;
   readonly gatewayModelSettings?: AdmittedGatewayCodexModelSettings;
   readonly directCredentialLease?: () => import('../../providers/prepared-invocation').ProviderCredentialLease;
+  readonly directModelProvider?: CodexModelProvider;
   readonly reasoningEffort: Exclude<
     CodexReviewAgentAdapterOptions['reasoningEffort'],
     undefined
@@ -1695,7 +1722,7 @@ export function createConfiguredProductionInvestigationAgents(input: {
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
         modelProvider: input.directCredentialLease
-          ? 'openrouter'
+          ? (input.directModelProvider ?? 'openrouter')
           : resolveAccountGatewayModelProvider(
               input.codexModel,
               input.admittedGatewayModel,
@@ -1725,7 +1752,8 @@ export function createConfiguredProductionInvestigationAgents(input: {
                       input.codexModel,
                       input.modelTransport!.environment.CODEX_HOME,
                       input.modelTransport!.configuration,
-                      input.gatewayModelSettings
+                      input.gatewayModelSettings,
+                      input.directCredentialLease !== undefined
                     );
                   const result = await appServer.executeTurn({
                     ...request,
@@ -2287,9 +2315,9 @@ export async function prepareSingleT0ReviewPlan(input: {
     pr.baseSha !== authorization.facts.baseSha ||
     pr.headSha !== authorization.facts.headSha ||
     provider.name !==
-      (config.providers[0]?.startsWith('openrouter/')
-        ? selectDirectOpenRouterProvider(config)
-        : selectCodexProvider(config)) ||
+      (config.providers[0]?.startsWith('codex/')
+        ? selectCodexProvider(config)
+        : selectDirectProvider(config).providerName) ||
     config.codexAgenticContext === false
   ) {
     throw new Error('review_action_v2_single_plan_authority_mismatch');
@@ -2694,21 +2722,7 @@ function selectCodexProvider(config: ReviewConfig): string {
 }
 
 export function selectDirectOpenRouterProvider(config: ReviewConfig): string {
-  const selected = config.providers[0];
-  if (
-    config.providers.length !== 1 ||
-    !selected ||
-    !/^openrouter\/[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(selected) ||
-    config.providerLimit !== 1 ||
-    config.providerMaxParallel !== 1 ||
-    config.inlineMinAgreement !== 1 ||
-    config.synthesisModel !== selected ||
-    config.fallbackProviders.length !== 0 ||
-    config.requiredHealthyProviders?.length !== 1 ||
-    config.requiredHealthyProviders[0] !== selected
-  )
-    throw new Error('review_action_v2_direct_provider_policy_invalid');
-  return selected;
+  return selectDirectProvider(config, 'openrouter-api').providerName;
 }
 
 async function applyReviewRuntimeConfig(

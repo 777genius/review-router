@@ -145,6 +145,47 @@ describe('ProductionT0ReviewRunner policy', () => {
         selectDirectOpenRouterProvider({ ...config, ...mismatch })
       ).toThrow('review_action_v2_direct_provider_policy_invalid');
   });
+  it.each([
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', undefined, 'high'],
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'low', 'low'],
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'medium', 'medium'],
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'high', 'high'],
+    ['kimi-code-api', 'k3-256k', undefined, null],
+  ] as const)(
+    'preserves direct %s reasoning for %s with saved effort %s',
+    (providerApiAuthMode, codexModel, serverReasoningEffort, expected) => {
+      expect(
+        resolveProductionInvestigationReasoningEffort({
+          codexModel,
+          accountGateway: false,
+          providerApi: true,
+          providerApiAuthMode,
+          serverReasoningEffort,
+        })
+      ).toBe(expected);
+    }
+  );
+
+  it.each([
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'xhigh'],
+    ['mimo-token-plan-api', 'mimo-v2.6-pro', 'ultra'],
+    ['kimi-code-api', 'k3-256k', 'low'],
+    ['kimi-code-api', 'k3-256k', 'high'],
+  ] as const)(
+    'rejects unsupported direct %s reasoning for %s: %s',
+    (providerApiAuthMode, codexModel, serverReasoningEffort) => {
+      expect(() =>
+        resolveProductionInvestigationReasoningEffort({
+          codexModel,
+          accountGateway: false,
+          providerApi: true,
+          providerApiAuthMode,
+          serverReasoningEffort,
+        })
+      ).toThrow('provider_api_reasoning_effort_unsupported');
+    }
+  );
+
   const admittedAgentJson = JSON.stringify({
     profileRef: 'fixture-codex',
     agentKind: 'codex',
@@ -685,7 +726,9 @@ describe('ProductionT0ReviewRunner policy', () => {
           })
         ).rejects.toBe(stoppedAtBoundary);
         expect(configuration).not.toHaveBeenCalled();
-        expect(captured).toHaveBeenCalledWith(runtimeEnv);
+        expect(captured).toHaveBeenCalledWith(runtimeEnv, {
+          modelTransport: true,
+        });
         const resolved = captured.mock.results[0].value as ReviewConfig;
         expect(resolved.providers).toEqual([
           'openrouter/vendor/captured-model',

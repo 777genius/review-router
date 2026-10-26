@@ -5,6 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import yaml from 'js-yaml';
 import { REVIEW_ROUTER_API_ORIGIN } from '../../../src/config/review-router-endpoints';
+import {
+  providerApiAuthModes,
+  providerApiDescriptors,
+} from '../../../src/control-plane/generated/review-action-v2/companion-contracts';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -305,91 +309,96 @@ describe('production reusable workflows', () => {
     ).toBe(1);
   });
 
-  it('isolates direct provider API T0 from OAuth preparation and rejects alternate authority', () => {
-    for (const source of [
-      '.github/workflows/reviewrouter-reusable.yml',
-      '.github/workflows/reviewrouter-execution-reusable.yml',
-    ]) {
-      expect(
-        parseWorkflow(source).on?.workflow_call?.inputs?.provider_api_auth_mode
-          ?.default
-      ).toBe('');
-    }
-    const env: NodeJS.ProcessEnv = {
-      RR_REVIEW_ACTION_LANE: 't0',
-      RR_PROVIDER_API_AUTH_MODE: 'openrouter-api',
-      RR_REVIEW_REQUEST_ID: 'review-request-1',
-      RR_RUNTIME_REF: '0123456789abcdef0123456789abcdef01234567',
-      RR_WORKFLOW_REPOSITORY: '777genius/review-router',
-      RR_WORKFLOW_SHA: '0123456789abcdef0123456789abcdef01234567',
-      RR_REVIEW_TIMEOUT_MINUTES: '240',
-      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
-      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
-      GITHUB_EVENT_NAME: 'workflow_dispatch',
-      GITHUB_REPOSITORY: 'owner/repo',
-    };
-    const admitted = runExecutionPreparation(env);
-    expect(admitted.status).toBe(0);
-    expect(admitted.output).toContain('can_run=true\n');
-    const steps =
-      parseWorkflow('.github/workflows/reviewrouter-execution-reusable.yml')
-        .jobs?.review?.steps ?? [];
-    const selected = steps.filter((step) =>
-      runInNewContext(
-        (step.if ?? '${{ true }}')
-          .slice(3, -2)
-          .replaceAll('steps.provider-tooling', 'steps["provider-tooling"]'),
-        {
-          inputs: {
-            review_action_lane: 't0',
-            codex_session_mode: '',
-            provider_api_auth_mode: 'openrouter-api',
-          },
-          steps: {
-            runtime: {
-              outputs: { can_run: 'true', app_token_needed: 'false' },
+  it.each(providerApiAuthModes)(
+    'isolates direct %s T0 from OAuth preparation and rejects alternate authority',
+    (mode) => {
+      for (const source of [
+        '.github/workflows/reviewrouter-reusable.yml',
+        '.github/workflows/reviewrouter-execution-reusable.yml',
+      ]) {
+        expect(
+          parseWorkflow(source).on?.workflow_call?.inputs
+            ?.provider_api_auth_mode?.default
+        ).toBe('');
+      }
+      const env: NodeJS.ProcessEnv = {
+        RR_REVIEW_ACTION_LANE: 't0',
+        RR_PROVIDER_API_AUTH_MODE: mode,
+        RR_REVIEW_REQUEST_ID: 'review-request-1',
+        RR_RUNTIME_REF: '0123456789abcdef0123456789abcdef01234567',
+        RR_WORKFLOW_REPOSITORY: '777genius/review-router',
+        RR_WORKFLOW_SHA: '0123456789abcdef0123456789abcdef01234567',
+        RR_REVIEW_TIMEOUT_MINUTES: '240',
+        REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+        REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+        GITHUB_EVENT_NAME: 'workflow_dispatch',
+        GITHUB_REPOSITORY: 'owner/repo',
+      };
+      const admitted = runExecutionPreparation(env);
+      expect(admitted.status).toBe(0);
+      expect(admitted.output).toContain('can_run=true\n');
+      const steps =
+        parseWorkflow('.github/workflows/reviewrouter-execution-reusable.yml')
+          .jobs?.review?.steps ?? [];
+      const selected = steps.filter((step) =>
+        runInNewContext(
+          (step.if ?? '${{ true }}')
+            .slice(3, -2)
+            .replaceAll('steps.provider-tooling', 'steps["provider-tooling"]'),
+          {
+            inputs: {
+              review_action_lane: 't0',
+              codex_session_mode: '',
+              provider_api_auth_mode: mode,
             },
-            'provider-tooling': { outputs: {} },
-          },
-          env: {},
-        }
-      )
-    );
-    expect(
-      selected
-        .filter((step) => step.uses?.startsWith('actions/checkout@'))
-        .map((step) => step.name)
-    ).toEqual(['Checkout ReviewRouter runtime']);
-    expect(
-      selected
-        .filter((step) => step.name?.startsWith('Run ReviewRouter'))
-        .map((step) => step.name)
-    ).toEqual(['Run ReviewRouter T0 provider API']);
-    expect(
-      selected.some(
-        (step) => step.name === 'Resolve ReviewRouter runtime provider tooling'
-      )
-    ).toBe(false);
-    expect(
-      selected.find((step) => step.name === 'Run ReviewRouter T0 provider API')
-        ?.env
-    ).toMatchObject({
-      REVIEW_ROUTER_MODE: 'provider-api',
-      INPUT_OPENROUTER_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}',
-    });
-    for (const mismatch of [
-      { RR_PROVIDER_INSTANCE_ID: 'codex-rotating:1' },
-      { RR_CODEX_SESSION_MODE: 'account-gateway' },
-      { CODEX_AUTH_JSON_PRESENT: '1' },
-      { CODEX_CONFIG_TOML_PRESENT: '1' },
-      { OPENAI_API_KEY_PRESENT: '1' },
-      { REVIEW_APP_PRIVATE_KEY_PRESENT: '1' },
-      { RR_STATIC_RUNTIME_ENV_JSON: '{"CODEX_MODEL":"other"}' },
-      { REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static' },
-      { RR_REVIEW_REQUEST_ID: '' },
-    ])
-      expect(runExecutionPreparation({ ...env, ...mismatch }).status).toBe(1);
-  });
+            steps: {
+              runtime: {
+                outputs: { can_run: 'true', app_token_needed: 'false' },
+              },
+              'provider-tooling': { outputs: {} },
+            },
+            env: {},
+          }
+        )
+      );
+      expect(
+        selected
+          .filter((step) => step.uses?.startsWith('actions/checkout@'))
+          .map((step) => step.name)
+      ).toEqual(['Checkout ReviewRouter runtime']);
+      expect(
+        selected
+          .filter((step) => step.name?.startsWith('Run ReviewRouter'))
+          .map((step) => step.name)
+      ).toEqual(['Run ReviewRouter T0 provider API']);
+      expect(
+        selected.some(
+          (step) =>
+            step.name === 'Resolve ReviewRouter runtime provider tooling'
+        )
+      ).toBe(false);
+      expect(
+        selected.find(
+          (step) => step.name === 'Run ReviewRouter T0 provider API'
+        )?.env
+      ).toMatchObject({
+        REVIEW_ROUTER_MODE: 'provider-api',
+        [`INPUT_${providerApiDescriptors[mode].secretName}`]: `\${{ secrets.${providerApiDescriptors[mode].secretName} }}`,
+      });
+      for (const mismatch of [
+        { RR_PROVIDER_INSTANCE_ID: 'codex-rotating:1' },
+        { RR_CODEX_SESSION_MODE: 'account-gateway' },
+        { CODEX_AUTH_JSON_PRESENT: '1' },
+        { CODEX_CONFIG_TOML_PRESENT: '1' },
+        { OPENAI_API_KEY_PRESENT: '1' },
+        { REVIEW_APP_PRIVATE_KEY_PRESENT: '1' },
+        { RR_STATIC_RUNTIME_ENV_JSON: '{"CODEX_MODEL":"other"}' },
+        { REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static' },
+        { RR_REVIEW_REQUEST_ID: '' },
+      ])
+        expect(runExecutionPreparation({ ...env, ...mismatch }).status).toBe(1);
+    }
+  );
 
   it.each(['', 'codex-oauth', 'openai-api', 'mimo-token-plan-api'])(
     'validates the explicit discussion backend %s before checkout',
@@ -649,7 +658,7 @@ describe('production reusable workflows', () => {
     }
   );
 
-  it('traces the MiMo token secret through the legacy-only workflow contract', () => {
+  it('confines the MiMo token secret to direct provider API and legacy execution', () => {
     const secretName = 'MIMO_TOKEN_PLAN_API_KEY';
     const secretExpression = '${{ secrets.MIMO_TOKEN_PLAN_API_KEY }}';
     const parentWorkflow = parseWorkflow(
@@ -695,6 +704,12 @@ describe('production reusable workflows', () => {
     );
     expect(childWorkflow.jobs?.review?.env).not.toHaveProperty(secretName);
     expect(traceSecretEnvBindings(childWorkflow, secretName)).toEqual([
+      {
+        job: 'review',
+        step: 'Run ReviewRouter T0 provider API',
+        environmentVariable: `INPUT_${secretName}`,
+        value: secretExpression,
+      },
       {
         job: 'review',
         step: 'Run ReviewRouter legacy',

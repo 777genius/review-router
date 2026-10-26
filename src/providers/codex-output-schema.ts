@@ -1,13 +1,13 @@
 import Ajv2020, { type AnySchema } from 'ajv/dist/2020';
 
-export type CodexModelProvider = 'openai' | 'openrouter' | 'mimo';
+export type CodexModelProvider = 'openai' | 'openrouter' | 'mimo' | 'kimi';
 
 export function supportsCliOutputSchema(
   modelProvider: CodexModelProvider | undefined
 ): boolean {
   // MiMo's Responses endpoint rejects text.format=json_schema. Other
   // providers retain Codex's native structured output enforcement.
-  return modelProvider !== 'mimo';
+  return modelProvider !== 'mimo' && modelProvider !== 'kimi';
 }
 
 export function assertJsonMatchesSchema(

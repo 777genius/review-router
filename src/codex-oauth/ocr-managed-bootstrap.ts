@@ -19,6 +19,7 @@ import {
   assertApprovedReviewAgentVersion,
 } from '../control-plane/approved-review-agent';
 import { buildOcrManagedConfigJson } from '../review-orchestration/infrastructure/ocr-review-managed-run';
+import type { AdmittedRuntimeConfig } from '../control-plane/runtime-config';
 
 /**
  * Strict OCR side of the approved agent profile contract (§4.1): the same
@@ -317,6 +318,7 @@ export async function prepareOcrManagedRun(input: {
   readonly model: string;
   readonly requestTimeoutSec: number;
   readonly modelReasoningEffort: string | null;
+  readonly admittedRuntimeConfig?: AdmittedRuntimeConfig;
   readonly language: string | null;
   readonly signal?: AbortSignal;
   readonly env?: NodeJS.ProcessEnv;
@@ -352,6 +354,7 @@ export async function prepareOcrManagedRun(input: {
         model: input.model,
         limits: { requestTimeoutSec: input.requestTimeoutSec },
         modelReasoningEffort: input.modelReasoningEffort,
+        admittedRuntimeConfig: input.admittedRuntimeConfig,
         language: input.language,
       }),
       { mode: 0o600 }

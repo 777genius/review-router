@@ -1218,10 +1218,7 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(observation.transportAttemptCount).toBe(1);
   });
 
-  it('re-dispatches a poisoned consumer after a failure fact once it reopens', async () => {
-    // A recorded failure fact is a proven failure and fresh dispatch stays
-    // bounded by the server-counted attempt budget, so one later attempt may
-    // reopen the consumer instead of burning the budget fenced.
+  it('preserves an unknown effect even when a bridge offers to reopen', async () => {
     let effect: { effect: string } | undefined;
     let reopened = 0;
     const { bridge, requests } = bridgeFixture({
@@ -1252,10 +1249,12 @@ describe('OcrReviewInvocationAdapter', () => {
       /review_action_v2_ocr_gateway_effect_unknown/u
     );
     const second = await adapter.prepare({ workSlot, attemptOrdinal: 2 });
-    const observation = await adapter.execute(executionInput(second));
-    expect(reopened).toBe(1);
-    expect(processRunner.calls).toHaveLength(2);
-    expect(observation.transportAttemptCount).toBe(1);
+    await expect(adapter.execute(executionInput(second))).rejects.toThrow(
+      /review_action_v2_ocr_gateway_effect_unknown/u
+    );
+    expect(reopened).toBe(0);
+    expect(processRunner.calls).toHaveLength(1);
+    expect(effect).toEqual({ effect: 'effect_unknown' });
   });
 
   it('never consults the reopen seam without a recorded failure fact', async () => {

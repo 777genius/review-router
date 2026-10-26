@@ -87,6 +87,31 @@ export function resolveAdmittedGatewayCodexReasoningEffort(
   return selected;
 }
 
+/** OCR may inherit an older saved effort from review configuration. A captured
+ * model capability is authoritative for the request; absent metadata retains
+ * the qualified legacy setting instead of inventing unsupported capabilities. */
+export function resolveAdmittedGatewayOcrReasoningEffort(
+  runtime: AdmittedRuntimeConfig | undefined,
+  selectedModel: string,
+  savedEffort: string | null
+): string | null {
+  const settings = readAdmittedGatewayCodexModelSettings(
+    runtime,
+    selectedModel
+  );
+  if (settings === undefined) return savedEffort;
+  if (settings.reasoning === null) return null;
+  const selected = resolveAdmittedGatewayCodexReasoningEffort(
+    settings,
+    savedEffort ?? undefined
+  );
+  // The approved managed OCR protocol supports through xhigh; Codex's max
+  // cannot be passed to that binary merely because the model accepts it.
+  if (selected === 'max')
+    throw new Error('account_gateway_ocr_reasoning_effort_unsupported');
+  return selected;
+}
+
 function isCanonicalEffort(
   value: unknown
 ): value is GatewayCodexReasoningEffort {

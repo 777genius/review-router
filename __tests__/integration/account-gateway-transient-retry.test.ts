@@ -13,6 +13,13 @@ import {
   AccountGatewayModelTransport,
   type GatewayTransportDiagnostic,
 } from '../../src/review-orchestration/infrastructure/account-gateway-model-transport';
+import { OcrReviewInvocationAdapter } from '../../src/review-orchestration/infrastructure/ocr-review-invocation-adapter';
+import {
+  ReviewExecutionProviderKind,
+  ReviewTaskKind,
+  type ProviderInvocationManifest,
+  type ReviewInvocationLease,
+} from '../../src/review-orchestration/application';
 
 // Red: a fully accepted POST followed by lost headers or a bare proxy timeout
 // was re-dispatched. Only positive closed not_dispatched denial permits replay.
@@ -68,6 +75,149 @@ async function drain(response: Readable): Promise<string> {
     /* collected bytes so far are the observable body */
   }
   return Buffer.concat(chunks).toString('utf8');
+}
+
+/** Feed the real transport's lost-header failure into the real OCR adapter's
+ * next granted attempt. The surrounding TLS fixture owns teardown even if a
+ * red-baseline assertion fails; no network mock or replacement effect is used. */
+async function assertAdapterKeepsUnknownTransport(
+  transport: AccountGatewayModelTransport,
+  root: string
+): Promise<void> {
+  const workSlot = {
+    workSlotId: 'synthetic-slot',
+    taskKind: ReviewTaskKind.FindingDiscovery,
+    providerKind: ReviewExecutionProviderKind.Ocr,
+    providerVoteIdentityHash: 'f'.repeat(64),
+    shardKey: 'all',
+    required: true,
+    attemptBudget: 3,
+    retryPolicyVersion: 'fixture',
+  };
+  let processCalls = 0;
+  let reopenCalls = 0;
+  const adapter = new OcrReviewInvocationAdapter(
+    [
+      {
+        workSlot,
+        reviewRevisionHash: 'e'.repeat(64),
+        mergeBaseSha: 'a'.repeat(40),
+        lifecycleTargets: [],
+        liveLifecycleStateHash: 'd'.repeat(64),
+        context: {
+          number: 1,
+          title: 'synthetic',
+          body: 'synthetic',
+          author: 'fixture',
+          draft: false,
+          labels: [],
+          files: [
+            {
+              filename: 'calc.ts',
+              status: 'modified',
+              additions: 1,
+              deletions: 1,
+              changes: 2,
+              patch: '@@ -1 +1 @@\n-old\n+new',
+            },
+          ],
+          diff: '',
+          additions: 1,
+          deletions: 1,
+          baseSha: 'a'.repeat(40),
+          headSha: 'b'.repeat(40),
+        },
+      },
+    ],
+    {
+      model: 'fixture-model',
+      binaryPath: '/synthetic/not-dispatched',
+      binarySha256: '1'.repeat(64),
+      packageVersion: '1.2.3',
+      profileRef: 'ocr-managed-v1',
+      run: {
+        runDirectory: root,
+        homeDirectory: root,
+        configPath: join(root, 'adapter-config.json'),
+        rulePath: join(root, 'adapter-rule.json'),
+        backgroundPath: null,
+      },
+      bridge: {
+        baseUrl: 'http://127.0.0.1:41000',
+        capabilityAuthorization: `Bearer ${'a'.repeat(64)}`,
+        actualModel: () => transport.actualModel,
+        requestCount: () => 1,
+        effectFacts: () => ({
+          effect: transport.lastFailure?.effect ?? 'none',
+        }),
+        releaseRetrySafeFailure: () => transport.releaseRetrySafeFailure(),
+        reopenConsumer: () => {
+          reopenCalls += 1;
+          return transport.reopenConsumer();
+        },
+      },
+      limits: { requestTimeoutSec: 10 },
+      ocrEffort: 'medium',
+      modelReasoningEffort: null,
+      language: null,
+      ruleText: 'synthetic',
+      backgroundText: null,
+      checkoutRoot: root,
+      previewRunner: async (input) => {
+        writeFileSync(
+          input.outputPath,
+          JSON.stringify({ files: [{ path: 'calc.ts', will_review: true }] })
+        );
+        return {
+          closed: true,
+          exitCode: 0,
+          signal: null,
+          stdoutTail: '',
+          stderrTail: '',
+        };
+      },
+      processRunner: async () => {
+        processCalls += 1;
+        throw new Error('unexpected_adapter_redispatch');
+      },
+    }
+  );
+  const invocation = await adapter.prepare({ workSlot, attemptOrdinal: 2 });
+  await assert.rejects(
+    adapter.execute({
+      invocation,
+      manifest: {
+        manifestCanonicalJson: '{}',
+        manifestKey: 'fixture',
+        providerInvocationKey: 'fixture',
+        providerVoteIdentityHash: 'f'.repeat(64),
+      } as ProviderInvocationManifest,
+      lease: {
+        leaseId: 'fixture',
+        attemptId: 'fixture',
+        leaseCapability: 'fixture',
+        fencingToken: 'fixture',
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+        resultReportUntil: new Date(Date.now() + 60000).toISOString(),
+        renewalCeilingReached: false,
+      } as ReviewInvocationLease,
+      sourceExecutionId: 'synthetic-execution',
+      sourceReviewRevisionHash: 'e'.repeat(64),
+      signal: new AbortController().signal,
+    }),
+    /review_action_v2_ocr_gateway_effect_unknown/u
+  );
+  assert.equal(
+    processCalls,
+    0,
+    'the adapter must not dispatch after real lost-header uncertainty'
+  );
+  assert.equal(
+    reopenCalls,
+    0,
+    'the adapter never erases the real transport unknown fact'
+  );
+  assert.equal(transport.lastFailure?.effect, 'effect_unknown');
 }
 
 type ProbeMode =
@@ -228,26 +378,21 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         false,
         'an unknown effect is never positively proven unpaid'
       );
+      await assertAdapterKeepsUnknownTransport(transport, root);
       assert.equal(
         transport.reopenConsumer(),
-        true,
-        'a recorded failure fact reopens the consumer for a fresh attempt'
+        false,
+        'an unknown effect stays fenced through every reopening entry point'
       );
-      assert.equal(transport.lastFailure, undefined);
-      const recovered = await bounded(
-        transport.responses(Buffer.from(body)),
-        'poisoned-reopen-redispatch'
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      await assert.rejects(
+        bounded(
+          transport.responses(Buffer.from(body)),
+          'poisoned-reopen-denied'
+        ),
+        /account_gateway_inference_denied/u
       );
-      const recoveredText = await bounded(
-        drain(recovered.body),
-        'poisoned-reopen-drain'
-      );
-      assert.equal(
-        requests,
-        2,
-        'a reopened consumer permits exactly one fresh dispatch'
-      );
-      assert(recoveredText.includes('"type":"response.completed"'));
+      assert.equal(requests, 1, 'the accepted POST is never re-dispatched');
       transport.cancelInference();
       assert.equal(
         transport.reopenConsumer(),
@@ -486,7 +631,7 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
     transientRetry('cancelled-denial-release-denied')
   );
   nodeTest(
-    'a recorded failure fact reopens the consumer for one fresh dispatch',
+    'an unknown effect remains fenced through the compatibility reopen method',
     { timeout: 20_000 },
     () => transientRetry('poisoned-consumer-reopen')
   );

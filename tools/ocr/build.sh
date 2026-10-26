@@ -11,13 +11,14 @@
 #                                 and the outcome schema version
 #
 # Usage:
-#   tools/ocr/build.sh [--source <git-repo-or-dir>] [--out <dir>]
+#   tools/ocr/build.sh [--source <git-repo-or-dir>] [--out <dir>] [--test-managed]
 #
 #   --source  Where to obtain clean upstream. A local path to a git clone of
 #             alibaba/open-code-review (read via `git archive`, never
 #             modified), or a URL to clone. Default:
 #             https://github.com/alibaba/open-code-review.git
 #   --out     Output directory. Default: <this-dir>/out
+#   --test-managed  Run the finite managed transport regression suite first.
 #
 # Environment:
 #   OCR_UPSTREAM  Same as --source.
@@ -25,22 +26,24 @@
 # The build never writes outside <out> and the temporary work directory.
 set -euo pipefail
 
-TOOLCHAIN=go1.26.9
+TOOLCHAIN=go1.26.10
 UPSTREAM_COMMIT=8eb83340a487b1150af00701b94f01af97e4b4d6 # v1.13.1
 UPSTREAM_NAME=alibaba/open-code-review
 OUTCOME_SCHEMA_VERSION=reviewrouter.ocr-outcome/v1
-RELEASE_VERSION=1.13.1-rr.4
+RELEASE_VERSION=1.13.1-rr.5
 BUILD_FLAGS="-trimpath -buildvcs=false -ldflags -X=main.Version=$RELEASE_VERSION"
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 patches_dir="$script_dir/patches"
 source_repo=${OCR_UPSTREAM:-https://github.com/$UPSTREAM_NAME.git}
 out_dir="$script_dir/out"
+test_managed=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --source) source_repo=${2:?--source needs a value}; shift 2 ;;
     --out) out_dir=${2:?--out needs a value}; shift 2 ;;
+    --test-managed) test_managed=true; shift ;;
     -h|--help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "build.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -86,6 +89,14 @@ for p in $patch_list; do
   git -C "$src" apply "$p"
   echo "    applied $(basename "$p")"
 done
+
+# This uses only synthetic loopback fixtures, never provider credentials.
+if [ "$test_managed" = true ]; then
+  ( cd "$src" && env GOTOOLCHAIN="$TOOLCHAIN" CGO_ENABLED=0 LC_ALL=C \
+      go test -p 1 -trimpath -buildvcs=false ./internal/llm \
+      -run '^(TestManagedAnthropic|TestResolveManagedEndpoint|TestSerializing)' ) \
+    || die "managed transport regression failed"
+fi
 
 # --- 3. build with the pinned toolchain ------------------------------------
 mkdir -p "$out_dir"

@@ -1,3 +1,4 @@
+import type { AdmittedGatewayCodexModelSettings } from '../../../src/control-plane/admitted-gateway-codex-model-settings';
 import { EventEmitter } from 'events';
 import nock from 'nock';
 import { randomBytes } from 'crypto';
@@ -118,6 +119,82 @@ describe('CodexProvider', () => {
   afterAll(() => {
     process.env = originalEnv;
   });
+
+  it.each([
+    [undefined, 'minimal'],
+    ['ultra', 'max'],
+    [null, null],
+  ] as const)(
+    'pins managed Codex exec reasoning %s as %s despite ambient xhigh',
+    async (saved, effective) => {
+      const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'managed-codex-exec-')
+      );
+      const cwd = process.cwd();
+      const previous = { ...process.env };
+      const model = 'gpt-5.4-future';
+      const settings: AdmittedGatewayCodexModelSettings = {
+        model,
+        reasoning:
+          saved === null
+            ? null
+            : { allowed: ['minimal', 'max'], default: 'minimal' },
+      };
+      try {
+        process.chdir(root);
+        process.env.CODEX_REASONING_EFFORT = 'xhigh';
+        const home = path.join(root, 'home');
+        fs.mkdirSync(home);
+        const gateway: LocalGatewayModelTransport = {
+          baseUrl: 'http://127.0.0.1:1/v1',
+          environment: { CODEX_HOME: home },
+          configuration: codexGatewayConfiguration('http://127.0.0.1:1'),
+          actualModel: () => model,
+          failureFact: () => undefined,
+          dispose: async () => {},
+        };
+        const provider = new CodexProvider(model, {
+          agenticContext: false,
+          accountGateway: gateway,
+          accountGatewayModelSettings: settings,
+          ...(saved === null || saved === undefined
+            ? {}
+            : { accountGatewaySavedReasoningEffort: saved }),
+        });
+        overridePrivate(
+          provider,
+          'resolveBinary',
+          jest.fn().mockResolvedValue('/mock/codex')
+        );
+        const prepared = await provider.prepareInvocation('review input', 1000);
+        const args = prepared.request.argsTemplate;
+        const catalogPath = path.join(home, 'reviewrouter-model-catalog.json');
+        expect(args).toContain(
+          `model_catalog_json=${JSON.stringify(catalogPath)}`
+        );
+        if (effective === null)
+          expect(
+            args.some((arg: string) =>
+              arg.startsWith('model_reasoning_effort=')
+            )
+          ).toBe(false);
+        else expect(args).toContain(`model_reasoning_effort="${effective}"`);
+        expect(args).not.toContain('model_reasoning_effort="xhigh"');
+        const descriptor = JSON.parse(fs.readFileSync(catalogPath, 'utf8'))
+          .models[0];
+        expect(descriptor).toMatchObject({
+          slug: model,
+          default_reasoning_level: saved === null ? null : 'minimal',
+          use_responses_lite: false,
+        });
+        expect(process.env.CODEX_REASONING_EFFORT).toBe('xhigh');
+      } finally {
+        process.chdir(cwd);
+        process.env = previous;
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
 
   it.each([undefined, 'mimo'] as const)(
     'pins bounded MiMo metadata to the fresh gateway home on repeated preparations (modelProvider=%s)',

@@ -105,9 +105,7 @@ function containsFinalOutput(value: unknown): boolean {
   return true;
 }
 
-function functionTool(
-  value: unknown
-): value is JsonRecord & {
+function functionTool(value: unknown): value is JsonRecord & {
   type: 'function';
   name: string;
   parameters: JsonRecord;
@@ -139,9 +137,7 @@ function functionToolEnvelope(value: unknown): boolean {
   );
 }
 
-function toolEnvelopeReceipt(
-  body: JsonRecord
-): Readonly<{
+function toolEnvelopeReceipt(body: JsonRecord): Readonly<{
   topLevelTypes: readonly string[];
   functionLeaves: readonly string[];
 }> {
@@ -496,7 +492,6 @@ async function scenario(
         approvalPolicy: 'never',
         approvalsReviewer: 'user',
         sandbox: 'read-only',
-        config: {},
         ephemeral: true,
         environments: [],
         dynamicTools: [],

@@ -25,6 +25,10 @@ import { startCodexUsageRelay } from '../provider-usage/codex-relay';
 import { prepareCodexCliBeforeAuthRead } from '../codex-oauth/codex-cli';
 import { prepareAccountGatewayModelCatalog } from '../codex-oauth/account-gateway-mimo-catalog';
 import {
+  resolveAdmittedGatewayCodexReasoningEffort,
+  type AdmittedGatewayCodexModelSettings,
+} from '../control-plane/admitted-gateway-codex-model-settings';
+import {
   ACCOUNT_GATEWAY_BOUNDS,
   LOCAL_MODEL_CAPABILITY_ENV,
   type LocalGatewayModelTransport,
@@ -63,6 +67,9 @@ export interface CodexProviderOptions {
     | 'https://chatgpt.com/backend-api/codex';
   /** Internal T0 composition only; no user URL/account/provider-key override. */
   accountGateway?: LocalGatewayModelTransport;
+  /** Frozen admitted policy and saved choice, never ambient model metadata. */
+  accountGatewayModelSettings?: AdmittedGatewayCodexModelSettings;
+  accountGatewaySavedReasoningEffort?: string;
   /** Direct OpenRouter wire attestation; contains only a loopback capability. */
   providerApiTransport?: LocalGatewayModelTransport;
   /** Trusted provider API T0 composition; context access remains RR MCP-only. */
@@ -440,13 +447,19 @@ export class CodexProvider extends Provider {
     const eventAudit = contextGateway ? true : this.shouldUseEventAudit();
     const forkSandbox =
       !this.modelTransport && this.shouldUseForkSandboxCodexHomeConfig();
-    const reasoningEffort = this.resolveReasoningEffort(false);
+    const reasoningEffort = this.options.accountGatewayModelSettings
+      ? (resolveAdmittedGatewayCodexReasoningEffort(
+          this.options.accountGatewayModelSettings,
+          this.options.accountGatewaySavedReasoningEffort
+        ) ?? undefined)
+      : this.resolveReasoningEffort(false);
     const gateway = this.modelTransport;
     const modelCatalogSetting = gateway
       ? await prepareAccountGatewayModelCatalog(
           this.model,
           gateway.environment.CODEX_HOME,
           gateway.configuration,
+          this.options.accountGatewayModelSettings,
           this.options.providerApiTransport !== undefined
         )
       : undefined;

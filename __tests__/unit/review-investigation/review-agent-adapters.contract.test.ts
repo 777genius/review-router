@@ -731,7 +731,7 @@ describe('review agent environment allowlists', () => {
       if (providerKind === ReviewAgentProviderKind.Codex) {
         const args = runner.requests[0].args;
         expect(args).toContain(
-          'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
+          'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude",KIMI_CODE_API_KEY="exclude"}'
         );
         const toolEnvironment = args.find((argument) =>
           argument.startsWith('mcp_servers.reviewrouter.env_vars=')

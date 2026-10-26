@@ -126601,6 +126601,40 @@ function isNonNegativeSafeInteger(value) {
 }
 
 // src/control-plane/generated/review-action-v2/companion-contracts.ts
+var providerApiAuthModes = [
+  "openrouter-api",
+  "mimo-token-plan-api",
+  "kimi-code-api"
+];
+var providerApiDescriptors = Object.freeze({
+  "openrouter-api": Object.freeze({
+    providerKind: "openrouter",
+    authMode: "openrouter_api_key",
+    runtimePrefix: "openrouter",
+    secretName: "OPENROUTER_API_KEY",
+    fixedResponsesUrl: "https://openrouter.ai/api/v1/responses",
+    defaultModel: "openai/gpt-5.3-codex"
+  }),
+  "mimo-token-plan-api": Object.freeze({
+    providerKind: "codex-mimo",
+    authMode: "mimo_token_plan_api_key",
+    runtimePrefix: "codex-mimo",
+    secretName: "MIMO_TOKEN_PLAN_API_KEY",
+    fixedResponsesUrl: "https://token-plan-sgp.xiaomimimo.com/v1/responses",
+    defaultModel: "mimo-v2.6-pro"
+  }),
+  "kimi-code-api": Object.freeze({
+    providerKind: "kimi",
+    authMode: "kimi_code_api_key",
+    runtimePrefix: "kimi",
+    secretName: "KIMI_CODE_API_KEY",
+    fixedResponsesUrl: "https://api.kimi.ai/coding/v1/responses",
+    defaultModel: "k3-256k"
+  })
+});
+function isProviderApiAuthMode(value) {
+  return typeof value === "string" && Object.hasOwn(providerApiDescriptors, value);
+}
 var providerApiCheckoutCompanionContract = Object.freeze({
   path: "/api/action/v2/provider-api/checkout",
   providerApiAuthMode: "openrouter-api",
@@ -146882,7 +146916,7 @@ Respond with: {"findings": [{"file": "test.ts", "line": 1, "severity": "minor", 
     }
   }
   static validate(name) {
-    const pattern = /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*(?:#\d+)?|claude\/[\w.:~-]+|codex\/[\w.:~-]+|codex-openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*|codex-mimo\/[\w.:~-]+|gemini\/[\w.:~-]+)$/i;
+    const pattern = /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*(?:#\d+)?|claude\/[\w.:~-]+|codex\/[\w.:~-]+|codex-openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*|codex-mimo\/[\w.:~-]+|kimi\/[\w.:~-]+|gemini\/[\w.:~-]+)$/i;
     return pattern.test(name);
   }
 };
@@ -147389,8 +147423,11 @@ var ConfigLoader = class {
   }
   /** Trusted native runtime configuration, without ambient env or checkout files.
    * The same parser/defaults/validation apply; this is not a caller override. */
-  static loadRuntimeEnvironment(env) {
-    return this.resolve({}, this.loadFromEnv({ ...env }));
+  static loadRuntimeEnvironment(env, options = {}) {
+    return this.resolve(
+      {},
+      this.loadFromEnv({ ...env }, options.modelTransport === true)
+    );
   }
   static resolve(fileConfig, envConfig) {
     const merged = this.merge(DEFAULT_CONFIG, fileConfig, envConfig);
@@ -147437,7 +147474,7 @@ var ConfigLoader = class {
     }
     return {};
   }
-  static loadFromEnv(env = process.env) {
+  static loadFromEnv(env = process.env, modelTransport = false) {
     const codexProvider = this.codexProviderFromModel(env.CODEX_MODEL);
     const claudeProvider = this.claudeProviderFromModel(env.CLAUDE_MODEL);
     const explicitProviders = this.parseArray(env.REVIEW_PROVIDERS) || [];
@@ -147447,7 +147484,7 @@ var ConfigLoader = class {
       codexProvider
     );
     const providers = explicitProviders.length > 0 ? explicitProviders : inferredProvider ? [inferredProvider] : void 0;
-    if ((env.REVIEW_AUTH_MODE?.trim() === "mimo-token-plan-api" || providers?.some((provider) => provider.startsWith("codex-mimo/"))) && !env.MIMO_TOKEN_PLAN_API_KEY?.trim()) {
+    if ((env.REVIEW_AUTH_MODE?.trim() === "mimo-token-plan-api" || providers?.some((provider) => provider.startsWith("codex-mimo/"))) && !modelTransport && !env.MIMO_TOKEN_PLAN_API_KEY?.trim()) {
       throw new Error(
         "MIMO_TOKEN_PLAN_API_KEY is required for REVIEW_AUTH_MODE=mimo-token-plan-api"
       );
@@ -188660,6 +188697,64 @@ function stripOwnedPrDescriptionBlocks(body2) {
   return result2;
 }
 
+// src/codex-oauth/auth-input.ts
+var REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES = [
+  "GITHUB_TOKEN",
+  "GH_TOKEN",
+  "INPUT_GITHUB_TOKEN",
+  "INPUT_GITHUB-TOKEN",
+  "REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN",
+  "INPUT_REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN",
+  "INPUT_REVIEW-THREAD-LIFECYCLE-RESOLVE-TOKEN",
+  "REVIEW_APP_PRIVATE_KEY",
+  "REVIEW_ROUTER_APP_PRIVATE_KEY",
+  "REVIEWROUTER_APP_PRIVATE_KEY",
+  "INPUT_REVIEW_APP_PRIVATE_KEY",
+  "INPUT_REVIEW-APP-PRIVATE-KEY",
+  "GITHUB_APP_TOKEN",
+  "REVIEW_APP_TOKEN",
+  "REVIEW_ROUTER_APP_TOKEN",
+  "REVIEWROUTER_APP_TOKEN",
+  "REVIEW_ROUTER_COMMENT_TOKEN",
+  "REVIEWROUTER_COMMENT_TOKEN"
+];
+var REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAME_SET = new Set(
+  REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES
+);
+
+// src/codex-oauth/provider-api-selection.ts
+function selectDirectProvider(config2, expectedMode) {
+  const selected = config2.providers[0];
+  const mode = providerApiAuthModes.find(
+    (candidate) => selected?.startsWith(`${providerApiDescriptors[candidate].runtimePrefix}/`)
+  );
+  if (!selected || !mode || expectedMode !== void 0 && mode !== expectedMode || config2.providers.length !== 1 || config2.providerLimit !== 1 || config2.providerMaxParallel !== 1 || config2.inlineMinAgreement !== 1 || config2.synthesisModel !== selected || config2.fallbackProviders.length !== 0 || config2.requiredHealthyProviders?.length !== 1 || config2.requiredHealthyProviders[0] !== selected)
+    throw new Error("review_action_v2_direct_provider_policy_invalid");
+  const descriptor = providerApiDescriptors[mode];
+  const model = selected.slice(descriptor.runtimePrefix.length + 1);
+  if (mode === "openrouter-api" ? !/^[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(model) : model !== descriptor.defaultModel)
+    throw new Error("review_action_v2_direct_provider_model_invalid");
+  return Object.freeze({
+    mode,
+    providerName: selected,
+    model,
+    modelProvider: mode === "mimo-token-plan-api" ? "mimo" : mode === "kimi-code-api" ? "kimi" : "openrouter"
+  });
+}
+function readDirectProviderSelection(env) {
+  if (!isProviderApiAuthMode(env.REVIEW_AUTH_MODE))
+    throw new Error("provider_api_admitted_configuration_invalid");
+  const selection = selectDirectProvider(
+    ConfigLoader.loadRuntimeEnvironment(env, { modelTransport: true }),
+    env.REVIEW_AUTH_MODE
+  );
+  if (selection.mode === "mimo-token-plan-api" && env.CODEX_FAST_MODE === "true")
+    throw new Error("provider_api_mimo_fast_unsupported");
+  if (selection.mode === "kimi-code-api" && (env.CODEX_REASONING_EFFORT !== void 0 || env.CODEX_FAST_MODE === "true"))
+    throw new Error("provider_api_kimi_options_unsupported");
+  return selection;
+}
+
 // src/github/ledger.ts
 var import_crypto10 = require("crypto");
 var LEDGER_MARKER = "reviewrouter-ledger:v1";
@@ -189323,7 +189418,7 @@ var crypto5 = __toESM(require("crypto"));
 // src/providers/codex-output-schema.ts
 var import__2 = __toESM(require__());
 function supportsCliOutputSchema(modelProvider) {
-  return modelProvider !== "mimo";
+  return modelProvider !== "mimo" && modelProvider !== "kimi";
 }
 function assertJsonMatchesSchema(content, schema2, kind) {
   let value;
@@ -189393,7 +189488,7 @@ function buildCliSafeEnv(options = {}) {
 // src/providers/codex-confinement-policy.ts
 var CODEX_SHELL_ENVIRONMENT_POLICY = Object.freeze([
   "shell_environment_policy.ignore_default_excludes=false",
-  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
+  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude",KIMI_CODE_API_KEY="exclude"}'
 ]);
 var CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   "shell_tool",
@@ -190151,10 +190246,33 @@ var mimoModel = {
 function isAccountGatewayMiMoModel(model) {
   return model === mimoModel.slug;
 }
-async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration, settings) {
+async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration, settings, providerApi = false) {
   if (settings && (settings.model !== model || isAccountGatewayMiMoModel(model)))
     throw new Error("account_gateway_codex_model_settings_invalid");
-  const catalogModel = settings ? managedCodexModel(settings) : model === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model) ? mimoModel : void 0;
+  const catalogModel = settings ? managedCodexModel(settings) : model === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model) ? mimoModel : providerApi && model === "k3-256k" ? {
+    ...gpt_5_6_sol_model_0_147_0_default,
+    slug: "k3-256k",
+    display_name: "Kimi Code K3",
+    description: "Kimi Code native Responses model.",
+    base_instructions: "",
+    model_messages: null,
+    default_reasoning_level: null,
+    supported_reasoning_levels: [],
+    supports_reasoning_summary_parameter: false,
+    default_reasoning_summary: "none",
+    support_verbosity: false,
+    apply_patch_tool_type: null,
+    tool_mode: "direct",
+    use_responses_lite: false,
+    supports_search_tool: false,
+    experimental_supported_tools: [],
+    additional_speed_tiers: [],
+    service_tiers: [],
+    default_service_tier: null,
+    input_modalities: ["text"],
+    context_window: 256e3,
+    max_context_window: 256e3
+  } : void 0;
   if (!catalogModel) return void 0;
   if (!codexHome || !path7.isAbsolute(codexHome))
     throw new Error("account_gateway_catalog_home_unavailable");
@@ -190780,12 +190898,13 @@ var CodexProvider = class _CodexProvider extends Provider {
       this.options.accountGatewayModelSettings,
       this.options.accountGatewaySavedReasoningEffort
     ) ?? void 0 : this.resolveReasoningEffort(false);
-    const gateway = this.options.accountGateway;
+    const gateway = this.modelTransport;
     const modelCatalogSetting = gateway ? await prepareAccountGatewayModelCatalog(
       this.model,
       gateway.environment.CODEX_HOME,
       gateway.configuration,
-      this.options.accountGatewayModelSettings
+      this.options.accountGatewayModelSettings,
+      this.options.providerApiTransport !== void 0
     ) : void 0;
     const frozenCliConfig = {
       model: this.model,
@@ -191609,6 +191728,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     return content.replace(new RegExp(`${cwd}/?`, "g"), "").replace(/\/home\/runner\/work\/[^/\s")]+\/[^/\s")]+\//g, "").replace(/\/private\/tmp\/[^/\s")]+\//g, "");
   }
   resolveReasoningEffort(healthCheck) {
+    if (this.options.modelProvider === "kimi") return void 0;
     return healthCheck ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || "low" : process.env.CODEX_REASONING_EFFORT;
   }
   async buildRepositoryContextSeed(prompt) {
@@ -192610,31 +192730,6 @@ function emitReviewInvestigationTelemetry(message) {
   } catch {
   }
 }
-
-// src/codex-oauth/auth-input.ts
-var REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES = [
-  "GITHUB_TOKEN",
-  "GH_TOKEN",
-  "INPUT_GITHUB_TOKEN",
-  "INPUT_GITHUB-TOKEN",
-  "REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN",
-  "INPUT_REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN",
-  "INPUT_REVIEW-THREAD-LIFECYCLE-RESOLVE-TOKEN",
-  "REVIEW_APP_PRIVATE_KEY",
-  "REVIEW_ROUTER_APP_PRIVATE_KEY",
-  "REVIEWROUTER_APP_PRIVATE_KEY",
-  "INPUT_REVIEW_APP_PRIVATE_KEY",
-  "INPUT_REVIEW-APP-PRIVATE-KEY",
-  "GITHUB_APP_TOKEN",
-  "REVIEW_APP_TOKEN",
-  "REVIEW_ROUTER_APP_TOKEN",
-  "REVIEWROUTER_APP_TOKEN",
-  "REVIEW_ROUTER_COMMENT_TOKEN",
-  "REVIEWROUTER_COMMENT_TOKEN"
-];
-var REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAME_SET = new Set(
-  REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES
-);
 
 // src/codex-oauth/crypto.ts
 var CODEX_ROTATING_AUTH_JSON_MAX_BYTES = 32 * 1024;
@@ -220318,7 +220413,8 @@ var ProductionT0ReviewRunner = class {
     }
     signal?.throwIfAborted();
     const loadedConfig = input.providerApi ? ConfigLoader.loadRuntimeEnvironment(
-      input.providerApi.runtimeConfig.runtimeEnv
+      input.providerApi.runtimeConfig.runtimeEnv,
+      { modelTransport: true }
     ) : ConfigLoader.load();
     const capturedDescriptionFlag = admittedRuntime?.runtimeEnv[prDescriptionContract.runtimeEnvKey];
     if (capturedDescriptionFlag !== void 0 && !["true", "false"].includes(capturedDescriptionFlag))
@@ -220329,7 +220425,8 @@ var ProductionT0ReviewRunner = class {
       // A missing captured flag means ON; ambient runner input cannot disable it.
       updatePrDescription: admittedRuntime ? capturedDescriptionFlag !== "false" : loadedConfig.updatePrDescription !== false
     };
-    const codexProviderName = input.ocr ? "" : input.providerApi ? selectDirectOpenRouterProvider(config2) : selectCodexProvider(config2);
+    const directProvider = input.providerApi ? readDirectProviderSelection(input.providerApi.runtimeConfig.runtimeEnv) : void 0;
+    const codexProviderName = input.ocr ? "" : input.providerApi ? directProvider.providerName : selectCodexProvider(config2);
     const model = codexProviderName.slice(codexProviderName.indexOf("/") + 1);
     const gatewayModelSettings = input.accountGateway && !input.ocr && !isAccountGatewayMiMoModel(model) ? readAdmittedGatewayCodexModelSettings(
       input.accountGateway.runtimeConfig,
@@ -220339,12 +220436,13 @@ var ProductionT0ReviewRunner = class {
       codexModel: model,
       accountGateway: input.accountGateway !== void 0,
       providerApi: input.providerApi !== void 0,
+      ...directProvider ? { providerApiAuthMode: directProvider.mode } : {},
       serverReasoningEffort,
       gatewayModelSettings
     });
     if (input.providerApi || input.accountGateway && model === "mimo-v2.6-pro") {
-      if (reasoningEffort !== null)
-        process.env.CODEX_REASONING_EFFORT = reasoningEffort;
+      if (reasoningEffort === null) delete process.env.CODEX_REASONING_EFFORT;
+      else process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
     const configuredTimeoutMs = Math.max(
@@ -220836,13 +220934,13 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
         } : {},
         agenticContext,
         eventAudit: config2.codexEventAudit,
-        modelProvider: input.providerApi ? "openrouter" : resolveAccountGatewayModelProvider(
+        modelProvider: input.providerApi ? directProvider.modelProvider : resolveAccountGatewayModelProvider(
           model,
           input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
           input.accountGateway?.modelTransport
         ),
         ...input.providerApi ? {
-          providerNamePrefix: "openrouter",
+          providerNamePrefix: directProvider.mode === "kimi-code-api" ? "kimi" : directProvider.mode === "mimo-token-plan-api" ? "codex-mimo" : "openrouter",
           providerApiTransport: input.providerApi.modelTransport,
           disableBuiltinTools: true,
           waitForProcessClose: true
@@ -221028,7 +221126,8 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               agents: createConfiguredProductionInvestigationAgents({
                 approvedAgent,
                 ...input.providerApi ? {
-                  directCredentialLease: input.providerApi.credentialLease
+                  directCredentialLease: input.providerApi.credentialLease,
+                  directModelProvider: directProvider.modelProvider
                 } : {},
                 codexModel: model,
                 codexBinaryPath: input.codexBinaryPath,
@@ -221304,8 +221403,14 @@ function publicInvestigationProcessDiagnostic(stderr) {
 }
 function resolveProductionInvestigationReasoningEffort(input) {
   if (input.providerApi) {
-    const effort2 = input.serverReasoningEffort ?? "xhigh";
-    if (effort2 !== "low" && effort2 !== "medium" && effort2 !== "high" && effort2 !== "xhigh")
+    if (input.providerApiAuthMode === "kimi-code-api") {
+      if (input.serverReasoningEffort !== void 0)
+        throw new Error("provider_api_reasoning_effort_unsupported");
+      return null;
+    }
+    const mimo = input.providerApiAuthMode === "mimo-token-plan-api";
+    const effort2 = input.serverReasoningEffort ?? (mimo ? "high" : "xhigh");
+    if (effort2 !== "low" && effort2 !== "medium" && effort2 !== "high" && (effort2 !== "xhigh" || mimo))
       throw new Error("provider_api_reasoning_effort_unsupported");
     return effort2;
   }
@@ -221358,7 +221463,7 @@ function createConfiguredProductionInvestigationAgents(input) {
       requestedModel: input.codexModel,
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
-        modelProvider: input.directCredentialLease ? "openrouter" : resolveAccountGatewayModelProvider(
+        modelProvider: input.directCredentialLease ? input.directModelProvider ?? "openrouter" : resolveAccountGatewayModelProvider(
           input.codexModel,
           input.admittedGatewayModel,
           input.modelTransport
@@ -221374,7 +221479,8 @@ function createConfiguredProductionInvestigationAgents(input) {
                 input.codexModel,
                 input.modelTransport.environment.CODEX_HOME,
                 input.modelTransport.configuration,
-                input.gatewayModelSettings
+                input.gatewayModelSettings,
+                input.directCredentialLease !== void 0
               );
               const result2 = await appServer.executeTurn({
                 ...request3,
@@ -221765,7 +221871,7 @@ async function prepareSingleT0ReviewPlan(input) {
   const provider = input.provider;
   const contextGateway = input.contextGateway;
   const runtimeConfigVersion = input.runtimeConfigVersion;
-  if (!authorization.facts.workflowIdentityHash || !/^[a-f0-9]{64}$/u.test(authorization.facts.workflowIdentityHash) || pr.number !== authorization.facts.pullRequestNumber || pr.baseSha !== authorization.facts.baseSha || pr.headSha !== authorization.facts.headSha || provider.name !== (config2.providers[0]?.startsWith("openrouter/") ? selectDirectOpenRouterProvider(config2) : selectCodexProvider(config2)) || config2.codexAgenticContext === false) {
+  if (!authorization.facts.workflowIdentityHash || !/^[a-f0-9]{64}$/u.test(authorization.facts.workflowIdentityHash) || pr.number !== authorization.facts.pullRequestNumber || pr.baseSha !== authorization.facts.baseSha || pr.headSha !== authorization.facts.headSha || provider.name !== (config2.providers[0]?.startsWith("codex/") ? selectCodexProvider(config2) : selectDirectProvider(config2).providerName) || config2.codexAgenticContext === false) {
     throw new Error("review_action_v2_single_plan_authority_mismatch");
   }
   const compatibilityKey = hashIncrementalCompatibility(
@@ -222068,10 +222174,7 @@ function selectCodexProvider(config2) {
   return selected;
 }
 function selectDirectOpenRouterProvider(config2) {
-  const selected = config2.providers[0];
-  if (config2.providers.length !== 1 || !selected || !/^openrouter\/[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(selected) || config2.providerLimit !== 1 || config2.providerMaxParallel !== 1 || config2.inlineMinAgreement !== 1 || config2.synthesisModel !== selected || config2.fallbackProviders.length !== 0 || config2.requiredHealthyProviders?.length !== 1 || config2.requiredHealthyProviders[0] !== selected)
-    throw new Error("review_action_v2_direct_provider_policy_invalid");
-  return selected;
+  return selectDirectProvider(config2, "openrouter-api").providerName;
 }
 async function applyReviewRuntimeConfig(input, fetchImpl, oidc) {
   if (input.accountGateway || input.providerApi) {

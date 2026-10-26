@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmitOnError": true,
+    "rootDir": ".",
+    "outDir": "tmp/kimi-native-qualification-build",
+    "types": ["node"],
+    "typeRoots": ["tmp/kimi-native-qualification-compiler/node_modules/@types"]
+  },
+  "include": ["scripts/kimi-native-qualification/**/*.ts"]
+}

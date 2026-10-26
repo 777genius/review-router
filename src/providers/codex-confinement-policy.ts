@@ -1,7 +1,7 @@
 /** Credentials belong to the model client, never model-spawned shell tools. */
 export const CODEX_SHELL_ENVIRONMENT_POLICY = Object.freeze([
   'shell_environment_policy.ignore_default_excludes=false',
-  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
+  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude",KIMI_CODE_API_KEY="exclude"}',
 ] as const);
 
 export const CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([

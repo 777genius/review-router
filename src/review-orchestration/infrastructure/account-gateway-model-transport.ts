@@ -13,6 +13,8 @@ import { pipeline } from 'stream/promises';
 import { hasOwnedPrDescriptionMarker } from '../../github/pr-description-markers';
 import {
   providerApiCheckoutCompanionContract,
+  providerApiDescriptors,
+  type ProviderApiAuthMode,
   prDescriptionContract,
   lifecycleVerificationContract,
   type ReviewCompanionDispatchContextV1,
@@ -90,7 +92,8 @@ export type GatewayTransportDiagnostic = Readonly<{
     | 'Error'
     | 'other';
 }>;
-type DirectOpenRouterLimits = Readonly<{
+type DirectProviderApiLimits = Readonly<{
+  mode?: ProviderApiAuthMode;
   requestMs: number;
   streamFrameBytes: number;
   usage?: { delivery: UsageDelivery; requestedModel: string };
@@ -235,13 +238,20 @@ export class AccountGatewayModelTransport {
     apiUrl: string,
     private readonly authorization: () => string,
     private readonly observe?: ObserveTransport,
-    private readonly directOpenRouter?: DirectOpenRouterLimits,
+    private readonly directProvider?: DirectProviderApiLimits,
     private readonly auxiliaryDescription: boolean = false,
     private readonly completedDescriptionResponse?: (response: unknown) => void,
     private readonly companionDispatch?: ReviewCompanionDispatchContextV1
   ) {
     this.origin = trustedGatewayOrigin(apiUrl);
-    if (directOpenRouter && this.origin.origin !== 'https://openrouter.ai')
+    if (
+      directProvider &&
+      this.origin.origin !==
+        new URL(
+          providerApiDescriptors[directProvider.mode ?? 'openrouter-api']
+            .fixedResponsesUrl
+        ).origin
+    )
       throw new Error('provider_api_origin_invalid');
   }
 
@@ -340,7 +350,7 @@ export class AccountGatewayModelTransport {
       this.origin.origin,
       this.authorization,
       undefined,
-      this.directOpenRouter,
+      this.directProvider,
       true,
       (response) => {
         markdown = completedPrDescriptionText(response);
@@ -390,7 +400,7 @@ export class AccountGatewayModelTransport {
     deadlineMs: number;
   }): Promise<LifecycleVerificationModelReceipt> {
     input.signal.throwIfAborted();
-    if (this.directOpenRouter || this.terminal || this.held.size > 0)
+    if (this.directProvider || this.terminal || this.held.size > 0)
       throw new Error('lifecycle_verification_connection_unavailable');
     const bytes = Buffer.from(input.requestBody);
     if (bytes.length > lifecycleVerificationContract.maxPromptBytes)
@@ -460,11 +470,11 @@ export class AccountGatewayModelTransport {
     }
     // Snapshot before awaiting authorization; no mutable caller payload.
     const body =
-      this.directOpenRouter && bytes instanceof Readable
+      this.directProvider && bytes instanceof Readable
         ? bytes
         : Buffer.from(bytes as Uint8Array);
     if (
-      !this.directOpenRouter &&
+      !this.directProvider &&
       Buffer.isBuffer(body) &&
       body.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes
     ) {
@@ -479,17 +489,22 @@ export class AccountGatewayModelTransport {
     if (signal?.aborted) abort();
     const timer = setTimeout(
       abort,
-      this.directOpenRouter?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs
+      this.directProvider?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs
     );
     const dispose = () => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', abort);
       this.held.delete(controller);
     };
-    const usage = this.directOpenRouter?.usage
+    const usage = this.directProvider?.usage
       ? createResponsesUsageObserver(
-          this.directOpenRouter.usage.delivery,
-          this.directOpenRouter.usage.requestedModel
+          this.directProvider.usage.delivery,
+          this.directProvider.usage.requestedModel,
+          this.directProvider.mode === 'mimo-token-plan-api'
+            ? 'mimo'
+            : this.directProvider.mode === 'kimi-code-api'
+              ? 'kimi'
+              : 'openrouter'
         )
       : undefined;
     let responseReceived = false;
@@ -511,7 +526,13 @@ export class AccountGatewayModelTransport {
         // Socket errors can happen after application dispatch. Never infer non-entry.
         response = await this.request(
           'POST',
-          this.directOpenRouter ? '/api/v1/responses' : `${BASE}/responses`,
+          this.directProvider
+            ? new URL(
+                providerApiDescriptors[
+                  this.directProvider.mode ?? 'openrouter-api'
+                ].fixedResponsesUrl
+              ).pathname
+            : `${BASE}/responses`,
           body,
           controller.signal,
           usage?.dispatched
@@ -545,7 +566,7 @@ export class AccountGatewayModelTransport {
         const referenced =
           response.headers['x-reviewrouter-request-ref'] !== undefined;
         if (
-          !this.directOpenRouter &&
+          !this.directProvider &&
           !this.auxiliaryDescription &&
           httpStatus === 503 &&
           !referenced &&
@@ -570,7 +591,7 @@ export class AccountGatewayModelTransport {
       // Waited-out denials above paid nothing; only a closed saturation
       // denial as the final response keeps that proof.
       if (
-        this.directOpenRouter ||
+        this.directProvider ||
         httpStatus !== 503 ||
         response.headers['x-reviewrouter-request-ref'] !== undefined ||
         !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
@@ -608,7 +629,7 @@ export class AccountGatewayModelTransport {
             },
             this.auxiliaryDescription
               ? ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes
-              : this.directOpenRouter?.streamFrameBytes,
+              : this.directProvider?.streamFrameBytes,
             usage?.observe,
             this.completedDescriptionResponse
           )
@@ -618,7 +639,7 @@ export class AccountGatewayModelTransport {
         transform: (chunk: Buffer, _encoding, done) => {
           count += chunk.length;
           const maximum = isStream
-            ? this.directOpenRouter && !this.auxiliaryDescription
+            ? this.directProvider && !this.auxiliaryDescription
               ? Infinity
               : ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes
             : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
@@ -801,10 +822,19 @@ export class AccountGatewayModelTransport {
   }
 
   providerApiCheckoutCapability(
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    mode: ProviderApiAuthMode = providerApiCheckoutCompanionContract.providerApiAuthMode
   ): Promise<GatewayReadback> {
-    const { path: route, ...request } = providerApiCheckoutCompanionContract;
-    return this.json('POST', route, request, signal);
+    return this.json(
+      'POST',
+      providerApiCheckoutCompanionContract.path,
+      {
+        providerApiAuthMode: mode,
+        workflowSchemaVersion:
+          providerApiCheckoutCompanionContract.workflowSchemaVersion,
+      },
+      signal
+    );
   }
 
   private async json(
@@ -863,8 +893,13 @@ export class AccountGatewayModelTransport {
     onDispatch?: () => void
   ): Promise<IncomingMessage> {
     if (
-      this.directOpenRouter &&
-      (method !== 'POST' || route !== '/api/v1/responses')
+      this.directProvider &&
+      (method !== 'POST' ||
+        route !==
+          new URL(
+            providerApiDescriptors[this.directProvider.mode ?? 'openrouter-api']
+              .fixedResponsesUrl
+          ).pathname)
     )
       throw new Error('provider_api_control_route_denied');
     const token = this.authorization();
@@ -883,6 +918,12 @@ export class AccountGatewayModelTransport {
           maxHeaderSize: ACCOUNT_GATEWAY_BOUNDS.headerBytes,
           headers: {
             authorization: `Bearer ${token}`,
+            ...(this.directProvider
+              ? {
+                  'user-agent': 'ReviewRouter/1.0 provider-api',
+                  'x-title': 'ReviewRouter',
+                }
+              : {}),
             ...(this.companionDispatch
               ? Object.fromEntries(
                   Object.entries(
@@ -955,7 +996,7 @@ export function normalizeCodexGatewayServiceTier(bytes: Uint8Array): Buffer {
 export async function startLocalGatewayModelTransport(
   transport: AccountGatewayModelTransport,
   observe?: ObserveTransport,
-  directOpenRouter?: DirectOpenRouterLimits
+  directProvider?: DirectProviderApiLimits
 ): Promise<LocalGatewayModelTransport> {
   const capability = randomBytes(32).toString('hex');
   let stopping = false;
@@ -1020,14 +1061,14 @@ export async function startLocalGatewayModelTransport(
         };
         const timer = setTimeout(
           abort,
-          directOpenRouter?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs
+          directProvider?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs
         );
         request.once('aborted', abort);
         reply.once('close', downstreamClosed);
         let upstream: GatewayResponses | undefined;
         let stage: GatewayTransportDiagnostic['stage'] = 'request_body';
         try {
-          const normalized = directOpenRouter
+          const normalized = directProvider
             ? request
             : normalizeCodexGatewayServiceTier(
                 await boundedBytes(
@@ -1082,7 +1123,7 @@ export async function startLocalGatewayModelTransport(
   server.maxRequestsPerSocket = 1;
   server.headersTimeout = 10_000;
   server.requestTimeout =
-    directOpenRouter?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs;
+    directProvider?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs;
   server.keepAliveTimeout = 1_000;
   server.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, (socket) =>
     socket.destroy()
@@ -1103,12 +1144,28 @@ export async function startLocalGatewayModelTransport(
     environment: Object.freeze({
       [LOCAL_MODEL_CAPABILITY_ENV]: `Bearer ${capability}`,
     }),
-    configuration: directOpenRouter
-      ? codexGatewayConfiguration(baseUrl).map((setting) =>
-          setting
-            .replaceAll('reviewrouter_account_gateway', 'openrouter')
-            .replaceAll('ReviewRouter account gateway', 'OpenRouter')
-        )
+    configuration: directProvider
+      ? codexGatewayConfiguration(baseUrl)
+          .filter(
+            (setting) =>
+              directProvider.mode !== 'kimi-code-api' ||
+              !setting.startsWith('service_tier=')
+          )
+          .map((setting) =>
+            setting
+              .replaceAll(
+                'reviewrouter_account_gateway',
+                directProvider.mode === 'mimo-token-plan-api'
+                  ? 'mimo'
+                  : directProvider.mode === 'kimi-code-api'
+                    ? 'kimi'
+                    : 'openrouter'
+              )
+              .replaceAll(
+                'ReviewRouter account gateway',
+                'ReviewRouter provider API'
+              )
+          )
       : codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
@@ -1135,7 +1192,20 @@ export async function startLocalGatewayModelTransport(
 /** Fixed upstream, local credential and passive wire evidence. No Gateway control API. */
 export function startDirectOpenRouterModelTransport(
   credential: () => string,
-  limits: DirectOpenRouterLimits
+  limits: DirectProviderApiLimits
+): Promise<LocalGatewayModelTransport> {
+  return startDirectProviderApiModelTransport(
+    'openrouter-api',
+    credential,
+    limits
+  );
+}
+
+/** Closed native Responses destinations; callers supply only an approved mode. */
+export function startDirectProviderApiModelTransport(
+  mode: ProviderApiAuthMode,
+  credential: () => string,
+  limits: DirectProviderApiLimits
 ): Promise<LocalGatewayModelTransport> {
   if (
     !Number.isSafeInteger(limits.requestMs) ||
@@ -1146,13 +1216,13 @@ export function startDirectOpenRouterModelTransport(
     throw new Error('provider_api_limits_invalid');
   return startLocalGatewayModelTransport(
     new AccountGatewayModelTransport(
-      'https://openrouter.ai',
+      new URL(providerApiDescriptors[mode].fixedResponsesUrl).origin,
       credential,
       undefined,
-      limits
+      { ...limits, mode }
     ),
     undefined,
-    limits
+    { ...limits, mode }
   );
 }
 

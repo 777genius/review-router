@@ -21,6 +21,7 @@ import {
   type PreparedReviewInvocation,
   type PreparedReviewInvocationPort,
   type ReviewExecutionProviderKind,
+  type ReviewWorkSlotPlan,
 } from '../application';
 import {
   createStableReviewWorkPlan,
@@ -451,6 +452,28 @@ export function compositeLifecycleInvocations(input: {
       });
     },
   };
+}
+
+/** Bind captured discovery inputs to the exact slot objects the final plan will execute. */
+export function rebindReviewAssignmentsToWorkPlan<
+  T extends { readonly workSlot: ReviewWorkSlotPlan },
+>(assignments: readonly T[], plan: StableReviewWorkPlan): readonly T[] {
+  const slots = new Map(
+    plan.assignments.map(({ workSlot }) => [workSlot.workSlotId, workSlot])
+  );
+  if (slots.size !== plan.assignments.length)
+    throw new Error('review_action_v2_assignment_duplicate');
+  return Object.freeze(
+    assignments.map((assignment) => {
+      const workSlot = slots.get(assignment.workSlot.workSlotId);
+      if (
+        !workSlot ||
+        canonicalJson(workSlot) !== canonicalJson(assignment.workSlot)
+      )
+        throw new Error('review_action_v2_assignment_plan_mismatch');
+      return Object.freeze({ ...assignment, workSlot });
+    })
+  );
 }
 
 /** Reuses persisted identities. Current inventory can only invalidate frozen witnesses. */

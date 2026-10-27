@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import * as core from '../../../src/actions/core';
 import { runPreparedModelReview } from '../../../src/codex-oauth/prepared-model-review-runtime';
+import { createPreparedCodexSubscriptionReviewRunner } from '../../../src/codex-oauth/subscription-model-runtime';
 import { GitHubActionsOidcTokenProvider } from '../../../src/codex-oauth/github-actions-oidc';
 import { ReviewActionV2ControlPlaneAdapter } from '../../../src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
 import { safeCheckoutRepository } from '../../../src/codex-oauth/safe-checkout';
@@ -124,23 +125,19 @@ describe('one admitted prepared model bootstrap', () => {
         'currentAuthorization'
       )
       .mockReturnValue(authorization as never);
-    jest
-      .mocked(resolveApprovedOcrBinary)
-      .mockResolvedValue({
-        binaryPath: '/verified/immutable-ocr',
-        cleanup: jest.fn(async () => {}),
-      });
-    jest
-      .mocked(prepareOcrManagedRun)
-      .mockResolvedValue({
-        binaryPath: '/verified/immutable-ocr',
-        runDirectory: '/private/ocr-run',
-        homeDirectory: '/private/ocr-home',
-        configPath: '/private/config',
-        rulePath: '/private/rule',
-        backgroundPath: '/private/background',
-        cleanup: jest.fn(async () => {}),
-      });
+    jest.mocked(resolveApprovedOcrBinary).mockResolvedValue({
+      binaryPath: '/verified/immutable-ocr',
+      cleanup: jest.fn(async () => {}),
+    });
+    jest.mocked(prepareOcrManagedRun).mockResolvedValue({
+      binaryPath: '/verified/immutable-ocr',
+      runDirectory: '/private/ocr-run',
+      homeDirectory: '/private/ocr-home',
+      configPath: '/private/config',
+      rulePath: '/private/rule',
+      backgroundPath: '/private/background',
+      cleanup: jest.fn(async () => {}),
+    });
   });
   afterEach(async () => {
     jest.restoreAllMocks();
@@ -210,6 +207,73 @@ describe('one admitted prepared model bootstrap', () => {
     );
     expect(dispose).toHaveBeenCalledTimes(1);
     await expect(fs.access(workspace)).rejects.toThrow();
+  });
+
+  it('runs the actual rotating schema 5 adapter with the separate schema 2 checkout contract and private refreshed auth', async () => {
+    const request = input();
+    await fs.mkdir(request.codexHome, { mode: 0o700 });
+    const jwt = (claims: object) =>
+      `${Buffer.from('{"alg":"RS256"}').toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.synthetic-signature`;
+    await fs.writeFile(
+      path.join(request.codexHome, 'auth.json'),
+      JSON.stringify({
+        auth_mode: 'chatgpt',
+        tokens: {
+          account_id: 'synthetic-account',
+          id_token: jwt({
+            iss: 'https://auth.openai.com',
+            sub: 'synthetic-user',
+            'https://api.openai.com/auth': {
+              chatgpt_account_id: 'synthetic-account',
+            },
+          }),
+          access_token: jwt({ exp: Math.floor(Date.now() / 1000) + 3600 }),
+          refresh_token: 'synthetic-refreshed-token',
+        },
+      }),
+      { mode: 0o600 }
+    );
+    const fetchImpl = jest.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        expect(JSON.parse(String(init!.body))).toEqual({
+          transport: 'runner_local_responses',
+          providerIndex: 0,
+          workflowSchemaVersion: 2,
+        });
+        return response(checkout());
+      }
+    );
+    const review: CodexOAuthV2ReviewRunnerPort = {
+      run: jest.fn(async (prepared) => {
+        expect(prepared.workflowSchemaVersion).toBe(5);
+        expect(prepared.preparedRoute!.modelTransport.baseUrl).toMatch(
+          /^http:\/\/127\.0\.0\.1:/
+        );
+        expect(prepared).not.toHaveProperty('codexHome');
+        expect(prepared).not.toHaveProperty('privateCredential');
+        return { outcome: 'completed' } as never;
+      }),
+    };
+    const runner = createPreparedCodexSubscriptionReviewRunner({
+      review,
+      fetchImpl,
+      signal: new AbortController().signal,
+    });
+    expect(runner.checkoutOwner).toBe('review_runner');
+    await expect(
+      runner.run({
+        ...request,
+        workflowSchemaVersion: 5,
+        scmReadTokenExpiresAt: new Date(Date.now() + 600000).toISOString(),
+        refreshScmReadToken: jest.fn(),
+      })
+    ).resolves.toEqual({ outcome: 'completed' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(review.run).toHaveBeenCalledTimes(1);
+    // The rotating parent still owns refresh/writeback credential cleanup.
+    await expect(
+      fs.access(path.join(request.codexHome, 'auth.json'))
+    ).resolves.toBeUndefined();
   });
 
   it('rejects changed configuration on SCM refresh without reselecting credentials or retrying the review', async () => {

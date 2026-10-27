@@ -56,6 +56,22 @@ const binary = process.env.REVIEWROUTER_TEST_APPROVED_OCR_BINARY;
 if ((liveMcp || liveDeepWiki) && !binary)
   throw new Error('Live MCP qualification requires the approved OCR binary');
 const nativeTest = binary ? test : test.skip;
+const candidateManifest = fs.readFileSync(
+  path.resolve(
+    __dirname,
+    '../../../tools/ocr/qualifications/unified-model-routes-v2.manifest'
+  ),
+  'utf8'
+);
+const candidateDigest = /^binary_sha256=([a-f0-9]{64})$/m.exec(
+  candidateManifest
+)?.[1];
+if (!candidateDigest) throw new Error('qualified_ocr_manifest_digest_missing');
+const approvedDigests = new Set([
+  // Keep the previously qualified immutable rr.3 executable valid.
+  '2f62d6fbb326e74d0fe9377f0224f1b56520bcefee688c58073fa1a30e45f1c9',
+  candidateDigest,
+]);
 /** Uses a synthetic local model endpoint; external opt-in MCP servers are real. */
 const scenarios: Array<{
   valid: boolean;
@@ -72,11 +88,13 @@ const scenarios: Array<{
   ).map((remote) => ({ valid: true, label: remote.id, remote })),
 ];
 nativeTest.each(scenarios)(
-  'approved rr.3 invokes MCP and reuses its result; valid=$valid server=$label',
+  'approved OCR invokes MCP and reuses its result; valid=$valid server=$label',
   async ({ valid, remote }) => {
     expect(
-      createHash('sha256').update(fs.readFileSync(binary!)).digest('hex')
-    ).toBe('2f62d6fbb326e74d0fe9377f0224f1b56520bcefee688c58073fa1a30e45f1c9');
+      approvedDigests.has(
+        createHash('sha256').update(fs.readFileSync(binary!)).digest('hex')
+      )
+    ).toBe(true);
     fs.mkdirSync('tmp', { recursive: true });
     const scratch = fs.mkdtempSync(path.resolve('tmp/native-mcp-'));
     const repo = path.join(scratch, 'repo');

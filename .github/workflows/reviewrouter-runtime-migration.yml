@@ -1,0 +1,77 @@
+# ReviewRouter credential-preserving runtime migration v1
+name: ReviewRouter Runtime Migration Internal
+
+on:
+  workflow_call:
+    inputs:
+      migration_id:
+        required: true
+        type: string
+      setup_base_url:
+        required: true
+        type: string
+      provider_instance_id:
+        required: true
+        type: string
+      source_namespace_id:
+        required: true
+        type: string
+      source_namespace_epoch:
+        required: true
+        type: string
+    secrets:
+      codex_auth_json:
+        required: true
+
+permissions: {}
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: reviewrouter-runtime-migration-${{ github.repository_id }}-${{ inputs.provider_instance_id }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Verify immutable migration runtime
+        shell: bash
+        env:
+          RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          node <<'NODE'
+          const e = process.env;
+          if (e.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
+              e.RR_WORKFLOW_REPOSITORY !== '777genius/review-router' ||
+              !/^[a-f0-9]{40}$/.test(e.RR_WORKFLOW_SHA || '') ||
+              !/^refs\/heads\//.test(e.GITHUB_REF || '')) {
+            console.error('Runtime migration requires the immutable trusted workflow.');
+            process.exit(1);
+          }
+          NODE
+      - name: Checkout immutable migration runtime
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: 777genius/review-router
+          ref: ${{ job.workflow_sha }}
+          path: .reviewrouter-runtime
+          persist-credentials: false
+      - name: Preserve the active credential in the new namespace
+        shell: bash
+        env:
+          INPUT_MIGRATION_ID: ${{ inputs.migration_id }}
+          INPUT_SETUP_BASE_URL: ${{ inputs.setup_base_url }}
+          INPUT_PROVIDER_INSTANCE_ID: ${{ inputs.provider_instance_id }}
+          INPUT_SOURCE_NAMESPACE_ID: ${{ inputs.source_namespace_id }}
+          INPUT_SOURCE_NAMESPACE_EPOCH: ${{ inputs.source_namespace_epoch }}
+          INPUT_AUTH_JSON: ${{ secrets.codex_auth_json }}
+          RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: node .reviewrouter-runtime/dist/runtime-migration.js

@@ -132,6 +132,20 @@ export class PreparedModelDispatch {
     const row = request as Record<string, unknown>;
     if (row.model !== cap.model || row.stream !== true)
       throw new Error('model_dispatch_route_mismatch');
+    if (cap.transport === 'account_gateway') {
+      // The Gateway independently validates these fields before forwarding.
+      // Include its canonical defaults BEFORE the durable wire-hash claim so
+      // discovery and verifier reserve the exact bytes the relay will send.
+      if (
+        (row.store !== undefined && row.store !== false) ||
+        (row.service_tier !== undefined && row.service_tier !== 'default') ||
+        Object.hasOwn(row, 'previous_response_id')
+      )
+        throw new Error('model_dispatch_route_mismatch');
+      if (row.reasoning === null) delete row.reasoning;
+      row.store = false;
+      row.service_tier = 'default';
+    }
     const requested = row.max_output_tokens ?? cap.maxOutputTokens;
     if (
       typeof requested !== 'number' ||
@@ -142,7 +156,10 @@ export class PreparedModelDispatch {
     // Normalize once before claiming the actual wire hash. This removes
     // duplicate-key ambiguity; canonical parent verifier envelopes stay exact.
     row.max_output_tokens = Math.min(requested, cap.maxOutputTokens);
-    return Buffer.from(JSON.stringify(row));
+    const normalized = Buffer.from(JSON.stringify(row));
+    if (normalized.byteLength > cap.maxRequestBytes)
+      throw new Error('model_dispatch_request_bound');
+    return normalized;
   }
 
   async reserve(

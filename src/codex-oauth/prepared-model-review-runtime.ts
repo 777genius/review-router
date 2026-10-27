@@ -73,7 +73,10 @@ export async function runPreparedModelReview(
 ) {
   const signal = ports.signal;
   signal.throwIfAborted();
-  if (input.workflowSchemaVersion !== 2)
+  if (
+    !Number.isSafeInteger(input.workflowSchemaVersion) ||
+    input.workflowSchemaVersion < 1
+  )
     throw new Error('prepared_model_workflow_schema_invalid');
   const fetchImpl = createAccountGatewayRunFetch(
     ports.fetchImpl ?? fetch,
@@ -107,6 +110,9 @@ export async function runPreparedModelReview(
         body: JSON.stringify({
           transport: ports.transport,
           providerIndex: 0,
+          // This is the model-route checkout contract version. The original
+          // caller schema (including rotating schemas 4/5) is independently
+          // verified by OIDC admission and remains unchanged in review input.
           workflowSchemaVersion: 2,
         }),
         signal,

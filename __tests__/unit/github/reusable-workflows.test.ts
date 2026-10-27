@@ -815,7 +815,7 @@ describe('production reusable workflows', () => {
     expect(hostedPoolRun?.env).not.toHaveProperty(secretName);
   });
 
-  it('selects gateway tooling directly and preserves other provider preflight paths', () => {
+  it('leaves T0 checkout and approved tooling to the prepared route and preserves legacy preflight', () => {
     const workflowPath =
       '.github/workflows/reviewrouter-execution-reusable.yml';
     const workflow = parseWorkflow(workflowPath);
@@ -824,9 +824,12 @@ describe('production reusable workflows', () => {
     );
 
     expect(codexInstall?.if).toBe(
-      "${{ steps.runtime.outputs.can_run == 'true' && ((inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') || steps.provider-tooling.outputs.codex_cli_needed == 'true') }}"
+      "${{ inputs.review_action_lane == 'legacy' && steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
     );
     const steps = workflow.jobs?.review?.steps ?? [];
+    expect(
+      steps.find((step) => step.name === 'Checkout exact T0 review revision')
+    ).toBeUndefined();
     const preflight = steps.find(
       (step) => step.name === 'Resolve ReviewRouter runtime provider tooling'
     );
@@ -834,10 +837,10 @@ describe('production reusable workflows', () => {
       (step) => step.name === 'Run ReviewRouter T0 account gateway'
     );
     const cases: Array<[string, string, string, string, boolean[]]> = [
-      ['t0', 'account-gateway', 'true', '', [false, true, true]],
+      ['t0', 'account-gateway', 'true', '', [false, false, true]],
       ['t0', 'account-gateway', 'false', 'true', [false, false, false]],
-      ['t0', '', 'true', 'true', [true, true, false]],
-      ['t0', '', 'true', '', [true, false, false]],
+      ['t0', '', 'true', 'true', [false, false, false]],
+      ['t0', '', 'true', '', [false, false, false]],
       ['legacy', '', 'true', 'true', [true, true, false]],
       ['legacy', '', 'true', '', [true, false, false]],
       ['legacy', '', 'false', 'true', [false, false, false]],
@@ -1063,11 +1066,9 @@ describe('production reusable workflows', () => {
     expect(t0Run?.if).toContain("inputs.review_action_lane == 't0'");
     expect(t0Run?.if).toContain("inputs.codex_session_mode == ''");
     expect(codexInstall?.if).toBe(
-      "${{ steps.runtime.outputs.can_run == 'true' && ((inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') || steps.provider-tooling.outputs.codex_cli_needed == 'true') }}"
+      "${{ inputs.review_action_lane == 'legacy' && steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
     );
-    expect(codexInstall?.if).not.toContain(
-      "inputs.review_action_lane == 'legacy'"
-    );
+    expect(codexInstall?.if).toContain("inputs.review_action_lane == 'legacy'");
     expect(codexAuthRestore?.if).toContain(
       "inputs.review_action_lane == 'legacy'"
     );
@@ -1108,16 +1109,12 @@ describe('production reusable workflows', () => {
     expect(workflowSource).toContain(
       'run: node .reviewrouter-runtime/action-dist/index.cjs'
     );
-    expect(codexInstall?.if).not.toContain(
-      "inputs.review_action_lane == 'legacy'"
-    );
+    expect(codexInstall?.if).toContain("inputs.review_action_lane == 'legacy'");
     expect(
       steps.find(
         (step) => step.name === 'Resolve ReviewRouter runtime provider tooling'
       )?.if
-    ).toContain(
-      "inputs.codex_session_mode != 'codex_subscription_oauth_hosted_pool'"
-    );
+    ).toContain("inputs.review_action_lane == 'legacy'");
 
     expect(legacyRun?.if).toContain("inputs.review_action_lane == 'legacy'");
     expect(legacyRun?.env?.REVIEWROUTER_ACTION_V2_MODE).toBe('disabled');

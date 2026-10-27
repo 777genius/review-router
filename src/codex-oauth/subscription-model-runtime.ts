@@ -115,7 +115,10 @@ export async function runPreparedSubscriptionRuntime(
       if (
         !originalGrant ||
         originalGrant.length > 8192 ||
-        /[\s\u0000-\u001f]/u.test(originalGrant)
+        /\s/u.test(originalGrant) ||
+        Array.from(originalGrant).some(
+          (character) => character.charCodeAt(0) < 0x20
+        )
       )
         throw new Error('hosted_original_grant_invalid');
       core.setSecret(originalGrant);

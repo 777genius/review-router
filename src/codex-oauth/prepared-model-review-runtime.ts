@@ -288,8 +288,7 @@ export async function runPreparedModelReview(
     // Drain in-flight model work and receipt settlement before removing the
     // process configuration or executable. Every remaining cleanup still runs
     // when an earlier one fails, including after cancellation.
-    let cleanupFailed = false;
-    for (const cleanup of [
+    await cleanupPreparedModelResources([
       () => modelTransport?.dispose(),
       () => ocr?.cleanup(),
       () => binary?.cleanup(),
@@ -300,15 +299,22 @@ export async function runPreparedModelReview(
             ? fs.rm(directory, { recursive: true, force: true })
             : undefined
       ),
-    ]) {
-      try {
-        await cleanup();
-      } catch {
-        cleanupFailed = true;
-      }
-    }
-    if (cleanupFailed) throw new Error('prepared_model_cleanup_unconfirmed');
+    ]);
   }
+}
+
+async function cleanupPreparedModelResources(
+  cleanups: ReadonlyArray<() => void | Promise<void>>
+): Promise<void> {
+  let cleanupFailed = false;
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup();
+    } catch {
+      cleanupFailed = true;
+    }
+  }
+  if (cleanupFailed) throw new Error('prepared_model_cleanup_unconfirmed');
 }
 
 function canonicalEnv(config: AdmittedRuntimeConfig): string {

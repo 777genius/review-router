@@ -111,10 +111,6 @@ jobs:
       OPENAI_API_KEY_PRESENT: ${{ secrets.OPENAI_API_KEY != '' && '1' || '0' }}
       MIMO_TOKEN_PLAN_API_KEY_PRESENT: ${{ secrets.MIMO_TOKEN_PLAN_API_KEY != '' && '1' || '0' }}
       REVIEW_ROUTER_MEMORY_ENABLED: 'true'
-      REVIEW_ROUTER_MEMORY_PROTOCOL_VERSION: '1'
-      REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT: /api/action/v1/memory
-      REVIEW_ROUTER_MEMORY_CANDIDATE_ENDPOINT: /api/action/v1/memory-candidates
-      REVIEW_ROUTER_MEMORY_COMMAND_ENDPOINT: /api/action/v1/memory-commands
     steps:
       - name: Prepare ReviewRouter runtime settings
         id: runtime

@@ -959,7 +959,7 @@ describe('production reusable workflows', () => {
     expect(workflowSource).toContain('CLAUDE_CODE_OAUTH_TOKEN');
     expect(workflowSource).toContain('OPENROUTER_API_KEY');
     expect(workflowSource).toContain('REVIEW_ROUTER_MEMORY_ENABLED');
-    expect(workflowSource).toContain('REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT');
+    expect(workflowSource).not.toContain('/api/action/v1/memory');
     expect(workflowSource).toContain('reseed auth.json');
     expect(workflowSource).toContain(
       'ReviewRouter skipped this fork pull request'
@@ -1040,6 +1040,36 @@ describe('production reusable workflows', () => {
     );
   });
 
+  it('enables memory capture in each trusted T0 execution lane', () => {
+    const workflow = parseWorkflow(
+      '.github/workflows/reviewrouter-execution-reusable.yml'
+    );
+    const steps = workflow.jobs?.review?.steps;
+    for (const name of [
+      'Run ReviewRouter T0',
+      'Run ReviewRouter T0 provider API',
+      'Run ReviewRouter T0 account gateway',
+    ]) {
+      const step = steps?.find((candidate) => candidate.name === name);
+      expect(step).toBeDefined();
+      expect(step?.env?.REVIEWROUTER_ACTION_V2_MODE).toBe('t0');
+      expect(step?.env?.REVIEW_ROUTER_MEMORY_ENABLED).toBe('true');
+      expect(step?.env).not.toHaveProperty(
+        'REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT'
+      );
+    }
+    const standalone = parseWorkflow(
+      '.github/workflows/reviewrouter-runtime.yml'
+    );
+    const run = standalone.jobs?.review?.steps?.find(
+      (step) => step.name === 'Run ReviewRouter'
+    );
+    expect(run?.env?.REVIEWROUTER_ACTION_V2_MODE).toBe('t0');
+    expect(run?.env?.REVIEWROUTER_RUNTIME_CONFIG_MODE).toBe('oidc');
+    expect(run?.env?.REVIEWROUTER_STATIC_CONFIG_FALLBACK).toBe('false');
+    expect(run?.env?.REVIEW_ROUTER_MEMORY_ENABLED).toBe('true');
+  });
+
   it('keeps the interaction reusable workflow focused on /rr handling', () => {
     const workflowPath =
       '.github/workflows/reviewrouter-interaction-reusable.yml';
@@ -1079,8 +1109,7 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('OPENAI_API_KEY:');
     expect(workflow).toContain('Install Codex CLI for discussion replies');
     expect(workflow).toContain('REVIEW_ROUTER_MEMORY_ENABLED');
-    expect(workflow).toContain('REVIEW_ROUTER_MEMORY_CANDIDATE_ENDPOINT');
-    expect(workflow).toContain('REVIEW_ROUTER_MEMORY_COMMAND_ENDPOINT');
+    expect(workflow).not.toContain('/api/action/v1/memory');
     expect(workflow).toContain('review_workflow_file:');
     expect(workflow).toContain(
       'RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}'

@@ -131,6 +131,8 @@ import {
 describe('ProductionT0ReviewRunner policy', () => {
   it.each([
     ['available', 'codex'],
+    ['available', 'direct'],
+    ['available', 'provider-api'],
     ['disabled', 'codex'],
     ['outage', 'codex'],
     ['restore', 'codex'],
@@ -199,15 +201,35 @@ describe('ProductionT0ReviewRunner policy', () => {
         headSha,
       };
       const pr = { ...pullRequest(['review.ts']), baseSha, headSha };
+      const providerName =
+        engine === 'provider-api'
+          ? 'openrouter/vendor/gpt-memory-test'
+          : 'codex/gpt-memory-test';
       const config = {
         ...DEFAULT_CONFIG,
-        providers: ['codex/gpt-memory-test'],
-        synthesisModel: 'codex/gpt-memory-test',
+        providers: [providerName],
+        synthesisModel: providerName,
         codexAgenticContext: false,
         updatePrDescription: false,
       };
       const boundary = new Error('production_memory_composition_verified');
       const fetchImpl = jest.fn().mockImplementation(async (url) => {
+        if (String(url).endsWith('/session/exchange'))
+          return new Response(
+            JSON.stringify({ sessionToken: 'fixture-session' })
+          );
+        if (String(url).endsWith('/config'))
+          return new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              configVersion: 1,
+              runtimeEnv: {
+                CODEX_MODEL: 'gpt-memory-test',
+                REVIEW_ROUTER_MEMORY_ENABLED:
+                  mode === 'disabled' ? 'false' : 'true',
+              },
+            })
+          );
         if (String(url).endsWith('/bundle')) {
           if (mode === 'outage') throw new Error('private engine diagnostic');
           return new Response(
@@ -230,6 +252,18 @@ describe('ProductionT0ReviewRunner policy', () => {
         );
       });
       const spies = [
+        jest
+          .spyOn(GitHubActionsOidcTokenProvider.prototype, 'requestToken')
+          .mockResolvedValue('fixture-oidc'),
+        jest
+          .spyOn(ReviewActionV2ControlPlaneAdapter.prototype, 'authorize')
+          .mockResolvedValue(admitted),
+        jest
+          .spyOn(
+            ReviewActionV2ControlPlaneAdapter.prototype,
+            'restoreExecution'
+          )
+          .mockResolvedValue(null),
         jest.spyOn(ConfigLoader, 'load').mockReturnValue(config),
         jest
           .spyOn(GitHubReviewRevisionGuard.prototype, 'loadCurrentRevision')
@@ -250,7 +284,7 @@ describe('ProductionT0ReviewRunner policy', () => {
             async (prompt) =>
               createPreparedProviderInvocation({
                 providerKind: ProviderKind.CodexCli,
-                providerName: 'codex/gpt-memory-test',
+                providerName,
                 requestedModel: 'gpt-memory-test',
                 timeoutMs: 1_000,
                 request: {
@@ -284,7 +318,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           const workSlot = command.workSlots.find(
             (slot) => slot.taskKind === ReviewTaskKind.FindingDiscovery
           )!;
-          for (let count = 0; engine === 'codex' && count < 2; count += 1) {
+          for (let count = 0; engine !== 'ocr' && count < 2; count += 1) {
             const invocation = await dependencies.invocations.prepare({
               workSlot,
               attemptOrdinal: 1,
@@ -313,6 +347,10 @@ describe('ProductionT0ReviewRunner policy', () => {
           throw boundary;
         });
       try {
+        const directProfile = JSON.stringify({
+          ...JSON.parse(admittedAgentJson),
+          modelTransports: ['provider_api'],
+        });
         const runtimeConfig = parseAdmittedRuntimeConfig({
           protocolVersion: 1,
           configVersion: 1,
@@ -322,6 +360,22 @@ describe('ProductionT0ReviewRunner policy', () => {
             REVIEW_ROUTER_MEMORY_ENABLED:
               mode === 'disabled' ? 'false' : 'true',
             UPDATE_PR_DESCRIPTION: 'false',
+            ...(engine === 'provider-api'
+              ? {
+                  REVIEW_AUTH_MODE: 'openrouter-api',
+                  REVIEW_PROVIDERS: providerName,
+                  REQUIRED_HEALTHY_PROVIDERS: providerName,
+                  SYNTHESIS_MODEL: providerName,
+                  PROVIDER_LIMIT: '1',
+                  PROVIDER_MAX_PARALLEL: '1',
+                  INLINE_MIN_AGREEMENT: '1',
+                  CODEX_AGENTIC_CONTEXT: 'false',
+                  REVIEW_ROUTER_AGENT_PROFILE_JSON: directProfile,
+                  REVIEW_ROUTER_AGENT_PROFILE_DIGEST: createHash('sha256')
+                    .update(directProfile)
+                    .digest('hex'),
+                }
+              : {}),
           },
         });
         const profile =
@@ -336,7 +390,7 @@ describe('ProductionT0ReviewRunner policy', () => {
                 cancellation: true,
               })
             : null;
-        const runnerInput = {
+        const gatewayInput = {
           apiUrl: 'https://fixture.invalid',
           audience: 'reviewrouter',
           workflowSchemaVersion: 1,
@@ -396,6 +450,23 @@ describe('ProductionT0ReviewRunner policy', () => {
             },
           },
         } as Parameters<ProductionT0ReviewRunner['run']>[0];
+        const gateway = gatewayInput.accountGateway!;
+        const runnerInput =
+          engine === 'direct'
+            ? { ...gatewayInput, accountGateway: undefined }
+            : engine === 'provider-api'
+              ? {
+                  ...gatewayInput,
+                  accountGateway: undefined,
+                  providerApi: {
+                    runtimeConfig: gateway.runtimeConfig,
+                    controlPlane: gateway.controlPlane,
+                    modelTransport: gateway.modelTransport,
+                    signal: new AbortController().signal,
+                    credentialLease: () => ({ environment: {} }),
+                  },
+                }
+              : gatewayInput;
         await expect(
           new ProductionT0ReviewRunner(fetchImpl).run(runnerInput)
         ).rejects.toBe(boundary);

@@ -1082,7 +1082,8 @@ describe('Codex T0 prepared invocation', () => {
       2,
       lifecycleAssignment.context,
       lifecycleAssignment.context.number,
-      []
+      [],
+      null
     );
   });
 

@@ -25,6 +25,8 @@ import {
   ActionMemoryInteractionPort,
   ActionMemoryMutationResponse,
   memorySourceHash,
+  memoryCommandId,
+  type ActionMemorySourceMetadata,
 } from '../control-plane/memory';
 import {
   memoryCommandLabel,
@@ -58,6 +60,7 @@ interface ReviewCommentApiItem {
 
 interface PullRequestApiItem {
   number?: number;
+  base?: { sha?: string | null };
   head?: {
     sha?: string | null;
     repo?: {
@@ -73,6 +76,7 @@ interface PullRequestApiItem {
 interface InteractionPullRequestContext {
   prNumber: number;
   headSha?: string;
+  baseSha?: string;
   isFork: boolean;
   verified: boolean;
   prAuthor: string;
@@ -327,9 +331,15 @@ export class ReviewInteractionHandler {
     instruction: ParsedMemoryInstruction
   ): Promise<MemoryNoticeResult> {
     if (instruction.type === 'command') {
-      const [response] = await this.memoryClient!.submitCommands([
-        instruction.command,
-      ]);
+      const [response] = await this.memoryClient!.submitCommands(
+        [instruction.command],
+        buildMemorySourceMetadata({
+          payload,
+          prContext,
+          owner: this.client.owner,
+          repo: this.client.repo,
+        })
+      );
       return {
         label: memoryCommandLabel(instruction.command),
         status: 'result',
@@ -366,6 +376,7 @@ export class ReviewInteractionHandler {
       return {
         prNumber,
         headSha: payload.pull_request.head?.sha,
+        baseSha: payload.pull_request.base?.sha,
         isFork: payload.pull_request.head?.repo?.fork === true,
         verified: true,
         prAuthor: payload.pull_request.user?.login || '',
@@ -382,6 +393,7 @@ export class ReviewInteractionHandler {
       return {
         prNumber,
         headSha: data.head?.sha || undefined,
+        baseSha: data.base?.sha || undefined,
         isFork: data.head?.repo?.fork === true,
         verified: true,
         prAuthor: data.user?.login || '',
@@ -831,28 +843,64 @@ function buildMemoryCandidateRequest(input: {
   readonly owner: string;
   readonly repo: string;
 }): ActionMemoryCandidateRequest {
-  const comment = input.payload.comment;
-  if (!comment?.id || !comment.body) {
-    throw new Error('memory_comment_unavailable');
-  }
-  const sourceHash = memorySourceHash(comment.body);
-  return {
-    protocolVersion: 1,
+  const source = buildMemorySourceMetadata(input);
+  const candidate = {
+    protocolVersion: 2 as const,
+    expectedRevision: null,
+    kind: 'rule' as const,
     intent: input.instruction.intent,
     requestedScope: input.instruction.requestedScope,
     candidateBody: input.instruction.candidateBody,
-    sourceTextHash: sourceHash,
     extractionMethod: input.instruction.extractionMethod,
     extractionVersion: 1,
-    source: {
-      sourceId: `github-comment:${comment.id}`,
-      githubCommentId: String(comment.id),
-      githubPullRequestNumber: input.prContext.prNumber,
-      url: buildMemoryCommentUrl(input),
-      redactedExcerpt: redactedMemoryExcerpt(input.instruction.candidateBody),
-      sourceHash,
-      sourceVisibility: 'private',
-    },
+    source,
+  };
+  return { ...candidate, commandId: memoryCommandId(candidate) };
+}
+
+function buildMemorySourceMetadata(input: {
+  readonly payload: ReviewCommentEventPayload;
+  readonly prContext: InteractionPullRequestContext;
+  readonly owner: string;
+  readonly repo: string;
+}): ActionMemorySourceMetadata {
+  const comment = input.payload.comment;
+  const repositoryId = input.payload.repository?.id;
+  if (
+    !comment?.id ||
+    !comment.node_id ||
+    !comment.body ||
+    !comment.created_at ||
+    !comment.updated_at ||
+    !Number.isFinite(Date.parse(comment.created_at)) ||
+    !Number.isFinite(Date.parse(comment.updated_at)) ||
+    !repositoryId ||
+    !input.prContext.headSha ||
+    !input.prContext.baseSha
+  ) {
+    throw new Error('memory_source_metadata_unavailable');
+  }
+  return {
+    type: input.payload.pull_request
+      ? 'github_review_comment'
+      : 'github_issue_comment',
+    sourceId: `github-comment:${comment.id}`,
+    nodeId: comment.node_id,
+    revision: comment.updated_at,
+    updatedAt: comment.updated_at,
+    statementAt:
+      comment.updated_at === comment.created_at
+        ? comment.created_at
+        : comment.updated_at,
+    claimedBodyDigest: memorySourceHash(comment.body),
+    githubRepositoryId: String(repositoryId),
+    pullRequestNumber: input.prContext.prNumber,
+    headSha: input.prContext.headSha,
+    baseSha: input.prContext.baseSha,
+    url: buildMemoryCommentUrl(input),
+    visibility:
+      input.payload.repository?.visibility ??
+      (input.payload.repository?.private === false ? 'public' : 'private'),
   };
 }
 
@@ -887,10 +935,60 @@ function renderMemoryNoticeLine(result: MemoryNoticeResult): string {
   if (!response) {
     return `${result.label}: no response from memory service.`;
   }
+  if (!result.command && response.suggestionId) {
+    return `Created pending ${result.requestedScope ?? 'repository'} memory suggestion \`${safeNoticeText(response.suggestionId)}\`. Confirm with \`/rr remember ${safeNoticeText(response.suggestionId)}\`.`;
+  }
+  const asyncResult = renderAsyncMemoryResult(result, response);
+  if (asyncResult) return asyncResult;
   if (result.command) {
     return renderMemoryCommandResult(result.command, response);
   }
   return renderMemoryCandidateResult(result, response);
+}
+
+function renderAsyncMemoryResult(
+  result: Extract<MemoryNoticeResult, { status: 'result' }>,
+  response: ActionMemoryMutationResponse
+): string | undefined {
+  const operation = response.id
+    ? ` Operation \`${safeNoticeText(response.id)}\`.`
+    : '';
+  const check = response.id
+    ? ` Check with \`/rr memory-status ${safeNoticeText(response.id)}\`.`
+    : '';
+  const entry = response.entryId
+    ? ` \`${safeNoticeText(response.entryId)}\``
+    : '';
+  if (['queued', 'submitted', 'processing'].includes(response.status)) {
+    return `Memory request for ${result.label} is ${response.status}.${operation}${check}`;
+  }
+  if (response.status === 'unknown') {
+    return `The outcome of the memory request for ${result.label} is not yet known.${operation}${check}`;
+  }
+  if (response.status === 'cleanup_pending') {
+    return `Memory${entry} is removed from new review context; provider cleanup is pending.${operation}${check}`;
+  }
+  if (response.status === 'failed') {
+    return `Memory request for ${result.label} failed: ${safeNoticeText(response.reason ?? 'operation_failed')}.${operation}${check}`;
+  }
+  if (response.status === 'published' || response.status === 'completed') {
+    if (result.command?.kind === 'forget_memory') {
+      return response.status === 'completed'
+        ? `Forgot memory${entry}; provider cleanup completed.${operation}`
+        : `Forget request for memory${entry} is published; cleanup status remains available.${operation}${check}`;
+    }
+    if (result.command?.kind === 'update_memory') {
+      return `Updated memory${entry}; the corrected revision is ${response.status}.${operation}`;
+    }
+    if (result.command?.kind === 'disable_memory') {
+      return `Retired memory${entry}; it is excluded from new review context.${operation}`;
+    }
+    if (result.command?.kind === 'reject_suggestion') {
+      return `Rejected memory suggestion \`${safeNoticeText(result.command.suggestionId)}\`.${operation}`;
+    }
+    return `Memory request for ${result.label} is ${response.status}${entry}.${operation}`;
+  }
+  return undefined;
 }
 
 function renderMemoryCandidateResult(
@@ -926,6 +1024,11 @@ function renderMemoryCommandResult(
     return response.status === 'updated'
       ? `Rejected memory suggestion \`${command.suggestionId}\`.`
       : `Could not reject memory suggestion \`${command.suggestionId}\`: ${safeNoticeText(response.reason || response.status)}.`;
+  }
+  if (command.kind === 'update_memory') {
+    return response.status === 'updated'
+      ? `Updated memory \`${command.memoryItemId}\`.`
+      : `Could not update memory \`${command.memoryItemId}\`: ${safeNoticeText(response.reason || response.status)}.`;
   }
   if (command.kind === 'disable_memory') {
     return response.status === 'updated'

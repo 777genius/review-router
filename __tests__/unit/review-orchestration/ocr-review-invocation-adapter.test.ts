@@ -1,3 +1,10 @@
+import { restoredLifecycleInvocations } from '../../../src/review-orchestration/infrastructure/restored-lifecycle-invocations';
+import { canonicalJson } from '../../../src/context-gateway/context-gateway-contract';
+import {
+  freezeReviewMemorySnapshot,
+  type ReviewMemorySnapshot,
+} from '../../../src/control-plane/review-memory-v2';
+import { reviewMemoryBundle } from '../../helpers/review-memory-v2-fixture';
 /**
  * Plan 56 managed OCR invocation adapter: one FindingDiscovery slot with a
  * single vote identity, model-free prepare with §8.3 semantic identity,
@@ -24,6 +31,8 @@ import {
 import type { OcrManagedLimits } from '../../../src/review-orchestration/infrastructure/ocr-review-managed-run';
 import {
   ReviewExecutionProviderKind,
+  RestoredReviewWorkSlotState,
+  type RestoredReviewExecution,
   ReviewTaskKind,
   type PreparedReviewInvocation,
   type ProviderInvocationManifest,
@@ -399,6 +408,7 @@ describe('OcrReviewInvocationAdapter', () => {
       readonly previewTimeoutMs?: () => number;
     };
     readonly backgroundText?: string | null;
+    readonly reviewMemory?: { current(): ReviewMemorySnapshot | null };
   }): {
     adapter: OcrReviewInvocationAdapter;
     workSlot: ReviewWorkSlotPlan;
@@ -436,6 +446,7 @@ describe('OcrReviewInvocationAdapter', () => {
         assignedPaths: ['calc.ts'],
       }),
       backgroundText: options.backgroundText ?? null,
+      reviewMemory: options.reviewMemory,
       checkoutRoot,
       processRunner: options.processRunner,
       previewRunner: options.previewRunner,
@@ -515,6 +526,64 @@ describe('OcrReviewInvocationAdapter', () => {
   const unusedRunner: OcrReviewProcessRunner = async () => {
     throw new Error('execute must not run on this path');
   };
+
+  it('writes the frozen memory into the real OCR rule file and hashes exactly the prepared context', async () => {
+    const snapshot = freezeReviewMemorySnapshot(reviewMemoryBundle());
+    let current: ReviewMemorySnapshot | null = snapshot;
+    const { bridge } = bridgeFixture();
+    const preview = previewRunner();
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: unusedRunner,
+      previewRunner: preview.runner,
+      reviewMemory: { current: () => current },
+    });
+    const first = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const written = JSON.parse(fs.readFileSync(run.rulePath, 'utf8')) as {
+      rules: { content: string }[];
+    };
+    expect(written.rules[0].content).toContain(snapshot.renderedPrompt);
+    expect(first.manifestFacts.memoryBundleHash).toBe(snapshot.hash);
+    current = null;
+    const second = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(second.manifestFacts.memoryBundleHash).toBeNull();
+    expect(second.reviewPrompt).not.toContain('AUTHORIZED REVIEWROUTER MEMORY');
+    expect(second.manifestFacts.providerRequestEnvelopeHash).not.toBe(
+      first.manifestFacts.providerRequestEnvelopeHash
+    );
+    expect(first.reviewPrompt).toContain(
+      'All outbound calls require a bounded timeout.'
+    );
+    const original = {
+      workSlotId: workSlot.workSlotId,
+      manifestCanonicalJson: canonicalJson({
+        ...first.manifestFacts,
+        requestedModel: first.requestedModel,
+      }),
+      manifestKey: 'a'.repeat(64),
+      providerInvocationKey: 'b'.repeat(64),
+      providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+    };
+    const restored = {
+      reviewRevisionHash: REVIEW_REVISION_HASH,
+      workSlots: [
+        {
+          workSlotId: workSlot.workSlotId,
+          state: RestoredReviewWorkSlotState.Satisfied,
+        },
+      ],
+      persistedPlan: { acceptedManifests: [original] },
+    } as unknown as RestoredReviewExecution;
+    const readonly = restoredLifecycleInvocations(restored, adapter);
+    const recovered = await readonly.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(recovered.coverageManifest).toEqual(first.coverageManifest);
+    expect(recovered.manifestFacts.memoryBundleHash).toBe(snapshot.hash);
+    expect(recovered.reviewPrompt).toBe('');
+    expect(recovered.immutableRequest).toBeNull();
+    await expect(
+      readonly.execute({ invocation: recovered } as never)
+    ).rejects.toThrow('review_restore_inference_forbidden');
+  });
 
   it('prepares model-free with a deterministic preview and no credentials in the request', async () => {
     const { bridge, requests } = bridgeFixture();

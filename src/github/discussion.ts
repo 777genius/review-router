@@ -21,8 +21,11 @@ export interface ReviewCommentEventPayload {
   action?: string;
   comment?: {
     id?: number;
+    node_id?: string;
     body?: string | null;
     in_reply_to_id?: number | null;
+    created_at?: string;
+    updated_at?: string;
     user?: {
       login?: string | null;
       type?: string | null;
@@ -34,6 +37,7 @@ export interface ReviewCommentEventPayload {
   };
   pull_request?: {
     number?: number;
+    base?: { sha?: string };
     head?: {
       sha?: string;
       ref?: string;
@@ -47,7 +51,10 @@ export interface ReviewCommentEventPayload {
     } | null;
   };
   repository?: {
+    id?: number;
     full_name?: string;
+    visibility?: 'private' | 'internal' | 'public';
+    private?: boolean;
   };
 }
 

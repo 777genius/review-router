@@ -1,6 +1,10 @@
 import type { AdmittedGatewayCodexModelSettings } from '../../control-plane/admitted-gateway-codex-model-settings';
 import { lifecycleVerificationContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import { createHash } from 'crypto';
+import type {
+  ReviewMemorySession,
+  ReviewMemorySnapshot,
+} from '../../control-plane/review-memory-v2';
 import { PromptBuilder } from '../../analysis/llm/prompt-builder';
 import {
   canonicalizeProviderInvocationManifestV1,
@@ -86,16 +90,27 @@ export type CodexPreparedReviewInvocation = PreparedReviewInvocation & {
 export async function prepareCodexReviewPrompt(
   promptBuilder: Pick<PromptBuilder, 'buildPreparedV2'>,
   assignment: CodexReviewAssignment,
-  investigationManifestBindingEnabled: boolean
+  investigationManifestBindingEnabled: boolean,
+  memorySnapshot?: ReviewMemorySnapshot | null
 ) {
+  // The initial investigation grant has no atomic memory admission. Explicitly
+  // exclude memory at this preparation boundary, including direct callers.
+  if (investigationManifestBindingEnabled) memorySnapshot = null;
   const effectiveLifecycleTargets = investigationManifestBindingEnabled
     ? []
     : assignment.lifecycleTargets;
-  const preparedPrompt = await promptBuilder.buildPreparedV2(
-    assignment.context,
-    assignment.context.number,
-    [...effectiveLifecycleTargets]
-  );
+  const preparedPrompt = await (memorySnapshot === undefined
+    ? promptBuilder.buildPreparedV2(
+        assignment.context,
+        assignment.context.number,
+        [...effectiveLifecycleTargets]
+      )
+    : promptBuilder.buildPreparedV2(
+        assignment.context,
+        assignment.context.number,
+        [...effectiveLifecycleTargets],
+        memorySnapshot
+      ));
   const coverageManifest = createReviewPromptCoverageManifest({
     workSlotId: assignment.workSlot.workSlotId,
     reviewRevisionHash: assignment.reviewRevisionHash,
@@ -136,6 +151,9 @@ export async function prepareCodexReviewPrompt(
       ...(preparedPrompt.reviewSkills === undefined
         ? {}
         : { reviewSkills: preparedPrompt.reviewSkills }),
+      ...(preparedPrompt.memoryBundleHash === undefined
+        ? {}
+        : { memoryBundleHash: preparedPrompt.memoryBundleHash }),
       author: assignment.context.author,
       body: assignment.context.body,
       coverageHash: providerVisibleCoverage.coverageHash,
@@ -196,7 +214,8 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     private readonly investigationManifestBindingEnabled = false,
     private readonly investigationReasoningEffort: CodexAppServerReasoningEffort | null = 'xhigh',
     private readonly directCredentialLease?: () => ProviderCredentialLease,
-    private readonly gatewayModelSettings?: AdmittedGatewayCodexModelSettings
+    private readonly gatewayModelSettings?: AdmittedGatewayCodexModelSettings,
+    private readonly reviewMemory?: Pick<ReviewMemorySession, 'current'>
   ) {
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
@@ -248,7 +267,8 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     } = await prepareCodexReviewPrompt(
       this.promptBuilder,
       assignment,
-      this.investigationManifestBindingEnabled
+      this.investigationManifestBindingEnabled,
+      this.reviewMemory?.current()
     );
     const shouldPrepareInvestigationSeed =
       this.investigationManifestBindingEnabled &&
@@ -416,6 +436,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
         outputSchemaHash: sha256(invocationPreimages.outputSchemaHash),
         filePatchManifestHash: sha256(manifestPreimages.filePatchManifestHash),
         contextManifestHash: sha256(manifestPreimages.contextManifestHash),
+        memoryBundleHash: preparedPrompt.memoryBundleHash ?? null,
         lifecycleTargetSetHash:
           manifestPreimages.lifecycleTargetSetHash !== null
             ? sha256(manifestPreimages.lifecycleTargetSetHash)
@@ -715,7 +736,7 @@ export class GeneratedProviderInvocationManifestAssembler implements ProviderInv
       runtimeCompatibilityKey: this.runtimeCompatibilityKey,
       filePatchManifestHash: facts.filePatchManifestHash,
       contextManifestHash: facts.contextManifestHash,
-      memoryBundleHash: null,
+      memoryBundleHash: description ? null : (facts.memoryBundleHash ?? null),
       codeGraphProjectionHash: null,
       lifecycleTargetSetHash: facts.lifecycleTargetSetHash,
       liveLifecycleStateHash: facts.liveLifecycleStateHash,

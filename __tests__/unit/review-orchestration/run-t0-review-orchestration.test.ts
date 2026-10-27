@@ -46,7 +46,346 @@ import { ReviewInvestigationRunStatus } from '../../../src/review-investigation/
 import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import { ExecutionDeadline } from '../../../src/review-execution/domain/execution-deadline';
 
+import { GeneratedProviderInvocationManifestAssembler } from '../../../src/review-orchestration/infrastructure/codex-review-invocation-adapter';
+import type { ReviewConfig } from '../../../src/types';
+
 describe('RunT0ReviewOrchestration', () => {
+  it('finishes an already-admitted immutable snapshot after post-acquire revocation', async () => {
+    const fixture = createFixture();
+    let eligible = true;
+    const prepare = (
+      fixture.dependencies.invocations.prepare as jest.Mock
+    ).getMockImplementation()!;
+    (fixture.dependencies.invocations.prepare as jest.Mock).mockImplementation(
+      async (input) => {
+        const invocation = await prepare(input);
+        return {
+          ...invocation,
+          manifestFacts: {
+            ...invocation.manifestFacts,
+            memoryBundleHash: eligible ? hash('memory') : null,
+          },
+        };
+      }
+    );
+    Object.assign(fixture.dependencies, {
+      memoryAdmission: {
+        isEligible: jest.fn(async () => eligible),
+        discard: jest.fn(() => {
+          eligible = false;
+        }),
+      },
+    });
+    const acquire =
+      fixture.controlPlane.acquireInvocationLease.getMockImplementation()!;
+    fixture.controlPlane.acquireInvocationLease.mockImplementation(
+      async (input) => {
+        const result = await acquire(input);
+        if (
+          result.status === ReviewInvocationLeaseAcquireOutcomeStatus.Acquired
+        )
+          eligible = false;
+        return result;
+      }
+    );
+    const result = await fixture.useCase.execute(fixture.command);
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({
+          manifestFacts: expect.objectContaining({
+            memoryBundleHash: hash('memory'),
+          }),
+        }),
+      })
+    );
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(
+      (fixture.dependencies.invocations.prepare as jest.Mock).mock.calls.map(
+        ([input]) => input.attemptOrdinal
+      )
+    ).toEqual([1]);
+  });
+
+  it('drops memory on atomic precharge input_stale and prepares the same single-budget attempt without a phantom lease', async () => {
+    const fixture = createFixture({
+      investigationMode: ReviewInvestigationRecordingMode.Authoritative,
+    });
+    Object.assign(fixture.dependencies, {
+      invocationManifestAssembler:
+        new GeneratedProviderInvocationManifestAssembler(
+          authorization,
+          {} as ReviewConfig,
+          hash('compatibility')
+        ),
+    });
+    let captured = true;
+    const prepare = (
+      fixture.dependencies.invocations.prepare as jest.Mock
+    ).getMockImplementation()!;
+    (fixture.dependencies.invocations.prepare as jest.Mock).mockImplementation(
+      async (input) => {
+        const invocation = await prepare(input);
+        return {
+          ...invocation,
+          reviewPrompt: captured ? 'with admitted memory' : 'without memory',
+          manifestFacts: {
+            ...invocation.manifestFacts,
+            memoryBundleHash: captured ? hash('memory') : null,
+          },
+        };
+      }
+    );
+    const discard = jest.fn(() => {
+      captured = false;
+    });
+    Object.assign(fixture.dependencies, {
+      memoryAdmission: { isEligible: jest.fn(async () => captured), discard },
+    });
+    fixture.controlPlane.acquireInvocationLease.mockResolvedValueOnce({
+      status: ReviewInvocationLeaseAcquireOutcomeStatus.InputStale,
+    });
+    const result = await fixture.useCase.execute(fixture.command);
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(discard).toHaveBeenCalledTimes(1);
+    expect(fixture.investigationRecording!.execute).not.toHaveBeenCalled();
+    expect(
+      (fixture.dependencies.invocations.prepare as jest.Mock).mock.calls.map(
+        ([input]) => input.attemptOrdinal
+      )
+    ).toEqual([1, 1]);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({
+          reviewPrompt: 'without memory',
+          manifestFacts: expect.objectContaining({ memoryBundleHash: null }),
+        }),
+      })
+    );
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      2
+    );
+    const calls = fixture.controlPlane.acquireInvocationLease.mock.calls;
+    expect(calls[0]![0].manifest.providerInvocationKey).not.toBe(
+      calls[1]![0].manifest.providerInvocationKey
+    );
+    // Only the actually granted capability is released. input_stale never
+    // creates or releases an uncharged lease and never decrements server state.
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+  });
+
+  it('keeps memory-bearing finding inference on the ordinary authoritative path without investigation grants', async () => {
+    const fixture = createFixture({
+      investigationMode: ReviewInvestigationRecordingMode.Authoritative,
+      investigationVerifiedCleanEffectsEnabled: true,
+    });
+    const prepare = (
+      fixture.dependencies.invocations.prepare as jest.Mock
+    ).getMockImplementation()!;
+    (fixture.dependencies.invocations.prepare as jest.Mock).mockImplementation(
+      async (input) => {
+        const invocation = await prepare(input);
+        return {
+          ...invocation,
+          manifestFacts: {
+            ...invocation.manifestFacts,
+            memoryBundleHash: hash('memory'),
+          },
+        };
+      }
+    );
+    Object.assign(fixture.dependencies, {
+      memoryAdmission: {
+        isEligible: jest.fn(async () => true),
+        discard: jest.fn(),
+      },
+    });
+    const result = await fixture.useCase.execute(fixture.command);
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(
+      fixture.dependencies.investigationInvocations!.prepare
+    ).not.toHaveBeenCalled();
+    expect(fixture.investigationRecording!.execute).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({
+          manifestFacts: expect.objectContaining({
+            memoryBundleHash: hash('memory'),
+          }),
+        }),
+      })
+    );
+  });
+
+  it('reconciles exhausted attempts after input_stale using a fresh memory-free identity without inference', async () => {
+    const fixture = createFixture();
+    Object.assign(fixture.dependencies, {
+      invocationManifestAssembler:
+        new GeneratedProviderInvocationManifestAssembler(
+          authorization,
+          {} as ReviewConfig,
+          hash('compatibility')
+        ),
+    });
+    let captured = true;
+    const prepare = (
+      fixture.dependencies.invocations.prepare as jest.Mock
+    ).getMockImplementation()!;
+    (fixture.dependencies.invocations.prepare as jest.Mock).mockImplementation(
+      async (input) => {
+        const invocation = await prepare(input);
+        return {
+          ...invocation,
+          reviewPrompt: captured ? 'with memory' : 'without memory',
+          manifestFacts: {
+            ...invocation.manifestFacts,
+            memoryBundleHash: captured ? hash('memory') : null,
+          },
+        };
+      }
+    );
+    const discard = jest.fn(() => {
+      captured = false;
+    });
+    Object.assign(fixture.dependencies, {
+      memoryAdmission: { isEligible: jest.fn(async () => captured), discard },
+    });
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockRejectedValue(new Error('provider_failed'));
+    const acquire =
+      fixture.controlPlane.acquireInvocationLease.getMockImplementation()!;
+    let acquisitions = 0;
+    fixture.controlPlane.acquireInvocationLease.mockImplementation(
+      async (input) => {
+        acquisitions += 1;
+        if (acquisitions === 2)
+          return {
+            status: ReviewInvocationLeaseAcquireOutcomeStatus.InputStale,
+          };
+        return acquire(input);
+      }
+    );
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      allowPartial: true,
+    });
+    expect(result.status).toBe(
+      ReviewOrchestrationResultStatus.PartialCompleted
+    );
+    expect(result.failureCode).toBe('required_work_exhausted');
+    expect(discard).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.prepare).toHaveBeenCalledTimes(2);
+    expect(
+      (fixture.dependencies.invocations.prepare as jest.Mock).mock.calls.map(
+        ([input]) => input.attemptOrdinal
+      )
+    ).toEqual([1, 2]);
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      3
+    );
+    const staleRequest =
+      fixture.controlPlane.acquireInvocationLease.mock.calls[1]![0];
+    const currentRequest =
+      fixture.controlPlane.acquireInvocationLease.mock.calls[2]![0];
+    expect(
+      JSON.parse(staleRequest.manifest.manifestCanonicalJson).memoryBundleHash
+    ).toBe(hash('memory'));
+    expect(
+      JSON.parse(currentRequest.manifest.manifestCanonicalJson).memoryBundleHash
+    ).toBeNull();
+    expect(currentRequest.manifest.providerInvocationKey).not.toBe(
+      staleRequest.manifest.providerInvocationKey
+    );
+    expect(currentRequest.acquireRequestId).not.toBe(
+      staleRequest.acquireRequestId
+    );
+    expect(currentRequest.idempotencyKey).not.toBe(staleRequest.idempotencyKey);
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.terminalizeWorkSlot).not.toHaveBeenCalled();
+  });
+
+  it('reprepares without memory at the same attempt when revocation arrives during a cache lookup', async () => {
+    const fixture = createFixture();
+    let eligible = true;
+    const prepare = (
+      fixture.dependencies.invocations.prepare as jest.Mock
+    ).getMockImplementation()!;
+    (fixture.dependencies.invocations.prepare as jest.Mock).mockImplementation(
+      async (input) => {
+        const invocation = await prepare(input);
+        return {
+          ...invocation,
+          reviewPrompt: eligible
+            ? 'review with frozen memory'
+            : 'review without memory',
+          manifestFacts: {
+            ...invocation.manifestFacts,
+            memoryBundleHash: eligible ? hash('memory') : null,
+          },
+        };
+      }
+    );
+    Object.assign(fixture.dependencies, {
+      memoryAdmission: {
+        isEligible: jest.fn(async () => eligible),
+        discard: jest.fn(() => {
+          eligible = false;
+        }),
+      },
+    });
+    fixture.controlPlane.lookupEvidence
+      .mockImplementationOnce(async () => {
+        eligible = false;
+        return {
+          kind: ReviewEvidenceLookupKind.Hit,
+          observation: acceptedObservation,
+          attachment: {
+            kind: 'exact_revision_reuse',
+            capability: 'stale-memory-capability',
+            reuseSafetyDecisionHash: hash('reuse-safety'),
+          },
+        };
+      })
+      .mockResolvedValue({ kind: ReviewEvidenceLookupKind.Miss });
+    const result = await fixture.useCase.execute(fixture.command);
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(fixture.dependencies.invocations.prepare).toHaveBeenCalledTimes(2);
+    expect(
+      (fixture.dependencies.invocations.prepare as jest.Mock).mock.calls.map(
+        ([input]) => input.attemptOrdinal
+      )
+    ).toEqual([1, 1]);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({
+          reviewPrompt: 'review without memory',
+          manifestFacts: expect.objectContaining({ memoryBundleHash: null }),
+        }),
+      })
+    );
+    expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentCapability: 'stale-memory-capability',
+      })
+    );
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+  });
+
   it('looks up accepted lifecycle evidence under its original manifest without rebuilding source packets', async () => {
     const fixture = createFixture({ workSlotCount: 2, allowPartial: true });
     const slots = fixture.command.workSlots.map((slot, index) =>
@@ -167,10 +506,111 @@ describe('RunT0ReviewOrchestration', () => {
     );
   });
 
+  it.each(['exact_hit', 'replay_required', 'wrong_observation'] as const)(
+    'restores satisfied memory-bearing discovery only through its original attached evidence: %s',
+    async (outcome) => {
+      const fixture = createFixture();
+      const workSlot = fixture.command.workSlots[0]!;
+      const prepared = await fixture.dependencies.invocations.prepare({
+        workSlot,
+        attemptOrdinal: 1,
+      });
+      const invocation = {
+        ...prepared,
+        manifestFacts: {
+          ...prepared.manifestFacts,
+          memoryBundleHash: hash('original-memory'),
+        },
+      };
+      const original = {
+        workSlotId: workSlot.workSlotId,
+        manifestCanonicalJson: canonicalJson({
+          ...invocation.manifestFacts,
+          requestedModel: invocation.requestedModel,
+        }),
+        manifestKey: hash('original-manifest'),
+        providerInvocationKey: hash('original-invocation'),
+        providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+      };
+      const restored = {
+        ...restoredAdmission(fixture.command, {
+          state: RestoredReviewWorkSlotState.Satisfied,
+          acceptedObservationRefId: observationRef(
+            fixture.command.executionId,
+            workSlot.workSlotId,
+            'accepted-original'
+          ),
+        }).restoredExecution,
+        persistedPlan: {
+          planHash: fixture.command.planHash,
+          assignmentManifestVersion: 1,
+          assignmentManifestHash: fixture.command.assignmentManifestHash,
+          assignmentManifestCanonicalJson:
+            fixture.command.assignmentManifestCanonicalJson,
+          workSlots: fixture.command.workSlots,
+          artifact: null,
+          acceptedManifests: [original],
+        },
+      };
+      const isEligible = jest.fn(async () => false);
+      Object.assign(fixture.dependencies, {
+        memoryAdmission: { isEligible, discard: jest.fn() },
+      });
+      jest
+        .mocked(fixture.dependencies.invocations.prepare)
+        .mockResolvedValue(invocation);
+      jest
+        .mocked(fixture.dependencies.invocationManifestAssembler.assemble)
+        .mockResolvedValue(original);
+      fixture.controlPlane.restoreExecution.mockResolvedValue(restored);
+      fixture.controlPlane.lookupEvidence.mockResolvedValue({
+        kind:
+          outcome === 'replay_required'
+            ? ReviewEvidenceLookupKind.ReplayRequired
+            : ReviewEvidenceLookupKind.Hit,
+        observation: {
+          ...observationPayload,
+          observationId:
+            outcome === 'wrong_observation' ? 'different' : 'accepted-original',
+          eligibilityPolicyVersion: 't0-v1',
+          providerKind: workSlot.providerKind,
+          providerInvocationKey: original.providerInvocationKey,
+          providerVoteIdentityHash: original.providerVoteIdentityHash,
+        },
+        attachment: sameExecutionAttachment,
+      } as never);
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        restoredExecution: restored,
+        restoreOnly: true,
+      });
+      if (outcome === 'exact_hit')
+        expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+      else
+        expect(result).toMatchObject({
+          status: ReviewOrchestrationResultStatus.Failed,
+          failureCode:
+            'review_orchestration_restored_observation_identity_mismatch',
+        });
+      expect(isEligible).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.adoptObservation).not.toHaveBeenCalled();
+    }
+  );
+
   it.each([false, true])(
     'resumes never-started discovery in the same restored execution; persisted ordinal=%s',
     async (withOrdinal) => {
-      const fixture = createFixture({ workSlotCount: 1, allowPartial: true });
+      const fixture = createFixture({
+        workSlotCount: 1,
+        allowPartial: true,
+        investigationMode: ReviewInvestigationRecordingMode.Authoritative,
+      });
       const native = restoredAdmission(fixture.command, {
         state: RestoredReviewWorkSlotState.Pending,
         acceptedObservationRefId: null,
@@ -211,6 +651,7 @@ describe('RunT0ReviewOrchestration', () => {
         1
       );
       expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+      expect(fixture.investigationRecording!.execute).not.toHaveBeenCalled();
       expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(1);
     }
   );

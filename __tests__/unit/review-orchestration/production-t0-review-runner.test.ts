@@ -1,3 +1,15 @@
+import { execFileSync } from 'node:child_process';
+import {
+  RunT0ReviewOrchestration,
+  type RunT0ReviewOrchestrationDependencies,
+} from '../../../src/review-orchestration/application';
+import {
+  GitHubReviewRevisionGuard,
+  FreshGitHubLifecycleInventory,
+} from '../../../src/review-orchestration/infrastructure/github-review-state-adapter';
+import { GitReviewRevisionMaterializer } from '../../../src/review-orchestration/infrastructure/git-review-revision-materializer';
+import { PullRequestLoader } from '../../../src/github/pr-loader';
+import { reviewMemoryBundle } from '../../helpers/review-memory-v2-fixture';
 import {
   readAdmittedGatewayCodexModelSettings,
   GATEWAY_CODEX_MODEL_SETTINGS_ENV,
@@ -117,6 +129,359 @@ import {
 } from '../../../src/review-orchestration/infrastructure/production-review-investigation-composition';
 
 describe('ProductionT0ReviewRunner policy', () => {
+  it.each([
+    ['available', 'codex'],
+    ['disabled', 'codex'],
+    ['outage', 'codex'],
+    ['restore', 'codex'],
+    ['restore', 'ocr'],
+  ] as const)(
+    'composes the real T0 runner with %s memory on %s and preserves execution identity on restore',
+    async (mode, engine) => {
+      const root = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), 't0-memory-production-'))
+      );
+      const previousEnv = { ...process.env };
+      const git = (...args: string[]) =>
+        execFileSync('git', args, {
+          cwd: root,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }).trim();
+      git('init', '--quiet');
+      fs.writeFileSync(
+        path.join(root, 'review.ts'),
+        'export const timeout = 30;\n'
+      );
+      git('add', 'review.ts');
+      git(
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '--quiet',
+        '-m',
+        'base'
+      );
+      const baseSha = git('rev-parse', 'HEAD');
+      fs.writeFileSync(
+        path.join(root, 'review.ts'),
+        'export const timeout = 60;\n'
+      );
+      git('add', 'review.ts');
+      git(
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '--quiet',
+        '-m',
+        'head'
+      );
+      const headSha = git('rev-parse', 'HEAD');
+      const admitted = authorization(3);
+      admitted.facts = {
+        ...admitted.facts,
+        ...(engine === 'ocr'
+          ? {
+              providerVoteLanes: admitted.facts.providerVoteLanes.map(
+                (lane) => ({
+                  ...lane,
+                  providerKind: ReviewExecutionProviderKind.Ocr,
+                })
+              ),
+            }
+          : {}),
+        baseSha,
+        mergeBaseSha: baseSha,
+        headSha,
+      };
+      const pr = { ...pullRequest(['review.ts']), baseSha, headSha };
+      const config = {
+        ...DEFAULT_CONFIG,
+        providers: ['codex/gpt-memory-test'],
+        synthesisModel: 'codex/gpt-memory-test',
+        codexAgenticContext: false,
+        updatePrDescription: false,
+      };
+      const boundary = new Error('production_memory_composition_verified');
+      const fetchImpl = jest.fn().mockImplementation(async (url) => {
+        if (String(url).endsWith('/bundle')) {
+          if (mode === 'outage') throw new Error('private engine diagnostic');
+          return new Response(
+            JSON.stringify(
+              reviewMemoryBundle({
+                authorizationId: admitted.authorizationId,
+                repositoryConnectionId: admitted.facts.repositoryConnectionId,
+                pullRequestNumber: pr.number,
+                baseSha,
+                headSha,
+                reviewRevisionHash: admitted.facts.reviewRevisionHash,
+              })
+            ),
+            { headers: { 'content-type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ protocolVersion: 2, eligible: true }),
+          { headers: { 'content-type': 'application/json' } }
+        );
+      });
+      const spies = [
+        jest.spyOn(ConfigLoader, 'load').mockReturnValue(config),
+        jest
+          .spyOn(GitHubReviewRevisionGuard.prototype, 'loadCurrentRevision')
+          .mockResolvedValue({ ...admitted.facts, pullRequestState: 'open' }),
+        jest.spyOn(PullRequestLoader.prototype, 'load').mockResolvedValue(pr),
+        jest
+          .spyOn(GitReviewRevisionMaterializer.prototype, 'ensureAvailable')
+          .mockResolvedValue(),
+        jest
+          .spyOn(FreshGitHubLifecycleInventory.prototype, 'loadForPrompt')
+          .mockResolvedValue({
+            promptTargets: [],
+            inventory: { lifecycleStateHash: '8'.repeat(64) },
+          } as never),
+        jest
+          .spyOn(CodexProvider.prototype, 'prepareInvocation')
+          .mockImplementation(
+            async (prompt) =>
+              createPreparedProviderInvocation({
+                providerKind: ProviderKind.CodexCli,
+                providerName: 'codex/gpt-memory-test',
+                requestedModel: 'gpt-memory-test',
+                timeoutMs: 1_000,
+                request: {
+                  prompt,
+                  outputSchema: { type: 'object' },
+                  environment: {},
+                },
+              }) as never
+          ),
+        jest
+          .spyOn(CodexProvider.prototype, 'describePreparedEnvironmentContract')
+          .mockReturnValue({}),
+      ];
+      const prepared: { prompt: string; hash: string | null }[] = [];
+      const commands: Parameters<
+        RunT0ReviewOrchestration['executeAuthorized']
+      >[0][] = [];
+      let restored: RestoredReviewExecution | null = null;
+      const execute = jest
+        .spyOn(RunT0ReviewOrchestration.prototype, 'executeAuthorized')
+        .mockImplementation(async function (
+          this: RunT0ReviewOrchestration,
+          command
+        ) {
+          commands.push(command);
+          const dependencies = (
+            this as unknown as {
+              dependencies: RunT0ReviewOrchestrationDependencies;
+            }
+          ).dependencies;
+          const workSlot = command.workSlots.find(
+            (slot) => slot.taskKind === ReviewTaskKind.FindingDiscovery
+          )!;
+          for (let count = 0; engine === 'codex' && count < 2; count += 1) {
+            const invocation = await dependencies.invocations.prepare({
+              workSlot,
+              attemptOrdinal: 1,
+            });
+            const manifest = JSON.parse(
+              (
+                await dependencies.invocationManifestAssembler.assemble(
+                  invocation
+                )
+              ).manifestCanonicalJson
+            ) as { memoryBundleHash: string | null };
+            prepared.push({
+              prompt: invocation.reviewPrompt,
+              hash: manifest.memoryBundleHash,
+            });
+            expect(manifest.memoryBundleHash).toBe(
+              invocation.manifestFacts.memoryBundleHash
+            );
+            if (manifest.memoryBundleHash)
+              expect(
+                await dependencies.memoryAdmission!.isEligible(
+                  manifest.memoryBundleHash
+                )
+              ).toBe(true);
+          }
+          throw boundary;
+        });
+      try {
+        const runtimeConfig = parseAdmittedRuntimeConfig({
+          protocolVersion: 1,
+          configVersion: 1,
+          runtimeEnv: {
+            ...admittedAgentEnv,
+            CODEX_MODEL: 'gpt-memory-test',
+            REVIEW_ROUTER_MEMORY_ENABLED:
+              mode === 'disabled' ? 'false' : 'true',
+            UPDATE_PR_DESCRIPTION: 'false',
+          },
+        });
+        const profile =
+          engine === 'ocr'
+            ? JSON.stringify({
+                profileRef: 'ocr-managed-v1',
+                agentKind: 'ocr',
+                binarySha256: '1'.repeat(64),
+                packageVersion: '1.2.3',
+                modelTransports: ['account_gateway'],
+                contextGateway: false,
+                cancellation: true,
+              })
+            : null;
+        const runnerInput = {
+          apiUrl: 'https://fixture.invalid',
+          audience: 'reviewrouter',
+          workflowSchemaVersion: 1,
+          repository: 'fixture/repository',
+          pullRequestNumber: 1,
+          headSha,
+          workspacePath: root,
+          codexHome: path.join(root, 'home'),
+          scmReadToken: 'fixture-scm',
+          scmReadTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          refreshScmReadToken: async () => {
+            throw new Error('unexpected refresh');
+          },
+          ...(engine === 'ocr'
+            ? {
+                ocr: {
+                  run: {
+                    binaryPath: '/never-run',
+                    runDirectory: root,
+                    homeDirectory: path.join(root, 'home'),
+                    configPath: path.join(root, 'config'),
+                    rulePath: path.join(root, 'rule'),
+                    backgroundPath: null,
+                    cleanup: async () => {},
+                  },
+                  effectFacts: () => ({ effect: 'not_dispatched' as const }),
+                },
+              }
+            : {}),
+          accountGateway: {
+            runtimeConfig: profile
+              ? parseAdmittedRuntimeConfig({
+                  protocolVersion: 1,
+                  configVersion: 1,
+                  runtimeEnv: {
+                    ...runtimeConfig.runtimeEnv,
+                    REVIEW_ROUTER_AGENT_PROFILE_JSON: profile,
+                    REVIEW_ROUTER_AGENT_PROFILE_DIGEST: createHash('sha256')
+                      .update(profile)
+                      .digest('hex'),
+                  },
+                })
+              : runtimeConfig,
+            controlPlane: {
+              currentAuthorization: () => admitted,
+              restoreExecution: async () => restored,
+            } as never,
+            modelTransport: {
+              baseUrl: 'http://127.0.0.1:1/v1',
+              configuration: [],
+              environment: {
+                REVIEWROUTER_LOCAL_MODEL_TOKEN: `Bearer ${'a'.repeat(64)}`,
+              },
+              actualModel: () => 'gpt-memory-test',
+              failureFact: () => undefined,
+              dispose: async () => {},
+            },
+          },
+        } as Parameters<ProductionT0ReviewRunner['run']>[0];
+        await expect(
+          new ProductionT0ReviewRunner(fetchImpl).run(runnerInput)
+        ).rejects.toBe(boundary);
+        if (mode === 'restore') {
+          const original = commands[0]!;
+          restored = {
+            executionId: original.executionId,
+            version: '1',
+            streamVersion: '1',
+            generation: '1',
+            state: RestoredReviewExecutionState.Running,
+            authorizationId: admitted.authorizationId,
+            reviewRevisionHash: original.reviewRevisionHash,
+            planHash: original.planHash,
+            workSlots: original.workSlots.map((slot) => ({
+              ...slot,
+              state: RestoredReviewWorkSlotState.Pending,
+              activeLeaseId: null,
+              acceptedObservationRefId: null,
+            })),
+            persistedPlan: {
+              compatibilityKey: original.compatibilityKey,
+              planHash: original.planHash,
+              assignmentManifestVersion: 1,
+              assignmentManifestHash: original.assignmentManifestHash,
+              assignmentManifestCanonicalJson:
+                original.assignmentManifestCanonicalJson,
+              workSlots: original.workSlots.map((slot) => ({
+                ...slot,
+                nextAttemptOrdinal: 1,
+              })),
+              acceptedManifests: [],
+              artifact: null,
+            },
+          };
+          await expect(
+            new ProductionT0ReviewRunner(fetchImpl).run(runnerInput)
+          ).rejects.toBe(boundary);
+          expect(commands).toHaveLength(2);
+          expect(commands[1]).toMatchObject({
+            executionId: original.executionId,
+            compatibilityKey: original.compatibilityKey,
+            planHash: original.planHash,
+            workSlotsCanonicalJson: original.workSlotsCanonicalJson,
+            restoredExecution: restored,
+            restoreOnly: true,
+          });
+          if (engine === 'codex') {
+            expect(prepared).toHaveLength(4);
+            expect(prepared[0]!.hash).not.toBeNull();
+            expect(prepared[2]!.hash).toBeNull();
+            expect(prepared[2]!.prompt).not.toContain(
+              'AUTHORIZED REVIEWROUTER MEMORY'
+            );
+          }
+        } else {
+          expect(prepared).toHaveLength(2);
+          expect(prepared[0]).toEqual(prepared[1]);
+        }
+        if (mode === 'available') {
+          expect(prepared[0].prompt).toContain(
+            'All outbound calls require a bounded timeout.'
+          );
+          expect(prepared[0].hash).toMatch(/^[a-f0-9]{64}$/);
+        } else if (mode !== 'restore') {
+          expect(prepared[0].prompt).not.toContain(
+            'AUTHORIZED REVIEWROUTER MEMORY'
+          );
+          expect(prepared[0].hash).toBeNull();
+        }
+        expect(
+          fetchImpl.mock.calls.filter(([url]) =>
+            String(url).endsWith('/bundle')
+          )
+        ).toHaveLength(mode === 'disabled' ? 0 : 1);
+      } finally {
+        execute.mockRestore();
+        for (const spy of spies) spy.mockRestore();
+        for (const key of Object.keys(process.env))
+          if (!(key in previousEnv)) delete process.env[key];
+        Object.assign(process.env, previousEnv);
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
+
   it('preserves one explicit OpenRouter model and refuses policy collapse', () => {
     const provider = 'openrouter/vendor/model';
     const config = {

@@ -1,4 +1,8 @@
 import type { ReviewAgentProfile } from '../../control-plane/generated/review-action-v2/review-agent-profile';
+import {
+  ReviewMemorySession,
+  type ReviewMemorySnapshot,
+} from '../../control-plane/review-memory-v2';
 import { fetchCapturedReviewSkills } from '../../review-skills/review-skills-transport';
 import {
   materializeReviewSkills,
@@ -490,6 +494,21 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
       }
       signal?.throwIfAborted();
+      const reviewMemory = await ReviewMemorySession.capture({
+        apiUrl: input.apiUrl,
+        authorizationToken: authorization.authorizationToken,
+        binding: reviewMemoryBinding(authorization),
+        // A recovered ensemble may continue its already-admitted immutable
+        // results, but must never capture a different memory snapshot.
+        enabled:
+          !preplanningRestore &&
+          process.env.REVIEW_ROUTER_MEMORY_ENABLED === 'true',
+        pr,
+        signal,
+        timeoutMs: executionDeadline.clampProviderTimeout(2_000),
+        fetchImpl,
+        warn: core.warning,
+      });
       const materializer = new GitReviewRevisionMaterializer(
         signal
           ? async (args, options) => {
@@ -786,6 +805,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               modelReasoningEffort: ocrModelReasoningEffort,
               language: ocrLanguage,
               reviewSkills,
+              reviewMemory,
               freshReviewSkillsSupply: (supply) =>
                 skillsReceiptCollector.record(supply),
               ruleText:
@@ -856,6 +876,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                     transport: modelTransport,
                   })
                 : invocationAdapter,
+            memoryAdmission: reviewMemory,
             invocationFailureClassifier:
               new ProviderInvocationFailureClassifier(
                 modelTransport.failureFact
@@ -1143,7 +1164,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         false,
         input.providerApi || gatewayModelSettings ? reasoningEffort : 'xhigh',
         input.providerApi?.credentialLease,
-        gatewayModelSettings
+        gatewayModelSettings,
+        reviewMemory
       );
       const investigationInvocationAdapter =
         createProductionReviewInvestigationInvocation({
@@ -1166,7 +1188,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               true,
               reasoningEffort,
               input.providerApi?.credentialLease,
-              gatewayModelSettings
+              gatewayModelSettings,
+              undefined
             ),
         });
       const identities = new DeterministicReviewOrchestrationIdentity();
@@ -1342,6 +1365,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 transport: input.accountGateway!.modelTransport,
               })
             : nativeDiscoveryInvocations,
+        memoryAdmission: reviewMemory,
         ...(investigationInvocationAdapter
           ? { investigationInvocations: investigationInvocationAdapter }
           : {}),
@@ -2112,6 +2136,17 @@ export function createProductionT0ReviewRunner(
   return new ProductionT0ReviewRunner(input.fetchImpl, input.progress);
 }
 
+function reviewMemoryBinding(authorization: ReviewRunAuthorization) {
+  return Object.freeze({
+    authorizationId: authorization.authorizationId,
+    repositoryConnectionId: authorization.facts.repositoryConnectionId,
+    pullRequestNumber: authorization.facts.pullRequestNumber,
+    baseSha: authorization.facts.baseSha,
+    headSha: authorization.facts.headSha,
+    reviewRevisionHash: authorization.facts.reviewRevisionHash,
+  });
+}
+
 /** Trusted in-memory preparation after native authorization. This does not
  * authorize, start an execution, open a session, or invoke the provider. It
  * reuses ordinary planning and both ordinary invocation manifest paths. */
@@ -2254,6 +2289,14 @@ export async function prepareSingleT0NativeInputs(
     github,
     new ReviewLedger(github, ledgerKey)
   ).loadForPrompt(pr.number, authorization.facts.headSha);
+  const reviewMemory = await ReviewMemorySession.capture({
+    apiUrl: runner.apiUrl,
+    authorizationToken: authorization.authorizationToken,
+    binding: reviewMemoryBinding(authorization),
+    enabled: process.env.REVIEW_ROUTER_MEMORY_ENABLED === 'true',
+    pr,
+    fetchImpl: trusted.fetchImpl,
+  });
   const providerName = selectCodexProvider(config);
   validateProcessContext();
   const agenticContext = config.codexAgenticContext ?? true;
@@ -2277,6 +2320,7 @@ export async function prepareSingleT0NativeInputs(
     config,
     admittedAgent,
     reviewSkills,
+    memorySnapshot: reviewMemory.current(),
     provider,
     contextGateway: new ContextGatewayInvocationSessionFactory(
       controlPlane,
@@ -2292,6 +2336,7 @@ export async function prepareSingleT0NativeInputs(
 export async function prepareSingleT0ReviewPlan(input: {
   readonly admittedAgent: ReviewAgentProfile;
   readonly reviewSkills: ReviewSkillsExecutionInput;
+  readonly memorySnapshot?: ReviewMemorySnapshot | null;
   readonly authorization: ReviewRunAuthorization;
   readonly pr: PRContext;
   readonly config: ReviewConfig;
@@ -2305,6 +2350,7 @@ export async function prepareSingleT0ReviewPlan(input: {
   const authorization = structuredClone(input.authorization);
   const admittedAgent = structuredClone(input.admittedAgent);
   const reviewSkills = structuredClone(input.reviewSkills);
+  const memorySnapshot = input.memorySnapshot ?? null;
   assertReviewSkillsExecutionInput(
     reviewSkills,
     admittedAgent,
@@ -2370,7 +2416,11 @@ export async function prepareSingleT0ReviewPlan(input: {
       Math.max(1_000, config.runTimeoutSeconds * 1_000),
       true,
       contextGateway,
-      investigation
+      investigation,
+      'xhigh',
+      undefined,
+      undefined,
+      { current: () => (investigation ? null : memorySnapshot) }
     ).prepare({ workSlot: assignment.workSlot, attemptOrdinal: 1 });
   const invocation = await prepare(false);
   const investigation = await prepare(true);
@@ -2399,7 +2449,9 @@ export async function prepareSingleT0ReviewPlan(input: {
       ...prepared.manifestPreimages,
       reviewConfigHash: reviewConfigPreimage,
       runtimeCompatibilityKey: compatibilityPreimage,
-      memoryBundleHash: null,
+      memoryBundleHash: prepared.manifestFacts.memoryBundleHash
+        ? (memorySnapshot?.hashPreimage ?? null)
+        : null,
       codeGraphProjectionHash: null,
       liveLifecycleStateHash: null,
     });

@@ -7,6 +7,7 @@ const https = require('node:https');
 const net = require('node:net');
 const path = require('node:path');
 const tls = require('node:tls');
+const protocolManifest = require('../../src/control-plane/generated/review-action-v2/manifest.json');
 
 const witnessPath = requireEnv('RR_ARTIFACT_SMOKE_WITNESS_PATH');
 const expectedArtifactPath = fs.realpathSync(
@@ -38,6 +39,11 @@ process.once('exit', () => persist());
 
 assertEqual(artifactPath, expectedArtifactPath, 'artifact_path_mismatch');
 assertEqual(artifactSha256, expectedArtifactSha256, 'artifact_digest_mismatch');
+assertEqual(
+  process.env.REVIEWROUTER_ACTION_VERSION,
+  expectedActionVersion,
+  'action_version_mismatch'
+);
 if (!/^[a-f0-9]{40}$/.test(expectedActionVersion)) {
   fail('action_version_not_immutable');
 }
@@ -118,36 +124,101 @@ async function fakeFetch(resource, init = {}) {
         });
       case 'POST https://control-plane.reviewrouter.test/api/action/v1/session/exchange':
         return jsonResponse({ sessionToken: 'fake-action-session' });
-      case 'GET https://control-plane.reviewrouter.test/api/action/v1/config': {
-        const actionVersion = headers.get('x-reviewrouter-action-version');
+      case 'POST https://control-plane.reviewrouter.test/api/action/v2/review-runs/authorize': {
+        const request = JSON.parse(String(init.body));
         assertEqual(
-          actionVersion,
-          expectedActionVersion,
-          'runtime_config_action_version_mismatch'
+          request.protocolVersion,
+          protocolManifest.protocolVersion,
+          'authorization_protocol_mismatch'
         );
+        assertEqual(
+          request.schemaDigest,
+          protocolManifest.schemaDigest,
+          'authorization_schema_mismatch'
+        );
+        assertEqual(
+          request.oidcToken,
+          'fake-oidc-token',
+          'authorization_oidc_mismatch'
+        );
+        return jsonResponse({
+          protocolVersion: protocolManifest.protocolVersion,
+          schemaDigest: protocolManifest.schemaDigest,
+          requestId: request.requestId,
+          serverTime: new Date().toISOString(),
+          result: authorizationResult(),
+        });
+      }
+      case 'POST https://control-plane.reviewrouter.test/api/action/v2/model-route/checkout': {
         assertEqual(
           headers.get('authorization'),
-          'Bearer fake-action-session',
-          'runtime_config_session_mismatch'
+          'Bearer synthetic-run-authorization',
+          'model_route_authorization_mismatch'
         );
+        const request = JSON.parse(String(init.body));
+        assertEqual(
+          JSON.stringify(request),
+          JSON.stringify({
+            transport: 'runner_local_responses',
+            providerIndex: 0,
+            workflowSchemaVersion: 2,
+          }),
+          'model_route_request_mismatch'
+        );
+        state.modelRoute = request;
+        const profileJson = requireEnv('RR_ARTIFACT_SMOKE_APPROVED_AGENT_JSON');
         state.runtimeConfig = {
-          actionVersion,
           configVersion: 4242,
           providerLimit: '987654321',
         };
         persist();
         return jsonResponse({
           protocolVersion: 1,
-          configVersion: 4242,
-          runtimeEnv: {
-            PROVIDER_LIMIT: '987654321',
-            REVIEW_ROUTER_REVIEW_INVESTIGATION_RECORDING_ENABLED: '1',
-            REVIEW_ROUTER_REVIEW_INVESTIGATION_SHADOW_ENABLED: '1',
-            REVIEW_ROUTER_REVIEW_INVESTIGATION_CONTEXT_CRITIC_ENABLED: '1',
-            REVIEW_ROUTER_REVIEW_INVESTIGATION_VERIFIED_CLEAN_ENABLED: '1',
-            REVIEW_ROUTER_REVIEW_INVESTIGATION_CROSS_REVISION_REPLAY_ENABLED:
-              '1',
-            REVIEW_ROUTER_REVIEW_INVESTIGATION_PRODUCTION_EFFECTS_ENABLED: '1',
+          repository: 'sandbox/repository',
+          headSha: 'a'.repeat(40),
+          token: 'synthetic-model-route-checkout-token',
+          expiresAt: new Date(Date.now() + 600_000).toISOString(),
+          permissions: { contents: 'read', pullRequests: 'read' },
+          runtimeConfig: {
+            protocolVersion: 1,
+            configVersion: 4242,
+            runtimeEnv: {
+              REVIEW_AUTH_MODE: 'codex-oauth',
+              CODEX_MODEL: 'gpt-5.4',
+              REVIEW_PROVIDERS: 'codex/gpt-5.4',
+              CODEX_REASONING_EFFORT: 'high',
+              RUN_TIMEOUT_SECONDS: '600',
+              PROVIDER_LIMIT: '987654321',
+              REVIEW_ROUTER_AGENT_PROFILE_JSON: profileJson,
+              REVIEW_ROUTER_AGENT_PROFILE_DIGEST: crypto
+                .createHash('sha256')
+                .update(profileJson)
+                .digest('hex'),
+              REVIEW_ROUTER_MODEL_DISPATCH_CAPABILITY_JSON: JSON.stringify({
+                extensionId: 'review-model-dispatch.v2',
+                version: 2,
+                routeIdentityHash: 'd'.repeat(64),
+                transport: 'runner_local_responses',
+                wireProtocol: 'codex-responses',
+                outputTokenLimit: 'terminal_acceptance',
+                providerIndex: 0,
+                model: 'gpt-5.4',
+                deadline: new Date(Date.now() + 600_000).toISOString(),
+                maxRequests: 32,
+                maxConcurrentRequests: 1,
+                maxRequestBytes: 98304,
+                maxResponseBytes: 32768,
+                maxOutputTokens: 4096,
+              }),
+              REVIEW_ROUTER_REVIEW_INVESTIGATION_RECORDING_ENABLED: '1',
+              REVIEW_ROUTER_REVIEW_INVESTIGATION_SHADOW_ENABLED: '1',
+              REVIEW_ROUTER_REVIEW_INVESTIGATION_CONTEXT_CRITIC_ENABLED: '1',
+              REVIEW_ROUTER_REVIEW_INVESTIGATION_VERIFIED_CLEAN_ENABLED: '1',
+              REVIEW_ROUTER_REVIEW_INVESTIGATION_CROSS_REVISION_REPLAY_ENABLED:
+                '1',
+              REVIEW_ROUTER_REVIEW_INVESTIGATION_PRODUCTION_EFFECTS_ENABLED:
+                '1',
+            },
           },
         });
       }
@@ -186,7 +257,7 @@ async function fakeFetch(resource, init = {}) {
 
 function installNetworkGuards() {
   const blocked = () => {
-    throw new Error('artifact_smoke_real_network_forbidden');
+    fail('artifact_smoke_real_network_forbidden');
   };
   http.request = blocked;
   http.get = blocked;
@@ -196,6 +267,67 @@ function installNetworkGuards() {
   net.createConnection = blocked;
   tls.connect = blocked;
   state.networkGuardsInstalled = true;
+}
+
+function authorizationResult() {
+  return {
+    status: 'authorized',
+    authorizationId: 'artifact-smoke-authorization',
+    authorizationToken: 'synthetic-run-authorization',
+    producerReleaseId: 'artifact-smoke-release',
+    protocolLimitsProfileId: 'artifact-smoke-limits',
+    operationalSloProfileId: 'artifact-smoke-slo',
+    mutationEpoch: '1',
+    expiresAt: new Date(Date.now() + 600_000).toISOString(),
+    protocolLimitsCanonicalJson: canonicalJson({
+      maxAttemptsPerSlot: 1,
+      maxLeaseDurationMs: 60_000,
+      maxObservationBytes: 100_000,
+      maxObservationFindings: 100,
+      maxProjectionBytes: 200_000,
+      maxProjectionFindings: 100,
+      maxPublicationBodyBytes: 200_000,
+      maxPublicationChunks: 20,
+      maxPublicationOperations: 100,
+      maxReconciliationDurationMs: 60_000,
+      maxRequestBatchSize: 20,
+      maxResultReportDurationMs: 60_000,
+      maxWorkSlots: 10,
+    }),
+    authorizationFactsCanonicalJson: canonicalJson({
+      workspaceId: 'artifact-smoke-workspace',
+      repositoryConnectionId: 'artifact-smoke-connection',
+      scmRepositoryIdentityId: 'artifact-smoke-repository',
+      pullRequestNumber: 17,
+      sourceRunId: 'artifact-smoke-run',
+      sourceRunAttempt: '1',
+      baseSha: 'b'.repeat(40),
+      mergeBaseSha: 'b'.repeat(40),
+      headSha: 'a'.repeat(40),
+      reviewRevisionHash: 'c'.repeat(64),
+      trustDomain: 'github-actions',
+      producerReleaseId: 'artifact-smoke-release',
+      selectedProtocolVersion: protocolManifest.protocolVersion,
+      schemaDigest: protocolManifest.schemaDigest,
+      providerVoteLanes: [
+        { providerKind: 'codex', providerVoteIdentityHash: 'e'.repeat(64) },
+      ],
+    }),
+  };
+}
+
+function canonicalJson(value) {
+  const canonicalize = (input) =>
+    Array.isArray(input)
+      ? input.map(canonicalize)
+      : input && typeof input === 'object'
+        ? Object.fromEntries(
+            Object.keys(input)
+              .sort()
+              .map((key) => [key, canonicalize(input[key])])
+          )
+        : input;
+  return JSON.stringify(canonicalize(value));
 }
 
 function requestUrl(resource) {
@@ -247,6 +379,7 @@ function fail(message) {
 }
 
 function persist() {
+  state.runnerProviderLimit = process.env.PROVIDER_LIMIT ?? null;
   state.investigationRollout = {
     recording:
       process.env.REVIEW_ROUTER_REVIEW_INVESTIGATION_RECORDING_ENABLED ?? null,

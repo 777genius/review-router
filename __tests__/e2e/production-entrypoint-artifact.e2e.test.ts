@@ -64,9 +64,14 @@ type SmokeWitness = Readonly<{
     context: string;
   }>;
   runtimeConfig?: Readonly<{
-    actionVersion: string;
     configVersion: number;
     providerLimit: string;
+  }>;
+  runnerProviderLimit: string | null;
+  modelRoute: Readonly<{
+    transport: string;
+    providerIndex: number;
+    workflowSchemaVersion: number;
   }>;
   investigationRollout?: Readonly<{
     recording: string | null;
@@ -84,13 +89,11 @@ type SmokeWitness = Readonly<{
 }>;
 
 describe('committed production entrypoint artifact', () => {
-  jest.setTimeout(30_000);
-
   const linuxTest =
     process.platform === 'linux' && process.arch === 'x64' ? it : it.skip;
 
   linuxTest(
-    'provisions runtime config into the production runner without real I/O',
+    'passes admitted model-route config through rotating auth into the production runner without real I/O',
     () => {
       const tempRoot = fs.mkdtempSync(
         path.join(os.tmpdir(), 'reviewrouter-entrypoint-smoke-')
@@ -249,6 +252,7 @@ Module.prototype._compile = function(source, filename) {
             INPUT_AUTH_JSON: JSON.stringify({
               auth_mode: 'chatgpt',
               tokens: {
+                access_token: 'synthetic-expired-access-token',
                 refresh_token: 'fake-refresh-token',
                 id_token: fakeIdToken,
               },
@@ -262,23 +266,25 @@ Module.prototype._compile = function(source, filename) {
             RR_ARTIFACT_SMOKE_EXPECTED_ARTIFACT_SHA256: artifactSha256,
             RR_ARTIFACT_SMOKE_PUBLIC_KEY: fakeGitHubPublicKey,
             RR_ARTIFACT_SMOKE_WITNESS_PATH: witnessPath,
+            RR_ARTIFACT_SMOKE_APPROVED_AGENT_JSON: JSON.stringify({
+              ...profile,
+              binarySha256: sha256(fs.readFileSync(fakeCodexPath)),
+            }),
           },
         });
 
         expect(result.error).toBeUndefined();
         expect(result.signal).toBeNull();
         expect(result.status).toBe(1);
-        expect(result.stdout).toContain(
-          'ReviewRouter runtime config applied (version 4242).'
-        );
+        const witness = JSON.parse(
+          fs.readFileSync(witnessPath, 'utf8')
+        ) as SmokeWitness;
+        expect(witness.failure).toBeUndefined();
         expect(result.stdout).toContain(
           'review_action_v2_terminal_result_missing'
         );
         expect(result.stdout).not.toContain('Review completed successfully');
 
-        const witness = JSON.parse(
-          fs.readFileSync(witnessPath, 'utf8')
-        ) as SmokeWitness;
         expect(witness).toMatchObject({
           artifactPath: fs.realpathSync(artifactPath),
           artifactSha256,
@@ -294,9 +300,16 @@ Module.prototype._compile = function(source, filename) {
             context: 'ReviewRouter',
           },
           runtimeConfig: {
-            actionVersion,
             configVersion: 4242,
             providerLimit: runtimeConfigSentinel,
+          },
+          // Only the actual production runner applies the admitted environment.
+          // The deliberately invalid limit then stops it before any model I/O.
+          runnerProviderLimit: runtimeConfigSentinel,
+          modelRoute: {
+            transport: 'runner_local_responses',
+            providerIndex: 0,
+            workflowSchemaVersion: 2,
           },
           investigationRollout: {
             recording: '1',
@@ -307,7 +320,6 @@ Module.prototype._compile = function(source, filename) {
             productionEffects: '1',
           },
         });
-        expect(witness.failure).toBeUndefined();
         expect(
           witness.calls.map(
             (call) => `${call.method} ${call.origin}${call.pathname}`
@@ -321,8 +333,8 @@ Module.prototype._compile = function(source, filename) {
           'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/writeback',
           'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/checkout-token',
           'GET https://token.actions.githubusercontent.com/token',
-          'POST https://control-plane.reviewrouter.test/api/action/v1/session/exchange',
-          'GET https://control-plane.reviewrouter.test/api/action/v1/config',
+          'POST https://control-plane.reviewrouter.test/api/action/v2/review-runs/authorize',
+          'POST https://control-plane.reviewrouter.test/api/action/v2/model-route/checkout',
           'GET https://token.actions.githubusercontent.com/token',
           'POST https://control-plane.reviewrouter.test/api/action/v1/session/exchange',
           'POST https://control-plane.reviewrouter.test/api/action/v1/comment-token',
@@ -330,8 +342,16 @@ Module.prototype._compile = function(source, filename) {
           'POST https://api.github.com/repos/sandbox/repository/issues/17/comments',
           'POST https://api.github.com/repos/sandbox/repository/statuses/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         ]);
-        expect(readLog(npmLogPath)).toEqual(['approved-install']);
-        expect(readLog(codexLogPath)).toEqual(['login-status']);
+        expect(readLog(npmLogPath)).toEqual([
+          'approved-install',
+          'approved-install',
+        ]);
+        expect(readLog(codexLogPath)).toEqual([
+          'app-server',
+          'initialize',
+          'initialized',
+          'account/read',
+        ]);
         expect(readLog(gitLogPath)).toEqual([
           'init',
           'config',
@@ -344,7 +364,8 @@ Module.prototype._compile = function(source, filename) {
       } finally {
         fs.rmSync(tempRoot, { recursive: true, force: true });
       }
-    }
+    },
+    30_000
   );
 });
 
@@ -386,15 +407,35 @@ function writeFakeCodex(filePath: string, logPath: string): void {
     filePath,
     `#!/usr/bin/env node
 const fs = require('node:fs');
+const path = require('node:path');
+const readline = require('node:readline');
 const args = process.argv.slice(2);
-const invocation = args.includes('--version')
-  ? 'version'
-  : args[0] === 'login' && args[1] === 'status'
-    ? 'login-status'
-    : 'unexpected';
-fs.appendFileSync(${JSON.stringify(logPath)}, invocation + '\\n');
-if (invocation === 'version') console.log('codex-artifact-smoke 0.0.0');
-process.exitCode = invocation === 'unexpected' ? 97 : 0;
+if (JSON.stringify(args) !== '["app-server"]') {
+  fs.appendFileSync(${JSON.stringify(logPath)}, 'unexpected-cli-invocation\\n');
+  process.exit(97);
+}
+fs.appendFileSync(${JSON.stringify(logPath)}, 'app-server\\n');
+let phase = 0;
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  const request = JSON.parse(line);
+  const expected = ['initialize', 'initialized', 'account/read'][phase++];
+  fs.appendFileSync(${JSON.stringify(logPath)}, request.method + '\\n');
+  if (!expected || request.method !== expected) process.exit(97);
+  if (request.method === 'initialize') {
+    if (request.id !== 1) process.exit(97);
+    console.log(JSON.stringify({ id: request.id, result: {} }));
+  } else if (request.method === 'account/read') {
+    if (request.id !== 2 || JSON.stringify(request.params) !== '{"refreshToken":true}') process.exit(97);
+    const authPath = path.join(process.env.CODEX_HOME, 'auth.json');
+    const auth = JSON.parse(fs.readFileSync(authPath, 'utf8'));
+    auth.tokens.access_token = Buffer.from('{}').toString('base64url') + '.' +
+      Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.synthetic-signature';
+    auth.tokens.refresh_token = 'synthetic-refreshed-token';
+    auth.last_refresh = new Date().toISOString();
+    fs.writeFileSync(authPath, JSON.stringify(auth), { mode: 0o600 });
+    console.log(JSON.stringify({ id: request.id, result: { account: { type: 'chatgpt' } } }));
+  }
+});
 `
   );
 }

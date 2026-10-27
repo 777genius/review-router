@@ -17,6 +17,8 @@ import {
 import {
   ReviewExecutionProviderKind,
   ReviewTaskKind,
+  RestoredReviewExecutionState,
+  RestoredReviewWorkSlotState,
   type PreparedReviewInvocationPort,
 } from '../../../src/review-orchestration/application';
 import { createStableReviewWorkPlan } from '../../../src/review-orchestration/domain';
@@ -268,18 +270,35 @@ test.each([{ targets: [] }, { targets: [target] }])(
 test('binds recovered discovery inputs to persisted slot objects without changing their contract', async () => {
   const original = basePlan();
   const final = await composed();
-  const restored = restorePersistedWorkPlan(
-    {
-      persistedPlan: {
-        planHash: final.plan.planHash,
-        assignmentManifestCanonicalJson:
-          final.plan.assignmentManifestCanonicalJson,
-        assignmentManifestHash: final.plan.assignmentManifestHash,
-        workSlots: final.plan.assignments.map(({ workSlot }) => workSlot),
-      },
-    } as RestoredReviewExecution,
-    original
-  );
+  const execution: RestoredReviewExecution = {
+    executionId: 'restored-lifecycle-execution',
+    authorizationId: 'restored-authorization',
+    version: '1',
+    streamVersion: '1',
+    generation: '1',
+    state: RestoredReviewExecutionState.Running,
+    reviewRevisionHash: hash,
+    planHash: final.plan.planHash,
+    workSlots: final.plan.assignments.map(({ workSlot }) => ({
+      workSlotId: workSlot.workSlotId,
+      required: workSlot.required,
+      providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+      state: RestoredReviewWorkSlotState.Pending,
+      activeLeaseId: null,
+      acceptedObservationRefId: null,
+    })),
+    persistedPlan: {
+      compatibilityKey: hash,
+      planHash: final.plan.planHash,
+      assignmentManifestVersion: 2,
+      assignmentManifestCanonicalJson:
+        final.plan.assignmentManifestCanonicalJson,
+      assignmentManifestHash: final.plan.assignmentManifestHash,
+      workSlots: final.plan.assignments.map(({ workSlot }) => workSlot),
+      artifact: null,
+    },
+  };
+  const restored = restorePersistedWorkPlan(execution, original);
   const inputs = [
     { workSlot: original.assignments[0].workSlot, captured: hash },
   ];

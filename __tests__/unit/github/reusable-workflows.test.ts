@@ -1070,6 +1070,40 @@ describe('production reusable workflows', () => {
     expect(run?.env?.REVIEW_ROUTER_MEMORY_ENABLED).toBe('true');
   });
 
+  it('isolates the managed interaction job from local model setup and publication fallback', () => {
+    const workflow = parseWorkflow(
+      '.github/workflows/reviewrouter-interaction-reusable.yml'
+    );
+    const managed = workflow.jobs?.['gateway-interaction'];
+    expect(managed?.if).toBe(
+      "${{ inputs.interaction_backend == 'account-gateway' }}"
+    );
+    expect(workflow.jobs?.interaction?.if).toBe(
+      "${{ inputs.interaction_backend == 'legacy' }}"
+    );
+    expect(managed?.env).toMatchObject({
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+      REVIEWROUTER_COMMENT_TOKEN_MODE: 'app-oidc',
+      REVIEW_ROUTER_INTERACTION_BACKEND: 'account-gateway',
+    });
+    expect(managed?.permissions?.['pull-requests']).toBe('read');
+    expect(managed?.permissions?.issues).toBe('read');
+    expect(JSON.stringify(managed)).not.toMatch(
+      /CODEX_AUTH_JSON|DISCUSSION_MODEL|OPENAI_API_KEY|MIMO_TOKEN_PLAN_API_KEY|npm install/
+    );
+    expect(
+      managed?.steps?.find(
+        (step) => step.name === 'Validate immutable managed interaction'
+      )?.run
+    ).toContain('created|edited|deleted');
+    expect(
+      managed?.steps?.find(
+        (step) => step.name === 'Process managed conversation'
+      )?.run
+    ).toBe('node .reviewrouter-runtime/dist/index.js');
+  });
+
   it('keeps the interaction reusable workflow focused on /rr handling', () => {
     const workflowPath =
       '.github/workflows/reviewrouter-interaction-reusable.yml';

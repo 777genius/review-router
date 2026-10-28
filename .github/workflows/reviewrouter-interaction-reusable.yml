@@ -147,7 +147,7 @@ jobs:
           REVIEW_ROUTER_MODE: interaction
         run: node .reviewrouter-runtime/dist/index.js
   interaction:
-    if: ${{ inputs.interaction_backend != 'account-gateway' }}
+    if: ${{ inputs.interaction_backend == 'legacy' }}
     name: interaction
     runs-on: ubuntu-latest
     permissions:

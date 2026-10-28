@@ -18,6 +18,24 @@ calls. The SaaS owns authorization, mutation epochs, evidence acceptance,
 publication policy, and durable state. Provider processes never receive GitHub
 mutation credentials.
 
+## Memory inputs
+
+Fresh T0 reviews capture one bounded, authorized memory snapshot and bind its
+exact rendered bytes into the invocation manifest. Ordinary native reviews and
+OCR discovery receive this snapshot; an expired or revoked snapshot is discarded
+before a fresh inference grant. Initial investigation and PR-description calls
+intentionally omit it. Recovery retains the admitted identity instead of fetching
+new memory for an old execution.
+
+OCR uses its native `path`/`rule` JSON entries. Captured Skills keep their exact
+path rules and built-ins. When a retained no-Skills profile receives memory,
+the Action translates its historical `content` rule to an additive native
+catch-all; this changes rule content, not the legacy selected file inventory.
+Memory-free historical rule bytes and invocation identities remain unchanged.
+The required real-CLI fixture verifies memory in actual main model requests
+with and without Skills. Deterministic model responses prove input delivery,
+not that a real model follows every remembered convention.
+
 ## Projection envelope compatibility
 
 Projection envelope v1 includes `authoritativeObservationIds` so the SaaS can

@@ -9,7 +9,8 @@ import { logger } from '../utils/logger';
 
 /** The managed lane deliberately does not inspect reply gates or run a local model. */
 export function conversationSource(
-  payload: ReviewCommentEventPayload
+  payload: ReviewCommentEventPayload,
+  replyMode?: 'off' | 'suggest'
 ): ConversationSource | null {
   const comment = payload.comment;
   const action = payload.action;
@@ -34,6 +35,7 @@ export function conversationSource(
     sourceCommentId: String(comment.id),
     sourceRevision: comment.updated_at,
     eventAction: action as ConversationSource['eventAction'],
+    ...(replyMode ? { replyMode } : {}),
   });
 }
 
@@ -41,17 +43,23 @@ export function conversationSource(
 export class ManagedConversationHandler {
   constructor(
     private readonly client: GitHubClient,
-    private readonly conversations: ConversationPort
+    private readonly conversations: ConversationPort,
+    private readonly options: { readonly replyMode: 'off' | 'suggest' }
   ) {}
 
   async execute(payload: ReviewCommentEventPayload): Promise<void> {
-    const source = conversationSource(payload);
+    const source = conversationSource(payload, this.options.replyMode);
     if (!source) return;
     const result = await this.conversations.process(source);
     logger.info(
       `Conversation ${result.processingId}: ${result.status}; learning=${result.learning.status}.`
     );
-    if (!result.reply || !['ready', 'unknown'].includes(result.status)) return;
+    if (
+      this.options.replyMode === 'off' ||
+      !result.reply ||
+      !['ready', 'unknown'].includes(result.status)
+    )
+      return;
     const { reply, processingId } = result;
     const { octokit, owner, repo } = this.client;
     const receipt = (status: 'published' | 'unknown', commentId?: string) =>

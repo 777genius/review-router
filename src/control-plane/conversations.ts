@@ -2,44 +2,15 @@ import { createHash } from 'crypto';
 import type { RuntimeConfigResult } from './runtime-config';
 import { postBoundedMemoryJson } from './review-memory-v2';
 
-export type ConversationSource = Readonly<{
-  protocolVersion: 2;
-  pullRequestNumber: number;
-  sourceCommentId: string;
-  sourceRevision: string;
-  eventAction: 'created' | 'edited' | 'deleted';
-}>;
+import type {
+  ConversationProcessRequest,
+  ConversationProcessResult,
+  ConversationPublicationReceipt,
+} from './generated/review-action-v2/conversation';
 
-export type ConversationResult = Readonly<{
-  protocolVersion: 2;
-  processingId: string;
-  status:
-    | 'processing'
-    | 'ready'
-    | 'silent'
-    | 'published'
-    | 'context_incomplete'
-    | 'stale'
-    | 'unavailable'
-    | 'output_unavailable'
-    | 'unknown';
-  learning: Readonly<{ status: string; effectIds: readonly string[] }>;
-  reply?: Readonly<{
-    body: string;
-    bodyDigest: string;
-    marker: string;
-    parentCommentId: string;
-  }>;
-  publicationCommentId?: string;
-}>;
-
-export type ConversationPublication = Readonly<{
-  protocolVersion: 2;
-  processingId: string;
-  status: 'published' | 'unknown' | 'failed';
-  commentId?: string;
-  bodyDigest?: string;
-}>;
+export type ConversationSource = ConversationProcessRequest;
+export type ConversationResult = ConversationProcessResult;
+export type ConversationPublication = ConversationPublicationReceipt;
 
 /** Source references only. Source, account, learning and reply policy belong to the server. */
 export interface ConversationPort {

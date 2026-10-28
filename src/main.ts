@@ -488,7 +488,8 @@ async function runInteraction(
     ) {
       await new ManagedConversationHandler(
         githubClient,
-        new ControlPlaneConversationClient(runtimeConfig)
+        new ControlPlaneConversationClient(runtimeConfig),
+        { replyMode: loadDiscussionOptionsFromEnv().mode }
       ).execute(payload);
       return;
     }

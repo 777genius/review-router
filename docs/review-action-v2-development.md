@@ -24,8 +24,9 @@ Fresh T0 reviews capture one bounded, authorized memory snapshot and bind its
 exact rendered bytes into the invocation manifest. Ordinary native reviews and
 OCR discovery receive this snapshot; an expired or revoked snapshot is discarded
 before a fresh inference grant. Qualified server context policies authorize the
-same frozen snapshot for investigation and PR-description calls. The policy binds
-the repository, audience, and allowed tasks into the snapshot identity; historical
+same frozen internal snapshot for investigation. PR-description capture uses the
+same bounded client/helper once for its separate PR-reader audience. The policy binds
+the repository, audience, and allowed tasks into each snapshot identity; historical
 bundles without that policy remain ordinary-review inputs. The server filters the
 audience before capture and validates current receipt eligibility at each task's
 authoritative grant. Recovery retains the admitted identity instead of fetching

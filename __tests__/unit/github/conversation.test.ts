@@ -34,6 +34,7 @@ function fixture(
     comments?: unknown[];
     createError?: boolean;
     badDigest?: boolean;
+    replyMode?: 'off' | 'suggest';
   } = {}
 ) {
   const calls: Array<{ url: string; request: Record<string, unknown> }> = [];
@@ -79,7 +80,9 @@ function fixture(
     calls,
     client,
     createReplyForReviewComment,
-    handler: new ManagedConversationHandler(client, conversations),
+    handler: new ManagedConversationHandler(client, conversations, {
+      replyMode: options.replyMode ?? 'suggest',
+    }),
   };
 }
 
@@ -95,6 +98,7 @@ describe('managed App conversation boundary', () => {
         sourceCommentId: '11',
         sourceRevision: '2026-10-28T00:00:00Z',
         eventAction: 'created',
+        replyMode: 'suggest',
       },
     });
     expect(JSON.stringify(f.calls)).not.toContain(
@@ -124,6 +128,14 @@ describe('managed App conversation boundary', () => {
       expect(f.createReplyForReviewComment).not.toHaveBeenCalled();
     }
   );
+  it('forwards reply-off as a restrictive server policy while still processing learning', async () => {
+    const f = fixture({ replyMode: 'off' });
+    await f.handler.execute(payload);
+    expect(f.calls[0]?.request.replyMode).toBe('off');
+    expect(f.calls).toHaveLength(1);
+    expect(f.createReplyForReviewComment).not.toHaveBeenCalled();
+  });
+
   it('reconciles a lost create receipt by marker without a second publication', async () => {
     const first = fixture({ createError: true });
     await first.handler.execute(payload);

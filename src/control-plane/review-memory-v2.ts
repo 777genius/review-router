@@ -32,6 +32,11 @@ export type ReviewMemoryItem = Readonly<{
   observedCommitSha?: string;
   temporalStatus?: 'historical' | 'at_commit';
   exceptionRuleId?: string;
+  sourceObservations?: readonly Readonly<{
+    entryId: string;
+    observedCommitSha: string;
+    statementAt: string;
+  }>[];
 }>;
 
 export type ReviewMemoryBundle = ReviewMemoryBinding &
@@ -46,7 +51,7 @@ export type ReviewMemoryBundle = ReviewMemoryBinding &
     degraded: boolean;
     reason: string | null;
     contextPolicy?: Readonly<{
-      audience: 'public' | 'repository';
+      audience: 'public' | 'repository' | 'internal';
       repositoryId: string;
       allowedTasks: readonly ReviewMemoryTask[];
     }>;
@@ -80,6 +85,7 @@ export type ReviewMemorySessionOptions = Readonly<{
   binding: ReviewMemoryBinding;
   enabled: boolean;
   pr: PRContext;
+  task?: ReviewMemoryTask;
   signal?: AbortSignal;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
@@ -107,6 +113,7 @@ export class ReviewMemorySession {
         {
           protocolVersion: 2,
           ...session.options.binding,
+          ...(session.options.task ? { task: session.options.task } : {}),
         },
         Math.min(
           options.timeoutMs ?? REVIEW_MEMORY_V2.retrievalTimeoutMs,
@@ -209,6 +216,29 @@ export class ReviewMemorySession {
   }
 }
 
+/** Distinct task audiences share the capture/admission implementation, never each other's bytes. */
+export function reviewMemoryAdmissionForSessions(
+  primary: ReviewMemorySession,
+  ...companions: readonly ReviewMemorySession[]
+) {
+  const sessions = [primary, ...companions];
+  return {
+    isEligible(hash: string | null | undefined): Promise<boolean> {
+      if (hash == null) return Promise.resolve(true);
+      const owner = sessions.find(
+        (session) => session.current()?.hash === hash
+      );
+      return owner ? owner.isEligible(hash) : Promise.resolve(false);
+    },
+    discard() {
+      for (const session of sessions) session.discard();
+    },
+    allowsInvestigation() {
+      return primary.allowsInvestigation();
+    },
+  };
+}
+
 export function freezeReviewMemorySnapshot(
   bundle: ReviewMemoryBundle
 ): ReviewMemorySnapshot {
@@ -269,6 +299,9 @@ export function renderReviewMemoryPrompt(bundle: ReviewMemoryBundle): string {
             : {}),
           statementAt: item.statementAt,
           lastVerifiedAt: item.lastVerifiedAt,
+          ...(item.sourceObservations
+            ? { sourceObservations: item.sourceObservations }
+            : {}),
           ...(item.observedCommitSha
             ? { observedCommitSha: item.observedCommitSha }
             : {}),
@@ -373,6 +406,13 @@ export function parseReviewMemoryBundle(
       ...(item.kind === 'exception'
         ? { exceptionRuleId: item.exceptionRuleId as string }
         : {}),
+      ...(item.sourceObservations === undefined
+        ? {}
+        : {
+            sourceObservations: parseSourceObservations(
+              item.sourceObservations
+            ),
+          }),
     });
   });
   return Object.freeze({
@@ -392,12 +432,38 @@ export function parseReviewMemoryBundle(
   });
 }
 
+function parseSourceObservations(
+  value: unknown
+): NonNullable<ReviewMemoryItem['sourceObservations']> {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 32)
+    throw new Error('review_memory_source_observations_invalid');
+  const ids = new Set<string>();
+  return Object.freeze(
+    value.map((raw) => {
+      const item = record(raw);
+      const entryId = bounded(item.entryId, 160);
+      if (
+        ids.has(entryId) ||
+        typeof item.observedCommitSha !== 'string' ||
+        !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(item.observedCommitSha)
+      )
+        throw new Error('review_memory_source_observations_invalid');
+      ids.add(entryId);
+      return Object.freeze({
+        entryId,
+        observedCommitSha: item.observedCommitSha,
+        statementAt: instant(item.statementAt),
+      });
+    })
+  );
+}
+
 function parseContextPolicy(
   value: unknown
 ): NonNullable<ReviewMemoryBundle['contextPolicy']> {
   const policy = record(value);
   if (
-    !['public', 'repository'].includes(String(policy.audience)) ||
+    !['public', 'repository', 'internal'].includes(String(policy.audience)) ||
     !Array.isArray(policy.allowedTasks) ||
     policy.allowedTasks.length < 1 ||
     policy.allowedTasks.length > 3 ||
@@ -408,7 +474,7 @@ function parseContextPolicy(
   )
     throw new Error('review_memory_context_policy_invalid');
   return Object.freeze({
-    audience: policy.audience as 'public' | 'repository',
+    audience: policy.audience as 'public' | 'repository' | 'internal',
     repositoryId: bounded(policy.repositoryId, 160),
     allowedTasks: Object.freeze(policy.allowedTasks as ReviewMemoryTask[]),
   });

@@ -114,6 +114,7 @@ jobs:
       REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false'
       REVIEWROUTER_COMMENT_TOKEN_MODE: app-oidc
       REVIEW_ROUTER_INTERACTION_BACKEND: account-gateway
+      REVIEW_ROUTER_DISCUSSION_MODE: ${{ inputs.discussion_mode }}
       REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}
       REVIEW_ROUTER_MEMORY_ENABLED: 'true'
       REVIEWROUTER_ACTION_VERSION: ${{ inputs.runtime_ref }}

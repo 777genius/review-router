@@ -32,6 +32,35 @@ const json = (body: unknown) =>
   });
 
 describe('T0 memory companion v2', () => {
+  it('preserves each derived historical source commit/time without changing the recorded observation', () => {
+    const bundle = reviewMemoryBundle();
+    const sourceObservations = [
+      {
+        entryId: 'auto_source_one',
+        observedCommitSha: 'a'.repeat(40),
+        statementAt: '2026-01-01T00:00:00Z',
+      },
+    ];
+    const snapshot = freezeReviewMemorySnapshot({
+      ...bundle,
+      items: [
+        {
+          ...bundle.items[2],
+          temporalStatus: 'historical',
+          sourceObservations,
+        },
+      ],
+    });
+    expect(snapshot.bundle.items[0]?.sourceObservations).toEqual(
+      sourceObservations
+    );
+    expect(snapshot.renderedPrompt).toContain(
+      '"sourceObservations":[{"entryId":"auto_source_one","observedCommitSha":"' +
+        'a'.repeat(40) +
+        '","statementAt":"2026-01-01T00:00:00Z"}]'
+    );
+  });
+
   it('binds server audience/task authority once while preserving historical snapshot identities', () => {
     const legacy = freezeReviewMemorySnapshot(reviewMemoryBundle());
     expect(memorySnapshotForTask(legacy, 'investigation')).toBeNull();

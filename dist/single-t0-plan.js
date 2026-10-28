@@ -119981,7 +119981,8 @@ var ReviewMemorySession = class _ReviewMemorySession {
         REVIEW_MEMORY_V2.bundlePath,
         {
           protocolVersion: 2,
-          ...session.options.binding
+          ...session.options.binding,
+          ...session.options.task ? { task: session.options.task } : {}
         },
         Math.min(
           options.timeoutMs ?? REVIEW_MEMORY_V2.retrievalTimeoutMs,
@@ -120066,6 +120067,24 @@ var ReviewMemorySession = class _ReviewMemorySession {
     });
   }
 };
+function reviewMemoryAdmissionForSessions(primary, ...companions) {
+  const sessions = [primary, ...companions];
+  return {
+    isEligible(hash3) {
+      if (hash3 == null) return Promise.resolve(true);
+      const owner = sessions.find(
+        (session) => session.current()?.hash === hash3
+      );
+      return owner ? owner.isEligible(hash3) : Promise.resolve(false);
+    },
+    discard() {
+      for (const session of sessions) session.discard();
+    },
+    allowsInvestigation() {
+      return primary.allowsInvestigation();
+    }
+  };
+}
 function freezeReviewMemorySnapshot(bundle) {
   const immutable = parseReviewMemoryBundle(structuredClone(bundle), bundle);
   const renderedPrompt = renderReviewMemoryPrompt(immutable);
@@ -120119,6 +120138,7 @@ function renderReviewMemoryPrompt(bundle) {
           ...item.temporalStatus ? { temporalStatus: item.temporalStatus } : {},
           statementAt: item.statementAt,
           lastVerifiedAt: item.lastVerifiedAt,
+          ...item.sourceObservations ? { sourceObservations: item.sourceObservations } : {},
           ...item.observedCommitSha ? { observedCommitSha: item.observedCommitSha } : {},
           ...item.exceptionRuleId ? { exceptionRuleId: item.exceptionRuleId } : {},
           body: item.body
@@ -120181,7 +120201,12 @@ function parseReviewMemoryBundle(value, binding) {
         temporalStatus: item.temporalStatus === "historical" ? "historical" : "at_commit",
         ...typeof item.observedCommitSha === "string" ? { observedCommitSha: item.observedCommitSha } : {}
       } : {},
-      ...item.kind === "exception" ? { exceptionRuleId: item.exceptionRuleId } : {}
+      ...item.kind === "exception" ? { exceptionRuleId: item.exceptionRuleId } : {},
+      ...item.sourceObservations === void 0 ? {} : {
+        sourceObservations: parseSourceObservations(
+          item.sourceObservations
+        )
+      }
     });
   });
   return Object.freeze({
@@ -120198,9 +120223,28 @@ function parseReviewMemoryBundle(value, binding) {
     ...input.contextPolicy === void 0 ? {} : { contextPolicy: parseContextPolicy(input.contextPolicy) }
   });
 }
+function parseSourceObservations(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 32)
+    throw new Error("review_memory_source_observations_invalid");
+  const ids = /* @__PURE__ */ new Set();
+  return Object.freeze(
+    value.map((raw) => {
+      const item = record(raw);
+      const entryId = bounded(item.entryId, 160);
+      if (ids.has(entryId) || typeof item.observedCommitSha !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(item.observedCommitSha))
+        throw new Error("review_memory_source_observations_invalid");
+      ids.add(entryId);
+      return Object.freeze({
+        entryId,
+        observedCommitSha: item.observedCommitSha,
+        statementAt: instant(item.statementAt)
+      });
+    })
+  );
+}
 function parseContextPolicy(value) {
   const policy = record(value);
-  if (!["public", "repository"].includes(String(policy.audience)) || !Array.isArray(policy.allowedTasks) || policy.allowedTasks.length < 1 || policy.allowedTasks.length > 3 || !policy.allowedTasks.every(
+  if (!["public", "repository", "internal"].includes(String(policy.audience)) || !Array.isArray(policy.allowedTasks) || policy.allowedTasks.length < 1 || policy.allowedTasks.length > 3 || !policy.allowedTasks.every(
     (task) => ["review", "investigation", "pr_description"].includes(String(task))
   ) || new Set(policy.allowedTasks).size !== policy.allowedTasks.length)
     throw new Error("review_memory_context_policy_invalid");
@@ -221089,19 +221133,28 @@ var ProductionT0ReviewRunner = class {
         return { outcome: "superseded" /* Superseded */ };
       }
       signal?.throwIfAborted();
-      const reviewMemory = await ReviewMemorySession.capture({
+      const captureMemory = (task, available = true) => ReviewMemorySession.capture({
         apiUrl: input.apiUrl,
         authorizationToken: authorization.authorizationToken,
         binding: reviewMemoryBinding(authorization),
-        // A recovered ensemble may continue its already-admitted immutable
-        // results, but must never capture a different memory snapshot.
-        enabled: !preplanningRestore && process.env.REVIEW_ROUTER_MEMORY_ENABLED === "true",
+        task,
+        // Recovery cannot capture new bytes under an already admitted identity.
+        enabled: available && !preplanningRestore && process.env.REVIEW_ROUTER_MEMORY_ENABLED === "true",
         pr,
         signal,
         timeoutMs: executionDeadline.clampProviderTimeout(2e3),
         fetchImpl,
         warn: warning2
       });
+      const reviewMemory = await captureMemory("review");
+      const descriptionMemory = await captureMemory(
+        "pr_description",
+        config2.updatePrDescription && !!admittedRuntime?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey]
+      );
+      const memoryAdmission = reviewMemoryAdmissionForSessions(
+        reviewMemory,
+        descriptionMemory
+      );
       const materializer = new GitReviewRevisionMaterializer(
         signal ? async (args, options) => {
           signal.throwIfAborted();
@@ -221258,7 +221311,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             language: config2.outputLanguage,
             config: config2,
             transport: modelTransport,
-            memorySnapshot: reviewMemory.current(),
+            memorySnapshot: descriptionMemory.current(),
             warn: warning2
           });
           const lifecycleCapability2 = config2.reviewThreadLifecycle !== "off" && input.accountGateway ? readLifecycleCapability(
@@ -221402,7 +221455,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               liveLifecycleStateHash: lifecycle2.liveLifecycleStateHash,
               transport: modelTransport
             }) : invocationAdapter2,
-            memoryAdmission: reviewMemory,
+            memoryAdmission,
             invocationFailureClassifier: new ProviderInvocationFailureClassifier(
               modelTransport.failureFact
             ),
@@ -221555,7 +221608,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
         language: config2.outputLanguage,
         config: config2,
         transport: input.providerApi?.modelTransport ?? input.accountGateway?.modelTransport,
-        memorySnapshot: reviewMemory.current(),
+        memorySnapshot: descriptionMemory.current(),
         warn: warning2
       });
       const lifecycleCapability = config2.reviewThreadLifecycle !== "off" && input.accountGateway ? readLifecycleCapability(
@@ -221789,7 +221842,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
           transport: input.accountGateway.modelTransport
         }) : nativeDiscoveryInvocations,
-        memoryAdmission: reviewMemory,
+        memoryAdmission,
         ...investigationInvocationAdapter ? { investigationInvocations: investigationInvocationAdapter } : {},
         invocationFailureClassifier: new ProviderInvocationFailureClassifier(
           input.accountGateway?.modelTransport.failureFact

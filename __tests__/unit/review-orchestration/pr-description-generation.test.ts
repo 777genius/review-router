@@ -18,9 +18,13 @@ import {
 } from '../../../src/review-orchestration/application';
 import { prDescriptionExtensionV1 } from '../../../src/control-plane/generated/review-action-v2/pr-description-invocation-manifest-v1';
 import { canonicalizeProviderInvocationManifestV1 } from '../../../src/control-plane/generated/review-action-v2/provider-invocation-manifest-v1';
-import { GeneratedProviderInvocationManifestAssembler } from '../../../src/review-orchestration/infrastructure/codex-review-invocation-adapter';
+import {
+  GeneratedProviderInvocationManifestAssembler,
+  prepareCodexReviewPrompt,
+} from '../../../src/review-orchestration/infrastructure/codex-review-invocation-adapter';
 import type { ReviewRunAuthorization } from '../../../src/review-orchestration/application';
 import { freezeReviewMemorySnapshot } from '../../../src/control-plane/review-memory-v2';
+import { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
 import { reviewMemoryBundle } from '../../helpers/review-memory-v2-fixture';
 
 const model = 'review/model';
@@ -127,6 +131,82 @@ async function execute(transport: LocalGatewayModelTransport) {
 }
 
 describe('parent AI PR description', () => {
+  it('keeps private workspace facts in internal review while the actual description request uses its separate PR audience snapshot', async () => {
+    const bundle = reviewMemoryBundle({
+      baseSha: pr.baseSha,
+      headSha: pr.headSha,
+      pullRequestNumber: pr.number,
+    });
+    const internal = freezeReviewMemorySnapshot({
+      ...bundle,
+      contextPolicy: {
+        audience: 'internal',
+        repositoryId: 'repository-1',
+        allowedTasks: ['review', 'investigation'],
+      },
+      items: [
+        {
+          ...bundle.items[0],
+          scope: 'workspace',
+          body: 'PRIVATE_WORKSPACE_CONTEXT_SENTINEL',
+        },
+      ],
+    });
+    const publicMemory = freezeReviewMemorySnapshot({
+      ...bundle,
+      contextPolicy: {
+        audience: 'public',
+        repositoryId: 'repository-1',
+        allowedTasks: ['pr_description'],
+      },
+      items: [
+        {
+          ...bundle.items[0],
+          scope: 'repository',
+          body: 'PUBLIC_REPOSITORY_CONTEXT_SENTINEL',
+        },
+      ],
+    });
+    const review = await prepareCodexReviewPrompt(
+      new PromptBuilder(DEFAULT_CONFIG),
+      {
+        workSlot: {
+          ...slot,
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          required: true,
+        },
+        reviewRevisionHash: 'c'.repeat(64),
+        mergeBaseSha: pr.baseSha,
+        context: pr,
+        lifecycleTargets: [],
+        liveLifecycleStateHash: 'd'.repeat(64),
+      },
+      false,
+      internal
+    );
+    expect(review.prompt).toContain('PRIVATE_WORKSPACE_CONTEXT_SENTINEL');
+    const transport = {
+      generatePrDescription: jest.fn(),
+    } as unknown as LocalGatewayModelTransport;
+    const admitted = await generator(transport, {
+      memorySnapshot: publicMemory,
+    })!.prepare({ workSlot: slot, attemptOrdinal: 1 });
+    expect(admitted.immutableRequest).toContain(
+      'PUBLIC_REPOSITORY_CONTEXT_SENTINEL'
+    );
+    expect(admitted.immutableRequest).not.toContain(
+      'PRIVATE_WORKSPACE_CONTEXT_SENTINEL'
+    );
+    expect(admitted.manifestFacts.memoryBundleHash).toBe(publicMemory.hash);
+    const denied = await generator(transport, {
+      memorySnapshot: internal,
+    })!.prepare({ workSlot: slot, attemptOrdinal: 1 });
+    expect(denied.immutableRequest).not.toContain(
+      'PRIVATE_WORKSPACE_CONTEXT_SENTINEL'
+    );
+    expect(denied.manifestFacts.memoryBundleHash).toBeUndefined();
+  });
+
   it('binds the same audience-authorized memory into the actual immutable description request and manifest', async () => {
     const memory = freezeReviewMemorySnapshot(
       reviewMemoryBundle({

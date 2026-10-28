@@ -687,6 +687,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             language: config.outputLanguage,
             config,
             transport: modelTransport,
+            memorySnapshot: reviewMemory.current(),
             warn: core.warning,
           });
           const lifecycleCapability =
@@ -1078,6 +1079,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         transport:
           input.providerApi?.modelTransport ??
           input.accountGateway?.modelTransport,
+        memorySnapshot: reviewMemory.current(),
         warn: core.warning,
       });
       const lifecycleCapability =
@@ -1189,7 +1191,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               reasoningEffort,
               input.providerApi?.credentialLease,
               gatewayModelSettings,
-              undefined
+              reviewMemory
             ),
         });
       const identities = new DeterministicReviewOrchestrationIdentity();
@@ -2420,7 +2422,7 @@ export async function prepareSingleT0ReviewPlan(input: {
       'xhigh',
       undefined,
       undefined,
-      { current: () => (investigation ? null : memorySnapshot) }
+      { current: () => memorySnapshot }
     ).prepare({ workSlot: assignment.workSlot, attemptOrdinal: 1 });
   const invocation = await prepare(false);
   const investigation = await prepare(true);

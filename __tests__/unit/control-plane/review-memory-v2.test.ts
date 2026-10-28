@@ -4,6 +4,7 @@ import {
   parseReviewMemoryBundle,
   ReviewMemorySession,
   REVIEW_MEMORY_V2,
+  memorySnapshotForTask,
 } from '../../../src/control-plane/review-memory-v2';
 import {
   reviewMemoryBinding,
@@ -31,6 +32,27 @@ const json = (body: unknown) =>
   });
 
 describe('T0 memory companion v2', () => {
+  it('binds server audience/task authority once while preserving historical snapshot identities', () => {
+    const legacy = freezeReviewMemorySnapshot(reviewMemoryBundle());
+    expect(memorySnapshotForTask(legacy, 'investigation')).toBeNull();
+    expect(memorySnapshotForTask(legacy, 'pr_description')).toBeNull();
+    const qualified = freezeReviewMemorySnapshot(
+      reviewMemoryBundle({
+        contextPolicy: {
+          audience: 'public',
+          repositoryId: 'repository-1',
+          allowedTasks: ['review', 'investigation', 'pr_description'],
+        },
+      })
+    );
+    expect(qualified.hash).not.toBe(legacy.hash);
+    expect(qualified.renderedPrompt).toBe(legacy.renderedPrompt);
+    expect(memorySnapshotForTask(qualified, 'investigation')).toBe(qualified);
+    expect(memorySnapshotForTask(qualified, 'pr_description')).toBe(qualified);
+    expect(JSON.parse(qualified.hashPreimage).contextPolicy).toEqual(
+      qualified.bundle.contextPolicy
+    );
+  });
   it('labels derived observations as historical without inventing a shared commit', () => {
     const observed = reviewMemoryBundle().items[2];
     const snapshot = freezeReviewMemorySnapshot(

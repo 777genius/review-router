@@ -3,6 +3,11 @@ name: ReviewRouter Interaction Reusable
 on:
   workflow_call:
     inputs:
+      interaction_backend:
+        description: 'Managed account-gateway profile or legacy local discussion backend'
+        required: false
+        type: string
+        default: legacy
       runtime_ref:
         description: 'ReviewRouter runtime ref: main, v1, v1.x.x, or a 40-char commit SHA'
         required: false
@@ -88,7 +93,61 @@ on:
         required: false
 
 jobs:
+  gateway-interaction:
+    if: ${{ inputs.interaction_backend == 'account-gateway' }}
+    name: managed interaction
+    runs-on: ubuntu-latest
+    concurrency:
+      group: reviewrouter-conversation-${{ github.repository_id }}-${{ github.event.comment.id }}
+      cancel-in-progress: false
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    env:
+      REVIEWROUTER_API_URL: ${{ inputs.control_plane_url || inputs.api_url }}
+      REVIEWROUTER_CONTROL_PLANE_URL: ${{ inputs.control_plane_url || inputs.api_url }}
+      REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: oidc
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false'
+      REVIEWROUTER_COMMENT_TOKEN_MODE: app-oidc
+      REVIEW_ROUTER_INTERACTION_BACKEND: account-gateway
+      REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}
+      REVIEW_ROUTER_MEMORY_ENABLED: 'true'
+      REVIEWROUTER_ACTION_VERSION: ${{ inputs.runtime_ref }}
+    steps:
+      - name: Validate immutable managed interaction
+        env:
+          RR_RUNTIME_REF: ${{ inputs.runtime_ref }}
+          RR_EVENT_NAME: ${{ github.event_name }}
+          RR_EVENT_ACTION: ${{ github.event.action }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RR_RUNTIME_REF" =~ ^[a-f0-9]{40}$ ]] || { echo '::error::Managed interaction requires a full immutable runtime SHA.'; exit 1; }
+          [[ "$RR_EVENT_NAME" == pull_request_review_comment ]] || { echo '::error::Managed interaction requires an inline comment event.'; exit 1; }
+          [[ "$RR_EVENT_ACTION" =~ ^(created|edited|deleted)$ ]] || { echo '::error::Unsupported inline comment action.'; exit 1; }
+      - name: Checkout ReviewRouter runtime
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: 777genius/review-router
+          ref: ${{ inputs.runtime_ref }}
+          path: .reviewrouter-runtime
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Process managed conversation
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REVIEW_ROUTER_MODE: interaction
+        run: node .reviewrouter-runtime/dist/index.js
   interaction:
+    if: ${{ inputs.interaction_backend != 'account-gateway' }}
     name: interaction
     runs-on: ubuntu-latest
     permissions:

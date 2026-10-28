@@ -45,7 +45,26 @@ export type ReviewMemoryBundle = ReviewMemoryBinding &
     items: readonly ReviewMemoryItem[];
     degraded: boolean;
     reason: string | null;
+    contextPolicy?: Readonly<{
+      audience: 'public' | 'repository';
+      repositoryId: string;
+      allowedTasks: readonly ReviewMemoryTask[];
+    }>;
   }>;
+
+export type ReviewMemoryTask = 'review' | 'investigation' | 'pr_description';
+
+/** One frozen input, with server-selected audience and purpose authority. */
+export function memorySnapshotForTask(
+  snapshot: ReviewMemorySnapshot | null | undefined,
+  task: ReviewMemoryTask
+): ReviewMemorySnapshot | null {
+  if (!snapshot) return null;
+  if (task === 'review' && !snapshot.bundle.contextPolicy) return snapshot;
+  return snapshot.bundle.contextPolicy?.allowedTasks.includes(task)
+    ? snapshot
+    : null;
+}
 
 /** Exact bytes used by every review provider. Never persist or log this object. */
 export type ReviewMemorySnapshot = Readonly<{
@@ -119,6 +138,10 @@ export class ReviewMemorySession {
   /** A server lease rejection retires this captured input; never refetch it. */
   discard(): void {
     this.snapshot = null;
+  }
+
+  allowsInvestigation(): boolean {
+    return memorySnapshotForTask(this.current(), 'investigation') !== null;
   }
 
   /** A rejected or unavailable admission permanently drops this run's snapshot. */
@@ -205,6 +228,9 @@ export function freezeReviewMemorySnapshot(
     eligibilityEpoch: immutable.eligibilityEpoch,
     expiresAt: immutable.expiresAt,
     renderedPrompt,
+    ...(immutable.contextPolicy
+      ? { contextPolicy: immutable.contextPolicy }
+      : {}),
   });
   return Object.freeze({
     bundle: immutable,
@@ -360,6 +386,31 @@ export function parseReviewMemoryBundle(
     items: Object.freeze(items),
     degraded: input.degraded,
     reason: input.reason as string | null,
+    ...(input.contextPolicy === undefined
+      ? {}
+      : { contextPolicy: parseContextPolicy(input.contextPolicy) }),
+  });
+}
+
+function parseContextPolicy(
+  value: unknown
+): NonNullable<ReviewMemoryBundle['contextPolicy']> {
+  const policy = record(value);
+  if (
+    !['public', 'repository'].includes(String(policy.audience)) ||
+    !Array.isArray(policy.allowedTasks) ||
+    policy.allowedTasks.length < 1 ||
+    policy.allowedTasks.length > 3 ||
+    !policy.allowedTasks.every((task) =>
+      ['review', 'investigation', 'pr_description'].includes(String(task))
+    ) ||
+    new Set(policy.allowedTasks).size !== policy.allowedTasks.length
+  )
+    throw new Error('review_memory_context_policy_invalid');
+  return Object.freeze({
+    audience: policy.audience as 'public' | 'repository',
+    repositoryId: bounded(policy.repositoryId, 160),
+    allowedTasks: Object.freeze(policy.allowedTasks as ReviewMemoryTask[]),
   });
 }
 

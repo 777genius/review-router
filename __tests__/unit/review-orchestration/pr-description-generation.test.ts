@@ -20,6 +20,8 @@ import { prDescriptionExtensionV1 } from '../../../src/control-plane/generated/r
 import { canonicalizeProviderInvocationManifestV1 } from '../../../src/control-plane/generated/review-action-v2/provider-invocation-manifest-v1';
 import { GeneratedProviderInvocationManifestAssembler } from '../../../src/review-orchestration/infrastructure/codex-review-invocation-adapter';
 import type { ReviewRunAuthorization } from '../../../src/review-orchestration/application';
+import { freezeReviewMemorySnapshot } from '../../../src/control-plane/review-memory-v2';
+import { reviewMemoryBundle } from '../../helpers/review-memory-v2-fixture';
 
 const model = 'review/model';
 const slot = {
@@ -125,6 +127,58 @@ async function execute(transport: LocalGatewayModelTransport) {
 }
 
 describe('parent AI PR description', () => {
+  it('binds the same audience-authorized memory into the actual immutable description request and manifest', async () => {
+    const memory = freezeReviewMemorySnapshot(
+      reviewMemoryBundle({
+        contextPolicy: {
+          audience: 'public',
+          repositoryId: 'repository-1',
+          allowedTasks: ['review', 'investigation', 'pr_description'],
+        },
+      })
+    );
+    const request = jest.fn(
+      async ({ requestBody }: { requestBody: Uint8Array }) => ({
+        generatedMarkdown: '## Summary\nPreserve invoice ownership.',
+        actualModel: model,
+        providerRequestEnvelopeHash: hash(requestBody),
+      })
+    );
+    const parent = generator(
+      {
+        generatePrDescription: request,
+      } as unknown as LocalGatewayModelTransport,
+      { memorySnapshot: memory }
+    )!;
+    const invocation = await parent.prepare({
+      workSlot: slot,
+      attemptOrdinal: 1,
+    });
+    expect(invocation.manifestFacts.memoryBundleHash).toBe(memory.hash);
+    expect(
+      JSON.parse(String(invocation.immutableRequest)).input[0].content[0].text
+    ).toContain(JSON.stringify(memory.renderedPrompt).slice(1, -1));
+    await parent.execute({
+      invocation,
+      manifest,
+      lease,
+      signal: new AbortController().signal,
+    });
+    expect(
+      Buffer.from(request.mock.calls[0][0].requestBody).toString('utf8')
+    ).toBe(invocation.immutableRequest);
+    const legacy = generator(
+      {
+        generatePrDescription: request,
+      } as unknown as LocalGatewayModelTransport,
+      { memorySnapshot: freezeReviewMemorySnapshot(reviewMemoryBundle()) }
+    )!;
+    const denied = await legacy.prepare({ workSlot: slot, attemptOrdinal: 1 });
+    expect(denied.manifestFacts.memoryBundleHash).toBeUndefined();
+    expect(denied.immutableRequest).not.toContain(
+      'AUTHORIZED REVIEWROUTER MEMORY'
+    );
+  });
   beforeAll(() => {
     nock.disableNetConnect();
     nock.enableNetConnect('127.0.0.1');

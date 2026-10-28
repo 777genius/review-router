@@ -40,6 +40,11 @@ import { createRotatingCommentTokenProvider } from './control-plane/rotating-com
 import { GitHubTokenProvider } from './github/token-provider';
 import { reportControlPlaneActionHealth } from './control-plane/health-report';
 import { ControlPlaneMemoryClient } from './control-plane/memory';
+import { ControlPlaneConversationClient } from './control-plane/conversations';
+import {
+  ManagedConversationHandler,
+  conversationSource,
+} from './github/conversation';
 import {
   prepareRuntimePreflight,
   resolveRuntimePreflightPlan,
@@ -248,6 +253,12 @@ async function run(): Promise<void> {
         warn: (message) => core.warning(message),
       },
     });
+    if (
+      process.env.REVIEW_ROUTER_INTERACTION_BACKEND === 'account-gateway' &&
+      (mode === 'interaction' || mode === 'interaction-preflight') &&
+      (runtimeConfig.status !== 'applied' || commentToken.status !== 'app')
+    )
+      throw new Error('managed_conversation_app_identity_required');
     const fallbackToken = token;
     token = commentToken.token;
     githubTokenProvider = createRotatingCommentTokenProvider({
@@ -465,6 +476,23 @@ async function runInteraction(
   runtimeConfig?: RuntimeConfigResult
 ): Promise<void> {
   const githubClient = new GitHubClient(token);
+  if (process.env.REVIEW_ROUTER_INTERACTION_BACKEND === 'account-gateway') {
+    if (runtimeConfig?.status !== 'applied')
+      throw new Error('managed_conversation_session_required');
+    const payload = JSON.parse(
+      fs.readFileSync(process.env.GITHUB_EVENT_PATH || '', 'utf8')
+    );
+    if (
+      payload.action === 'deleted' ||
+      !parseInteractionCommand(String(payload.comment?.body || ''))
+    ) {
+      await new ManagedConversationHandler(
+        githubClient,
+        new ControlPlaneConversationClient(runtimeConfig)
+      ).execute(payload);
+      return;
+    }
+  }
   const actionsClient =
     actionsToken && actionsToken !== token
       ? new GitHubClient(actionsToken)
@@ -474,7 +502,10 @@ async function runInteraction(
     process.env.REVIEW_ROUTER_LEDGER_KEY,
     /^true$/i.test(process.env.DRY_RUN || '')
   );
-  const discussionHandler = createDiscussionHandler(githubClient);
+  const discussionHandler =
+    process.env.REVIEW_ROUTER_INTERACTION_BACKEND === 'account-gateway'
+      ? undefined
+      : createDiscussionHandler(githubClient);
   const memoryClient = new ControlPlaneMemoryClient(runtimeConfig);
   const reviewRequests = new ControlPlaneManualReviewRequestClient(
     runtimeConfig
@@ -492,10 +523,21 @@ async function runInteraction(
 
 async function runInteractionPreflight(token: string): Promise<void> {
   const githubClient = new GitHubClient(token);
-  const discussionHandler = createDiscussionHandler(githubClient);
   const payload = JSON.parse(
     fs.readFileSync(process.env.GITHUB_EVENT_PATH || '', 'utf8')
   );
+  if (process.env.REVIEW_ROUTER_INTERACTION_BACKEND === 'account-gateway') {
+    const eligible = conversationSource(payload) !== null;
+    core.setOutput('should_run', eligible ? 'true' : 'false');
+    core.setOutput('needs_discussion', 'false');
+    core.setOutput('discussion_auth_mode', 'account-gateway');
+    core.setOutput(
+      'reason',
+      eligible ? 'managed conversation source event' : 'ineligible source event'
+    );
+    return;
+  }
+  const discussionHandler = createDiscussionHandler(githubClient);
   const body = String(payload?.comment?.body || '');
   const botComment =
     payload?.comment?.user?.type === 'Bot' ||

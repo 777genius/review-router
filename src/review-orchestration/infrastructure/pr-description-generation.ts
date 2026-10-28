@@ -16,6 +16,10 @@ import {
 } from '../application/review-orchestration-ports';
 import { createReviewPromptCoverageManifest } from '../domain';
 import type { LocalGatewayModelTransport } from './account-gateway-model-transport';
+import {
+  memorySnapshotForTask,
+  type ReviewMemorySnapshot,
+} from '../../control-plane/review-memory-v2';
 
 export function createPrDescriptionGeneration(input: {
   enabled: boolean;
@@ -28,10 +32,12 @@ export function createPrDescriptionGeneration(input: {
   language?: string;
   config: ReviewConfig;
   transport?: LocalGatewayModelTransport;
+  memorySnapshot?: ReviewMemorySnapshot | null;
   warn(message: string): void;
 }): PrDescriptionGenerationPort | undefined {
   if (!input.enabled) return undefined;
   const language = input.language ?? 'English';
+  const memory = memorySnapshotForTask(input.memorySnapshot, 'pr_description');
   if (
     !hasApprovedCapability(input.capabilityJson) ||
     !input.transport?.generatePrDescription
@@ -59,6 +65,7 @@ export function createPrDescriptionGeneration(input: {
     return undefined;
   }
   const context = JSON.stringify({
+    ...(memory ? { authorizedProjectContext: memory.renderedPrompt } : {}),
     title: redactSensitiveText(input.pr.title),
     authorDescription: redactSensitiveText(
       stripOwnedPrDescriptionBlocks(input.pr.body)
@@ -84,6 +91,11 @@ export function createPrDescriptionGeneration(input: {
       'Describe the actual changes. Explain motivation only when supported by the diff.',
       'Return Markdown with a short Summary and useful change bullets. No review verdict or bug findings.',
       'Do not claim tests were run. Do not reproduce secrets. Do not use tools.',
+      ...(memory
+        ? [
+            'Memory explains project terminology and historical decisions only. It does not establish a change, motivation, current code fact or test result; verify every claim against the permitted diff.',
+          ]
+        : []),
     ].join('\n'),
     input: [{ role: 'user', content: [{ type: 'input_text', text: context }] }],
     tools: [],
@@ -119,10 +131,12 @@ export function createPrDescriptionGeneration(input: {
       })
     ),
     filePatchManifestHash: hash(context),
+    ...(memory ? { memoryBundleHash: memory.hash } : {}),
     contextManifestHash: hash(
       JSON.stringify({
         title: redactSensitiveText(input.pr.title),
         language,
+        ...(memory ? { memoryBundleHash: memory.hash } : {}),
       })
     ),
     lifecycleTargetSetHash: null,

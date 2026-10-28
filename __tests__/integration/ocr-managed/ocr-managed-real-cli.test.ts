@@ -1302,6 +1302,107 @@ describeHarness(
       ]);
     }, 120_000);
 
+    it.each([false, true])(
+      'keeps literal frozen memory exact in actual plan/main and second-round requests (skills=%s)',
+      async (withSkills) => {
+        const repo = path.join(workspace, `literal-repo-${withSkills}`);
+        fs.mkdirSync(repo);
+        git(repo, 'init', '-q');
+        fs.writeFileSync(
+          path.join(repo, 'calc.ts'),
+          'export const seed = 1;\n'
+        );
+        git(repo, 'add', '.');
+        git(repo, 'commit', '-qm', 'base');
+        const baseSha = git(repo, 'rev-parse', 'HEAD').trim();
+        fs.writeFileSync(
+          path.join(repo, 'calc.ts'),
+          Array.from(
+            { length: 80 },
+            (_, i) => `export const changed${i} = ${i};`
+          ).join('\n')
+        );
+        git(repo, 'add', '.');
+        git(repo, 'commit', '-qm', 'head');
+        const headSha = git(repo, 'rev-parse', 'HEAD').trim();
+        const bundle = reviewMemoryBundle({
+          authorizationId: 'auth-harness',
+          repositoryConnectionId: 'conn-1',
+          pullRequestNumber: 1,
+          baseSha,
+          headSha,
+        });
+        // This independent literal is the oracle, not the production renderer.
+        const literal =
+          'LITERAL_MEMORY_START Use {{requirement_background}} as a literal fixture key. DIFF_KEY={{diffs}} END_LITERAL_MEMORY';
+        const snapshot = freezeReviewMemorySnapshot({
+          ...bundle,
+          items: [{ ...bundle.items[0], body: literal }],
+        });
+        const skills = withSkills
+          ? await materializeReviewSkillsWithDiagnostics({
+              capture: createCapturedReviewSkills({
+                baseSha,
+                webSkills: [
+                  {
+                    skillId: 'literal-skill',
+                    revisionId: 'revision-1',
+                    sourceWorkspaceId: 'source',
+                    name: 'literal',
+                    description: 'literal native fixture',
+                    instructions: 'EXACT_PATH_SKILL_SENTINEL',
+                    includePaths: ['calc.ts'],
+                    excludePaths: [],
+                  },
+                ],
+                gitSources: [],
+              }),
+              baseSha,
+              checkoutRoot: repo,
+            })
+          : undefined;
+        const scenario = await runScriptedScenario({
+          workspace,
+          checkoutRoot: repo,
+          script: { nComments: 1, contentLen: 40, filterMode: 'approve' },
+          reviewMemory: snapshot,
+          reviewSkills: skills?.executionInput,
+        });
+        expect(scenario.rejection).toBeUndefined();
+        const requests = scenario.requests.filter(
+          (request) => request.kind === 'main' || request.kind === 'plan'
+        );
+        expect(requests.some((request) => request.kind === 'plan')).toBe(true);
+        expect(
+          requests.filter((request) => request.kind === 'main').length
+        ).toBeGreaterThanOrEqual(3);
+        for (const request of requests) {
+          expect(request.inputText).toContain(literal);
+          expect(request.inputText).toContain(
+            JSON.stringify(snapshot.renderedPrompt).slice(1, -1)
+          );
+          expect(request.inputText).toContain(
+            'System-Specific Rules (Mandatory)'
+          );
+          expect(request.inputText).toContain(
+            'Accidental subtraction in add().'
+          );
+          if (withSkills)
+            expect(request.inputText).toContain('EXACT_PATH_SKILL_SENTINEL');
+        }
+        const native = parseOcrNativeReviewResult(
+          scenario.resultRaw,
+          scenario.admission
+        );
+        expect(native.outcome.groups[0].rounds).toEqual({
+          configured: 2,
+          started: 2,
+          completed: 2,
+        });
+      },
+      120_000
+    );
+
     // ------------------------------------------------------------------
     // §12 variant 1: round-2 prompt overflow.
     //

@@ -1076,15 +1076,18 @@ export class RunT0ReviewOrchestration {
         }
 
         let investigationCandidate = null;
-        // The initial profile has no atomic memory admission at investigation
-        // grants. Keep this ordinal on ordinary review, even after memory drops.
-        if (authoritativeInvocation.manifestFacts.memoryBundleHash != null)
+        // Historical snapshots lack investigation authority. A qualified server
+        // context policy permits the same frozen input at its separate grant.
+        const investigationMemoryAllowed =
+          authoritativeInvocation.manifestFacts.memoryBundleHash == null ||
+          this.dependencies.memoryAdmission?.allowsInvestigation?.() === true;
+        if (!investigationMemoryAllowed)
           handledInvestigationOrdinal = attemptOrdinal;
         if (
           // A restored pending authoritative slot cannot prove that its
           // separate investigation did not already execute before the crash.
           !input.restoreOnly &&
-          authoritativeInvocation.manifestFacts.memoryBundleHash == null &&
+          investigationMemoryAllowed &&
           handledInvestigationOrdinal !== attemptOrdinal &&
           !authoritativeInvocation.manifestFacts.taskKindSet.includes(
             ReviewTaskKind.LifecycleRevalidation
@@ -2289,6 +2292,7 @@ export class RunT0ReviewOrchestration {
         workSlot: input.workSlot,
         attemptOrdinal: 1,
       });
+      await this.assertMemoryEligible(invocation);
       const manifest =
         await this.dependencies.invocationManifestAssembler.assemble(
           invocation

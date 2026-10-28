@@ -1273,6 +1273,12 @@ describeHarness(
         expect(request.inputText).toContain(
           'All outbound calls require a bounded timeout.'
         );
+        expect(request.inputText).toContain(
+          'The offline replay harness can disable its timer.'
+        );
+        expect(request.inputText).toContain(
+          'The adapter used a 30 second timeout at this commit.'
+        );
         expect(request.inputText).toContain('UPPER_ONLY_MARKER');
         expect(request.inputText).toContain('LOWER_ONLY_MARKER');
         expect(request.inputText).toContain(

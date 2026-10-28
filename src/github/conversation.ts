@@ -80,7 +80,9 @@ export class ManagedConversationHandler {
         per_page: 100,
       });
     } catch {
-      await receipt('unknown');
+      // An inventory read has no publication effect. Only a consumed server
+      // claim can make the frozen reply uncertain.
+      if (result.status === 'unknown') await receipt('unknown');
       return;
     }
     const matches = comments.filter((comment) =>
@@ -97,7 +99,7 @@ export class ManagedConversationHandler {
           .digest('hex') === reply.bodyDigest
       )
         await receipt('published', String(existing.id));
-      else await receipt('unknown');
+      else if (result.status === 'unknown') await receipt('unknown');
       return;
     }
     // A prior ambiguous create remains uncertain even when a later read misses it.

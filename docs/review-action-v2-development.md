@@ -70,7 +70,9 @@ receipt. Immediately before the first create, the server rechecks the frozen
 source/authority and atomically claims publication through the same finite
 endpoint. A lost or rejected claim never authorizes a create. Redelivery looks up every comment page; an ambiguous create is marked
 unknown and reconciled rather than blindly recreated. Settled output is not
-regenerated. Matching source events are serialized in the reusable job.
+regenerated. A failed inventory before the claim leaves the reply ready for
+redelivery within its original deadline; only the server claim consumes the
+one-create permission. Matching source events are serialized in the reusable job.
 
 Source implementation and deterministic fixtures do not enable this profile.
 The control plane must attest the exact immutable caller/runtime, configure the

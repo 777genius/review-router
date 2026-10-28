@@ -165281,7 +165281,7 @@ var ManagedConversationHandler = class {
         per_page: 100
       });
     } catch {
-      await receipt("unknown");
+      if (result2.status === "unknown") await receipt("unknown");
       return;
     }
     const matches = comments.filter(
@@ -165291,7 +165291,7 @@ var ManagedConversationHandler = class {
       const existing = matches[0];
       if (matches.length === 1 && existing.user?.type === "Bot" && String(existing.in_reply_to_id) === reply.parentCommentId && (0, import_crypto25.createHash)("sha256").update(existing.body ?? "", "utf8").digest("hex") === reply.bodyDigest)
         await receipt("published", String(existing.id));
-      else await receipt("unknown");
+      else if (result2.status === "unknown") await receipt("unknown");
       return;
     }
     if (result2.status === "unknown") {

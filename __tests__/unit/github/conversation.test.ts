@@ -81,17 +81,19 @@ function fixture(
     ? jest.fn().mockRejectedValue(new Error('lost ACK'))
     : jest.fn().mockResolvedValue({ data: { id: 77 } });
   const listReviewComments = jest.fn();
+  const paginate = jest.fn().mockResolvedValue(options.comments ?? []);
   const client = {
     owner: 'owner',
     repo: 'repo',
     octokit: {
-      paginate: jest.fn().mockResolvedValue(options.comments ?? []),
+      paginate,
       rest: { pulls: { listReviewComments, createReplyForReviewComment } },
     },
   } as unknown as GitHubClient;
   return {
     calls,
     client,
+    paginate,
     createReplyForReviewComment,
     handler: new ManagedConversationHandler(client, conversations, {
       replyMode: options.replyMode ?? 'suggest',
@@ -164,6 +166,39 @@ describe('managed App conversation boundary', () => {
       expect(f.calls[1].request.status).toBe('dispatching');
     }
   );
+
+  it('leaves a failed preclaim inventory ready for safe redelivery', async () => {
+    const f = fixture();
+    f.paginate.mockRejectedValueOnce(new Error('inventory unavailable'));
+    await f.handler.execute(payload);
+    expect(f.calls).toHaveLength(1);
+    expect(f.createReplyForReviewComment).not.toHaveBeenCalled();
+    await f.handler.execute(payload);
+    expect(f.calls.map((call) => call.request.status)).toEqual([
+      undefined,
+      undefined,
+      'dispatching',
+      'published',
+    ]);
+    expect(f.createReplyForReviewComment).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves an already consumed publication claim when inventory fails', async () => {
+    const f = fixture({ status: 'unknown' });
+    f.paginate.mockRejectedValueOnce(new Error('inventory unavailable'));
+    await f.handler.execute(payload);
+    expect(f.calls[1].request.status).toBe('unknown');
+    expect(f.createReplyForReviewComment).not.toHaveBeenCalled();
+  });
+
+  it('does not consume a ready claim for an unverified existing marker', async () => {
+    const f = fixture({
+      comments: [{ id: 77, body, in_reply_to_id: 10, user: { type: 'User' } }],
+    });
+    await f.handler.execute(payload);
+    expect(f.calls).toHaveLength(1);
+    expect(f.createReplyForReviewComment).not.toHaveBeenCalled();
+  });
 
   it('reconciles a lost create receipt by marker without a second publication', async () => {
     const first = fixture({ createError: true });

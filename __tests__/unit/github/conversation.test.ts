@@ -35,6 +35,8 @@ function fixture(
     createError?: boolean;
     badDigest?: boolean;
     replyMode?: 'off' | 'suggest';
+    claimAllowed?: boolean;
+    claimError?: boolean;
   } = {}
 ) {
   const calls: Array<{ url: string; request: Record<string, unknown> }> = [];
@@ -43,6 +45,17 @@ function fixture(
     expect((init?.headers as Record<string, string>).authorization).toBe(
       'Bearer session-only'
     );
+    if (JSON.parse(String(init?.body)).status === 'dispatching') {
+      if (options.claimError) throw new Error('lost claim ACK');
+      return new Response(
+        JSON.stringify({
+          protocolVersion: 2,
+          processingId: 'record-1',
+          allowed: options.claimAllowed ?? true,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    }
     return new Response(
       JSON.stringify({
         ...result,
@@ -111,7 +124,12 @@ describe('managed App conversation boundary', () => {
       comment_id: 10,
       body,
     });
-    expect(f.calls[1].request).toEqual({
+    expect(f.calls[1].request).toMatchObject({
+      processingId: 'record-1',
+      status: 'dispatching',
+      bodyDigest,
+    });
+    expect(f.calls[2].request).toEqual({
       protocolVersion: 2,
       processingId: 'record-1',
       status: 'published',
@@ -136,10 +154,21 @@ describe('managed App conversation boundary', () => {
     expect(f.createReplyForReviewComment).not.toHaveBeenCalled();
   });
 
+  it.each([{ claimAllowed: false }, { claimError: true }])(
+    'never creates after a rejected or lost publication claim (%j)',
+    async (options) => {
+      const f = fixture(options);
+      await f.handler.execute(payload);
+      expect(f.createReplyForReviewComment).not.toHaveBeenCalled();
+      expect(f.calls).toHaveLength(2);
+      expect(f.calls[1].request.status).toBe('dispatching');
+    }
+  );
+
   it('reconciles a lost create receipt by marker without a second publication', async () => {
     const first = fixture({ createError: true });
     await first.handler.execute(payload);
-    expect(first.calls[1].request.status).toBe('unknown');
+    expect(first.calls[2].request.status).toBe('unknown');
     const retry = fixture({
       status: 'unknown',
       comments: [{ id: 77, body, in_reply_to_id: 10, user: { type: 'Bot' } }],

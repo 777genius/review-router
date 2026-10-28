@@ -105,6 +105,22 @@ export class ManagedConversationHandler {
       await receipt('unknown');
       return;
     }
+    // The server revalidates the frozen source/authority and atomically consumes
+    // the one publication claim. A lost claim ACK never authorizes a create.
+    try {
+      if (
+        !(await this.conversations.claimPublication(
+          processingId,
+          reply.bodyDigest
+        ))
+      )
+        return;
+    } catch {
+      logger.warn(
+        'Conversation publication admission is unavailable; awaiting reconciliation.'
+      );
+      return;
+    }
     try {
       const published = await octokit.rest.pulls.createReplyForReviewComment({
         owner,

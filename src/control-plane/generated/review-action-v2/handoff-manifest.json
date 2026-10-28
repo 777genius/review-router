@@ -1,10 +1,10 @@
 {
   "canonicalizerDigest": "bf61d04d42e158b26e4b651b62700b10212496487d7e20ac6e705272dc1d6a5f",
   "contractExportVersion": 1,
-  "expectedPublicActionBaseCommit": "ff67f9c12bee6e42fc50aeff8067596d93aa7fe8",
+  "expectedPublicActionBaseCommit": "df8e2147d219dbd5c0a17ac913df3922ccce5a5f",
   "generatedFileDigests": {
     "companion-contracts.ts": "6394d8b5b1b922da6ae6fa6fec7897bb414676dbb847f9ba9e80192ce293749b",
-    "conversation.ts": "1a88050ecb50cf83fbc80f2fc7a1493b132e6eb9790d540ca00b41b76c40b5b1",
+    "conversation.ts": "d31309c5667a8aa37d9ef8e59b055d3ffdfeb59ba6bb7723fad09fb137d1493b",
     "fixtures/context-tools-v1.json": "bfb01a041ade951c16ae6f4066a1a160338191ec8ef3a1c5a059eff1a2c7a19b",
     "fixtures/pr-description-invocation-manifest-v1.golden.json": "03a33c85b5d3ef9070b592f2c2e3c39654891ca0ccef93ac6c55b6330aa38334",
     "fixtures/provider-invocation-manifest-v1.golden.json": "9e0369a80cb91c458befaf0b2aeb41be5b98246e0217b032e8fca414dab579bb",
@@ -66,6 +66,6 @@
   },
   "goldenFixtureDigest": "25cbbf9c205d69c8bb9f32d074ce4df8d81a77a3fce070383abbd282245a6b9f",
   "protocolVersion": "2",
-  "saasSourceCommit": "66a54a1b3ca1f8e951fb94100316d1a24a16eef3",
+  "saasSourceCommit": "157eed60e97ecfc31d9ceaea8c8c989eb9e9e3be",
   "schemaDigest": "71f316821909667e1b7cc704bed330ef6cfa7ac44cf51d58935ba3238ab92504"
 }

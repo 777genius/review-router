@@ -66,7 +66,9 @@ The Action submits source references to the finite `/api/action/v2/conversations
 process/status/publication contract. The server loads and checks the full thread,
 selects the authorized account and freezes bounded exact reply bytes. The Action
 publishes that envelope with its stable marker and reports the publication
-receipt. Redelivery looks up every comment page; an ambiguous create is marked
+receipt. Immediately before the first create, the server rechecks the frozen
+source/authority and atomically claims publication through the same finite
+endpoint. A lost or rejected claim never authorizes a create. Redelivery looks up every comment page; an ambiguous create is marked
 unknown and reconciled rather than blindly recreated. Settled output is not
 regenerated. Matching source events are serialized in the reusable job.
 

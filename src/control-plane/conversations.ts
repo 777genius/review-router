@@ -4,6 +4,8 @@ import { postBoundedMemoryJson } from './review-memory-v2';
 
 import type {
   ConversationProcessRequest,
+  ConversationPublicationClaimRequest,
+  ConversationPublicationClaimResult,
   ConversationProcessResult,
   ConversationPublicationReceipt,
 } from './generated/review-action-v2/conversation';
@@ -16,6 +18,7 @@ export type ConversationPublication = ConversationPublicationReceipt;
 export interface ConversationPort {
   process(source: ConversationSource): Promise<ConversationResult>;
   status(processingId: string): Promise<ConversationResult>;
+  claimPublication(processingId: string, bodyDigest: string): Promise<boolean>;
   publication(receipt: ConversationPublication): Promise<void>;
 }
 
@@ -36,6 +39,29 @@ export class ControlPlaneConversationClient implements ConversationPort {
     return parseConversationResult(
       await this.post('status', { protocolVersion: 2, processingId }, 10_000)
     );
+  }
+
+  async claimPublication(
+    processingId: string,
+    bodyDigest: string
+  ): Promise<boolean> {
+    const request: ConversationPublicationClaimRequest = {
+      protocolVersion: 2,
+      processingId,
+      status: 'dispatching',
+      bodyDigest,
+    };
+    const value = await this.post('publication', request, 10_000);
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new Error('conversation_publication_claim_invalid');
+    const claim = value as Partial<ConversationPublicationClaimResult>;
+    if (
+      claim.protocolVersion !== 2 ||
+      claim.processingId !== processingId ||
+      typeof claim.allowed !== 'boolean'
+    )
+      throw new Error('conversation_publication_claim_invalid');
+    return claim.allowed;
   }
 
   async publication(receipt: ConversationPublication): Promise<void> {

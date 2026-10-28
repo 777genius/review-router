@@ -165148,6 +165148,21 @@ var ControlPlaneConversationClient = class {
       await this.post("status", { protocolVersion: 2, processingId }, 1e4)
     );
   }
+  async claimPublication(processingId, bodyDigest) {
+    const request3 = {
+      protocolVersion: 2,
+      processingId,
+      status: "dispatching",
+      bodyDigest
+    };
+    const value = await this.post("publication", request3, 1e4);
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("conversation_publication_claim_invalid");
+    const claim = value;
+    if (claim.protocolVersion !== 2 || claim.processingId !== processingId || typeof claim.allowed !== "boolean")
+      throw new Error("conversation_publication_claim_invalid");
+    return claim.allowed;
+  }
   async publication(receipt) {
     await this.post("publication", receipt, 1e4);
   }
@@ -165281,6 +165296,18 @@ var ManagedConversationHandler = class {
     }
     if (result2.status === "unknown") {
       await receipt("unknown");
+      return;
+    }
+    try {
+      if (!await this.conversations.claimPublication(
+        processingId,
+        reply.bodyDigest
+      ))
+        return;
+    } catch {
+      logger.warn(
+        "Conversation publication admission is unavailable; awaiting reconciliation."
+      );
       return;
     }
     try {

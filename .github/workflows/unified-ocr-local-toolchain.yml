@@ -1,5 +1,5 @@
-# Temporary preparation for offline local verification; remove after qualification.
-name: Unified OCR local toolchain
+# Temporary exact-pair qualification; removed from the verified candidate.
+name: Unified OCR integrated runtime
 on:
   push:
     branches: [feat/unified-ocr-review-20261026]
@@ -7,42 +7,194 @@ on:
 permissions:
   contents: read
 jobs:
-  prepare:
+  qualify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    env:
+      MAIN_SHA: 2b9b7f8c438b076b6e06c6e14f9ac8e87f1a25b6
+      SAAS_SHA: bcebb27469a0bc919cfa2b97d5d630a88c6a00bf
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          show-progress: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24.21.0
-      - name: Install the exact lock without changing dependencies
-        run: |
-          npm ci --ignore-scripts
-          npm rebuild tree-sitter tree-sitter-python tree-sitter-typescript tree-sitter-go tree-sitter-rust
-          git diff --exit-code -- package.json package-lock.json
-      - name: Record the audit without hiding its outcome
-        run: |
-          mkdir -p "$RUNNER_TEMP/ocr-toolchain"
-          set +e
-          npm audit --json > "$RUNNER_TEMP/ocr-toolchain/npm-audit.json"
-          result=$?
-          set -e
-          printf '%s\n' "$result" > "$RUNNER_TEMP/ocr-toolchain/npm-audit-exit.txt"
-          test "$result" -le 1
-      - name: Preserve only the pinned public development dependencies and Node executable
+      - name: Integrate exact main without dropping either owner's guards
         run: |
           set -euo pipefail
-          cp "$(command -v node)" "$RUNNER_TEMP/ocr-toolchain/node"
-          tar -czf "$RUNNER_TEMP/ocr-toolchain/node_modules.tar.gz" node_modules
-          git rev-parse HEAD > "$RUNNER_TEMP/ocr-toolchain/source-revision.txt"
-          sha256sum package-lock.json > "$RUNNER_TEMP/ocr-toolchain/package-lock.sha256"
-          cd "$RUNNER_TEMP/ocr-toolchain"
-          sha256sum node node_modules.tar.gz > SHA256SUMS
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+          test "$GITHUB_REPOSITORY" = 777genius/review-router
+          test "$GITHUB_REF" = refs/heads/feat/unified-ocr-review-20261026
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git merge-base HEAD "$MAIN_SHA")" = dc0b3b340f911af7efcfb2f4fc3170fe304c349e
+          git config user.name 777genius
+          git config user.email iliyazelenkog@gmail.com
+          git switch -C feat/unified-ocr-review-20261026
+          git merge --no-commit --no-ff "$MAIN_SHA" || test -n "$(git ls-files -u)"
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess
+          runner = 'src/review-orchestration/infrastructure/production-t0-review-runner.ts'
+          test = '__tests__/unit/review-orchestration/lifecycle-verification-invocation.test.ts'
+          generated = ['action-dist/conflict-runtime.cjs','dist/index.js','dist/index.js.map','dist/single-t0-plan.js']
+          unmerged = subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).splitlines()
+          assert set(unmerged) == {runner,test,*generated}, unmerged
+          pattern = r'<<<<<<< HEAD\n(.*?)=======\n(.*?)>>>>>>> ' + os.environ['MAIN_SHA'] + r'\n'
+          ordinal = [0]
+          def resolve(m):
+              i=ordinal[0];ordinal[0]+=1
+              if i==0:
+                  assert 'scopedModelInvocations' in m[1] and 'ReviewMemorySession' in m[2]
+                  return m[1]+m[2]
+              assert i==1 and m[1].strip()==': discoveryInvocations,' and 'memoryAdmission: reviewMemory,' in m[2]
+              return m[1]+'            memoryAdmission: reviewMemory,\n'
+          p=pathlib.Path(runner);text=re.sub(pattern,resolve,p.read_text(),flags=re.S)
+          assert ordinal[0]==2 and '<<<<<<<' not in text
+          duplicate='  rebindReviewAssignmentsToWorkPlan,\n  restorePersistedWorkPlan,\n  rebindReviewAssignmentsToWorkPlan,\n'
+          assert text.count(duplicate)==1
+          p.write_text(text.replace(duplicate,'  rebindReviewAssignmentsToWorkPlan,\n  restorePersistedWorkPlan,\n'))
+          p=pathlib.Path(test);matches=list(re.finditer(pattern,p.read_text(),flags=re.S))
+          assert len(matches)==1 and not matches[0][1].strip() and 'refuses duplicate final slot identities' in matches[0][2]
+          p.write_text(re.sub(pattern,lambda m:m[2],p.read_text(),flags=re.S))
+          subprocess.run(['git','checkout','--ours','--',*generated],check=True)
+          subprocess.run(['git','add','--',runner,test,*generated],check=True)
+          assert not subprocess.check_output(['git','ls-files','-u'])
+          PY
+          mkdir -p "$RUNNER_TEMP/ocr-integration"
+      - name: Check out the verified merged control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          name: unified-ocr-local-toolchain-${{ github.sha }}
-          path: ${{ runner.temp }}/ocr-toolchain/
-          retention-days: 1
-          if-no-files-found: error
+          repository: 777genius/review-router-ai
+          ref: ${{ env.SAAS_SHA }}
+          path: tmp/control-plane
+          persist-credentials: false
+      - name: Install and validate the pinned control-plane producer
+        working-directory: tmp/control-plane
+        env:
+          DATABASE_URL: postgresql://fixture:synthetic-fixture@127.0.0.1:5432/rr_test
+        run: |
+          test "$(git rev-parse HEAD)" = "$SAAS_SHA"
+          npm install --global --ignore-scripts --no-audit --no-fund pnpm@11.28.7
+          node scripts/install-private-dependencies.mjs --frozen-lockfile
+          pnpm --filter @reviewrouter/platform-db db:generate
+          pnpm protocol:check
+          pnpm action:build
+          git diff --exit-code
+      - name: Regenerate the canonical handoff and sync only the curated wrapper
+        run: |
+          set -euo pipefail
+          # Generated files are replaced only by their owning exporter. Restore
+          # its known target input before exporting the complete merged source.
+          git restore --source="$GITHUB_SHA" --staged --worktree -- src/control-plane/generated/review-action-v2
+          node tmp/control-plane/scripts/export-public-review-action-v2-contract.mjs \
+            --saas-repo "$PWD/tmp/control-plane" --action-repo "$PWD" \
+            --target-branch feat/unified-ocr-review-20261026 \
+            --expected-head "$GITHUB_SHA" --expected-saas-head "$SAAS_SHA" --write
+          node tmp/control-plane/scripts/sync-public-action-runtime.mjs \
+            --saas-repo "$PWD/tmp/control-plane" --action-repo "$PWD" \
+            --expected-action-branch feat/unified-ocr-review-20261026 --write
+      - name: Install and check the locked public runtime
+        run: |
+          npm ci --ignore-scripts
+          npx --no-install prettier --write src/review-orchestration/infrastructure/production-t0-review-runner.ts __tests__/unit/review-orchestration/lifecycle-verification-invocation.test.ts
+          npm run lint
+          npm run typecheck
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.26.10'
+          cache: false
+      - name: Build and verify the unchanged managed OCR executable
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
+          tools/ocr/build.sh --test-managed --out "$RUNNER_TEMP/reviewrouter-ocr"
+          diff -u tools/ocr/qualifications/unified-model-routes-v2.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
+      - name: Prepare synthetic native and database test dependencies
+        run: |
+          docker pull postgres:17
+          mkdir -p "$RUNNER_TEMP/reviewrouter-auth-codex"
+          npm pack --ignore-scripts @openai/codex@0.147.0-linux-x64 --pack-destination "$RUNNER_TEMP/reviewrouter-auth-codex"
+          tar -xzf "$RUNNER_TEMP/reviewrouter-auth-codex/openai-codex-0.147.0-linux-x64.tgz" -C "$RUNNER_TEMP/reviewrouter-auth-codex"
+          npm rebuild tree-sitter tree-sitter-python tree-sitter-typescript tree-sitter-go tree-sitter-rust
+      - name: Run the full public runtime suite with real required binaries
+        env:
+          REVIEWROUTER_OCR_REQUIRED: '1'
+          REVIEWROUTER_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview
+          REVIEWROUTER_CODEX_AUTH_REQUIRED: '1'
+          REVIEWROUTER_CODEX_AUTH_BINARY: ${{ runner.temp }}/reviewrouter-auth-codex/package/vendor/x86_64-unknown-linux-musl/bin/codex
+        run: npm test -- --maxWorkers=2 --detectOpenHandles --testTimeout=20000 --json --outputFile="$RUNNER_TEMP/ocr-integration/results.json"
+      - name: Qualify native OCR MCP without external service calls
+        env:
+          REVIEWROUTER_TEST_APPROVED_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview
+          REVIEWROUTER_TEST_LIVE_MCP: '0'
+        run: npm test -- __tests__/unit/context-tools/ocr-native.test.ts --runInBand --json --outputFile="$RUNNER_TEMP/ocr-integration/native-mcp.json"
+      - name: Rebuild and confirm deterministic public artifacts
+        run: |
+          npm run build
+          npm run check:context-gateway-release-metadata
+          find dist -type f -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/ocr-integration/dist.sha256"
+          npm run build
+          sha256sum --check --strict "$RUNNER_TEMP/ocr-integration/dist.sha256"
+          git diff --exit-code -- package.json package-lock.json
+      - name: Preserve verified blob objects without changing branch authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64,json,os,pathlib,subprocess
+          repo,head,main=os.environ['GITHUB_REPOSITORY'],os.environ['GITHUB_SHA'],os.environ['MAIN_SHA']
+          out=pathlib.Path(os.environ['RUNNER_TEMP'],'ocr-integration')
+          def git(*args):return subprocess.check_output(['git',*args])
+          def api(path,body=None):
+              args=['gh','api',f'repos/{repo}/{path}']
+              if body is not None:args+=['--method','POST','--input','-']
+              r=subprocess.run(args,input=None if body is None else json.dumps(body).encode(),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+              if r.returncode:raise RuntimeError(f'Blob preservation failed: {path}: {r.stderr.decode()[:500]}')
+              return json.loads(r.stdout)
+          assert repo=='777genius/review-router'
+          assert git('rev-parse','HEAD').decode().strip()==head
+          assert git('rev-parse','MERGE_HEAD').decode().strip()==main
+          assert api('git/ref/heads/feat/unified-ocr-review-20261026')['object']['sha']==head
+          pathlib.Path('.github/workflows/unified-ocr-local-toolchain.yml').unlink()
+          subprocess.run(['git','add','--all'],check=True)
+          subprocess.run(['git','diff','--cached','--check',main],check=True)
+          assert not git('ls-files','-u')
+          tree=git('write-tree').decode().strip()
+          def entries(ref):
+              rows={}
+              for row in git('ls-tree','-rz',ref).split(b'\0'):
+                  if not row:continue
+                  info,name=row.split(b'\t',1);mode,kind,sha=info.decode().split()
+                  rows[name.decode()]={'mode':mode,'type':kind,'sha':sha}
+              return rows
+          feature,base,result=entries(head),entries(main),entries(tree)
+          known={e['sha'] for e in [*feature.values(),*base.values()]};delta=[]
+          for name in sorted(base.keys()|result.keys()):
+              if base.get(name)==result.get(name):continue
+              if name not in result:
+                  delta.append({'path':name,'mode':base[name]['mode'],'type':base[name]['type'],'sha':None});continue
+              entry=result[name]
+              if entry['sha'] not in known:
+                  assert entry['type']=='blob'
+                  raw=git('cat-file','blob',entry['sha'])
+                  assert api('git/blobs',{'encoding':'base64','content':base64.b64encode(raw).decode()})['sha']==entry['sha']
+                  known.add(entry['sha'])
+              delta.append({'path':name,**entry})
+          proof={'head':head,'main':main,'saas':os.environ['SAAS_SHA'],'base_tree':git('rev-parse',f'{main}^{{tree}}').decode().strip(),'tree':tree,'tree_elements':delta,'run_id':os.environ['GITHUB_RUN_ID']}
+          (out/'candidate.json').write_text(json.dumps(proof,indent=2))
+          (out/'source.patch').write_bytes(git('diff','--cached','--binary',main))
+          print(json.dumps({k:v for k,v in proof.items() if k!='tree_elements'}))
+          print('No tree, commit, ref, release or deployment writes.')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: unified-ocr-integrated-runtime-${{ github.sha }}
+          path: ${{ runner.temp }}/ocr-integration/
+          retention-days: 3
+          if-no-files-found: warn

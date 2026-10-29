@@ -148320,7 +148320,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.219",
+  version: "1.0.220",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -204540,6 +204540,8 @@ query ReviewRouterThreadInventory(
               body
               createdAt
               updatedAt
+              publishedAt
+              lastEditedAt
               path
               line
               originalLine
@@ -204566,6 +204568,8 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
           body
           createdAt
           updatedAt
+          publishedAt
+          lastEditedAt
           path
           line
           originalLine
@@ -204800,11 +204804,7 @@ var ReviewThreadInventoryLoader = class {
         message,
         diffHunk: parent.diffHunk ?? null
       }),
-      ...parent.updatedAt ? {
-        parentCommentEdited: normalizeCommentTimestamp(parent.updatedAt) !== normalizeCommentTimestamp(
-          requireCommentTimestamp(parent.createdAt)
-        )
-      } : {},
+      parentCommentEdited: parentCommentWasEdited(parent),
       // Only the valid-marker branch can construct this target.
       findingMarkerAmbiguous: false,
       parentCommentUpdatedAt: normalizeCommentTimestamp(
@@ -204982,6 +204982,27 @@ function normalizeLifecycleSeverity(value) {
     return value;
   }
   return "unknown";
+}
+function parentCommentWasEdited(parent) {
+  if (parent.updatedAt == null || parent.publishedAt === void 0 || parent.lastEditedAt === void 0)
+    return void 0;
+  const createdAt = new Date(
+    normalizeCommentTimestamp(requireCommentTimestamp(parent.createdAt))
+  );
+  const updatedAt = new Date(
+    normalizeCommentTimestamp(requireCommentTimestamp(parent.updatedAt))
+  );
+  const publishedAt = parent.publishedAt === null ? null : new Date(
+    normalizeCommentTimestamp(requireCommentTimestamp(parent.publishedAt))
+  );
+  const lastEditedAt = parent.lastEditedAt === null ? null : new Date(
+    normalizeCommentTimestamp(
+      requireCommentTimestamp(parent.lastEditedAt)
+    )
+  );
+  if (updatedAt < createdAt || publishedAt !== null && (publishedAt < createdAt || updatedAt < publishedAt) || lastEditedAt !== null && (lastEditedAt < createdAt || lastEditedAt > updatedAt))
+    throw new Error("review thread comment timestamp order was invalid");
+  return lastEditedAt !== null || publishedAt === null && updatedAt.getTime() !== createdAt.getTime();
 }
 function requireCommentTimestamp(value) {
   if (typeof value !== "string" || value.length === 0) {

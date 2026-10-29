@@ -39,7 +39,7 @@ jobs:
         run: |
           test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
           tools/ocr/build.sh --test-managed --out "$RUNNER_TEMP/reviewrouter-ocr"
-          diff -u tools/ocr/qualifications/unified-model-routes-v2.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
+          diff -u tools/ocr/qualifications/unified-model-routes-v3.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
           cd "$RUNNER_TEMP/reviewrouter-ocr"
           sha256sum --check --strict opencodereview.sha256
       - run: npm ci

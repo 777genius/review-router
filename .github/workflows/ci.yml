@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.event_name }}-${{ (github.event_name == 'pull_request' || github.event_name == 'push') && (github.event.pull_request.number || github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+
 jobs:
   build:
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.CI_LINUX_RUNNER || 'ubuntu-latest' }}
@@ -41,7 +45,7 @@ jobs:
         run: |
           test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
           tools/ocr/build.sh --test-managed --out "$RUNNER_TEMP/reviewrouter-ocr"
-          diff -u tools/ocr/qualifications/unified-model-routes-v2.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
+          diff -u tools/ocr/qualifications/unified-model-routes-v3.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
       - name: Prepare review-quality fixture prerequisites
         timeout-minutes: 5
         run: |

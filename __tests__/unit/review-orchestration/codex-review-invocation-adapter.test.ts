@@ -53,6 +53,8 @@ import {
   planAssignments,
 } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
 import { hashIncrementalCompatibility } from '../../../src/cache/key-builder';
+import { freezeReviewMemorySnapshot } from '../../../src/control-plane/review-memory-v2';
+import { reviewMemoryBundle } from '../../helpers/review-memory-v2-fixture';
 import { ProviderInvocationFailureClassifier } from '../../../src/review-orchestration/infrastructure/provider-invocation-failure-classifier';
 
 const emptyProbePlan = createReviewInvestigationProbePlan({
@@ -61,6 +63,45 @@ const emptyProbePlan = createReviewInvestigationProbePlan({
 });
 
 describe('Codex T0 prepared invocation', () => {
+  it('delivers the same qualified frozen memory to investigation context and binds its hash', async () => {
+    const memory = freezeReviewMemorySnapshot(
+      reviewMemoryBundle({
+        contextPolicy: {
+          audience: 'public',
+          repositoryId: 'repository-1',
+          allowedTasks: ['review', 'investigation', 'pr_description'],
+        },
+      })
+    );
+    const builder = new PromptBuilder({
+      ...DEFAULT_CONFIG,
+      diffMaxBytes: 50_000,
+    } as ReviewConfig);
+    const prepared = await prepareCodexReviewPrompt(
+      builder,
+      assignment,
+      true,
+      memory
+    );
+    expect(prepared.investigationContextPrompt).toContain(
+      memory.renderedPrompt
+    );
+    expect(prepared.preparedPrompt.memoryBundleHash).toBe(memory.hash);
+    expect(
+      JSON.parse(prepared.manifestPreimages.contextManifestHash)
+        .memoryBundleHash
+    ).toBe(memory.hash);
+    const historical = await prepareCodexReviewPrompt(
+      builder,
+      assignment,
+      true,
+      freezeReviewMemorySnapshot(reviewMemoryBundle())
+    );
+    expect(historical.investigationContextPrompt).not.toContain(
+      'AUTHORIZED REVIEWROUTER MEMORY'
+    );
+    expect(historical.preparedPrompt.memoryBundleHash).toBeUndefined();
+  });
   it('binds discovery capability to captured settings and effective effort at an unchanged catalog path', async () => {
     const prepared = createPreparedProviderInvocation({
       providerKind: ProviderKind.CodexCli,
@@ -1082,7 +1123,8 @@ describe('Codex T0 prepared invocation', () => {
       2,
       lifecycleAssignment.context,
       lifecycleAssignment.context.number,
-      []
+      [],
+      null
     );
   });
 

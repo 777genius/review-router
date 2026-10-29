@@ -70,6 +70,7 @@ jobs:
         env:
           REVIEWROUTER_MCP_CREDENTIALS_JSON: ${{ secrets.mcp_secrets_json }}
           REVIEW_ROUTER_MODE: account-gateway
+          REVIEW_ROUTER_MEMORY_ENABLED: 'true'
           REVIEW_ROUTER_REVIEW_BANNER: ${{ vars.REVIEW_ROUTER_REVIEW_BANNER }}
           REVIEWROUTER_ACTION_V2_MODE: t0
           REVIEWROUTER_RUNTIME_CONFIG_MODE: oidc

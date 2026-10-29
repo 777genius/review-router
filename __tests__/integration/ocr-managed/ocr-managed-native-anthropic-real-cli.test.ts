@@ -26,7 +26,7 @@ try {
   available = execFileSync(binary, ['--version'], {
     encoding: 'utf8',
     timeout: 10_000,
-  }).includes('1.13.1-rr.5');
+  }).includes('1.13.1-rr.6');
 } catch {
   /* Optional build artifact; required jobs fail explicitly below. */
 }

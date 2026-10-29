@@ -336,6 +336,17 @@ test('refuses missing or changed discovery contracts even when the slot ID match
   ).toThrow('review_action_v2_assignment_plan_mismatch');
 });
 
+test('refuses duplicate final slot identities before rebinding captured inputs', () => {
+  const plan = basePlan();
+  const assignment = plan.assignments[0];
+  expect(() =>
+    rebindReviewAssignmentsToWorkPlan([{ workSlot: assignment.workSlot }], {
+      ...plan,
+      assignments: [assignment, assignment],
+    })
+  ).toThrow('review_action_v2_assignment_duplicate');
+});
+
 test('validates packet citations before normalized zero-finding evidence and sends lease context only to transport', async () => {
   const result = await composed();
   const slot = result.plan.assignments[1].workSlot;

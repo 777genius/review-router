@@ -136989,7 +136989,7 @@ var codexRuntimeMigrationBindingSchema = external_exports.object({
 }).strict().superRefine((binding, context5) => {
   const ids = new Set(binding.ingress.map((entry) => entry.workflowId));
   const paths = new Set(binding.ingress.map((entry) => entry.workflowPath));
-  if (ids.size !== binding.ingress.length || paths.size !== binding.ingress.length || ids.has(binding.bootstrap.workflowId) || !paths.has(binding.source.workflowPath) || binding.source.actionRef === binding.targetActionRef || /[\s~^:?*\[\\]|\.\.|@\{|\/\/|^\/|\/$/u.test(binding.defaultBranch)) {
+  if (ids.size !== binding.ingress.length || paths.size !== binding.ingress.length || ids.has(binding.bootstrap.workflowId) || !paths.has(binding.source.workflowPath) || binding.source.actionRef === binding.targetActionRef || /[\s~^:?*[\\]|\.\.|@\{|\/\/|^\/|\/$/u.test(binding.defaultBranch)) {
     context5.addIssue({
       code: "custom",
       message: "runtime migration requires distinct exact source and target"
@@ -141626,8 +141626,9 @@ async function ensureFullReviewRuntimeTools(input) {
   }
   await runProcess({
     command: "bash",
+    // Preserve the deliberately sanitized PATH; login Bash startup may replace it.
     args: [
-      "-lc",
+      "-c",
       [
         "set -euo pipefail",
         "if command -v claude >/dev/null 2>&1; then",

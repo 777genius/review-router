@@ -45,5 +45,25 @@
     "packageVersion": "1.13.1-rr.4",
     "profileRef": "ocr-managed-v3",
     "reviewSkillsVersion": 1
+  },
+  {
+    "agentKind": "ocr",
+    "binarySha256": "9c666b25f7b189d5af8e59beb877e0a449869166116975fbd8e634bd1b370969",
+    "cancellation": true,
+    "contextGateway": false,
+    "modelTransports": ["account_gateway"],
+    "packageVersion": "1.13.1-rr.5",
+    "profileRef": "ocr-managed-v4",
+    "reviewSkillsVersion": 1
+  },
+  {
+    "agentKind": "ocr",
+    "binarySha256": "9dd5f115747d24100f0767133a3288d268f3bc399675f5b826e7a867d101ee5c",
+    "cancellation": true,
+    "contextGateway": false,
+    "modelTransports": ["account_gateway", "provider_api"],
+    "packageVersion": "1.13.1-rr.6",
+    "profileRef": "ocr-managed-v5",
+    "reviewSkillsVersion": 1
   }
 ]

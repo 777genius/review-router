@@ -498,16 +498,27 @@ export function restorePersistedWorkPlan(
       required,
       attemptBudget,
       retryPolicyVersion,
-    }) => ({
-      workSlotId,
-      taskKind,
-      providerKind,
-      providerVoteIdentityHash,
-      shardKey,
-      required,
-      attemptBudget,
-      retryPolicyVersion,
-    })
+    }) => {
+      const persistedSlot = {
+        workSlotId,
+        taskKind,
+        providerKind,
+        providerVoteIdentityHash,
+        shardKey,
+        required,
+        attemptBudget,
+        retryPolicyVersion,
+      };
+      const current = planned.assignments.find(
+        (assignment) => assignment.workSlot.workSlotId === workSlotId
+      )?.workSlot;
+      // Native adapters bind their captured assignment by object identity. Only
+      // reuse the current object when every persisted authority/budget field is
+      // byte-equivalent; the durable plan remains the source of truth.
+      return current && canonicalJson(current) === canonicalJson(persistedSlot)
+        ? current
+        : persistedSlot;
+    }
   );
   const assignments = slots.map((workSlot, schedulingOrdinal) => ({
     workSlot,

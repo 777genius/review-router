@@ -112,8 +112,28 @@ async function fakeFetch(resource, init = {}) {
         });
       case 'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/writeback-preflight':
         return jsonResponse({ protocolVersion: 1, status: 'ready' });
-      case 'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/writeback':
+      case 'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/writeback': {
+        const sodium = require('libsodium-wrappers');
+        await sodium.ready;
+        const request = JSON.parse(String(init.body));
+        const auth = JSON.parse(
+          Buffer.from(
+            sodium.crypto_box_seal_open(
+              Buffer.from(request.encryptedValue, 'base64'),
+              Buffer.from(requireEnv('RR_ARTIFACT_SMOKE_PUBLIC_KEY'), 'base64'),
+              Buffer.from(requireEnv('RR_ARTIFACT_SMOKE_PRIVATE_KEY'), 'base64')
+            )
+          ).toString('utf8')
+        );
+        assertEqual(
+          auth.tokens.refresh_token,
+          'synthetic-refreshed-token',
+          'rotated_refresh_token_not_preserved'
+        );
+        state.authWriteback = { rotationPreserved: true };
+        persist();
         return jsonResponse({ protocolVersion: 1, status: 'accepted' });
+      }
       case 'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/checkout-token':
         return jsonResponse({
           protocolVersion: 1,

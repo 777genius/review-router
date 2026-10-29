@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import yaml from 'js-yaml';
+import sodium from 'libsodium-wrappers';
 import bundledProfiles from '../../src/control-plane/review-agent-profiles.json';
 
 const repoRoot = path.resolve(__dirname, '../..');
@@ -17,7 +18,6 @@ const preloadPath = path.join(
   'production-entrypoint-artifact-preload.cjs'
 );
 const runtimeConfigSentinel = '987654321';
-const fakeGitHubPublicKey = 'dh2I7IMEE5Gd/p1NHVbxfmU8jJlAgt9bE3uQoK5u33Q=';
 const fakeIdToken = `${Buffer.from('{}').toString('base64url')}.${Buffer.from(
   JSON.stringify({
     iss: 'https://auth.openai.com',
@@ -68,6 +68,9 @@ type SmokeWitness = Readonly<{
     providerLimit: string;
   }>;
   runnerProviderLimit: string | null;
+  authWriteback: Readonly<{
+    rotationPreserved: boolean;
+  }>;
   modelRoute: Readonly<{
     transport: string;
     providerIndex: number;
@@ -92,9 +95,11 @@ describe('committed production entrypoint artifact', () => {
   const linuxTest =
     process.platform === 'linux' && process.arch === 'x64' ? it : it.skip;
 
-  linuxTest(
-    'passes admitted model-route config through rotating auth into the production runner without real I/O',
-    () => {
+  linuxTest.each(['long', 'short', 'expired'] as const)(
+    'preserves %s rotated auth through sealed writeback and admits model work only for sufficient lifetime',
+    async (lifetime) => {
+      await sodium.ready;
+      const writebackKeys = sodium.crypto_box_keypair();
       const tempRoot = fs.mkdtempSync(
         path.join(os.tmpdir(), 'reviewrouter-entrypoint-smoke-')
       );
@@ -166,7 +171,7 @@ describe('committed production entrypoint artifact', () => {
           })
         );
         fs.writeFileSync(outputPath, '');
-        writeFakeCodex(fakeCodexPath, codexLogPath);
+        writeFakeCodex(fakeCodexPath, codexLogPath, lifetime);
         writeFakeGit(fakeGitPath, gitLogPath);
         const approvedProfiles = bundledProfiles.filter(
           (profile) =>
@@ -264,7 +269,12 @@ Module.prototype._compile = function(source, filename) {
             RR_ARTIFACT_SMOKE_EXPECTED_ACTION_VERSION: actionVersion,
             RR_ARTIFACT_SMOKE_EXPECTED_ARTIFACT: artifactPath,
             RR_ARTIFACT_SMOKE_EXPECTED_ARTIFACT_SHA256: artifactSha256,
-            RR_ARTIFACT_SMOKE_PUBLIC_KEY: fakeGitHubPublicKey,
+            RR_ARTIFACT_SMOKE_PUBLIC_KEY: Buffer.from(
+              writebackKeys.publicKey
+            ).toString('base64'),
+            RR_ARTIFACT_SMOKE_PRIVATE_KEY: Buffer.from(
+              writebackKeys.privateKey
+            ).toString('base64'),
             RR_ARTIFACT_SMOKE_WITNESS_PATH: witnessPath,
             RR_ARTIFACT_SMOKE_APPROVED_AGENT_JSON: JSON.stringify({
               ...profile,
@@ -305,19 +315,21 @@ Module.prototype._compile = function(source, filename) {
           },
           // Only the actual production runner applies the admitted environment.
           // The deliberately invalid limit then stops it before any model I/O.
-          runnerProviderLimit: runtimeConfigSentinel,
+          runnerProviderLimit:
+            lifetime === 'long' ? runtimeConfigSentinel : null,
+          authWriteback: { rotationPreserved: true },
           modelRoute: {
             transport: 'runner_local_responses',
             providerIndex: 0,
             workflowSchemaVersion: 2,
           },
           investigationRollout: {
-            recording: '1',
-            shadow: '1',
-            contextCritic: '1',
-            verifiedClean: '1',
-            crossRevisionReplay: '1',
-            productionEffects: '1',
+            recording: lifetime === 'long' ? '1' : null,
+            shadow: lifetime === 'long' ? '1' : null,
+            contextCritic: lifetime === 'long' ? '1' : null,
+            verifiedClean: lifetime === 'long' ? '1' : null,
+            crossRevisionReplay: lifetime === 'long' ? '1' : null,
+            productionEffects: lifetime === 'long' ? '1' : null,
           },
         });
         expect(
@@ -352,15 +364,22 @@ Module.prototype._compile = function(source, filename) {
           'initialized',
           'account/read',
         ]);
-        expect(readLog(gitLogPath)).toEqual([
-          'init',
-          'config',
-          'config',
-          'config',
-          'remote',
-          'fetch',
-          'checkout',
-        ]);
+        if (lifetime === 'long') {
+          expect(readLog(gitLogPath)).toEqual([
+            'init',
+            'config',
+            'config',
+            'config',
+            'remote',
+            'fetch',
+            'checkout',
+          ]);
+        } else {
+          expect(fs.existsSync(gitLogPath)).toBe(false);
+        }
+        expect(
+          fs.readdirSync(path.join(home, '.reviewrouter', 'runtime'))
+        ).toEqual([]);
       } finally {
         fs.rmSync(tempRoot, { recursive: true, force: true });
       }
@@ -402,7 +421,11 @@ function assertPublicActionLauncherTargetsRuntime(): void {
   );
 }
 
-function writeFakeCodex(filePath: string, logPath: string): void {
+function writeFakeCodex(
+  filePath: string,
+  logPath: string,
+  lifetime: 'long' | 'short' | 'expired'
+): void {
   writeExecutable(
     filePath,
     `#!/usr/bin/env node
@@ -429,7 +452,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     const authPath = path.join(process.env.CODEX_HOME, 'auth.json');
     const auth = JSON.parse(fs.readFileSync(authPath, 'utf8'));
     auth.tokens.access_token = Buffer.from('{}').toString('base64url') + '.' +
-      Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.synthetic-signature';
+      Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + ${lifetime === 'long' ? 3600 : lifetime === 'short' ? 30 : -30} })).toString('base64url') + '.synthetic-signature';
     auth.tokens.refresh_token = 'synthetic-refreshed-token';
     auth.last_refresh = new Date().toISOString();
     fs.writeFileSync(authPath, JSON.stringify(auth), { mode: 0o600 });

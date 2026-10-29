@@ -2190,12 +2190,16 @@ function parseLease(result: {
 function leaseAcquireRejectedOutcome(reason: string | null | undefined): {
   readonly status:
     | ReviewInvocationLeaseAcquireOutcomeStatus.AttemptBudgetExhausted
-    | ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable;
+    | ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable
+    | ReviewInvocationLeaseAcquireOutcomeStatus.InputStale;
 } {
   if (reason === 'attempt_budget_exhausted') {
     return {
       status: ReviewInvocationLeaseAcquireOutcomeStatus.AttemptBudgetExhausted,
     };
+  }
+  if (reason === 'input_stale') {
+    return { status: ReviewInvocationLeaseAcquireOutcomeStatus.InputStale };
   }
   if (reason === 'not_runnable') {
     return { status: ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable };

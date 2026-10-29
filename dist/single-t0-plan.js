@@ -212521,6 +212521,21 @@ function compositeLifecycleInvocations(input) {
     }
   };
 }
+function rebindReviewAssignmentsToWorkPlan(assignments, plan) {
+  const slots = new Map(
+    plan.assignments.map(({ workSlot }) => [workSlot.workSlotId, workSlot])
+  );
+  if (slots.size !== plan.assignments.length)
+    throw new Error("review_action_v2_assignment_duplicate");
+  return Object.freeze(
+    assignments.map((assignment) => {
+      const workSlot = slots.get(assignment.workSlot.workSlotId);
+      if (!workSlot || canonicalRevalidationJson(workSlot) !== canonicalRevalidationJson(assignment.workSlot))
+        throw new Error("review_action_v2_assignment_plan_mismatch");
+      return Object.freeze({ ...assignment, workSlot });
+    })
+  );
+}
 function restorePersistedWorkPlan(restored, planned) {
   const persisted = restored?.persistedPlan;
   if (!persisted) return planned;
@@ -221269,11 +221284,16 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           }) : void 0;
           if (preplanningRestore?.persistedPlan?.compatibilityKey && preplanningRestore.persistedPlan.compatibilityKey !== ocrCompatibilityKey)
             throw new Error("review_restore_compatibility_changed");
+          const finalPlan2 = restorePersistedWorkPlan(
+            preplanningRestore,
+            lifecycle2?.plan ?? planned2.plan
+          );
           planned2 = {
             ...planned2,
-            plan: restorePersistedWorkPlan(
-              preplanningRestore,
-              lifecycle2?.plan ?? planned2.plan
+            plan: finalPlan2,
+            assignments: rebindReviewAssignmentsToWorkPlan(
+              planned2.assignments,
+              finalPlan2
             )
           };
           const bridge = {
@@ -221567,11 +221587,16 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
       }) : void 0;
       if (preplanningRestore?.persistedPlan?.compatibilityKey && preplanningRestore.persistedPlan.compatibilityKey !== compatibilityKey)
         throw new Error("review_restore_compatibility_changed");
+      const finalPlan = restorePersistedWorkPlan(
+        preplanningRestore,
+        lifecycle?.plan ?? planned.plan
+      );
       planned = {
         ...planned,
-        plan: restorePersistedWorkPlan(
-          preplanningRestore,
-          lifecycle?.plan ?? planned.plan
+        plan: finalPlan,
+        assignments: rebindReviewAssignmentsToWorkPlan(
+          planned.assignments,
+          finalPlan
         )
       };
       const invocationAdapter = new CodexReviewInvocationAdapter(

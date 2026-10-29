@@ -1,6 +1,9 @@
 import { GeneratedProviderInvocationManifestAssembler } from '../../../src/review-orchestration/infrastructure/codex-review-invocation-adapter';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
-import type { ReviewRunAuthorization } from '../../../src/review-orchestration/application';
+import type {
+  RestoredReviewExecution,
+  ReviewRunAuthorization,
+} from '../../../src/review-orchestration/application';
 import { createHash } from 'crypto';
 import {
   planFindingRevalidation,
@@ -14,6 +17,8 @@ import {
 import {
   ReviewExecutionProviderKind,
   ReviewTaskKind,
+  RestoredReviewExecutionState,
+  RestoredReviewWorkSlotState,
   type PreparedReviewInvocationPort,
 } from '../../../src/review-orchestration/application';
 import { createStableReviewWorkPlan } from '../../../src/review-orchestration/domain';
@@ -22,6 +27,8 @@ import {
   compositeLifecycleInvocations,
   lifecycleHash,
   readLifecycleCapability,
+  rebindReviewAssignmentsToWorkPlan,
+  restorePersistedWorkPlan,
 } from '../../../src/review-orchestration/infrastructure/lifecycle-verification-invocation';
 import type { LocalGatewayModelTransport } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 import { priorResolutionFact } from '../../../src/review-orchestration/infrastructure/lifecycle-verification-planning';
@@ -239,6 +246,105 @@ test('zero eligible targets creates no lifecycle slots or model calls', async ()
     JSON.parse(result.plan.assignmentManifestCanonicalJson).lifecyclePlan
       .inventoryCount
   ).toBe(0);
+});
+
+test.each([{ targets: [] }, { targets: [target] }])(
+  'binds discovery inputs to final slots after lifecycle planning: %j',
+  async ({ targets }) => {
+    const original = basePlan();
+    const context = Object.freeze({ captured: 'discovery context' });
+    const assignments = [
+      { workSlot: original.assignments[0].workSlot, context },
+    ];
+    const final = await composed(targets);
+    const slot = final.plan.assignments[0].workSlot;
+    expect(slot).not.toBe(assignments[0].workSlot);
+    const rebound = rebindReviewAssignmentsToWorkPlan(assignments, final.plan);
+    expect(rebound[0].workSlot).toBe(slot);
+    expect(rebound[0].context).toBe(context);
+    expect(rebound).toHaveLength(1);
+    expect(assignments[0].workSlot).toBe(original.assignments[0].workSlot);
+  }
+);
+
+test('binds recovered discovery inputs to persisted slot objects without changing their contract', async () => {
+  const original = basePlan();
+  const final = await composed();
+  const execution: RestoredReviewExecution = {
+    executionId: 'restored-lifecycle-execution',
+    authorizationId: 'restored-authorization',
+    version: '1',
+    streamVersion: '1',
+    generation: '1',
+    state: RestoredReviewExecutionState.Running,
+    reviewRevisionHash: hash,
+    planHash: final.plan.planHash,
+    workSlots: final.plan.assignments.map(({ workSlot }) => ({
+      workSlotId: workSlot.workSlotId,
+      required: workSlot.required,
+      providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+      state: RestoredReviewWorkSlotState.Pending,
+      activeLeaseId: null,
+      acceptedObservationRefId: null,
+    })),
+    persistedPlan: {
+      compatibilityKey: hash,
+      planHash: final.plan.planHash,
+      assignmentManifestVersion: 2,
+      assignmentManifestCanonicalJson:
+        final.plan.assignmentManifestCanonicalJson,
+      assignmentManifestHash: final.plan.assignmentManifestHash,
+      workSlots: final.plan.assignments.map(({ workSlot }) => workSlot),
+      artifact: null,
+    },
+  };
+  const restored = restorePersistedWorkPlan(execution, original);
+  const inputs = [
+    { workSlot: original.assignments[0].workSlot, captured: hash },
+  ];
+  const rebound = rebindReviewAssignmentsToWorkPlan(inputs, restored);
+  expect(rebound[0].workSlot).toBe(restored.assignments[0].workSlot);
+  expect(rebound[0].workSlot).toEqual(inputs[0].workSlot);
+  expect(rebound[0].captured).toBe(hash);
+  expect(restored.planHash).toBe(final.plan.planHash);
+  expect(restored.assignmentManifestHash).toBe(
+    final.plan.assignmentManifestHash
+  );
+});
+
+test('refuses missing or changed discovery contracts even when the slot ID matches', () => {
+  const original = basePlan();
+  const inputs = [{ workSlot: original.assignments[0].workSlot }];
+  for (const change of [
+    { attemptBudget: 1 },
+    { required: false },
+    { providerVoteIdentityHash: 'f'.repeat(64) },
+  ]) {
+    const changed = {
+      ...original,
+      assignments: original.assignments.map((assignment) => ({
+        ...assignment,
+        workSlot: { ...assignment.workSlot, ...change },
+      })),
+    };
+    expect(() => rebindReviewAssignmentsToWorkPlan(inputs, changed)).toThrow(
+      'review_action_v2_assignment_plan_mismatch'
+    );
+  }
+  expect(() =>
+    rebindReviewAssignmentsToWorkPlan(inputs, { ...original, assignments: [] })
+  ).toThrow('review_action_v2_assignment_plan_mismatch');
+});
+
+test('refuses duplicate final slot identities before rebinding captured inputs', () => {
+  const plan = basePlan();
+  const assignment = plan.assignments[0];
+  expect(() =>
+    rebindReviewAssignmentsToWorkPlan([{ workSlot: assignment.workSlot }], {
+      ...plan,
+      assignments: [assignment, assignment],
+    })
+  ).toThrow('review_action_v2_assignment_duplicate');
 });
 
 test('validates packet citations before normalized zero-finding evidence and sends lease context only to transport', async () => {

@@ -32,6 +32,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Restore committed runtime artifacts after install
+        run: git restore --worktree -- dist
       - run: npm run lint
       - run: npm run typecheck
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

@@ -129,6 +129,19 @@ describe('committed production entrypoint artifact', () => {
             { cwd: repoRoot, encoding: 'utf8' }
           ).trim()
         ).toBe('dist/index.js');
+        const trackedArtifactPath = path.relative(repoRoot, artifactPath);
+        expect(
+          execFileSync('git', ['hash-object', '--', trackedArtifactPath], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+          }).trim()
+        ).toBe(
+          execFileSync(
+            'git',
+            ['rev-parse', `${actionVersion}:${trackedArtifactPath}`],
+            { cwd: repoRoot, encoding: 'utf8' }
+          ).trim()
+        );
 
         const githubWorkspace = ensureDirectory(
           path.join(tempRoot, 'github-workspace')

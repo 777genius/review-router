@@ -1,0 +1,27 @@
+# Temporary integration check; removed before completion of this draft.
+name: Unified OCR integration recovery
+on:
+  push:
+    branches: [feat/unified-ocr-review-20261026]
+    paths: [.github/workflows/unified-ocr-sync-main.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Inspect exact three-way source integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 777genius
+          git config user.email iliyazelenkog@gmail.com
+          test "$(git merge-base HEAD 056952b5a3d625fd1d19384942d452114804380f)" = a8cd9c5818c9c6dd1958e747f89b141a21baf882
+          git merge --no-commit --no-ff 056952b5a3d625fd1d19384942d452114804380f || test -n "$(git ls-files -u)"
+          git diff --name-only --diff-filter=U
+          git diff --cc -- src/review-orchestration/infrastructure/production-t0-review-runner.ts

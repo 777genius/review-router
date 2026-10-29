@@ -22,7 +22,9 @@ def api(path, body=None):
     if body is not None:
         args += ['--method', 'POST', '--input', '-']
     result = subprocess.run(args, input=None if body is None else json.dumps(body).encode(),
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode:
+        raise RuntimeError(f'GitHub object upload failed: {path}: {result.stderr.decode()[:1000]}')
     return json.loads(result.stdout)
 
 
@@ -33,8 +35,10 @@ assert not git('ls-files', '-u')
 shutil.rmtree('.github/ocr-recovery')
 Path('.github/workflows/unified-ocr-sync-main.yml').unlink()
 subprocess.run(['git', 'add', '--all'], check=True)
-subprocess.run(['git', 'diff', '--cached', '--check'], check=True)
+# Imported, unchanged patch files retain their exact source bytes.
+subprocess.run(['git', 'diff', '--cached', '--check', main], check=True)
 tree = git('write-tree').decode().strip()
+print('TESTED_TREE=' + tree, flush=True)
 
 
 def entries(ref):

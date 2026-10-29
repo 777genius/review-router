@@ -214910,14 +214910,14 @@ function appendOcrReviewMemory(ruleText, memory) {
   if (!Array.isArray(document3.rules) || document3.rules.length === 0) {
     throw new Error("review_memory_ocr_rule_invalid");
   }
-  for (const rule of document3.rules) {
-    const key = typeof rule.rule === "string" ? "rule" : "content";
-    if (typeof rule[key] !== "string")
+  document3.rules = document3.rules.map((rule) => {
+    const nativeRule = typeof rule.rule === "string" ? rule : { path: "**", rule: rule.content, merge_system_rule: true };
+    if (typeof nativeRule.rule !== "string")
       throw new Error("review_memory_ocr_rule_invalid");
-    rule[key] = `${rule[key]}
+    return { ...nativeRule, rule: `${nativeRule.rule}
 
-${memory}`;
-  }
+${memory}` };
+  });
   return `${JSON.stringify(document3, null, 2)}
 `;
 }

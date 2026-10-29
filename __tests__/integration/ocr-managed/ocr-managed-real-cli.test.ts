@@ -7,6 +7,11 @@ import {
 import { ReviewSkillsReceiptCollector } from '../../../src/review-skills/review-skills-receipt';
 import { createProductionReviewProjectionBuilder } from '../../../src/review-orchestration/infrastructure/production-review-projection';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
+import {
+  freezeReviewMemorySnapshot,
+  type ReviewMemorySnapshot,
+} from '../../../src/control-plane/review-memory-v2';
+import { reviewMemoryBundle } from '../../helpers/review-memory-v2-fixture';
 /**
  * Plan 56 §12 real-CLI harness: the pinned managed OCR binary
  * (tools/ocr/out/opencodereview) runs against a synthetic Git repository and a
@@ -82,6 +87,8 @@ interface RecordedRequest {
   url: string;
   authorization: string | undefined;
   bodyKeys: readonly string[];
+  inputText: string;
+  toolNames: readonly string[];
 }
 
 function startStubResponsesServer(): Promise<{
@@ -94,17 +101,26 @@ function startStubResponsesServer(): Promise<{
     let body = '';
     request.on('data', (chunk) => (body += chunk));
     request.on('end', () => {
-      let bodyKeys: readonly string[] = [];
+      let parsed: Record<string, unknown> = {};
       try {
-        bodyKeys = Object.keys(JSON.parse(body) as Record<string, unknown>);
+        parsed = JSON.parse(body) as Record<string, unknown>;
       } catch {
-        bodyKeys = [];
+        parsed = {};
       }
       requests.push({
         method: request.method ?? '',
         url: request.url ?? '',
         authorization: request.headers.authorization,
-        bodyKeys,
+        bodyKeys: Object.keys(parsed),
+        inputText: JSON.stringify({
+          instructions: parsed.instructions ?? '',
+          input: parsed.input ?? '',
+        }),
+        toolNames: Array.isArray(parsed.tools)
+          ? (parsed.tools as Array<{ name?: string }>).map(
+              (tool) => tool.name ?? ''
+            )
+          : [],
       });
       response.writeHead(200, { 'content-type': 'text/event-stream' });
       // Deterministic completed response with a task_done tool call: the
@@ -467,6 +483,7 @@ async function runScriptedScenario(input: {
   readonly script: ScriptedStubScript;
   readonly maxTokens?: number;
   readonly reviewSkills?: ReviewSkillsExecutionInput;
+  readonly reviewMemory?: ReviewMemorySnapshot;
   readonly skillsGitRoots?: readonly ReviewSkillsGitRootDiagnostic[];
   readonly projectSkills?: boolean;
   readonly assignedPaths?: readonly string[];
@@ -640,6 +657,7 @@ async function runScriptedScenario(input: {
       modelReasoningEffort: 'medium',
       language: 'en',
       reviewSkills: input.reviewSkills,
+      reviewMemory: { current: () => input.reviewMemory ?? null },
       freshReviewSkillsSupply: (supply) => collector.record(supply),
       ruleText:
         input.reviewSkills?.kind === 'captured'
@@ -836,7 +854,7 @@ describeHarness(
       if (workspace) fs.rmSync(workspace, { recursive: true, force: true });
     });
 
-    it('runs one managed review through the stubbed loopback bridge end to end', async () => {
+    it('supplies approved memory to the actual managed OCR model request end to end', async () => {
       const mergeBaseSha = git(checkoutRoot, 'rev-parse', 'HEAD~1').trim();
       const headSha = git(checkoutRoot, 'rev-parse', 'HEAD').trim();
 
@@ -949,6 +967,16 @@ describeHarness(
         },
       } as ReviewRunAuthorization;
 
+      const memory = freezeReviewMemorySnapshot(
+        reviewMemoryBundle({
+          authorizationId: authorization.authorizationId,
+          repositoryConnectionId: authorization.facts.repositoryConnectionId,
+          pullRequestNumber: pr.number,
+          baseSha: mergeBaseSha,
+          headSha,
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+        })
+      );
       const planned = planOcrReviewAssignments({
         authorization,
         pr,
@@ -967,6 +995,7 @@ describeHarness(
         effectFacts: () => ({ effect: 'none' }),
       };
       let observedClosedBeforeRead: boolean | undefined;
+      let currentMemory: ReviewMemorySnapshot | null = null;
       const adapter = new OcrReviewInvocationAdapter(planned.assignments, {
         model: 'stub-model',
         binaryPath: BINARY_PATH,
@@ -979,6 +1008,7 @@ describeHarness(
         ocrEffort: 'medium',
         modelReasoningEffort: 'medium',
         language: 'en',
+        reviewMemory: { current: () => currentMemory },
         ruleText: buildOcrControlledRuleText({
           language: 'en',
           assignedPaths: ['calc.ts'],
@@ -1016,10 +1046,21 @@ describeHarness(
         previewRunner: runOcrReviewProcess,
       });
 
+      const baseline = await adapter.prepare({
+        workSlot: planned.assignments[0].workSlot,
+        attemptOrdinal: 1,
+      });
+      currentMemory = memory;
       const prepared = await adapter.prepare({
         workSlot: planned.assignments[0].workSlot,
         attemptOrdinal: 1,
       });
+      expect(prepared.previewSelectedPaths).toEqual(
+        baseline.previewSelectedPaths
+      );
+      expect(baseline.manifestFacts.memoryBundleHash).toBeNull();
+      expect(prepared.manifestFacts.memoryBundleHash).toBe(memory.hash);
+      expect(requests).toHaveLength(0);
       const observation = await adapter.execute({
         invocation: prepared as PreparedReviewInvocation,
         manifest: {
@@ -1053,6 +1094,28 @@ describeHarness(
         expect(request.bodyKeys).not.toContain('temperature');
         expect(request.bodyKeys).not.toContain('top_p');
         expect(request.bodyKeys).not.toContain('max_tokens');
+      }
+      const mainRequests = requests.filter((request) =>
+        request.toolNames.includes('task_done')
+      );
+      expect(mainRequests.length).toBeGreaterThanOrEqual(1);
+      for (const request of mainRequests) {
+        expect(request.inputText).toContain(
+          'System-Specific Rules (Mandatory)'
+        );
+        expect(request.inputText).toContain(
+          'Write finding titles and messages in en.'
+        );
+        expect(request.inputText).toContain('AUTHORIZED REVIEWROUTER MEMORY');
+        expect(request.inputText).toContain(
+          'All outbound calls require a bounded timeout.'
+        );
+        expect(request.inputText).toContain(
+          'The offline replay harness can disable its timer.'
+        );
+        expect(request.inputText).toContain(
+          'The adapter used a 30 second timeout at this commit.'
+        );
       }
 
       // Managed outcome is emitted and parses under the frozen contract.
@@ -1151,6 +1214,15 @@ describeHarness(
         script: { nComments: 0, contentLen: 0, filterMode: 'approve' },
         assignedPaths: ['calc.ts', 'src/Foo.ts', 'src/foo.ts'],
         reviewSkills,
+        reviewMemory: freezeReviewMemorySnapshot(
+          reviewMemoryBundle({
+            authorizationId: 'auth-harness',
+            repositoryConnectionId: 'conn-1',
+            pullRequestNumber: 1,
+            baseSha,
+            headSha: git(repo, 'rev-parse', 'HEAD').trim(),
+          })
+        ),
         skillsGitRoots: materialized.gitRoots,
       });
       expect(scenario.rejection).toBeUndefined();
@@ -1197,6 +1269,16 @@ describeHarness(
       )) {
         expect(request.inputText).toContain('GLOBAL_ONE_MARKER');
         expect(request.inputText).toContain('GLOBAL_TWO_MARKER');
+        expect(request.inputText).toContain('AUTHORIZED REVIEWROUTER MEMORY');
+        expect(request.inputText).toContain(
+          'All outbound calls require a bounded timeout.'
+        );
+        expect(request.inputText).toContain(
+          'The offline replay harness can disable its timer.'
+        );
+        expect(request.inputText).toContain(
+          'The adapter used a 30 second timeout at this commit.'
+        );
         expect(request.inputText).toContain('UPPER_ONLY_MARKER');
         expect(request.inputText).toContain('LOWER_ONLY_MARKER');
         expect(request.inputText).toContain(

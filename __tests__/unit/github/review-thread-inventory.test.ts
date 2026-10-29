@@ -6,6 +6,7 @@ import {
 import { extractFindingFingerprint } from '../../../src/github/comment-fingerprint';
 import { GitHubClient } from '../../../src/github/client';
 import { createHash } from 'crypto';
+import publicationTimestamps from '../../fixtures/review-thread-inventory/pending-review-publication-timestamps.json';
 
 const parentBody = [
   '**🟡 Major - Previous Bug**',
@@ -901,6 +902,8 @@ describe('ReviewThreadInventoryLoader', () => {
       expect(graphql).toHaveBeenCalledTimes(2);
       expect(inventory.failed).toBe(false);
       expect(graphql.mock.calls[1][0]).toContain('author { login __typename }');
+      expect(graphql.mock.calls[1][0]).toContain('publishedAt');
+      expect(graphql.mock.calls[1][0]).toContain('lastEditedAt');
       expect(inventory.candidates).toHaveLength(
         authorTypename === 'Bot' ? 1 : 0
       );
@@ -1414,3 +1417,155 @@ function inventoryPageWithParentBody(
     },
   };
 }
+
+describe('review comment edit timestamps', () => {
+  async function inventory(timestamps: Record<string, unknown>) {
+    const parent = {
+      id: 'comment-timestamps',
+      author: { login: 'review-router-ai[bot]' },
+      body: parentBody,
+      path: 'src/app.ts',
+      line: 12,
+      ...timestamps,
+    };
+    const graphql = jest.fn().mockResolvedValue({
+      repository: {
+        pullRequest: {
+          headRefOid: 'a'.repeat(40),
+          reviewThreads: {
+            pageInfo: { hasNextPage: false, endCursor: null },
+            nodes: [
+              {
+                id: 'thread-timestamps',
+                isResolved: false,
+                viewerCanResolve: true,
+                path: 'src/app.ts',
+                line: 12,
+                comments: {
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                  nodes: [parent],
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    const loader = new ReviewThreadInventoryLoader({
+      owner: 'owner',
+      repo: 'repo',
+      octokit: { graphql },
+    } as unknown as GitHubClient);
+    return { result: await loader.load(123), graphql };
+  }
+  const observed = {
+    createdAt: publicationTimestamps.createdAt,
+    publishedAt: publicationTimestamps.publishedAt,
+    updatedAt: publicationTimestamps.updatedAt,
+    lastEditedAt: publicationTimestamps.lastEditedAt,
+  };
+  it('does not classify the observed pending-to-published propagation lag as a body edit', async () => {
+    const { result, graphql } = await inventory(observed);
+    expect(result.failed).toBe(false);
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0].parentCommentEdited).toBe(false);
+    expect(graphql.mock.calls[0][0]).toContain('publishedAt');
+    expect(graphql.mock.calls[0][0]).toContain('lastEditedAt');
+    // Freshness remains bound to actual updatedAt, not a normalized publication time.
+    expect(result.candidates[0].parentCommentUpdatedAt).toBe(
+      '2026-10-29T01:21:37.000Z'
+    );
+  });
+  it.each([
+    [
+      'pending creation',
+      { publishedAt: null, updatedAt: observed.createdAt },
+      false,
+    ],
+    ['unexplained pending update', { publishedAt: null }, true],
+    ['actual body edit', { lastEditedAt: observed.updatedAt }, true],
+  ])(
+    'classifies %s with the existing private timestamp semantics',
+    async (_name, change, edited) => {
+      const { result } = await inventory({ ...observed, ...change });
+      expect(result.failed).toBe(false);
+      expect(result.candidates[0].parentCommentEdited).toBe(edited);
+    }
+  );
+  it.each(['publishedAt', 'lastEditedAt', 'updatedAt'])(
+    'retains unknown %s as an unknown edit signal',
+    async (field) => {
+      const timestamps: Record<string, unknown> = { ...observed };
+      delete timestamps[field];
+      const { result } = await inventory(timestamps);
+      expect(result.failed).toBe(false);
+      expect(result.candidates[0].parentCommentEdited).toBeUndefined();
+    }
+  );
+  it('retains a null updatedAt as an unknown edit signal', async () => {
+    const { result } = await inventory({ ...observed, updatedAt: null });
+    expect(result.candidates[0].parentCommentEdited).toBeUndefined();
+  });
+  it.each([
+    ['impossible calendar day', '2026-02-30T00:00:00Z'],
+    ['non-leap-year day', '2026-02-29T00:00:00Z'],
+    ['rolled-over clock', '2026-03-02T24:00:00Z'],
+    ['invalid offset hour', '2026-03-02T00:00:00+24:00'],
+    ['invalid offset minute', '2026-03-02T00:00:00+00:60'],
+  ])(
+    'rejects %s before Date normalization can produce an unedited parent',
+    async (_name, publishedAt) => {
+      const { result } = await inventory({
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-03T00:00:00Z',
+        publishedAt,
+        lastEditedAt: null,
+      });
+      expect(result.failed).toBe(true);
+      expect(result.candidates).toHaveLength(0);
+    }
+  );
+  it('rejects an impossible edit date with otherwise correctly ordered timestamps', async () => {
+    const { result } = await inventory({
+      createdAt: '2026-03-01T00:00:00Z',
+      publishedAt: '2026-03-01T00:00:00Z',
+      updatedAt: '2026-03-03T00:00:00Z',
+      lastEditedAt: '2026-02-30T00:00:00Z',
+    });
+    expect(result.failed).toBe(true);
+    expect(result.candidates).toHaveLength(0);
+  });
+  it('normalizes supported fractional seconds and timezone offsets without losing the real update witness', async () => {
+    const { result } = await inventory({
+      createdAt: '2026-10-29T03:21:24.123456789+02:00',
+      publishedAt: '2026-10-29T03:21:36.234567890+02:00',
+      updatedAt: '2026-10-29T03:21:37.345678901+02:00',
+      lastEditedAt: null,
+    });
+    expect(result.failed).toBe(false);
+    expect(result.candidates[0].parentCommentEdited).toBe(false);
+    expect(result.candidates[0].parentCommentCreatedAt).toBe(
+      '2026-10-29T01:21:24.123Z'
+    );
+    expect(result.candidates[0].parentCommentUpdatedAt).toBe(
+      '2026-10-29T01:21:37.345Z'
+    );
+  });
+  it.each([
+    ['malformed publication', { publishedAt: 'invalid' }],
+    ['malformed edit', { lastEditedAt: 'invalid' }],
+    ['update before creation', { updatedAt: '2026-10-29T01:21:23Z' }],
+    ['publication before creation', { publishedAt: '2026-10-29T01:21:23Z' }],
+    ['update before publication', { publishedAt: '2026-10-29T01:21:38Z' }],
+    ['edit before creation', { lastEditedAt: '2026-10-29T01:21:23Z' }],
+    ['edit after update', { lastEditedAt: '2026-10-29T01:21:38Z' }],
+  ])(
+    'fails the complete fresh inventory closed on %s',
+    async (_name, change) => {
+      const { result } = await inventory({ ...observed, ...change });
+      expect(result.failed).toBe(true);
+      expect(result.candidates).toHaveLength(0);
+      expect(result.manualAttention).toHaveLength(0);
+    }
+  );
+});

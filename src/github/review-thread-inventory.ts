@@ -13,6 +13,7 @@ import { REVIEW_PROJECTION_ABSOLUTE_LIMITS } from '../review-projection/domain/r
 import {
   FindingMarkerParseKind,
   hashReviewLifecycleThreadState,
+  normalizeReviewLifecycleTimestamp as normalizeCommentTimestamp,
   isReviewLifecycleMarkerFingerprint,
   parseFindingMarker,
   type PriorLineageHint,
@@ -72,7 +73,7 @@ export interface ReviewThreadLifecycleTarget extends LifecycleTarget {
   readonly parentCommentCreatedAt?: string;
   readonly parentCommentBodyHash?: string;
   readonly claimHash?: string;
-  /** Undefined means GitHub did not supply an edit timestamp. */
+  /** Undefined means required edit/publication metadata was unavailable. */
   readonly parentCommentEdited?: boolean;
   readonly findingMarkerAmbiguous?: boolean;
 }
@@ -95,6 +96,8 @@ interface GraphQLComment {
   body?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  publishedAt?: string | null;
+  lastEditedAt?: string | null;
   path?: string | null;
   line?: number | null;
   originalLine?: number | null;
@@ -155,6 +158,8 @@ query ReviewRouterThreadInventory(
               body
               createdAt
               updatedAt
+              publishedAt
+              lastEditedAt
               path
               line
               originalLine
@@ -182,6 +187,8 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
           body
           createdAt
           updatedAt
+          publishedAt
+          lastEditedAt
           path
           line
           originalLine
@@ -492,15 +499,7 @@ export class ReviewThreadInventoryLoader {
         message,
         diffHunk: parent.diffHunk ?? null,
       }),
-      ...(parent.updatedAt
-        ? {
-            parentCommentEdited:
-              normalizeCommentTimestamp(parent.updatedAt) !==
-              normalizeCommentTimestamp(
-                requireCommentTimestamp(parent.createdAt)
-              ),
-          }
-        : {}),
+      parentCommentEdited: parentCommentWasEdited(parent),
       // Only the valid-marker branch can construct this target.
       findingMarkerAmbiguous: false,
       parentCommentUpdatedAt: normalizeCommentTimestamp(
@@ -751,19 +750,55 @@ function normalizeLifecycleSeverity(
   return 'unknown';
 }
 
+/** Match the private publication adapter: publication updates are not body edits. */
+function parentCommentWasEdited(parent: GraphQLComment): boolean | undefined {
+  // Missing GraphQL fields are unknown; the lifecycle adapter keeps them ineligible.
+  if (
+    parent.updatedAt == null ||
+    parent.publishedAt === undefined ||
+    parent.lastEditedAt === undefined
+  )
+    return undefined;
+  const createdAt = new Date(
+    normalizeCommentTimestamp(requireCommentTimestamp(parent.createdAt))
+  );
+  const updatedAt = new Date(
+    normalizeCommentTimestamp(requireCommentTimestamp(parent.updatedAt))
+  );
+  const publishedAt =
+    parent.publishedAt === null
+      ? null
+      : new Date(
+          normalizeCommentTimestamp(requireCommentTimestamp(parent.publishedAt))
+        );
+  const lastEditedAt =
+    parent.lastEditedAt === null
+      ? null
+      : new Date(
+          normalizeCommentTimestamp(
+            requireCommentTimestamp(parent.lastEditedAt)
+          )
+        );
+  if (
+    updatedAt < createdAt ||
+    (publishedAt !== null &&
+      (publishedAt < createdAt || updatedAt < publishedAt)) ||
+    (lastEditedAt !== null &&
+      (lastEditedAt < createdAt || lastEditedAt > updatedAt))
+  )
+    throw new Error('review thread comment timestamp order was invalid');
+  // GitHub can advance updatedAt after publication while submitting a pending review.
+  return (
+    lastEditedAt !== null ||
+    (publishedAt === null && updatedAt.getTime() !== createdAt.getTime())
+  );
+}
+
 function requireCommentTimestamp(value?: string | null): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error('review thread comment timestamp was missing');
   }
   return value;
-}
-
-function normalizeCommentTimestamp(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error('review thread comment timestamp was invalid');
-  }
-  return parsed.toISOString();
 }
 
 function stripLifecycleCommentBody(body: string): string {

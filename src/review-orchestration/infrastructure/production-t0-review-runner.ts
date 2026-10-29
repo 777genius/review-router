@@ -152,6 +152,7 @@ import {
   readLifecycleCapability,
   compositeLifecycleInvocations,
   restorePersistedWorkPlan,
+  rebindReviewAssignmentsToWorkPlan,
 } from './lifecycle-verification-invocation';
 import { planProductionLifecycleVerification } from './lifecycle-verification-planning';
 import { restoreReviewPublication } from './restore-review-publication';
@@ -768,11 +769,16 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               ocrCompatibilityKey
           )
             throw new Error('review_restore_compatibility_changed');
+          const finalPlan = restorePersistedWorkPlan(
+            preplanningRestore,
+            lifecycle?.plan ?? planned.plan
+          );
           planned = {
             ...planned,
-            plan: restorePersistedWorkPlan(
-              preplanningRestore,
-              lifecycle?.plan ?? planned.plan
+            plan: finalPlan,
+            assignments: rebindReviewAssignmentsToWorkPlan(
+              planned.assignments,
+              finalPlan
             ),
           };
           const bridge: OcrLoopbackBridge = {
@@ -1160,11 +1166,16 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         preplanningRestore.persistedPlan.compatibilityKey !== compatibilityKey
       )
         throw new Error('review_restore_compatibility_changed');
+      const finalPlan = restorePersistedWorkPlan(
+        preplanningRestore,
+        lifecycle?.plan ?? planned.plan
+      );
       planned = {
         ...planned,
-        plan: restorePersistedWorkPlan(
-          preplanningRestore,
-          lifecycle?.plan ?? planned.plan
+        plan: finalPlan,
+        assignments: rebindReviewAssignmentsToWorkPlan(
+          planned.assignments,
+          finalPlan
         ),
       };
       const invocationAdapter = new CodexReviewInvocationAdapter(

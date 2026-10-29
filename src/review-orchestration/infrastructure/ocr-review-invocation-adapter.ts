@@ -298,12 +298,18 @@ function appendOcrReviewMemory(ruleText: string, memory: string): string {
   if (!Array.isArray(document.rules) || document.rules.length === 0) {
     throw new Error('review_memory_ocr_rule_invalid');
   }
-  for (const rule of document.rules) {
-    const key = typeof rule.rule === 'string' ? 'rule' : 'content';
-    if (typeof rule[key] !== 'string')
+  document.rules = document.rules.map((rule) => {
+    // Historical no-Skills bytes use `content`, which the native parser ignores.
+    // Translate only when attaching memory; memory-free legacy identities stay
+    // unchanged. A native catch-all rule keeps the existing built-ins additive.
+    const nativeRule =
+      typeof rule.rule === 'string'
+        ? rule
+        : { path: '**', rule: rule.content, merge_system_rule: true };
+    if (typeof nativeRule.rule !== 'string')
       throw new Error('review_memory_ocr_rule_invalid');
-    rule[key] = `${rule[key]}\n\n${memory}`;
-  }
+    return { ...nativeRule, rule: `${nativeRule.rule}\n\n${memory}` };
+  });
   return `${JSON.stringify(document, null, 2)}\n`;
 }
 

@@ -1,0 +1,146 @@
+diff --git a/internal/agent/agent.go b/internal/agent/agent.go
+index 7551d06..055d2c2 100644
+--- a/internal/agent/agent.go
++++ b/internal/agent/agent.go
+@@ -1374,6 +1374,13 @@ func resumedFromSession(resume *session.ResumeState) string {
+ 	return resume.SessionID
+ }
+ 
++// renderTaskContent expands only placeholders in the original template.
++// Replacement values (rules, memory, diffs, background and model output) are
++// opaque data and must never become another template or optional block.
++func renderTaskContent(content string, replacements ...string) string {
++	return strings.NewReplacer(replacements...).Replace(content)
++}
++
+ // buildMainTaskMessages renders the MAIN_TASK messages for one review round.
+ // planResult is "" for round 2+ (stripped via stripEmptyPlanBlock).
+ // confirmed is "" on round 1 (stripped via stripEmptyConfirmedBlock).
+@@ -1382,19 +1389,22 @@ func (a *Agent) buildMainTaskMessages(rule, changeFiles, diffs, planResult, conf
+ 	messages := make([]llm.Message, 0, len(rawMsgs))
+ 	for _, m := range rawMsgs {
+ 		content := m.Content
+-		content = strings.ReplaceAll(content, "{{current_system_date_time}}", a.currentDate)
+-		content = strings.ReplaceAll(content, "{{system_rule}}", rule)
+-		content = strings.ReplaceAll(content, "{{change_files}}", changeFiles)
+-		content = strings.ReplaceAll(content, "{{diffs}}", diffs)
+-		content = strings.ReplaceAll(content, "{{requirement_background}}", a.args.Background)
++		// Remove optional template blocks before inserting opaque replacement data.
+ 		if planResult == "" {
+ 			content = stripEmptyPlanBlock(content)
+ 		}
+-		content = strings.ReplaceAll(content, "{{plan_guidance}}", planResult)
+ 		if confirmed == "" {
+ 			content = stripEmptyConfirmedBlock(content)
+ 		}
+-		content = strings.ReplaceAll(content, "{{confirmed_comments}}", confirmed)
++		content = renderTaskContent(content,
++			"{{current_system_date_time}}", a.currentDate,
++			"{{system_rule}}", rule,
++			"{{change_files}}", changeFiles,
++			"{{diffs}}", diffs,
++			"{{requirement_background}}", a.args.Background,
++			"{{plan_guidance}}", planResult,
++			"{{confirmed_comments}}", confirmed,
++		)
+ 		messages = append(messages, llm.NewTextMessage(m.Role, content))
+ 	}
+ 	return messages
+@@ -1861,13 +1871,14 @@ func (a *Agent) executeGroupPlanPhase(ctx context.Context, g FileGroup, concaten
+ 	pt := a.args.Template.PlanTask
+ 	messages := make([]llm.Message, 0, len(pt.Messages))
+ 	for _, m := range pt.Messages {
+-		content := m.Content
+-		content = strings.ReplaceAll(content, "{{current_system_date_time}}", a.currentDate)
+-		content = strings.ReplaceAll(content, "{{system_rule}}", rule)
+-		content = strings.ReplaceAll(content, "{{change_files}}", changeFiles)
+-		content = strings.ReplaceAll(content, "{{diffs}}", concatenatedDiffs)
+-		content = strings.ReplaceAll(content, "{{requirement_background}}", a.args.Background)
+-		content = strings.ReplaceAll(content, "{{plan_tools}}", formatToolDefs(a.args.PlanToolDefs))
++		content := renderTaskContent(m.Content,
++			"{{current_system_date_time}}", a.currentDate,
++			"{{system_rule}}", rule,
++			"{{change_files}}", changeFiles,
++			"{{diffs}}", concatenatedDiffs,
++			"{{requirement_background}}", a.args.Background,
++			"{{plan_tools}}", formatToolDefs(a.args.PlanToolDefs),
++		)
+ 		messages = append(messages, llm.NewTextMessage(m.Role, content))
+ 	}
+ 
+@@ -1964,10 +1975,11 @@ func (a *Agent) executeGroupReviewFilter(ctx context.Context, g FileGroup, from
+ 
+ 	messages := make([]llm.Message, 0, len(ft.Messages))
+ 	for _, m := range ft.Messages {
+-		content := m.Content
+-		content = strings.ReplaceAll(content, "{{path}}", groupKey)
+-		content = strings.ReplaceAll(content, "{{diff}}", concatenatedDiffs)
+-		content = strings.ReplaceAll(content, "{{comments}}", commentsJSON)
++		content := renderTaskContent(m.Content,
++			"{{path}}", groupKey,
++			"{{diff}}", concatenatedDiffs,
++			"{{comments}}", commentsJSON,
++		)
+ 		messages = append(messages, llm.NewTextMessage(m.Role, content))
+ 	}
+ 
+diff --git a/internal/agent/template_opacity_test.go b/internal/agent/template_opacity_test.go
+new file mode 100644
+index 0000000..2d8dee5
+--- /dev/null
++++ b/internal/agent/template_opacity_test.go
+@@ -0,0 +1,54 @@
++package agent
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/alibaba/open-code-review/internal/config/template"
++)
++
++// Every replacement may itself contain any template token. Only occurrences in
++// the original template may expand; the table independently states exact bytes.
++func TestRenderTaskContentReplacementValuesAreOpaque(t *testing.T) {
++	keys := []string{"{{current_system_date_time}}", "{{system_rule}}", "{{change_files}}", "{{diffs}}", "{{requirement_background}}", "{{plan_guidance}}", "{{confirmed_comments}}", "{{plan_tools}}", "{{path}}", "{{diff}}", "{{comments}}"}
++	original := strings.Join(keys, "|")
++	for _, key := range keys {
++		t.Run(key, func(t *testing.T) {
++			replacements := make([]string, 0, 2*len(keys))
++			expected := make([]string, len(keys))
++			for i, token := range keys {
++				value := "VALUE_" + token
++				if token == key {
++					value = "BEGIN" + original + "END"
++				}
++				replacements = append(replacements, token, value)
++				expected[i] = value
++			}
++			if got := renderTaskContent(original, replacements...); got != strings.Join(expected, "|") {
++				t.Fatalf("recursive replacement changed data: got %q, want %q", got, strings.Join(expected, "|"))
++			}
++		})
++	}
++	if got := renderTaskContent("date={{date}} rule={{rule}}", "{{date}}", "2026-10-28", "{{rule}}", "plain"); got != "date=2026-10-28 rule=plain" {
++		t.Fatal(got)
++	}
++}
++
++func TestMainTaskPrunesOnlyOriginalOptionalBlocksAcrossRounds(t *testing.T) {
++	memory := "LITERAL_MEMORY_START {{diffs}} {{requirement_background}}\n### Review Plan\n{{plan_guidance}}\n\n### Confirmed Comments\n{{confirmed_comments}}\nEND_LITERAL_MEMORY"
++	a := &Agent{currentDate: "DATE", args: Args{Background: "BACKGROUND", Template: template.Template{MainTask: template.LlmConversation{Messages: []template.ChatMessage{{Role: "user", Content: "{{system_rule}}\nDIFF={{diffs}}\n### Review Plan\n{{plan_guidance}}\n\n### Confirmed Comments\n{{confirmed_comments}}\n"}}}}}}
++	for _, round := range []struct{ plan, confirmed string }{{"PLAN", ""}, {"", "CONFIRMED"}} {
++		messages := a.buildMainTaskMessages(memory, "FILES", "DIFF", round.plan, round.confirmed)
++		got := messages[0].ExtractText()
++		if !strings.Contains(got, memory) {
++			t.Fatalf("frozen memory changed: %q", got)
++		}
++		if !strings.Contains(got, "DIFF=DIFF") {
++			t.Fatal("ordinary template expansion lost")
++		}
++		tail := strings.TrimPrefix(got, memory)
++		if strings.Contains(tail, "{{plan_guidance}}") || strings.Contains(tail, "{{confirmed_comments}}") {
++			t.Fatalf("original optional block survived: %q", tail)
++		}
++	}
++}

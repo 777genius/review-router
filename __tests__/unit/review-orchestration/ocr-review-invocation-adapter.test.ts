@@ -532,6 +532,15 @@ describe('OcrReviewInvocationAdapter', () => {
     let current: ReviewMemorySnapshot | null = snapshot;
     const { bridge } = bridgeFixture();
     const preview = previewRunner();
+    const baselineAdapter = adapterFixture({
+      bridge,
+      processRunner: unusedRunner,
+      previewRunner: preview.runner,
+    });
+    const baseline = await baselineAdapter.adapter.prepare({
+      workSlot: baselineAdapter.workSlot,
+      attemptOrdinal: 1,
+    });
     const { adapter, workSlot } = adapterFixture({
       bridge,
       processRunner: unusedRunner,
@@ -540,13 +549,21 @@ describe('OcrReviewInvocationAdapter', () => {
     });
     const first = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
     const written = JSON.parse(fs.readFileSync(run.rulePath, 'utf8')) as {
-      rules: { content: string }[];
+      rules: { path: string; rule: string; merge_system_rule: boolean }[];
     };
-    expect(written.rules[0].content).toContain(snapshot.renderedPrompt);
+    expect(written.rules[0]).toEqual({
+      path: '**',
+      rule: expect.stringContaining(snapshot.renderedPrompt),
+      merge_system_rule: true,
+    });
+    expect(first.previewSelectedPaths).toEqual(baseline.previewSelectedPaths);
     expect(first.manifestFacts.memoryBundleHash).toBe(snapshot.hash);
     current = null;
     const second = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
     expect(second.manifestFacts.memoryBundleHash).toBeNull();
+    expect(second.reviewPrompt).toBe(baseline.reviewPrompt);
+    expect(second.manifestFacts).toEqual(baseline.manifestFacts);
+    expect(fs.readFileSync(run.rulePath, 'utf8')).toBe(baseline.reviewPrompt);
     expect(second.reviewPrompt).not.toContain('AUTHORIZED REVIEWROUTER MEMORY');
     expect(second.manifestFacts.providerRequestEnvelopeHash).not.toBe(
       first.manifestFacts.providerRequestEnvelopeHash

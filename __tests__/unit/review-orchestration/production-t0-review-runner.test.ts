@@ -18,6 +18,8 @@ import {
 import { GitReviewRevisionMaterializer } from '../../../src/review-orchestration/infrastructure/git-review-revision-materializer';
 import { PullRequestLoader } from '../../../src/github/pr-loader';
 import { reviewMemoryBundle } from '../../helpers/review-memory-v2-fixture';
+import { prDescriptionContract } from '../../../src/control-plane/generated/review-action-v2/companion-contracts';
+import { prDescriptionExtensionV1 } from '../../../src/control-plane/generated/review-action-v2/pr-description-invocation-manifest-v1';
 import {
   readAdmittedGatewayCodexModelSettings,
   GATEWAY_CODEX_MODEL_SETTINGS_ENV,
@@ -141,6 +143,7 @@ describe('ProductionT0ReviewRunner policy', () => {
     ['available', 'codex'],
     ['available', 'direct'],
     ['available', 'provider-api'],
+    ['description', 'codex'],
     ['disabled', 'codex'],
     ['outage', 'codex'],
     ['restore', 'codex'],
@@ -218,10 +221,10 @@ describe('ProductionT0ReviewRunner policy', () => {
         providers: [providerName],
         synthesisModel: providerName,
         codexAgenticContext: false,
-        updatePrDescription: false,
+        updatePrDescription: mode === 'description',
       };
       const boundary = new Error('production_memory_composition_verified');
-      const fetchImpl = jest.fn().mockImplementation(async (url) => {
+      const fetchImpl = jest.fn().mockImplementation(async (url, options) => {
         if (String(url).endsWith('/session/exchange'))
           return new Response(
             JSON.stringify({ sessionToken: 'fixture-session' })
@@ -240,6 +243,9 @@ describe('ProductionT0ReviewRunner policy', () => {
           );
         if (String(url).endsWith('/bundle')) {
           if (mode === 'outage') throw new Error('private engine diagnostic');
+          const description =
+            mode === 'description' &&
+            JSON.parse(String(options.body)).task === 'pr_description';
           return new Response(
             JSON.stringify(
               reviewMemoryBundle({
@@ -249,6 +255,30 @@ describe('ProductionT0ReviewRunner policy', () => {
                 baseSha,
                 headSha,
                 reviewRevisionHash: admitted.facts.reviewRevisionHash,
+                ...(mode === 'description'
+                  ? {
+                      bundleId: description
+                        ? 'bundle-description'
+                        : 'bundle-review',
+                      contextPolicy: {
+                        audience: description ? 'public' : 'repository',
+                        repositoryId: 'repository-memory-fixture',
+                        allowedTasks: description
+                          ? ['pr_description']
+                          : ['review', 'investigation'],
+                      },
+                      ...(description
+                        ? {
+                            items: [
+                              {
+                                ...reviewMemoryBundle().items[0]!,
+                                body: 'Public description guidance.',
+                              },
+                            ],
+                          }
+                        : {}),
+                    }
+                  : {}),
               })
             ),
             { headers: { 'content-type': 'application/json' } }
@@ -352,6 +382,32 @@ describe('ProductionT0ReviewRunner policy', () => {
                 )
               ).toBe(true);
           }
+          if (mode === 'description') {
+            const descriptionSlot = command.workSlots.find(
+              (slot) => slot.taskKind === ReviewTaskKind.PrDescription
+            )!;
+            const description = await dependencies.prDescription!.prepare({
+              workSlot: descriptionSlot,
+              attemptOrdinal: 1,
+            });
+            expect(description.reviewPrompt).toContain(
+              'Public description guidance.'
+            );
+            expect(description.reviewPrompt).not.toContain(
+              'All outbound calls require a bounded timeout.'
+            );
+            expect(description.manifestFacts.memoryBundleHash).toMatch(
+              /^[a-f0-9]{64}$/
+            );
+            expect(description.manifestFacts.memoryBundleHash).not.toBe(
+              prepared[0]!.hash
+            );
+            expect(
+              await dependencies.memoryAdmission!.isEligible(
+                description.manifestFacts.memoryBundleHash
+              )
+            ).toBe(true);
+          }
           throw boundary;
         });
       try {
@@ -367,7 +423,13 @@ describe('ProductionT0ReviewRunner policy', () => {
             CODEX_MODEL: 'gpt-memory-test',
             REVIEW_ROUTER_MEMORY_ENABLED:
               mode === 'disabled' ? 'false' : 'true',
-            UPDATE_PR_DESCRIPTION: 'false',
+            UPDATE_PR_DESCRIPTION: String(mode === 'description'),
+            ...(mode === 'description'
+              ? {
+                  [prDescriptionContract.capabilityRuntimeEnvKey]:
+                    JSON.stringify(prDescriptionExtensionV1),
+                }
+              : {}),
             ...(engine === 'provider-api'
               ? {
                   REVIEW_AUTH_MODE: 'openrouter-api',
@@ -454,6 +516,9 @@ describe('ProductionT0ReviewRunner policy', () => {
               },
               actualModel: () => 'gpt-memory-test',
               failureFact: () => undefined,
+              generatePrDescription: async () => {
+                throw new Error('unexpected-description-inference');
+              },
               dispose: async () => {},
             },
           },
@@ -534,7 +599,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           expect(prepared).toHaveLength(2);
           expect(prepared[0]).toEqual(prepared[1]);
         }
-        if (mode === 'available') {
+        if (mode === 'available' || mode === 'description') {
           expect(prepared[0].prompt).toContain(
             'All outbound calls require a bounded timeout.'
           );
@@ -549,7 +614,9 @@ describe('ProductionT0ReviewRunner policy', () => {
           fetchImpl.mock.calls.filter(([url]) =>
             String(url).endsWith('/bundle')
           )
-        ).toHaveLength(mode === 'disabled' ? 0 : 1);
+        ).toHaveLength(
+          mode === 'disabled' ? 0 : mode === 'description' ? 2 : 1
+        );
       } finally {
         execute.mockRestore();
         for (const spy of spies) spy.mockRestore();
@@ -637,7 +704,7 @@ describe('ProductionT0ReviewRunner policy', () => {
     ['ocr', 'ocr'],
     ['codex', 'codex', 'ocr'],
   ] as const)(
-    'composes exact reviewer lanes and full OCR inventories for %j',
+    'composes exact reviewer lanes, captured memory and full OCR inventories for %j',
     async (...engineKinds) => {
       const root = fs.realpathSync(
         fs.mkdtempSync(path.join(os.tmpdir(), 't0-multi-composition-'))
@@ -738,6 +805,9 @@ describe('ProductionT0ReviewRunner policy', () => {
       };
       const selectedTools =
         engineKinds[0] === 'ocr' && engineKinds[1] === 'codex';
+      const memoryEnabled =
+        engineKinds.length === 2 &&
+        engineKinds.every((kind) => kind === 'codex');
       const contextPlanPreimage = {
         version: 1,
         builtinTools: ['repository.docs.read'],
@@ -766,7 +836,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           REVIEW_ROUTER_AGENT_PROFILE_DIGEST: reviewers[0].agentProfileDigest,
           REVIEW_PROVIDERS: `codex/${reviewers[0].requestedModel}`,
           UPDATE_PR_DESCRIPTION: 'false',
-          REVIEW_ROUTER_MEMORY_ENABLED: 'false',
+          REVIEW_ROUTER_MEMORY_ENABLED: String(memoryEnabled),
           BATCH_MAX_FILES: '1',
           REVIEW_ROUTER_REVIEWER_PLAN_JSON: JSON.stringify(reviewerPlan),
           ...(selectedTools
@@ -812,6 +882,33 @@ describe('ProductionT0ReviewRunner policy', () => {
         })
       );
       const boundary = new Error('multi_composition_verified');
+      const fetchImpl = jest.fn().mockImplementation(async (url) => {
+        if (String(url).endsWith('/bundle'))
+          return new Response(
+            JSON.stringify(
+              reviewMemoryBundle({
+                authorizationId: admitted.authorizationId,
+                repositoryConnectionId: admitted.facts.repositoryConnectionId,
+                pullRequestNumber: pr.number,
+                baseSha,
+                headSha,
+                reviewRevisionHash: admitted.facts.reviewRevisionHash,
+                contextPolicy: {
+                  audience: 'repository',
+                  repositoryId: 'repository-memory-fixture',
+                  allowedTasks: ['review', 'investigation'],
+                },
+              })
+            ),
+            { headers: { 'content-type': 'application/json' } }
+          );
+        if (String(url).endsWith('/admit'))
+          return new Response(
+            JSON.stringify({ protocolVersion: 2, eligible: true }),
+            { headers: { 'content-type': 'application/json' } }
+          );
+        throw new Error('unexpected-memory-request');
+      });
       const spies = [
         jest
           .spyOn(GitHubActionsOidcTokenProvider.prototype, 'requestToken')
@@ -940,6 +1037,22 @@ describe('ProductionT0ReviewRunner policy', () => {
                   )?.paths
                 ).toEqual(['one.ts', 'three.ts', 'two.ts']);
               } else {
+                if (memoryEnabled) {
+                  expect(invocation.reviewPrompt).toContain(
+                    'All outbound calls require a bounded timeout.'
+                  );
+                  expect(invocation.manifestFacts.memoryBundleHash).toMatch(
+                    /^[a-f0-9]{64}$/
+                  );
+                  expect(
+                    dependencies.memoryAdmission!.allowsInvestigation!()
+                  ).toBe(true);
+                  expect(
+                    await dependencies.memoryAdmission!.isEligible(
+                      invocation.manifestFacts.memoryBundleHash
+                    )
+                  ).toBe(true);
+                }
                 const assembled =
                   await dependencies.invocationManifestAssembler.assemble(
                     invocation
@@ -988,16 +1101,14 @@ describe('ProductionT0ReviewRunner policy', () => {
       };
       try {
         await expect(
-          new ProductionT0ReviewRunner(jest.fn()).run(runnerInput)
+          new ProductionT0ReviewRunner(fetchImpl).run(runnerInput)
         ).rejects.toBe(boundary);
         expect(execute).toHaveBeenCalledTimes(1);
-        if (
-          engineKinds.length === 2 &&
-          engineKinds.every((kind) => kind === 'codex')
-        ) {
-          unavailableVote = reviewers[1]!.providerVoteIdentityHash;
+        for (const unavailableIndex of memoryEnabled ? [1, 0] : []) {
+          unavailableVote =
+            reviewers[unavailableIndex]!.providerVoteIdentityHash;
           const changedReviewers = reviewers.map((reviewer, index) =>
-            index === 1
+            index === unavailableIndex
               ? {
                   ...reviewer,
                   unavailableReason: 'allocation_unavailable' as const,
@@ -1016,7 +1127,7 @@ describe('ProductionT0ReviewRunner policy', () => {
             },
           };
           await expect(
-            new ProductionT0ReviewRunner(jest.fn()).run({
+            new ProductionT0ReviewRunner(fetchImpl).run({
               ...runnerInput,
               accountGateway: {
                 ...runnerInput.accountGateway!,
@@ -1029,14 +1140,21 @@ describe('ProductionT0ReviewRunner policy', () => {
                     changedRuntime,
                     changedReviewers[index]!
                   ),
-                  ...(index === 1 ? { bootstrapFailure: true as const } : {}),
+                  ...(index === unavailableIndex
+                    ? { bootstrapFailure: true as const }
+                    : {}),
                 })),
               },
             })
           ).rejects.toBe(boundary);
-          expect(execute).toHaveBeenCalledTimes(2);
-          expect(plannedIdentities[1]).toEqual(plannedIdentities[0]);
+          expect(plannedIdentities.at(-1)).toEqual(plannedIdentities[0]);
         }
+        expect(execute).toHaveBeenCalledTimes(memoryEnabled ? 3 : 1);
+        expect(
+          fetchImpl.mock.calls.filter(([url]) =>
+            String(url).endsWith('/bundle')
+          )
+        ).toHaveLength(memoryEnabled ? 3 : 0);
       } finally {
         execute.mockRestore();
         spies.forEach((spy) => spy.mockRestore());

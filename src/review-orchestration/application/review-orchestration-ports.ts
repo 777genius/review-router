@@ -713,6 +713,8 @@ export interface PreparedReviewInvocationPort {
 /** Admission changes require a fresh prompt/manifest before cache or inference. */
 export interface ReviewMemoryAdmissionPort {
   isEligible(memoryBundleHash: string | null | undefined): Promise<boolean>;
+  /** Qualified server context policy also authorizes the separate investigation grant. */
+  allowsInvestigation?(): boolean;
   /** Permanently discard captured memory before same-attempt preparation. */
   discard(): void;
 }

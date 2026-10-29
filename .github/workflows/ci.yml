@@ -45,7 +45,7 @@ jobs:
         run: |
           test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
           tools/ocr/build.sh --out "$RUNNER_TEMP/reviewrouter-ocr"
-          diff -u tools/ocr/qualifications/review-skills-v1.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
+          diff -u tools/ocr/qualifications/memory-template-v1.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
       - name: Prepare review-quality fixture prerequisites
         timeout-minutes: 5
         run: |

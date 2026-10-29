@@ -1,6 +1,7 @@
 import type { ReviewAgentProfile } from '../../control-plane/generated/review-action-v2/review-agent-profile';
 import {
   ReviewMemorySession,
+  reviewMemoryAdmissionForSessions,
   type ReviewMemorySnapshot,
 } from '../../control-plane/review-memory-v2';
 import { fetchCapturedReviewSkills } from '../../review-skills/review-skills-transport';
@@ -495,21 +496,38 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
       }
       signal?.throwIfAborted();
-      const reviewMemory = await ReviewMemorySession.capture({
-        apiUrl: input.apiUrl,
-        authorizationToken: authorization.authorizationToken,
-        binding: reviewMemoryBinding(authorization),
-        // A recovered ensemble may continue its already-admitted immutable
-        // results, but must never capture a different memory snapshot.
-        enabled:
-          !preplanningRestore &&
-          process.env.REVIEW_ROUTER_MEMORY_ENABLED === 'true',
-        pr,
-        signal,
-        timeoutMs: executionDeadline.clampProviderTimeout(2_000),
-        fetchImpl,
-        warn: core.warning,
-      });
+      const captureMemory = (
+        task: 'review' | 'pr_description',
+        available = true
+      ) =>
+        ReviewMemorySession.capture({
+          apiUrl: input.apiUrl,
+          authorizationToken: authorization.authorizationToken,
+          binding: reviewMemoryBinding(authorization),
+          task,
+          // Recovery cannot capture new bytes under an already admitted identity.
+          enabled:
+            available &&
+            !preplanningRestore &&
+            process.env.REVIEW_ROUTER_MEMORY_ENABLED === 'true',
+          pr,
+          signal,
+          timeoutMs: executionDeadline.clampProviderTimeout(2_000),
+          fetchImpl,
+          warn: core.warning,
+        });
+      const reviewMemory = await captureMemory('review');
+      const descriptionMemory = await captureMemory(
+        'pr_description',
+        config.updatePrDescription &&
+          !!admittedRuntime?.runtimeEnv[
+            prDescriptionContract.capabilityRuntimeEnvKey
+          ]
+      );
+      const memoryAdmission = reviewMemoryAdmissionForSessions(
+        reviewMemory,
+        descriptionMemory
+      );
       const materializer = new GitReviewRevisionMaterializer(
         signal
           ? async (args, options) => {
@@ -688,6 +706,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             language: config.outputLanguage,
             config,
             transport: modelTransport,
+            memorySnapshot: descriptionMemory.current(),
             warn: core.warning,
           });
           const lifecycleCapability =
@@ -882,7 +901,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                     transport: modelTransport,
                   })
                 : invocationAdapter,
-            memoryAdmission: reviewMemory,
+            memoryAdmission,
             invocationFailureClassifier:
               new ProviderInvocationFailureClassifier(
                 modelTransport.failureFact
@@ -1084,6 +1103,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         transport:
           input.providerApi?.modelTransport ??
           input.accountGateway?.modelTransport,
+        memorySnapshot: descriptionMemory.current(),
         warn: core.warning,
       });
       const lifecycleCapability =
@@ -1200,7 +1220,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               reasoningEffort,
               input.providerApi?.credentialLease,
               gatewayModelSettings,
-              undefined
+              reviewMemory
             ),
         });
       const identities = new DeterministicReviewOrchestrationIdentity();
@@ -1376,7 +1396,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 transport: input.accountGateway!.modelTransport,
               })
             : nativeDiscoveryInvocations,
-        memoryAdmission: reviewMemory,
+        memoryAdmission,
         ...(investigationInvocationAdapter
           ? { investigationInvocations: investigationInvocationAdapter }
           : {}),
@@ -2431,7 +2451,7 @@ export async function prepareSingleT0ReviewPlan(input: {
       'xhigh',
       undefined,
       undefined,
-      { current: () => (investigation ? null : memorySnapshot) }
+      { current: () => memorySnapshot }
     ).prepare({ workSlot: assignment.workSlot, attemptOrdinal: 1 });
   const invocation = await prepare(false);
   const investigation = await prepare(true);

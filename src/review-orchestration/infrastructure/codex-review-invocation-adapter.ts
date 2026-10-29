@@ -5,6 +5,7 @@ import type {
   ReviewMemorySession,
   ReviewMemorySnapshot,
 } from '../../control-plane/review-memory-v2';
+import { memorySnapshotForTask } from '../../control-plane/review-memory-v2';
 import { PromptBuilder } from '../../analysis/llm/prompt-builder';
 import {
   canonicalizeProviderInvocationManifestV1,
@@ -93,9 +94,10 @@ export async function prepareCodexReviewPrompt(
   investigationManifestBindingEnabled: boolean,
   memorySnapshot?: ReviewMemorySnapshot | null
 ) {
-  // The initial investigation grant has no atomic memory admission. Explicitly
-  // exclude memory at this preparation boundary, including direct callers.
-  if (investigationManifestBindingEnabled) memorySnapshot = null;
+  // Companion purpose authority is issued by the server, never inferred from
+  // the existence of a review receipt or from an application-side preflight.
+  if (investigationManifestBindingEnabled)
+    memorySnapshot = memorySnapshotForTask(memorySnapshot, 'investigation');
   const effectiveLifecycleTargets = investigationManifestBindingEnabled
     ? []
     : assignment.lifecycleTargets;
@@ -736,7 +738,7 @@ export class GeneratedProviderInvocationManifestAssembler implements ProviderInv
       runtimeCompatibilityKey: this.runtimeCompatibilityKey,
       filePatchManifestHash: facts.filePatchManifestHash,
       contextManifestHash: facts.contextManifestHash,
-      memoryBundleHash: description ? null : (facts.memoryBundleHash ?? null),
+      memoryBundleHash: facts.memoryBundleHash ?? null,
       codeGraphProjectionHash: null,
       lifecycleTargetSetHash: facts.lifecycleTargetSetHash,
       liveLifecycleStateHash: facts.liveLifecycleStateHash,

@@ -23,8 +23,13 @@ mutation credentials.
 Fresh T0 reviews capture one bounded, authorized memory snapshot and bind its
 exact rendered bytes into the invocation manifest. Ordinary native reviews and
 OCR discovery receive this snapshot; an expired or revoked snapshot is discarded
-before a fresh inference grant. Initial investigation and PR-description calls
-intentionally omit it. Recovery retains the admitted identity instead of fetching
+before a fresh inference grant. Qualified server context policies authorize the
+same frozen internal snapshot for investigation. PR-description capture uses the
+same bounded client/helper once for its separate PR-reader audience. The policy binds
+the repository, audience, and allowed tasks into each snapshot identity; historical
+bundles without that policy remain ordinary-review inputs. The server filters the
+audience before capture and validates current receipt eligibility at each task's
+authoritative grant. Recovery retains the admitted identity instead of fetching
 new memory for an old execution.
 
 OCR uses its native `path`/`rule` JSON entries. Captured Skills keep their exact
@@ -35,6 +40,44 @@ Memory-free historical rule bytes and invocation identities remain unchanged.
 The required real-CLI fixture verifies memory in actual main model requests
 with and without Skills. Deterministic model responses prove input delivery,
 not that a real model follows every remembered convention.
+
+### Native template integrity
+
+`1.13.1-rr.5` / `ocr-managed-v4` adds one-pass original-template substitution.
+Rules, frozen memory, diffs, background and model output remain opaque replacement
+values, including literal `{{diffs}}` and `{{requirement_background}}`. Optional
+main-task blocks are removed before data is inserted. Existing rr.4 bytes and its
+qualification manifest are unchanged. The new source/build identity is recorded
+in `tools/ocr/qualifications/memory-template-v1.manifest`; this local build is not
+a claim that a release artifact has been published, registered, or activated.
+
+### Managed conversation interaction
+
+The reusable interaction workflow has an explicit `interaction_backend:
+account-gateway` job requiring a full runtime commit SHA, OIDC session and App
+publication identity. It runs for created/edited/deleted inline comment events,
+including when discussion replies are off or capped: the server owns independent
+learning and publication policies. It installs no Codex CLI, restores no provider
+secret, and accepts no local discussion model override. The workflow token is a
+read/bootstrap and authorized workflow-command credential; reply publication
+requires the App token and fails closed when that identity is unavailable.
+
+The Action submits source references to the finite `/api/action/v2/conversations`
+process/status/publication contract. The server loads and checks the full thread,
+selects the authorized account and freezes bounded exact reply bytes. The Action
+publishes that envelope with its stable marker and reports the publication
+receipt. Immediately before the first create, the server rechecks the frozen
+source/authority and atomically claims publication through the same finite
+endpoint. A lost or rejected claim never authorizes a create. Redelivery looks up every comment page; an ambiguous create is marked
+unknown and reconciled rather than blindly recreated. Settled output is not
+regenerated. A failed inventory before the claim leaves the reply ready for
+redelivery within its original deadline; only the server claim consumes the
+one-create permission. Matching source events are serialized in the reusable job.
+
+Source implementation and deterministic fixtures do not enable this profile.
+The control plane must attest the exact immutable caller/runtime, configure the
+qualified source-processing and inference profiles, and pass the disposable
+App-first Gateway interaction and native model/privacy gates before selection.
 
 ## Projection envelope compatibility
 

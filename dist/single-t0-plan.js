@@ -204167,8 +204167,10 @@ function hashReviewLifecycleThreadState(input) {
       commentId,
       normalizeAuthorLogin(comment.authorLogin),
       sha25612(comment.body ?? ""),
-      normalizeTimestamp(comment.createdAt),
-      normalizeTimestamp(comment.updatedAt ?? comment.createdAt)
+      normalizeReviewLifecycleTimestamp(comment.createdAt),
+      normalizeReviewLifecycleTimestamp(
+        comment.updatedAt ?? comment.createdAt
+      )
     ];
   });
   const preimage = JSON.stringify([
@@ -204191,7 +204193,7 @@ function normalizeAuthorLogin(value) {
   }
   return value.toLowerCase();
 }
-function normalizeTimestamp(value) {
+function normalizeReviewLifecycleTimestamp(value) {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error("review_lifecycle_thread_state_timestamp_invalid");
   }
@@ -204739,7 +204741,7 @@ var ReviewThreadInventoryLoader = class {
       inventory.resolvedObservations?.push({
         lineageId: matching[0].lineageId,
         trustedMarker: marker2.fingerprint,
-        confirmed: resolvedAt !== void 0 && !humanInteraction && normalizeCommentTimestamp(
+        confirmed: resolvedAt !== void 0 && !humanInteraction && normalizeReviewLifecycleTimestamp(
           parent.updatedAt ?? requireCommentTimestamp(parent.createdAt)
         ) <= resolvedAt
       });
@@ -204795,7 +204797,7 @@ var ReviewThreadInventoryLoader = class {
       diffHunk: parent.diffHunk ?? void 0,
       parentCommentId: parent.id,
       parentCommentDatabaseId: parent.databaseId ?? void 0,
-      parentCommentCreatedAt: normalizeCommentTimestamp(
+      parentCommentCreatedAt: normalizeReviewLifecycleTimestamp(
         requireCommentTimestamp(parent.createdAt)
       ),
       parentCommentBodyHash: (0, import_crypto28.createHash)("sha256").update(body2, "utf8").digest("hex"),
@@ -204807,7 +204809,7 @@ var ReviewThreadInventoryLoader = class {
       parentCommentEdited: parentCommentWasEdited(parent),
       // Only the valid-marker branch can construct this target.
       findingMarkerAmbiguous: false,
-      parentCommentUpdatedAt: normalizeCommentTimestamp(
+      parentCommentUpdatedAt: normalizeReviewLifecycleTimestamp(
         parent.updatedAt ?? requireCommentTimestamp(parent.createdAt)
       ),
       threadCommentCount: comments.length,
@@ -204960,7 +204962,7 @@ function findTrustedResolutionMarker(input) {
       targetId: marker2.targetId,
       fingerprint: marker2.fingerprint,
       commentId: comment.id,
-      commentUpdatedAt: normalizeCommentTimestamp(
+      commentUpdatedAt: normalizeReviewLifecycleTimestamp(
         comment.updatedAt ?? requireCommentTimestamp(comment.createdAt)
       )
     };
@@ -204987,16 +204989,16 @@ function parentCommentWasEdited(parent) {
   if (parent.updatedAt == null || parent.publishedAt === void 0 || parent.lastEditedAt === void 0)
     return void 0;
   const createdAt = new Date(
-    normalizeCommentTimestamp(requireCommentTimestamp(parent.createdAt))
+    normalizeReviewLifecycleTimestamp(requireCommentTimestamp(parent.createdAt))
   );
   const updatedAt = new Date(
-    normalizeCommentTimestamp(requireCommentTimestamp(parent.updatedAt))
+    normalizeReviewLifecycleTimestamp(requireCommentTimestamp(parent.updatedAt))
   );
   const publishedAt = parent.publishedAt === null ? null : new Date(
-    normalizeCommentTimestamp(requireCommentTimestamp(parent.publishedAt))
+    normalizeReviewLifecycleTimestamp(requireCommentTimestamp(parent.publishedAt))
   );
   const lastEditedAt = parent.lastEditedAt === null ? null : new Date(
-    normalizeCommentTimestamp(
+    normalizeReviewLifecycleTimestamp(
       requireCommentTimestamp(parent.lastEditedAt)
     )
   );
@@ -205009,13 +205011,6 @@ function requireCommentTimestamp(value) {
     throw new Error("review thread comment timestamp was missing");
   }
   return value;
-}
-function normalizeCommentTimestamp(value) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error("review thread comment timestamp was invalid");
-  }
-  return parsed.toISOString();
 }
 function stripLifecycleCommentBody(body2) {
   return stripInlineFingerprintMarkers(body2).replace(/<sub><!--\s*review-router-skip-help\s*-->[\s\S]*?<\/sub>/gi, "").replace(/<sub>\s*Models?:[\s\S]*?<\/sub>/gi, "").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, "").trim();

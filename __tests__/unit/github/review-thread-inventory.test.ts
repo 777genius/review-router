@@ -1507,6 +1507,51 @@ describe('review comment edit timestamps', () => {
     expect(result.candidates[0].parentCommentEdited).toBeUndefined();
   });
   it.each([
+    ['impossible calendar day', '2026-02-30T00:00:00Z'],
+    ['non-leap-year day', '2026-02-29T00:00:00Z'],
+    ['rolled-over clock', '2026-03-02T24:00:00Z'],
+    ['invalid offset hour', '2026-03-02T00:00:00+24:00'],
+    ['invalid offset minute', '2026-03-02T00:00:00+00:60'],
+  ])(
+    'rejects %s before Date normalization can produce an unedited parent',
+    async (_name, publishedAt) => {
+      const { result } = await inventory({
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-03T00:00:00Z',
+        publishedAt,
+        lastEditedAt: null,
+      });
+      expect(result.failed).toBe(true);
+      expect(result.candidates).toHaveLength(0);
+    }
+  );
+  it('rejects an impossible edit date with otherwise correctly ordered timestamps', async () => {
+    const { result } = await inventory({
+      createdAt: '2026-03-01T00:00:00Z',
+      publishedAt: '2026-03-01T00:00:00Z',
+      updatedAt: '2026-03-03T00:00:00Z',
+      lastEditedAt: '2026-02-30T00:00:00Z',
+    });
+    expect(result.failed).toBe(true);
+    expect(result.candidates).toHaveLength(0);
+  });
+  it('normalizes supported fractional seconds and timezone offsets without losing the real update witness', async () => {
+    const { result } = await inventory({
+      createdAt: '2026-10-29T03:21:24.123456789+02:00',
+      publishedAt: '2026-10-29T03:21:36.234567890+02:00',
+      updatedAt: '2026-10-29T03:21:37.345678901+02:00',
+      lastEditedAt: null,
+    });
+    expect(result.failed).toBe(false);
+    expect(result.candidates[0].parentCommentEdited).toBe(false);
+    expect(result.candidates[0].parentCommentCreatedAt).toBe(
+      '2026-10-29T01:21:24.123Z'
+    );
+    expect(result.candidates[0].parentCommentUpdatedAt).toBe(
+      '2026-10-29T01:21:37.345Z'
+    );
+  });
+  it.each([
     ['malformed publication', { publishedAt: 'invalid' }],
     ['malformed edit', { lastEditedAt: 'invalid' }],
     ['update before creation', { updatedAt: '2026-10-29T01:21:23Z' }],

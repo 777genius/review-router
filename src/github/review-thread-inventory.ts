@@ -13,6 +13,7 @@ import { REVIEW_PROJECTION_ABSOLUTE_LIMITS } from '../review-projection/domain/r
 import {
   FindingMarkerParseKind,
   hashReviewLifecycleThreadState,
+  normalizeReviewLifecycleTimestamp as normalizeCommentTimestamp,
   isReviewLifecycleMarkerFingerprint,
   parseFindingMarker,
   type PriorLineageHint,
@@ -798,14 +799,6 @@ function requireCommentTimestamp(value?: string | null): string {
     throw new Error('review thread comment timestamp was missing');
   }
   return value;
-}
-
-function normalizeCommentTimestamp(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error('review thread comment timestamp was invalid');
-  }
-  return parsed.toISOString();
 }
 
 function stripLifecycleCommentBody(body: string): string {

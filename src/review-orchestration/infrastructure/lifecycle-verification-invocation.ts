@@ -5,6 +5,11 @@ import {
   type LifecycleVerificationCapabilityV1,
 } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import {
+  parseLifecycleVerificationCapabilityV2,
+  type LifecycleVerificationCapability,
+} from '../../control-plane/generated/review-action-v2/review-lifecycle-verification-v2';
+import type { ReviewModelDispatchCapabilityV2 } from '../../control-plane/generated/review-action-v2/review-model-dispatch-contract';
+import {
   canonicalRevalidationJson as canonicalJson,
   prepareLifecycleRequest,
   validateLifecycleResponse,
@@ -38,11 +43,26 @@ export const lifecycleHash = (value: unknown): string =>
 export function readLifecycleCapability(
   json: string | undefined,
   model: string,
-  providerKind: ReviewExecutionProviderKind
-): LifecycleVerificationCapabilityV1 | undefined {
+  providerKind: ReviewExecutionProviderKind,
+  route?: ReviewModelDispatchCapabilityV2
+): LifecycleVerificationCapability | undefined {
   if (!json || Buffer.byteLength(json, 'utf8') > 4096) return undefined;
   try {
-    const value = JSON.parse(json) as LifecycleVerificationCapabilityV1;
+    const raw = JSON.parse(json);
+    if (raw?.extensionId === 'lifecycle-verification.v2') {
+      const capability = parseLifecycleVerificationCapabilityV2(raw);
+      if (
+        !route ||
+        capability.model !== model ||
+        capability.providerKind !== providerKind ||
+        capability.routeIdentityHash !== route.routeIdentityHash ||
+        capability.modelTransport !== route.transport ||
+        capability.model !== route.model
+      )
+        return undefined;
+      return capability;
+    }
+    const value = raw as LifecycleVerificationCapabilityV1;
     if (
       value.extensionId !== contract.extensionId ||
       value.descriptorDigest !== lifecycleVerificationDescriptorDigest ||
@@ -80,7 +100,7 @@ export function readLifecycleCapability(
 export function appendLifecycleWorkPlan(input: {
   plan: StableReviewWorkPlan;
   revalidation: RevalidationPlan;
-  capability: LifecycleVerificationCapabilityV1;
+  capability: LifecycleVerificationCapability;
   reviewRevisionHash: string;
   compatibilityKey: string;
   maxWorkSlots: number;
@@ -171,7 +191,7 @@ export function appendLifecycleWorkPlan(input: {
       lifecyclePlan: (assignments) => ({
         version: 1,
         capabilityHash: lifecycleHash(input.capability),
-        descriptorDigest: lifecycleVerificationDescriptorDigest,
+        descriptorDigest: input.capability.descriptorDigest,
         policyDigest: input.policyDigest,
         inventoryHash: input.revalidation.inventoryHash,
         inventoryCount: input.revalidation.inventoryCount,
@@ -290,7 +310,7 @@ export function appendLifecycleWorkPlan(input: {
 export function compositeLifecycleInvocations(input: {
   discovery: PreparedReviewInvocationPort;
   packetsByWorkSlotId: ReadonlyMap<string, VerifyPacket>;
-  capability: LifecycleVerificationCapabilityV1;
+  capability: LifecycleVerificationCapability;
   outputCap: number;
   reviewRevisionHash: string;
   liveLifecycleStateHash: string;
@@ -312,10 +332,17 @@ export function compositeLifecycleInvocations(input: {
         request.workSlot.attemptBudget !== 1
       )
         throw new Error('lifecycle_verification_work_slot_invalid');
+      if (
+        'protocol' in input.capability &&
+        input.capability.protocol !== 'openai-responses' &&
+        !input.transport.encodeLifecycleRequest
+      )
+        throw new Error('lifecycle_verification_native_encoder_unavailable');
       const value = prepareLifecycleRequest(
         packet,
         input.outputCap,
-        input.capability.maxPromptBytes
+        input.capability.maxPromptBytes,
+        input.transport.encodeLifecycleRequest
       );
       prepared.set(request.workSlot.workSlotId, value);
       return Object.freeze({
@@ -352,7 +379,7 @@ export function compositeLifecycleInvocations(input: {
           baseTreeHash: null,
           environmentContractHash: lifecycleHash({
             executor: contract.executor,
-            descriptorDigest: lifecycleVerificationDescriptorDigest,
+            descriptorDigest: input.capability.descriptorDigest,
           }),
         },
         coverageManifest: createReviewPromptCoverageManifest({
@@ -389,6 +416,7 @@ export function compositeLifecycleInvocations(input: {
         },
         signal: request.signal,
         maxResponseBytes: input.capability.maxResponseBytes,
+        maxOutputTokens: value.outputCap,
         deadlineMs: input.capability.deadlineMs,
       });
       const result = validateLifecycleResponse(

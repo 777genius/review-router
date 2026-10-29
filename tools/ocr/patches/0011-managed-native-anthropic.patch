@@ -1,0 +1,290 @@
+diff --git a/internal/llm/managed.go b/internal/llm/managed.go
+--- a/internal/llm/managed.go
++++ b/internal/llm/managed.go
+@@ -172,8 +172,8 @@
+ 	}
+ 
+ 	protocol := NormalizeProtocol(entry.Protocol)
+-	if protocol != ProtocolOpenAIResponses {
+-		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires protocol %q, got %q", ProtocolOpenAIResponses, entry.Protocol)
++	if protocol != ProtocolOpenAIResponses && protocol != ProtocolAnthropic {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires protocol %q or %q, got %q", ProtocolOpenAIResponses, ProtocolAnthropic, entry.Protocol)
+ 	}
+ 
+ 	baseURL, err := validateManagedURL(entry.URL)
+@@ -202,7 +202,12 @@
+ 		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires a positive timeout_sec per-request cap")
+ 	}
+ 
+-	extraBody, err := validateManagedExtraBody(entry.ExtraBody)
++	var extraBody map[string]any
++	if protocol == ProtocolAnthropic {
++		extraBody, err = validateManagedAnthropicExtraBody(entry.ExtraBody)
++	} else {
++		extraBody, err = validateManagedExtraBody(entry.ExtraBody)
++	}
+ 	if err != nil {
+ 		return ResolvedEndpoint{}, err
+ 	}
+@@ -215,11 +220,11 @@
+ 		Token:                 token,
+ 		Model:                 model,
+ 		Provider:              ManagedProviderName,
+-		Protocol:              ProtocolOpenAIResponses,
++		Protocol:              protocol,
+ 		Source:                "managed:" + ManagedProviderName,
+ 		ExtraBody:             extraBody,
+ 		Timeout:               timeout,
+-		RequiresStreaming:     true,
++		RequiresStreaming:     protocol == ProtocolOpenAIResponses,
+ 		RejectsSamplingParams: true,
+ 		ChatGPTPlan:           false,
+ 		StrictTerminal:        true,
+diff --git a/internal/llm/client.go b/internal/llm/client.go
+--- a/internal/llm/client.go
++++ b/internal/llm/client.go
+@@ -411,10 +411,8 @@
+ 	ChatGPTPlan           bool
+ 	ChatGPTAccount        string
+ 
+-	// StrictTerminal is the independent strict terminal-completion check for
+-	// streaming Responses calls (only response.completed + completed status is
+-	// success). Independent from ChatGPTPlan so managed mode can enforce it
+-	// without adopting any ChatGPT OAuth semantics.
++	// StrictTerminal requires proven completion for Responses streams or native
++	// Anthropic Messages. It is independent from ChatGPTPlan and OAuth semantics.
+ 	StrictTerminal bool
+ 
+ 	// MaxRetries optionally overrides the SDK retry count: nil keeps the
+@@ -1545,6 +1543,11 @@
+ 		return nil, c.explainError(model, err)
+ 	}
+ 
++	if c.cfg.StrictTerminal {
++		if err := validateManagedAnthropicResponse(sdkResp, model, params.MaxTokens, req.Tools); err != nil {
++			return nil, err
++		}
++	}
+ 	return c.mapAnthropicResponse(sdkResp), nil
+ }
+ 
+diff --git a/internal/llm/managed_anthropic.go b/internal/llm/managed_anthropic.go
+new file mode 100644
+--- /dev/null
++++ b/internal/llm/managed_anthropic.go
+@@ -0,0 +1,120 @@
++// SPDX-License-Identifier: Apache-2.0
++// Copyright 2026 alibaba/open-code-review Contributors
++
++package llm
++
++import (
++	"encoding/json"
++	"fmt"
++	"strings"
++
++	anthropic "github.com/anthropics/anthropic-sdk-go"
++)
++
++// This is the finite native Messages route, not a general protocol translator.
++// The parent controls endpoint, credentials, admission, and tighter captured caps.
++func validateManagedAnthropicExtraBody(body map[string]any) (map[string]any, error) {
++	for key := range body {
++		if key != "output_config" {
++			return nil, fmt.Errorf("managed Anthropic extra_body key %q is not allowed", key)
++		}
++	}
++	if raw, ok := body["output_config"]; ok {
++		config, ok := raw.(map[string]any)
++		if !ok || len(config) != 1 {
++			return nil, fmt.Errorf("managed Anthropic output_config requires only effort")
++		}
++		effort, ok := config["effort"].(string)
++		if !ok || (effort != "low" && effort != "medium" && effort != "high" && effort != "xhigh" && effort != "max") {
++			return nil, fmt.Errorf("managed Anthropic effort is not allowlisted")
++		}
++	}
++	return body, nil
++}
++
++// Anthropic's non-streaming SDK defaults a missing stop_reason to a generic
++// "stop" in the historical mapper. Managed calls must prove a valid terminal
++// and usage before that normalization can happen.
++func validateManagedAnthropicResponse(response *anthropic.Message, model string, maxTokens int64, tools []ToolDef) error {
++	if response == nil || len(response.RawJSON()) > 8*1024*1024 {
++		return fmt.Errorf("managed Anthropic response is absent or oversized")
++	}
++	var wire struct {
++		ID         string `json:"id"`
++		Type       string `json:"type"`
++		Role       string `json:"role"`
++		Model      string `json:"model"`
++		StopReason string `json:"stop_reason"`
++		Content    []struct {
++			Type  string          `json:"type"`
++			Text  string          `json:"text"`
++			ID    string          `json:"id"`
++			Name  string          `json:"name"`
++			Input json.RawMessage `json:"input"`
++		} `json:"content"`
++		Usage *struct {
++			InputTokens   *int64 `json:"input_tokens"`
++			OutputTokens  *int64 `json:"output_tokens"`
++			CacheRead     *int64 `json:"cache_read_input_tokens"`
++			CacheCreation *int64 `json:"cache_creation_input_tokens"`
++		} `json:"usage"`
++	}
++	if err := json.Unmarshal([]byte(response.RawJSON()), &wire); err != nil {
++		return fmt.Errorf("managed Anthropic response is malformed")
++	}
++	if wire.Type != "message" || wire.Role != "assistant" || wire.ID == "" || wire.Model != model {
++		return fmt.Errorf("managed Anthropic response identity mismatch")
++	}
++	if wire.StopReason != "end_turn" && wire.StopReason != "tool_use" {
++		return fmt.Errorf("managed Anthropic response is not terminal completed")
++	}
++	usage := wire.Usage
++	if usage == nil || usage.InputTokens == nil || usage.OutputTokens == nil ||
++		*usage.InputTokens < 0 || *usage.OutputTokens < 0 || *usage.OutputTokens > maxTokens ||
++		(usage.CacheRead != nil && *usage.CacheRead < 0) || (usage.CacheCreation != nil && *usage.CacheCreation < 0) {
++		return fmt.Errorf("managed Anthropic response usage unavailable or invalid")
++	}
++	// Receipts use interoperable JSON integers; reject overflow before the
++	// historical mapper adds Anthropic's separate cache counters.
++	const maxSafeTokens = int64(9007199254740991)
++	total := int64(0)
++	for _, count := range []*int64{usage.InputTokens, usage.OutputTokens, usage.CacheRead, usage.CacheCreation} {
++		if count != nil {
++			if *count > maxSafeTokens-total {
++				return fmt.Errorf("managed Anthropic response usage exceeds safe integer bound")
++			}
++			total += *count
++		}
++	}
++	allowed := make(map[string]bool)
++	for _, tool := range tools {
++		allowed[tool.Function.Name] = true
++	}
++	ids := make(map[string]bool)
++	toolCount, textCount := 0, 0
++	for _, block := range wire.Content {
++		switch block.Type {
++		case "text":
++			if strings.TrimSpace(block.Text) != "" {
++				textCount++
++			}
++		case "thinking", "redacted_thinking":
++			// Preserved by the existing native-turn mapper, never accepted as final text.
++		case "tool_use":
++			var input map[string]any
++			if block.ID == "" || ids[block.ID] || !allowed[block.Name] ||
++				json.Unmarshal(block.Input, &input) != nil || input == nil {
++				return fmt.Errorf("managed Anthropic tool use is invalid")
++			}
++			ids[block.ID] = true
++			toolCount++
++		default:
++			return fmt.Errorf("managed Anthropic content type is unsupported")
++		}
++	}
++	if (wire.StopReason == "tool_use" && toolCount == 0) ||
++		(wire.StopReason == "end_turn" && (toolCount != 0 || textCount == 0)) {
++		return fmt.Errorf("managed Anthropic terminal content is incomplete")
++	}
++	return nil
++}
+diff --git a/internal/llm/managed_anthropic_test.go b/internal/llm/managed_anthropic_test.go
+new file mode 100644
+--- /dev/null
++++ b/internal/llm/managed_anthropic_test.go
+@@ -0,0 +1,90 @@
++// SPDX-License-Identifier: Apache-2.0
++// Copyright 2026 alibaba/open-code-review Contributors
++
++package llm
++
++import (
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	anthropic "github.com/anthropics/anthropic-sdk-go"
++)
++
++func TestManagedAnthropicTerminalProof(t *testing.T) {
++	base := `{"id":"msg_fixture","type":"message","role":"assistant","model":"admitted-model","stop_reason":"end_turn","content":[{"type":"text","text":"done"}],"usage":{"input_tokens":10,"output_tokens":2}}`
++	tool := []ToolDef{{Type: "function", Function: FunctionDef{Name: "task_done"}}}
++	for _, tc := range []struct {
++		name  string
++		wire  string
++		tools []ToolDef
++		valid bool
++	}{
++		{name: "complete", wire: base, valid: true},
++		{name: "missing terminal", wire: strings.Replace(base, `"stop_reason":"end_turn",`, ``, 1)},
++		{name: "max tokens", wire: strings.Replace(base, `end_turn`, `max_tokens`, 1)},
++		{name: "unknown terminal", wire: strings.Replace(base, `end_turn`, `future`, 1)},
++		{name: "wrong model", wire: strings.Replace(base, `admitted-model`, `another-model`, 1)},
++		{name: "missing usage", wire: strings.Replace(base, `"input_tokens":10,`, ``, 1)},
++		{name: "output exceeds cap", wire: strings.Replace(base, `"output_tokens":2`, `"output_tokens":101`, 1)},
++		{name: "overflow usage", wire: strings.Replace(base, `"input_tokens":10`, `"input_tokens":9007199254740991`, 1)},
++		{name: "empty tool terminal", wire: strings.Replace(base, `end_turn`, `tool_use`, 1), tools: tool},
++		{name: "valid tool", wire: `{"id":"msg_tool","type":"message","role":"assistant","model":"admitted-model","stop_reason":"tool_use","content":[{"type":"tool_use","id":"call","name":"task_done","input":{}}],"usage":{"input_tokens":10,"output_tokens":2}}`, tools: tool, valid: true},
++		{name: "unoffered tool", wire: `{"id":"msg_tool","type":"message","role":"assistant","model":"admitted-model","stop_reason":"tool_use","content":[{"type":"tool_use","id":"call","name":"read_secret","input":{}}],"usage":{"input_tokens":10,"output_tokens":2}}`, tools: tool},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			var message anthropic.Message
++			if err := json.Unmarshal([]byte(tc.wire), &message); err != nil {
++				t.Fatal(err)
++			}
++			err := validateManagedAnthropicResponse(&message, "admitted-model", 100, tc.tools)
++			if (err == nil) != tc.valid {
++				t.Fatalf("validation = %v; valid = %v", err, tc.valid)
++			}
++		})
++	}
++}
++
++func TestManagedAnthropicEndpoint(t *testing.T) {
++	cfg := `{"provider":"reviewrouter","language":"en","telemetry":{"enabled":false},"custom_providers":{"reviewrouter":{"protocol":"anthropic","url":"http://127.0.0.1:8787","api_key":"Bearer fixture-capability","model":"admitted-model","timeout_sec":15,"extra_body":{"output_config":{"effort":"high"}}}}}`
++	endpoint, err := resolveManaged(t, cfg)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if endpoint.Protocol != ProtocolAnthropic || endpoint.RequiresStreaming || !endpoint.StrictTerminal || endpoint.MaxRetries == nil || *endpoint.MaxRetries != 0 || endpoint.Token != "fixture-capability" {
++		t.Fatalf("unexpected managed native endpoint: %+v", endpoint)
++	}
++	for _, body := range []map[string]any{
++		{"system": "override"}, {"service_tier": "default"},
++		{"output_config": map[string]any{"effort": "ultra"}},
++		{"output_config": map[string]any{"effort": "high", "format": "override"}},
++	} {
++		if _, err := validateManagedAnthropicExtraBody(body); err == nil {
++			t.Fatalf("accepted override: %v", body)
++		}
++	}
++}
++
++func TestManagedAnthropicSDKDoesNotRetry(t *testing.T) {
++	var calls atomic.Int32
++	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		calls.Add(1)
++		if r.URL.Path != "/v1/messages" || r.Header.Get("Authorization") != "Bearer fixture-capability" || r.Header.Get("X-Api-Key") != "" {
++			t.Errorf("unexpected native wire: %s %v", r.URL.Path, r.Header)
++		}
++		w.Header().Set("Content-Type", "application/json")
++		w.WriteHeader(http.StatusInternalServerError)
++		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"api_error","message":"fixture"}}`))
++	}))
++	defer server.Close()
++	zero := 0
++	client := NewAnthropicClient(ClientConfig{URL: server.URL, APIKey: "fixture-capability", Model: "admitted-model", AuthHeader: "authorization", Timeout: time.Second, MaxRetries: &zero, StrictTerminal: true})
++	_, err := client.CompletionsWithCtx(t.Context(), ChatRequest{Messages: []Message{{Role: "user", Content: "fixture"}}})
++	if err == nil || calls.Load() != 1 {
++		t.Fatalf("error = %v, calls = %d; expected one failed request", err, calls.Load())
++	}
++}

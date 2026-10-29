@@ -33,6 +33,8 @@ export type CodexOAuthRuntimeInputs = {
   headSha: string;
   workspacePath: string;
   reviewMode?: CodexOAuthReviewRuntimeMode;
+  signal?: AbortSignal;
+  requiredValidUntil?: number;
 };
 
 export enum CodexOAuthReviewRuntimeMode {
@@ -135,6 +137,8 @@ export type CodexOAuthV2ReviewResult =
     };
 
 export interface CodexOAuthV2ReviewRunnerPort {
+  /** A prepared route obtains its own admitted SCM capability and exact range. */
+  readonly checkoutOwner?: 'review_runner';
   run(input: {
     readonly apiUrl: string;
     readonly audience: string;
@@ -160,6 +164,14 @@ export interface CodexOAuthV2ReviewRunnerPort {
       readonly reviewers?: readonly import('./account-gateway-reviewer-session').AccountGatewayReviewerRuntime[];
       readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
       readonly signal?: AbortSignal;
+      readonly controlPlane: import('../review-orchestration/infrastructure/review-action-v2-control-plane-adapter').ReviewActionV2ControlPlaneAdapter;
+      readonly modelTransport: import('../review-orchestration/infrastructure/account-gateway-model-transport').LocalGatewayModelTransport;
+    };
+    /** Prepared by subscription/Hosted/native adapters. The scenario sees only
+     * admitted capabilities, never credential storage or refresh formats. */
+    readonly preparedRoute?: {
+      readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
+      readonly signal: AbortSignal;
       readonly controlPlane: import('../review-orchestration/infrastructure/review-action-v2-control-plane-adapter').ReviewActionV2ControlPlaneAdapter;
       readonly modelTransport: import('../review-orchestration/infrastructure/account-gateway-model-transport').LocalGatewayModelTransport;
     };
@@ -232,6 +244,8 @@ type CodexOAuthSharedRuntimePorts = {
     refreshAuth(input: {
       authJsonBytes: string;
       codexBinaryPath?: string;
+      signal?: AbortSignal;
+      requiredValidUntil?: number;
     }): Promise<{
       authJsonBytes: string;
       codexHome: string;
@@ -244,6 +258,7 @@ type CodexOAuthSharedRuntimePorts = {
       headSha: string;
       workspacePath: string;
       token: string;
+      signal?: AbortSignal;
     }): Promise<void>;
   };
   lifecycle?: {
@@ -439,6 +454,10 @@ export async function runCodexOAuthRotatingRuntime(
 
     refreshed = await ports.codex.refreshAuth({
       authJsonBytes: restoredCompact.compactAuthJsonBytes,
+      ...(input.signal ? { signal: input.signal } : {}),
+      ...(input.requiredValidUntil === undefined
+        ? {}
+        : { requiredValidUntil: input.requiredValidUntil }),
       ...(preparedCodexCli
         ? { codexBinaryPath: preparedCodexCli.binaryPath }
         : {}),
@@ -478,12 +497,19 @@ export async function runCodexOAuthRotatingRuntime(
     });
     assertScmReadToken(checkoutToken, input.repository);
     scmReadToken = checkoutToken.token;
-    await ports.checkout.checkoutExactHead({
-      repository: input.repository,
-      headSha: input.headSha,
-      workspacePath: input.workspacePath,
-      token: checkoutToken.token,
-    });
+    if (
+      input.reviewMode !== CodexOAuthReviewRuntimeMode.ServerPublishedV2 ||
+      (ports as CodexOAuthV2RuntimePorts).v2Review?.checkoutOwner !==
+        'review_runner'
+    ) {
+      await ports.checkout.checkoutExactHead({
+        repository: input.repository,
+        headSha: input.headSha,
+        workspacePath: input.workspacePath,
+        token: checkoutToken.token,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+    }
 
     if (input.reviewMode === CodexOAuthReviewRuntimeMode.ServerPublishedV2) {
       const v2Ports = ports as CodexOAuthV2RuntimePorts;

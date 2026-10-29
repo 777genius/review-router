@@ -1,7 +1,7 @@
 {
   "canonicalizerDigest": "bf61d04d42e158b26e4b651b62700b10212496487d7e20ac6e705272dc1d6a5f",
   "contractExportVersion": 1,
-  "expectedPublicActionBaseCommit": "de11bc35438ef3b49d6d9228aab507f47156565f",
+  "expectedPublicActionBaseCommit": "cfe2b78fba925e3e7741d8c7f479324aa785d12b",
   "generatedFileDigests": {
     "companion-contracts.ts": "6394d8b5b1b922da6ae6fa6fec7897bb414676dbb847f9ba9e80192ce293749b",
     "conversation.ts": "d31309c5667a8aa37d9ef8e59b055d3ffdfeb59ba6bb7723fad09fb137d1493b",
@@ -20,8 +20,11 @@
     "review-action-v2-pinned171.ts": "49a7018dbf1464e92947a57199217efa4a4ae6fa26fdb29388ac5907a460e782",
     "review-action-v2.schema.json": "c8c44fada800072195dffca9a447bef79e5bece5203bc920c89e724e81c3e86e",
     "review-action-v2.ts": "49ddbd20576db7435df610880aab084b11cec743e08e8fdfa4f70e84ef1ae3d1",
-    "review-agent-profile.ts": "45f0f7a5c2c3e23cb4b92f10e6717197070bcfe9c991ae928465f8ad0fd8b757",
+    "review-agent-profile.ts": "6da405b0a67d717010f012ba114864a9dc1f69534062a9bb98e4729742ffa190",
     "review-investigation-extension-v1.schema.json": "ede5bf90e3bc74c6332e36dbfacf71841343662ccf764314386dffb85bcca358",
+    "review-lifecycle-verification-v2.ts": "af9d8cc09d9a559daefaf58a683d563358fabc1fa6f75c8a142314aa97b7d3e8",
+    "review-model-dispatch-contract.ts": "c9d91addfd46122d095908c42cf416527d438c374e8bb4f65a333d62bf4b1728",
+    "review-model-route-policy.ts": "ac13197c14ca384276f96eba7ad85969ff8de47f976f041bd05ef026a5fc829c",
     "review-reviewer-plan.ts": "bbef9f5bd70778cf7b0858a84e1d866b5d2e8f97c2738c0210ff45705c7cf4c5",
     "review-skills-contract.ts": "621e6430cd84e0c3f8067c509cdc4c62af8e45045451649c4afc1f8fef708acb",
     "schemas/review_context_gateway_open.schema.json": "fa248d09ea4464978408a81911f0f5243c2ab8fee01e6f90e2e06d8be70ffaed",
@@ -67,6 +70,6 @@
   },
   "goldenFixtureDigest": "25cbbf9c205d69c8bb9f32d074ce4df8d81a77a3fce070383abbd282245a6b9f",
   "protocolVersion": "2",
-  "saasSourceCommit": "1a21c33f39ff42fa8c640d9cfd4980f8ff88f8e7",
+  "saasSourceCommit": "8080881802d87f3bf700b15faa7cebb02f54ee9b",
   "schemaDigest": "71f316821909667e1b7cc704bed330ef6cfa7ac44cf51d58935ba3238ab92504"
 }

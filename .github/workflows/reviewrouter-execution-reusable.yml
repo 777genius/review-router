@@ -51,6 +51,11 @@ on:
         required: false
         type: string
         default: ''
+      subscription_auth_mode:
+        description: 'Admitted native subscription credential route'
+        required: false
+        type: string
+        default: ''
       workflow_schema_version:
         required: true
         type: number
@@ -157,6 +162,7 @@ jobs:
       RR_STATIC_RUNTIME_ENV_JSON: ${{ inputs.static_runtime_env_json }}
       RR_CODEX_SESSION_MODE: ${{ inputs.codex_session_mode }}
       RR_PROVIDER_API_AUTH_MODE: ${{ inputs.provider_api_auth_mode }}
+      RR_SUBSCRIPTION_AUTH_MODE: ${{ inputs.subscription_auth_mode }}
       RR_PROVIDER_INSTANCE_ID: ${{ inputs.provider_instance_id }}
       RR_REVIEW_REQUEST_ID: ${{ inputs.review_request_id }}
       RR_SESSION_BINDING_ID: ${{ inputs.session_binding_id }}
@@ -165,11 +171,14 @@ jobs:
       REVIEWROUTER_CONTROL_PLANE_URL: ${{ inputs.control_plane_url || inputs.api_url }}
       REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
       REVIEWROUTER_RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
-      REVIEWROUTER_STATIC_CONFIG_FALLBACK: ${{ (inputs.codex_session_mode == 'account-gateway' || inputs.provider_api_auth_mode != '') && 'false' || 'true' }}
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: ${{ (inputs.codex_session_mode == 'account-gateway' || inputs.provider_api_auth_mode != '' || inputs.subscription_auth_mode != '') && 'false' || 'true' }}
       CODEX_AUTH_JSON_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' && '1' || '0' }}
       CODEX_CONFIG_TOML_PRESENT: ${{ secrets.CODEX_CONFIG_TOML != '' && '1' || '0' }}
       CLAUDE_CODE_OAUTH_TOKEN_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && '1' || '0' }}
       OPENAI_API_KEY_PRESENT: ${{ secrets.OPENAI_API_KEY != '' && '1' || '0' }}
+      OPENROUTER_API_KEY_PRESENT: ${{ secrets.OPENROUTER_API_KEY != '' && '1' || '0' }}
+      MIMO_TOKEN_PLAN_API_KEY_PRESENT: ${{ secrets.MIMO_TOKEN_PLAN_API_KEY != '' && '1' || '0' }}
+      KIMI_CODE_API_KEY_PRESENT: ${{ secrets.KIMI_CODE_API_KEY != '' && '1' || '0' }}
       REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
     steps:
       # Preparation uses TypeScript stdin and must run on the pinned Node major.
@@ -207,6 +216,28 @@ jobs:
             fail('Invalid provider_api_auth_mode.');
           }
           const providerApi = providerApiAuthMode !== '';
+          const subscriptionAuthMode = process.env.RR_SUBSCRIPTION_AUTH_MODE || '';
+          if (!['', 'claude-oauth'].includes(subscriptionAuthMode)) {
+            fail('Invalid subscription_auth_mode.');
+          }
+          const claudeSubscription = subscriptionAuthMode === 'claude-oauth';
+          if (claudeSubscription) {
+            if (reviewActionLane !== 't0' || providerApi || codexSessionMode ||
+                process.env.RR_PROVIDER_INSTANCE_ID || eventName !== 'workflow_dispatch' ||
+                process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'oidc' ||
+                process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== 'false' ||
+                !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$/.test(process.env.RR_REVIEW_REQUEST_ID || '')) {
+              fail('Native Claude subscription execution requires its canonical OIDC T0 request.');
+            }
+            if (process.env.CLAUDE_CODE_OAUTH_TOKEN_PRESENT !== '1') {
+              fail('Native Claude subscription execution requires CLAUDE_CODE_OAUTH_TOKEN.');
+            }
+            for (const key of ['CODEX_AUTH_JSON_PRESENT', 'CODEX_CONFIG_TOML_PRESENT',
+              'OPENAI_API_KEY_PRESENT', 'OPENROUTER_API_KEY_PRESENT', 'MIMO_TOKEN_PLAN_API_KEY_PRESENT',
+              'KIMI_CODE_API_KEY_PRESENT', 'REVIEW_APP_PRIVATE_KEY_PRESENT']) {
+              if (process.env[key] === '1') fail('Native Claude subscription execution rejects alternate authentication inputs.');
+            }
+          }
           if (providerApi) {
             if (reviewActionLane !== 't0' || codexSessionMode ||
                 process.env.RR_PROVIDER_INSTANCE_ID ||
@@ -341,10 +372,10 @@ jobs:
             fail('static_runtime_env_json must be a JSON object.');
           }
           const staticEnv = parsedStaticEnv as Record<string, unknown>;
-          if ((accountGateway || providerApi) && Object.keys(staticEnv).length > 0) {
+          if ((accountGateway || providerApi || claudeSubscription) && Object.keys(staticEnv).length > 0) {
             fail('Admitted execution does not accept static runtime env.');
           }
-          if (!accountGateway && !providerApi && staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS === undefined) {
+          if (!accountGateway && !providerApi && !claudeSubscription && staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS === undefined) {
             staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
           }
           const staticRuntimeEnvAllowlist = new Set(['TARGET_TOKENS_PER_BATCH']);
@@ -407,21 +438,6 @@ jobs:
             echo "ReviewRouter skipped this fork pull request because secret-backed provider execution is disabled by default."
           fi
 
-      - name: Checkout exact T0 review revision
-        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == '' && inputs.provider_api_auth_mode == '' && steps.runtime.outputs.can_run == 'true' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.review_head_sha }}
-          persist-credentials: false
-
-      - name: Checkout exact hosted pool review revision
-        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'codex_subscription_oauth_hosted_pool' && steps.runtime.outputs.can_run == 'true' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.review_head_sha }}
-          path: .reviewrouter-pr
-          persist-credentials: false
-
       - name: Checkout pull request code
         if: ${{ inputs.review_action_lane == 'legacy' && steps.runtime.outputs.can_run == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -439,7 +455,7 @@ jobs:
 
       - name: Resolve ReviewRouter runtime provider tooling
         id: provider-tooling
-        if: ${{ inputs.provider_api_auth_mode == '' && inputs.codex_session_mode != 'codex_subscription_oauth_hosted_pool' && !(inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') && steps.runtime.outputs.can_run == 'true' }}
+        if: ${{ inputs.review_action_lane == 'legacy' && steps.runtime.outputs.can_run == 'true' }}
         shell: bash
         env:
           REVIEW_ROUTER_MODE: runtime-preflight
@@ -459,12 +475,12 @@ jobs:
           permission-pull-requests: write
 
       - name: Install Codex CLI
-        if: ${{ steps.runtime.outputs.can_run == 'true' && ((inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') || steps.provider-tooling.outputs.codex_cli_needed == 'true') }}
+        if: ${{ inputs.review_action_lane == 'legacy' && steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}
         shell: bash
         run: npm install -g @openai/codex@0.147.0
 
       - name: Install Claude Code CLI
-        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.claude_cli_needed == 'true' }}
+        if: ${{ inputs.review_action_lane == 'legacy' && steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.claude_cli_needed == 'true' }}
         shell: bash
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
@@ -514,7 +530,7 @@ jobs:
           fi
 
       - name: Run ReviewRouter T0
-        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == '' && inputs.provider_api_auth_mode == '' && steps.runtime.outputs.can_run == 'true' }}
+        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == '' && inputs.provider_api_auth_mode == '' && inputs.subscription_auth_mode == '' && steps.runtime.outputs.can_run == 'true' }}
         shell: bash
         env:
           REVIEWROUTER_ACTION_V2_MODE: t0
@@ -552,6 +568,21 @@ jobs:
           REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.review_head_sha }}
         run: node .reviewrouter-runtime/dist/index.js
 
+      - name: Run ReviewRouter T0 Claude subscription
+        if: ${{ inputs.review_action_lane == 't0' && inputs.subscription_auth_mode == 'claude-oauth' && steps.runtime.outputs.can_run == 'true' }}
+        shell: bash
+        env:
+          REVIEWROUTER_ACTION_V2_MODE: t0
+          REVIEW_ROUTER_MODE: prepared-subscription
+          REVIEWROUTER_PREPARED_MODEL_TRANSPORT: runner_local_anthropic
+          INPUT_API_URL: ${{ inputs.api_url }}
+          INPUT_CONTROL_PLANE_URL: ${{ inputs.control_plane_url }}
+          INPUT_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          REVIEW_REQUEST_ID: ${{ inputs.review_request_id }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REVIEW_HEAD_SHA: ${{ inputs.review_head_sha }}
+        run: node .reviewrouter-runtime/dist/index.js
+
       # Server checkout capability materializes the exact head in isolation.
       # No PR checkout, auth restoration, rotating prelease or writeback here.
       - name: Run ReviewRouter T0 account gateway
@@ -575,7 +606,7 @@ jobs:
         if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'codex_subscription_oauth_hosted_pool' && steps.runtime.outputs.can_run == 'true' }}
         shell: bash
         env:
-          REVIEWROUTER_ACTION_V2_MODE: disabled
+          REVIEWROUTER_ACTION_V2_MODE: t0
           INPUT_MODE: fork-agentic-sandbox-hosted-pool
           INPUT_API_URL: ${{ inputs.api_url }}
           INPUT_CONTROL_PLANE_URL: ${{ inputs.control_plane_url }}
@@ -585,7 +616,6 @@ jobs:
           INPUT_SESSION_BINDING_VERSION: ${{ inputs.session_binding_version }}
           INPUT_MAX_CHANGED_LINES: ${{ inputs.max_changed_lines }}
           INPUT_REVIEW_TIMEOUT_MINUTES: ${{ inputs.review_timeout_minutes }}
-          REVIEW_ROUTER_PR_WORKSPACE: ${{ github.workspace }}/.reviewrouter-pr
         run: node .reviewrouter-runtime/action-dist/index.cjs
 
       - name: Run ReviewRouter legacy

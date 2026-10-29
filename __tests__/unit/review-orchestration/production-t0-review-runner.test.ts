@@ -421,6 +421,8 @@ describe('ProductionT0ReviewRunner policy', () => {
           runtimeEnv: {
             ...admittedAgentEnv,
             CODEX_MODEL: 'gpt-memory-test',
+            // Prepared routes use captured policy rather than the legacy loader spy.
+            CODEX_AGENTIC_CONTEXT: 'false',
             REVIEW_ROUTER_MEMORY_ENABLED:
               mode === 'disabled' ? 'false' : 'true',
             UPDATE_PR_DESCRIPTION: String(mode === 'description'),
@@ -439,7 +441,6 @@ describe('ProductionT0ReviewRunner policy', () => {
                   PROVIDER_LIMIT: '1',
                   PROVIDER_MAX_PARALLEL: '1',
                   INLINE_MIN_AGREEMENT: '1',
-                  CODEX_AGENTIC_CONTEXT: 'false',
                   REVIEW_ROUTER_AGENT_PROFILE_JSON: directProfile,
                   REVIEW_ROUTER_AGENT_PROFILE_DIGEST: createHash('sha256')
                     .update(directProfile)
@@ -855,11 +856,22 @@ describe('ProductionT0ReviewRunner policy', () => {
         dispose: async () => {},
         setContextToolsGuard: jest.fn(),
       };
+      const distinctOcrTransports =
+        engineKinds.length === 2 && engineKinds.every((kind) => kind === 'ocr');
       const runtimes: AccountGatewayReviewerRuntime[] = reviewers.map(
-        (reviewer) => ({
+        (reviewer, index) => ({
           reviewer,
           runtimeConfig: reviewerRuntimeConfig(parentRuntime, reviewer),
-          modelTransport,
+          modelTransport: distinctOcrTransports
+            ? {
+                ...modelTransport,
+                baseUrl: `http://127.0.0.1:${index + 1}`,
+                environment: {
+                  ...modelTransport.environment,
+                  REVIEWROUTER_LOCAL_MODEL_TOKEN: `Bearer ${String(index + 1).repeat(64)}`,
+                },
+              }
+            : modelTransport,
           ...(reviewer.agentProfile.agentKind === 'ocr'
             ? {
                 ocr: {
@@ -951,8 +963,27 @@ describe('ProductionT0ReviewRunner policy', () => {
             this: OcrReviewInvocationAdapter,
             request
           ) {
-            const model = (this as unknown as { options: { model: string } })
-              .options.model;
+            const { model, bridge } = (
+              this as unknown as {
+                options: {
+                  model: string;
+                  bridge: {
+                    baseUrl: string;
+                    capabilityAuthorization: string;
+                  };
+                };
+              }
+            ).options;
+            if (distinctOcrTransports) {
+              const runtime = runtimes.find(
+                (item) => item.reviewer.requestedModel === model
+              )!;
+              expect(bridge.baseUrl).toBe(runtime.modelTransport.baseUrl);
+              expect(bridge.capabilityAuthorization).toBe(
+                runtime.modelTransport.environment
+                  .REVIEWROUTER_LOCAL_MODEL_TOKEN
+              );
+            }
             return {
               workSlotId: request.workSlot.workSlotId,
               requestedModel: model,
@@ -1862,6 +1893,21 @@ describe('ProductionT0ReviewRunner policy', () => {
           }
         | undefined;
       const stoppedAtBoundary = new Error('mock authorization boundary');
+      const observeEnvironment = () => {
+        observedEnvironment = {
+          cwd: process.cwd(),
+          path: process.env.PATH,
+          binary: process.env.REVIEWROUTER_CODEX_BINARY,
+        };
+      };
+      const loadAdmitted =
+        ConfigLoader.loadRuntimeEnvironment.bind(ConfigLoader);
+      const admittedConfiguration = jest
+        .spyOn(ConfigLoader, 'loadRuntimeEnvironment')
+        .mockImplementation((...args) => {
+          observeEnvironment();
+          return loadAdmitted(...args);
+        });
       const configuration = jest
         .spyOn(ConfigLoader, 'load')
         .mockImplementation(() => {
@@ -2009,6 +2055,7 @@ describe('ProductionT0ReviewRunner policy', () => {
         }
       } finally {
         process.env = previousEnv;
+        admittedConfiguration.mockRestore();
         configuration.mockRestore();
         oidc.mockRestore();
         authorize.mockRestore();

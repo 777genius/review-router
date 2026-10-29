@@ -1,0 +1,73 @@
+name: Native runtime candidate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/native-runtime-candidate.yml'
+      - 'tools/ocr/**'
+      - 'src/codex-oauth/codex-bootstrap.ts'
+      - 'src/codex-oauth/codex-auth-refresh-validation.ts'
+      - 'src/review-orchestration/infrastructure/anthropic-messages-codec.ts'
+      - '__tests__/integration/ocr-managed/**'
+      - '__tests__/integration/codex-oauth/codex-auth-refresh-real-cli.test.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.10'
+          cache: false
+      - id: ocr-build
+        name: Build candidate and test finite managed transports
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
+          tools/ocr/build.sh --test-managed --out "$RUNNER_TEMP/reviewrouter-ocr"
+          diff -u tools/ocr/qualifications/unified-model-routes-v3.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
+          cd "$RUNNER_TEMP/reviewrouter-ocr"
+          sha256sum --check --strict opencodereview.sha256
+      - run: npm ci
+      - name: Fetch immutable official auth helper
+        run: |
+          mkdir -p "$RUNNER_TEMP/reviewrouter-auth-codex"
+          npm pack --ignore-scripts @openai/codex@0.147.0-linux-x64 --pack-destination "$RUNNER_TEMP/reviewrouter-auth-codex"
+          tar -xzf "$RUNNER_TEMP/reviewrouter-auth-codex/openai-codex-0.147.0-linux-x64.tgz" -C "$RUNNER_TEMP/reviewrouter-auth-codex"
+      - name: Require real binaries against synthetic local wire fixtures
+        env:
+          TMPDIR: ${{ runner.temp }}
+          REVIEWROUTER_OCR_REQUIRED: '1'
+          REVIEWROUTER_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview
+          REVIEWROUTER_CODEX_AUTH_REQUIRED: '1'
+          REVIEWROUTER_CODEX_AUTH_BINARY: ${{ runner.temp }}/reviewrouter-auth-codex/package/vendor/x86_64-unknown-linux-musl/bin/codex
+        run: |
+          npm test -- --runInBand \
+            __tests__/integration/ocr-managed/ocr-managed-real-cli.test.ts \
+            __tests__/integration/ocr-managed/ocr-managed-native-anthropic-real-cli.test.ts \
+            __tests__/integration/codex-oauth/codex-auth-refresh-real-cli.test.ts
+      - name: Preserve candidate bytes and exact build recipe
+        if: always() && steps.ocr-build.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-runtime-candidate-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/reviewrouter-ocr/opencodereview
+            ${{ runner.temp }}/reviewrouter-ocr/opencodereview.sha256
+            ${{ runner.temp }}/reviewrouter-ocr/MANIFEST
+          if-no-files-found: error
+          retention-days: 7

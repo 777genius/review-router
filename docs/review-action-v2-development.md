@@ -51,6 +51,15 @@ qualification manifest are unchanged. The new source/build identity is recorded
 in `tools/ocr/qualifications/memory-template-v1.manifest`; this local build is not
 a claim that a release artifact has been published, registered, or activated.
 
+The unified-route candidate `1.13.1-rr.6` / `ocr-managed-v5` combines that
+one-pass substitution with managed native Anthropic transport. Its exact
+12-patch build uses Go `1.26.10` and is recorded in
+`tools/ocr/qualifications/unified-model-routes-v3.manifest`. Earlier artifact
+profiles and qualification receipts retain their original bytes. The candidate
+profile supports the existing `account_gateway` and `provider_api` transport
+values; local subscription routes remain internal descriptors. Local executable
+qualification does not publish, register or activate this candidate.
+
 ### Managed conversation interaction
 
 The reusable interaction workflow has an explicit `interaction_backend:

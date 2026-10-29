@@ -957,6 +957,144 @@ describe('Codex OAuth rotating setup PR preview', () => {
     }
   );
 
+  it('does not intercept cancellation signals during legacy work', async () => {
+    process.env = actionEnv({
+      eventPath,
+      outputPath,
+      headRef: 'feature/change',
+    });
+    const listeners = {
+      SIGINT: process.listeners('SIGINT'),
+      SIGTERM: process.listeners('SIGTERM'),
+    };
+    mockedRuntime.mockImplementation(async (input) => {
+      expect(input).not.toHaveProperty('signal');
+      expect(process.listeners('SIGINT')).toEqual(listeners.SIGINT);
+      expect(process.listeners('SIGTERM')).toEqual(listeners.SIGTERM);
+      return { status: 'skipped', reason: 'stale_queued_secret' };
+    });
+
+    await runCodexOAuthRotatingAction({
+      terminalOutcomeReporter: { post: jest.fn(async () => undefined) },
+    });
+
+    expect(mockedRuntime).toHaveBeenCalledTimes(1);
+    expect(process.listeners('SIGINT')).toEqual(listeners.SIGINT);
+    expect(process.listeners('SIGTERM')).toEqual(listeners.SIGTERM);
+  });
+
+  it('delivers cancellation to active T0 runtime and removes its workspace and listeners', async () => {
+    process.env = actionEnv({
+      eventPath,
+      outputPath,
+      headRef: 'feature/change',
+    });
+    const listeners = {
+      SIGINT: process.listeners('SIGINT'),
+      SIGTERM: process.listeners('SIGTERM'),
+    };
+    let runtimeSignal: AbortSignal | undefined;
+    let initiallyAborted: boolean | undefined;
+    let cancellationListenerPresent = false;
+    mockedRuntime.mockImplementation(async (input) => {
+      runtimeSignal = input.signal;
+      initiallyAborted = input.signal?.aborted;
+      const cancel = process
+        .listeners('SIGTERM')
+        .find((listener) => !listeners.SIGTERM.includes(listener));
+      cancellationListenerPresent = cancel !== undefined;
+      cancel?.('SIGTERM');
+      runtimeSignal?.throwIfAborted();
+      throw new Error('expected cancellation');
+    });
+
+    await runCodexOAuthRotatingAction({
+      reviewActionV2Activation: v2Activation(),
+      terminalOutcomeReporter: { post: jest.fn(async () => undefined) },
+    });
+
+    expect(mockedRuntime).toHaveBeenCalledTimes(1);
+    expect(runtimeSignal).toBeDefined();
+    expect(initiallyAborted).toBe(false);
+    expect(cancellationListenerPresent).toBe(true);
+    expect(runtimeSignal?.aborted).toBe(true);
+    expect(fs.existsSync(mockedRuntime.mock.calls[0]![0].workspacePath)).toBe(
+      false
+    );
+    expect(process.listeners('SIGINT')).toEqual(listeners.SIGINT);
+    expect(process.listeners('SIGTERM')).toEqual(listeners.SIGTERM);
+  });
+
+  it.each(['SIGINT', 'SIGTERM'] as const)(
+    'cancels T0 during workspace creation on %s without starting runtime',
+    async (signalName) => {
+      process.env = actionEnv({
+        eventPath,
+        outputPath,
+        headRef: 'feature/change',
+      });
+      const listeners = {
+        SIGINT: process.listeners('SIGINT'),
+        SIGTERM: process.listeners('SIGTERM'),
+      };
+      const workspace = ensureDirectory(
+        path.join(tempDir, 'cancelled-workspace')
+      );
+      let resolveWorkspace!: (workspacePath: string) => void;
+      const creation = new Promise<string>((resolve) => {
+        resolveWorkspace = resolve;
+      });
+      const createWorkspace = jest
+        .spyOn(safeCheckout, 'createIsolatedCheckoutWorkspace')
+        .mockReturnValue(creation);
+      const action = runCodexOAuthRotatingAction({
+        reviewActionV2Activation: v2Activation(),
+        terminalOutcomeReporter: { post: jest.fn(async () => undefined) },
+      });
+      try {
+        expect(createWorkspace).toHaveBeenCalledTimes(1);
+        const cancel = process
+          .listeners(signalName)
+          .find((listener) => !listeners[signalName].includes(listener));
+        expect(cancel).toBeDefined();
+        cancel!(signalName);
+      } finally {
+        resolveWorkspace(workspace);
+        await action;
+      }
+
+      expect(mockedRuntime).not.toHaveBeenCalled();
+      expect(fs.existsSync(workspace)).toBe(false);
+      expect(process.listeners('SIGINT')).toEqual(listeners.SIGINT);
+      expect(process.listeners('SIGTERM')).toEqual(listeners.SIGTERM);
+    }
+  );
+
+  it('removes T0 signal listeners when workspace creation fails', async () => {
+    process.env = actionEnv({
+      eventPath,
+      outputPath,
+      headRef: 'feature/change',
+    });
+    const listeners = {
+      SIGINT: process.listeners('SIGINT'),
+      SIGTERM: process.listeners('SIGTERM'),
+    };
+    jest
+      .spyOn(safeCheckout, 'createIsolatedCheckoutWorkspace')
+      .mockRejectedValue(new Error('synthetic workspace creation failure'));
+
+    await runCodexOAuthRotatingAction({
+      reviewActionV2Activation: v2Activation(),
+      terminalOutcomeReporter: { post: jest.fn(async () => undefined) },
+    });
+
+    expect(mockedRuntime).not.toHaveBeenCalled();
+    expect(fs.readFileSync(outputPath, 'utf8')).toContain('failed');
+    expect(process.listeners('SIGINT')).toEqual(listeners.SIGINT);
+    expect(process.listeners('SIGTERM')).toEqual(listeners.SIGTERM);
+  });
+
   it('wires verified v2 without exposing legacy comment capabilities', async () => {
     mockedRuntime.mockResolvedValue({
       status: 'completed',
@@ -1018,7 +1156,12 @@ describe('Codex OAuth rotating setup PR preview', () => {
     expect(runtimePorts.controlPlane).not.toHaveProperty('commentToken');
     expect(runtimePorts).not.toHaveProperty('comments');
     expect(runtimePorts).not.toHaveProperty('review');
-    expect(runtimePorts).toHaveProperty('v2Review', v2ReviewRunner);
+    expect(runtimePorts).toHaveProperty(
+      'v2Review.checkoutOwner',
+      'review_runner'
+    );
+    expect(runtimePorts).toHaveProperty('v2Review.run', expect.any(Function));
+    expect(runtimePorts).not.toHaveProperty('v2Review', v2ReviewRunner);
     expect(terminalOutcomeReporter.post).not.toHaveBeenCalled();
     expect(terminalOutcomeReporter.clear).toHaveBeenCalledWith({
       reason: 'review_completed',

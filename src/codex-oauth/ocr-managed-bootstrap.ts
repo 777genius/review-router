@@ -17,27 +17,21 @@ import { promisify } from 'util';
 import {
   assertApprovedReviewAgentBinary,
   assertApprovedReviewAgentVersion,
+  readApprovedReviewAgent,
+  type ApprovedReviewAgent,
 } from '../control-plane/approved-review-agent';
-import { buildOcrManagedConfigJson } from '../review-orchestration/infrastructure/ocr-review-managed-run';
+import {
+  buildOcrManagedConfigJson,
+  type OcrModelProtocol,
+} from '../review-orchestration/infrastructure/ocr-review-managed-run';
 import type { AdmittedRuntimeConfig } from '../control-plane/runtime-config';
 
-/**
- * Strict OCR side of the approved agent profile contract (§4.1): the same
- * seven keys; contextGateway is a real false for ocr, modelTransports only
- * account_gateway. The generated strict parser remains the single authority
- * for codex/claude profiles; this boundary mirrors the generated OCR union
- * until the shared generator is regenerated.
- */
-export type ApprovedOcrReviewAgent = Readonly<{
-  profileRef: string;
-  agentKind: 'ocr';
-  binarySha256: string;
-  packageVersion: string;
-  modelTransports: readonly ['account_gateway'];
-  contextGateway: false;
-  cancellation: true;
-  reviewSkillsVersion?: 1;
-}>;
+/** The generated profile contract is the single strict parser for all engines.
+ * Old gateway-only profiles retain their original bytes and explicit refs. */
+export type ApprovedOcrReviewAgent = Extract<
+  ApprovedReviewAgent,
+  { agentKind: 'ocr' }
+>;
 
 /** Digest-checked agent kind peek used to dispatch before Codex effects. */
 export function readApprovedReviewAgentKind(
@@ -66,50 +60,13 @@ export function readApprovedOcrReviewAgent(
   if (readApprovedReviewAgentKind(json, digest) !== 'ocr') {
     throw new Error('review_agent_profile_invalid');
   }
-  const row = JSON.parse(json) as Record<string, unknown>;
-  const keys = [
-    'agentKind',
-    'binarySha256',
-    'cancellation',
-    'contextGateway',
-    'modelTransports',
-    'packageVersion',
-    'profileRef',
-  ];
-  if (Object.hasOwn(row, 'reviewSkillsVersion'))
-    keys.push('reviewSkillsVersion');
-  keys.sort();
-  const transports = row.modelTransports;
-  if (
-    Object.keys(row).sort().join(',') !== keys.join(',') ||
-    typeof row.profileRef !== 'string' ||
-    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(row.profileRef) ||
-    typeof row.binarySha256 !== 'string' ||
-    !/^[a-f0-9]{64}$/.test(row.binarySha256) ||
-    typeof row.packageVersion !== 'string' ||
-    !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(row.packageVersion) ||
-    (Object.hasOwn(row, 'reviewSkillsVersion') &&
-      row.reviewSkillsVersion !== 1) ||
-    row.contextGateway !== false ||
-    row.cancellation !== true ||
-    !Array.isArray(transports) ||
-    transports.length !== 1 ||
-    transports[0] !== 'account_gateway'
-  ) {
+  try {
+    const profile = readApprovedReviewAgent(json, digest);
+    if (profile.agentKind !== 'ocr') throw new Error();
+    return profile;
+  } catch {
     throw new Error('review_agent_profile_capabilities_invalid');
   }
-  return Object.freeze({
-    ...(row.reviewSkillsVersion === 1
-      ? { reviewSkillsVersion: 1 as const }
-      : {}),
-    profileRef: row.profileRef,
-    agentKind: 'ocr',
-    binarySha256: row.binarySha256,
-    packageVersion: row.packageVersion,
-    modelTransports: Object.freeze(['account_gateway']) as ['account_gateway'],
-    contextGateway: false,
-    cancellation: true,
-  });
 }
 
 /**
@@ -298,6 +255,7 @@ export type OcrManagedRunHandle = Readonly<{
   runDirectory: string;
   homeDirectory: string;
   configPath: string;
+  protocol?: OcrModelProtocol;
   rulePath: string;
   /** Always allocated 0600 in the private run dir; content written at prepare. */
   backgroundPath: string;
@@ -316,6 +274,7 @@ export async function prepareOcrManagedRun(input: {
   readonly baseUrl: string;
   readonly rawCapability: string;
   readonly model: string;
+  readonly protocol?: OcrModelProtocol;
   readonly requestTimeoutSec: number;
   readonly modelReasoningEffort: string | null;
   readonly admittedRuntimeConfig?: AdmittedRuntimeConfig;
@@ -352,6 +311,7 @@ export async function prepareOcrManagedRun(input: {
         baseUrl: input.baseUrl,
         rawCapability: input.rawCapability,
         model: input.model,
+        protocol: input.protocol,
         limits: { requestTimeoutSec: input.requestTimeoutSec },
         modelReasoningEffort: input.modelReasoningEffort,
         admittedRuntimeConfig: input.admittedRuntimeConfig,
@@ -374,6 +334,7 @@ export async function prepareOcrManagedRun(input: {
       runDirectory,
       homeDirectory,
       configPath,
+      protocol: input.protocol ?? 'openai-responses',
       rulePath,
       backgroundPath,
       cleanup,

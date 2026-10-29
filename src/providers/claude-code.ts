@@ -10,6 +10,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
+import { isClaudeSubscriptionSetupToken } from './claude-subscription-credential';
 import {
   buildReviewFindingsSchema,
   parseReviewOutputStrict,
@@ -285,7 +286,7 @@ export class ClaudeCodeProvider extends Provider {
   }
 
   private hasExpectedClaudeCodeOAuthTokenShape(token: string): boolean {
-    return /^sk-ant-oat01-[A-Za-z0-9._-]+$/.test(token);
+    return isClaudeSubscriptionSetupToken(token);
   }
 
   private async runCliWithStdin(

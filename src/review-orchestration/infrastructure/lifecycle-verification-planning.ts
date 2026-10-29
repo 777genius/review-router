@@ -1,8 +1,6 @@
 import { createConfiguredTrivialDetector } from '../../analysis/trivial-detector';
-import {
-  lifecycleVerificationContract,
-  type LifecycleVerificationCapabilityV1,
-} from '../../control-plane/generated/review-action-v2/companion-contracts';
+import { lifecycleVerificationContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
+import type { LifecycleVerificationCapability } from '../../control-plane/generated/review-action-v2/review-lifecycle-verification-v2';
 import {
   createGitImmutableSourceReader,
   planFindingRevalidation,
@@ -130,7 +128,7 @@ export function priorResolutionFact(
 }
 
 export async function planProductionLifecycleVerification(input: {
-  capability: LifecycleVerificationCapabilityV1;
+  capability: LifecycleVerificationCapability;
   authorization: ReviewRunAuthorization;
   plan: StableReviewWorkPlan;
   repository: string;

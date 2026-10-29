@@ -1,8 +1,10 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import sodium from 'libsodium-wrappers';
 import { refreshCodexAuthWithOfficialCli } from '../../../src/codex-oauth/codex-bootstrap';
 import { readPreparedCodexCredential } from '../../../src/codex-oauth/codex-auth-refresh-validation';
+import { encryptCodexAuthForGitHubSecret } from '../../../src/codex-oauth/crypto';
 
 function jwt(claims: Record<string, unknown>): string {
   return `${Buffer.from('{"alg":"RS256"}').toString('base64url')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.synthetic-signature`;
@@ -66,7 +68,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
  const filename = path.join(process.env.CODEX_HOME,'auth.json');
  const auth = JSON.parse(fs.readFileSync(filename,'utf8'));
  if (mode !== 'unchanged') {
-  auth.tokens.access_token = jwt({exp:Math.floor(Date.now()/1000)+(mode === 'short' ? 30 : 7200)});
+  auth.tokens.access_token = jwt({exp:Math.floor(Date.now()/1000)+(mode === 'short' ? 30 : mode === 'expired' ? -30 : 7200)});
   auth.tokens.refresh_token = 'synthetic-refresh-after';
   auth.last_refresh = new Date().toISOString();
   if (mode === 'changed-account') {
@@ -134,6 +136,49 @@ readline.createInterface({input:process.stdin}).on('line', line => {
     expect(await remainingHomes()).toEqual([]);
   });
 
+  it.each(['short', 'expired'])(
+    'preserves a confirmed %s rotation through the existing sealed writeback format but refuses inference',
+    async (mode) => {
+      const deadline = Date.now() + 60_000;
+      const result = await refreshCodexAuthWithOfficialCli({
+        authJsonBytes: auth(),
+        codexBinaryPath: await executable(mode),
+        requiredValidUntil: deadline,
+      });
+      try {
+        await sodium.ready;
+        const keys = sodium.crypto_box_keypair();
+        const sealed = await encryptCodexAuthForGitHubSecret({
+          authJsonBytes: result.authJsonBytes,
+          githubPublicKeyBase64: Buffer.from(keys.publicKey).toString('base64'),
+          githubKeyId: 'synthetic-writeback-key',
+          generationHashSalt: Buffer.alloc(32, 1).toString('base64url'),
+        });
+        const preserved = Buffer.from(
+          sodium.crypto_box_seal_open(
+            Buffer.from(sealed.encryptedValue, 'base64'),
+            keys.publicKey,
+            keys.privateKey
+          )
+        ).toString('utf8');
+        expect(JSON.parse(preserved).tokens.refresh_token).toBe(
+          'synthetic-refresh-after'
+        );
+        expect(result.credentialValidUntil).toBeLessThan(deadline + 60_000);
+        expect(() => readPreparedCodexCredential(preserved, deadline)).toThrow(
+          'codex_oauth_refresh_lifetime_insufficient'
+        );
+        const requests = (
+          await fs.readFile(path.join(directory, 'requests.jsonl'), 'utf8')
+        ).trim().split('\n').map((line) => JSON.parse(line).method);
+        expect(requests).toEqual(['initialize', 'initialized', 'account/read']);
+      } finally {
+        await result.clearAuthMaterial();
+      }
+      expect(await remainingHomes()).toEqual([]);
+    }
+  );
+
   it('rechecks lifetime and account consistency without invoking another helper process', () => {
     const original = JSON.parse(auth());
     expect(() =>
@@ -152,7 +197,6 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   it.each([
     ['unchanged', 'codex_oauth_refresh_not_confirmed'],
     ['changed-account', 'codex_oauth_refresh_account_changed'],
-    ['short', 'codex_oauth_refresh_lifetime_insufficient'],
     ['malformed', 'codex_oauth_refresh_protocol_invalid'],
     ['overflow', 'codex_oauth_refresh_output_bound'],
   ])('rejects %s and cleans auth before rejecting', async (mode, failure) => {

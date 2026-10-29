@@ -69,7 +69,6 @@ jobs:
           new=old+"\n            // Prepared routes use captured policy, not the legacy ConfigLoader spy.\n            CODEX_AGENTIC_CONTEXT: 'false',"
           text=p.read_text();assert text.count(old)==1;p.write_text(text.replace(old,new))
           assert subprocess.check_output(['git','hash-object',str(p)],text=True).strip()=='f0699f879ad40127633fbe464fe21f2d88a2a3c4'
-          # Test the final workflow inventory, not this disposable preparation job.
           pathlib.Path('.github/workflows/unified-ocr-local-toolchain.yml').unlink()
           PY
           mkdir -p "$RUNNER_TEMP/ocr-integration"
@@ -170,7 +169,12 @@ jobs:
           assert api('git/ref/heads/feat/unified-ocr-review-20261026')['object']['sha']==head
           assert not pathlib.Path('.github/workflows/unified-ocr-local-toolchain.yml').exists()
           subprocess.run(['git','add','--all'],check=True)
-          subprocess.run(['git','diff','--cached','--check',main],check=True)
+          # These imported patches are immutable qualified inputs. Verify exact
+          # identity, then check whitespace in every other changed file.
+          immutable=['tools/ocr/patches/0004-managed-tool-caller-profile.patch','tools/ocr/patches/0005-managed-review-agent-profile.patch']
+          for path in immutable:
+              assert git('rev-parse',f'{head}:{path}')==git('rev-parse',f':{path}'),path
+          subprocess.run(['git','diff','--cached','--check',main,'--','.',*[f':(exclude){path}' for path in immutable]],check=True)
           assert not git('ls-files','-u')
           tree=git('write-tree').decode().strip()
           def entries(ref):

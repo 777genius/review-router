@@ -1,36 +1,36 @@
-import { setTimeout as delay } from "node:timers/promises";
-import { NEWTEST_V4_ROOT_URL } from "../config/review-router-endpoints";
+import { setTimeout as delay } from 'node:timers/promises';
+import { NEWTEST_V4_ROOT_URL } from '../config/review-router-endpoints';
 
 const WAIT_MS = 120_000;
 const ATTEMPTS = 24;
 const CONNECTION_CODES = new Set([
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "EHOSTUNREACH",
-  "ENETUNREACH",
-  "ETIMEDOUT",
-  "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_SOCKET",
-  "UND_ERR_HEADERS_TIMEOUT",
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+  'UND_ERR_HEADERS_TIMEOUT',
 ]);
 
 export async function withNewtestAbort<T>(
   operation: Promise<T>,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<T> {
   if (signal.aborted) {
     void operation.catch(() => undefined);
-    throw new Error("newtest_readiness_timeout");
+    throw new Error('newtest_readiness_timeout');
   }
   let abort!: () => void;
   const interrupted = new Promise<never>((_, reject) => {
-    abort = () => reject(new Error("newtest_readiness_timeout"));
-    signal.addEventListener("abort", abort, { once: true });
+    abort = () => reject(new Error('newtest_readiness_timeout'));
+    signal.addEventListener('abort', abort, { once: true });
   });
   try {
     return await Promise.race([operation, interrupted]);
   } finally {
-    signal.removeEventListener("abort", abort);
+    signal.removeEventListener('abort', abort);
   }
 }
 
@@ -38,16 +38,16 @@ function connectionFailure(error: unknown, signal: AbortSignal): boolean {
   if (!(error instanceof Error)) return false;
   const cause = error.cause;
   const code =
-    cause && typeof cause === "object" && "code" in cause
+    cause && typeof cause === 'object' && 'code' in cause
       ? cause.code
       : undefined;
   // Redirects, TLS failures and arbitrary TypeErrors are not transient admission.
-  if (typeof code === "string") return CONNECTION_CODES.has(code);
+  if (typeof code === 'string') return CONNECTION_CODES.has(code);
   return (
     signal.aborted &&
-    (error.message === "newtest_readiness_timeout" ||
-      error.name === "AbortError" ||
-      error.name === "TimeoutError")
+    (error.message === 'newtest_readiness_timeout' ||
+      error.name === 'AbortError' ||
+      error.name === 'TimeoutError')
   );
 }
 
@@ -62,9 +62,9 @@ export async function waitForNewtestRootChallenge<T>(input: {
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
 }): Promise<T> {
   if (!/^[1-9][0-9]*$/.test(input.runId))
-    throw new Error("newtest_readiness_identity_rejected");
-  const url = new URL("challenge", NEWTEST_V4_ROOT_URL);
-  url.searchParams.set("runId", input.runId);
+    throw new Error('newtest_readiness_identity_rejected');
+  const url = new URL('challenge', NEWTEST_V4_ROOT_URL);
+  url.searchParams.set('runId', input.runId);
   const clock = input.monotonicNow ?? (() => performance.now());
   const sleep =
     input.wait ?? ((ms, signal) => delay(ms, undefined, { signal }));
@@ -77,7 +77,7 @@ export async function waitForNewtestRootChallenge<T>(input: {
       !Number.isFinite(started) ||
       current < last
     )
-      throw new Error("newtest_readiness_clock_rejected");
+      throw new Error('newtest_readiness_clock_rejected');
     last = current;
     return WAIT_MS - (current - started);
   };
@@ -89,15 +89,15 @@ export async function waitForNewtestRootChallenge<T>(input: {
       if (total.signal.aborted || left <= 0) break;
       const request = new AbortController();
       const abort = () => request.abort();
-      total.signal.addEventListener("abort", abort, { once: true });
+      total.signal.addEventListener('abort', abort, { once: true });
       const timer = setTimeout(abort, Math.min(10_000, left));
       let response: Response | undefined;
       try {
         try {
           const fetched = input
             .fetch(url, {
-              method: "GET",
-              redirect: "error",
+              method: 'GET',
+              redirect: 'error',
               signal: request.signal,
             })
             .then((value) => {
@@ -113,15 +113,15 @@ export async function waitForNewtestRootChallenge<T>(input: {
         if (response?.status === 200) {
           return await withNewtestAbort(
             input.read(response, request.signal),
-            request.signal,
+            request.signal
           );
         }
         void response?.body?.cancel().catch(() => undefined);
         if (response && response.status !== 502 && response.status !== 503)
-          throw new Error("newtest_root_response_rejected");
+          throw new Error('newtest_root_response_rejected');
       } finally {
         clearTimeout(timer);
-        total.signal.removeEventListener("abort", abort);
+        total.signal.removeEventListener('abort', abort);
         // Aborts a late, non-cooperative fetch without retrying any body/POST.
         request.abort();
       }
@@ -130,11 +130,11 @@ export async function waitForNewtestRootChallenge<T>(input: {
         if (left > 0)
           await withNewtestAbort(
             sleep(Math.min(5000, left), total.signal),
-            total.signal,
+            total.signal
           );
       }
     }
-    throw new Error("newtest_readiness_timeout");
+    throw new Error('newtest_readiness_timeout');
   } finally {
     clearTimeout(totalTimer);
   }

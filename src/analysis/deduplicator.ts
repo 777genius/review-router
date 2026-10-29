@@ -86,10 +86,12 @@ function mergeFindings(existing: Finding, incoming: Finding): Finding {
     ...existing,
     ...(existing.sourceFindingIds || incoming.sourceFindingIds
       ? {
-          sourceFindingIds: Array.from(new Set([
-            ...(existing.sourceFindingIds ?? []),
-            ...(incoming.sourceFindingIds ?? []),
-          ])).sort(),
+          sourceFindingIds: Array.from(
+            new Set([
+              ...(existing.sourceFindingIds ?? []),
+              ...(incoming.sourceFindingIds ?? []),
+            ])
+          ).sort(),
         }
       : {}),
     startLine: mergeStartLine(existing, incoming),

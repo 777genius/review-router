@@ -1,3 +1,13 @@
+import type { AccountGatewayReviewerRuntime } from '../../codex-oauth/account-gateway-reviewer-session';
+import type { ReviewReviewerPlanReviewerV1 } from '../../control-plane/generated/review-action-v2/review-reviewer-plan';
+import type {
+  RunT0ReviewOrchestrationDependencies,
+  RunT0ReviewOrchestrationCommand,
+} from '../application/run-t0-review-orchestration';
+import type {
+  ProductionWorkAssignmentFacts,
+  ProductionLifecycleVerificationPlan,
+} from './production-review-projection';
 import type { ReviewAgentProfile } from '../../control-plane/generated/review-action-v2/review-agent-profile';
 import {
   ReviewMemorySession,
@@ -108,6 +118,8 @@ import {
 } from '../../codex-oauth/runtime';
 import {
   ReviewExecutionProviderKind,
+  ReviewInvocationConfigurationMismatchError,
+  ReviewInvocationConfigurationMismatchReason,
   ReviewOrchestrationResultStatus,
   ReviewTaskKind,
   RunT0ReviewOrchestration,
@@ -116,6 +128,7 @@ import {
   type RestoredReviewExecution,
 } from '../application';
 import {
+  createStableReviewAssignmentManifest,
   createStableReviewBatchId,
   createStableReviewWorkPlan,
   type StableReviewWorkPlan,
@@ -289,9 +302,17 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       input.accountGateway?.runtimeConfig ?? input.providerApi?.runtimeConfig;
     if (
       admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== undefined &&
-      !input.ocr
+      !input.ocr &&
+      !input.accountGateway?.reviewers
     )
       throw contextToolsError('agent_unsupported');
+    const primaryEngineIsOcr =
+      input.ocr !== undefined ||
+      input.accountGateway?.reviewers?.find(
+        (lane) =>
+          lane.reviewer.reviewerId ===
+          input.accountGateway?.reviewerPlan?.primaryReviewerId
+      )?.reviewer.agentProfile.agentKind === 'ocr';
     const agentProfile = admittedRuntime
       ? {
           json: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!,
@@ -301,11 +322,12 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       : undefined;
     // The captured agentKind picks the engine; the OCR profile never enters
     // the generated Codex parser and vice versa.
-    const approvedOcrAgent: ApprovedOcrReviewAgent | undefined = input.ocr
-      ? readApprovedOcrReviewAgent(agentProfile!.json, agentProfile!.digest)
-      : undefined;
+    const approvedOcrAgent: ApprovedOcrReviewAgent | undefined =
+      primaryEngineIsOcr
+        ? readApprovedOcrReviewAgent(agentProfile!.json, agentProfile!.digest)
+        : undefined;
     const approvedAgent =
-      agentProfile && !input.ocr
+      agentProfile && !primaryEngineIsOcr
         ? readApprovedReviewAgent(agentProfile.json, agentProfile.digest)
         : undefined;
     if (approvedAgent && approvedAgent.agentKind !== 'codex')
@@ -353,14 +375,16 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const directProvider = input.providerApi
       ? readDirectProviderSelection(input.providerApi.runtimeConfig.runtimeEnv)
       : undefined;
-    const codexProviderName = input.ocr
+    const codexProviderName = primaryEngineIsOcr
       ? ''
       : input.providerApi
         ? directProvider!.providerName
         : selectCodexProvider(config);
     const model = codexProviderName.slice(codexProviderName.indexOf('/') + 1);
     const gatewayModelSettings =
-      input.accountGateway && !input.ocr && !isAccountGatewayMiMoModel(model)
+      input.accountGateway &&
+      !primaryEngineIsOcr &&
+      !isAccountGatewayMiMoModel(model)
         ? readAdmittedGatewayCodexModelSettings(
             input.accountGateway.runtimeConfig,
             model
@@ -548,12 +572,18 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       });
       const admittedAgent = approvedOcrAgent ?? approvedAgent;
       const skillsMaterialization =
-        admittedAgent?.reviewSkillsVersion === 1
+        admittedAgent?.reviewSkillsVersion === 1 ||
+        input.accountGateway?.reviewers?.some(
+          (lane) => lane.reviewer.agentProfile.reviewSkillsVersion === 1
+        )
           ? await materializeReviewSkillsWithDiagnostics({
               capture: await fetchCapturedReviewSkills({
                 apiUrl: input.apiUrl,
                 authorizationToken: authorization.authorizationToken,
                 baseSha: authorization.facts.baseSha,
+                reviewerId: input.accountGateway?.reviewers?.find(
+                  (lane) => lane.reviewer.agentProfile.reviewSkillsVersion === 1
+                )?.reviewer.reviewerId,
                 signal,
                 timeoutMs: executionDeadline.clampProviderTimeout(30_000),
                 fetchImpl,
@@ -589,11 +619,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           }
         },
       };
-      assertReviewSkillsExecutionInput(
-        reviewSkills,
-        admittedAgent ?? {},
-        authorization.facts.baseSha
-      );
+
       const lifecycleInventory = new FreshGitHubLifecycleInventory(
         github,
         new ReviewLedger(github, process.env.REVIEW_ROUTER_LEDGER_KEY)
@@ -603,274 +629,1028 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         authorization.facts.headSha
       );
       signal?.throwIfAborted();
-      if (input.ocr) {
-        // Managed OCR review (plan 56): one FindingDiscovery slot over the whole
-        // inventory, no CodexProvider/PromptBuilder/Context Gateway and no RR
-        // investigation composition on this path.
-        const ocrRuntimeEnv = input.accountGateway!.runtimeConfig.runtimeEnv;
-        const ocrModel = ocrRuntimeEnv.CODEX_MODEL;
-        if (!ocrModel || !approvedOcrAgent) {
-          throw new Error('review_action_v2_ocr_model_missing');
-        }
-        const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
-        const ocrModelReasoningEffort =
-          resolveAdmittedGatewayOcrReasoningEffort(
-            input.accountGateway!.runtimeConfig,
-            ocrModel,
-            ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
-          );
-        const modelTransport = input.accountGateway!.modelTransport;
-        const capabilityAuthorization =
-          modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
-        if (!capabilityAuthorization) {
-          throw new Error('review_action_v2_ocr_capability_missing');
-        }
-        const contextTools = await prepareOcrContextTools({
-          runtimeEnv: ocrRuntimeEnv,
-          githubJson: process.env[CONTEXT_TOOLS_CREDENTIALS_ENV],
-          apiUrl: input.apiUrl,
-          authorization: () => controlPlane.currentAuthorization(),
-          fetchImpl,
-          mask: core.setSecret,
-          checkoutRoot: path.resolve(input.workspacePath),
-          headSha: authorization.facts.headSha,
-          mergeBaseSha: authorization.facts.mergeBaseSha,
-          deadlineMs:
-            Date.now() +
-            executionDeadline.clampProviderTimeout(providerTimeoutMs),
-          ...(signal ? { signal } : {}),
-        });
-        try {
-          if (contextTools) {
-            if (!modelTransport.setContextToolsGuard)
-              throw contextToolsError('transport_guard_unavailable');
-            modelTransport.setContextToolsGuard(() => {
-              const receipt = contextTools.receipt();
-              if (!receipt.nativeConnected || receipt.hadFailure)
-                throw contextToolsError('required_context_unavailable');
-            });
-            await writeFile(
-              input.ocr.run.configPath,
-              buildOcrManagedConfigJson({
-                baseUrl: modelTransport.baseUrl,
-                rawCapability: extractRawLoopbackCapability(
-                  capabilityAuthorization
+      const sharedReviewSkills = reviewSkills;
+      const parentAuthorization = authorization;
+      const parentRestore = preplanningRestore;
+      const parentConfig = config;
+      const identities = new DeterministicReviewOrchestrationIdentity();
+      const reviewerPlan = input.accountGateway?.reviewerPlan;
+      const commonCompatibilityKey = reviewerPlan
+        ? sha256(
+            canonicalJson({
+              policy: hashIncrementalCompatibility(
+                config,
+                process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+                reviewSkillsCacheIdentity(reviewSkills)
+              ),
+              reviewerPlan: {
+                ...reviewerPlan,
+                reviewers: reviewerPlan.reviewers.map(
+                  ({
+                    modelSettings: _modelCapabilities,
+                    unavailableReason: _availability,
+                    ...capturedReviewer
+                  }) => capturedReviewer
                 ),
+              },
+            })
+          )
+        : undefined;
+      const prepareLane = async (
+        input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
+        reviewer?: ReviewReviewerPlanReviewerV1,
+        slotBudget?: ReviewerSlotBudget,
+        bootstrapFailure = false
+      ): Promise<ProductionReviewLane> => {
+        const admittedRuntime =
+          input.accountGateway?.runtimeConfig ??
+          input.providerApi?.runtimeConfig;
+        const laneConfig =
+          reviewer && admittedRuntime
+            ? ConfigLoader.loadRuntimeEnvironment(admittedRuntime.runtimeEnv, {
+                modelTransport: true,
+              })
+            : parentConfig;
+        const primary =
+          !reviewer || reviewer.reviewerId === reviewerPlan?.primaryReviewerId;
+        const config: ReviewConfig = {
+          ...laneConfig,
+          ...(input.accountGateway ? { providerRetries: 1 } : {}),
+          updatePrDescription: primary && parentConfig.updatePrDescription,
+          reviewThreadLifecycle: primary
+            ? parentConfig.reviewThreadLifecycle
+            : 'off',
+        };
+        const authorization: ReviewRunAuthorization = reviewer
+          ? {
+              ...parentAuthorization,
+              limits: {
+                ...parentAuthorization.limits,
+                maxWorkSlots:
+                  slotBudget?.maxSlots ??
+                  parentAuthorization.limits.maxWorkSlots,
+              },
+              facts: {
+                ...parentAuthorization.facts,
+                providerVoteLanes: [
+                  {
+                    providerKind:
+                      reviewer.agentProfile.agentKind === 'ocr'
+                        ? ReviewExecutionProviderKind.Ocr
+                        : ReviewExecutionProviderKind.Codex,
+                    providerVoteIdentityHash: reviewer.providerVoteIdentityHash,
+                  },
+                ],
+                reviewInvestigation: reviewer.investigationGrant
+                  ?.descriptor as ReviewRunAuthorization['facts']['reviewInvestigation'],
+              },
+            }
+          : parentAuthorization;
+        const preplanningRestore = reviewer ? null : parentRestore;
+        const laneEngineIsOcr =
+          input.ocr !== undefined || reviewer?.agentProfile.agentKind === 'ocr';
+        const approvedOcrAgent =
+          laneEngineIsOcr && admittedRuntime
+            ? readApprovedOcrReviewAgent(
+                admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!,
+                admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST!
+              )
+            : undefined;
+        const approvedAgent =
+          !laneEngineIsOcr && admittedRuntime
+            ? readApprovedReviewAgent(
+                admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!,
+                admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST!
+              )
+            : undefined;
+        const laneProfile = approvedOcrAgent ?? approvedAgent;
+        const reviewSkills =
+          laneProfile?.reviewSkillsVersion === 1
+            ? sharedReviewSkills
+            : LEGACY_REVIEW_SKILLS;
+        if (
+          reviewSkills.kind === 'legacy' &&
+          sharedReviewSkills.kind === 'captured' &&
+          (sharedReviewSkills.capture.gitSources.length > 0 ||
+            sharedReviewSkills.capture.webSkills.length > 0)
+        )
+          throw new Error('review_skills_agent_incompatible');
+        assertReviewSkillsExecutionInput(
+          reviewSkills,
+          laneProfile ?? {},
+          authorization.facts.baseSha
+        );
+        if (
+          admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== undefined &&
+          !laneEngineIsOcr
+        )
+          throw contextToolsError('agent_unsupported');
+        if (bootstrapFailure && reviewer) {
+          if (primary)
+            createPrDescriptionGeneration({
+              enabled: config.updatePrDescription !== false,
+              scopedCompanionDispatch:
+                !!admittedRuntime?.runtimeEnv[
+                  lifecycleVerificationContract.capabilityRuntimeEnvKey
+                ],
+              capabilityJson:
+                admittedRuntime?.runtimeEnv[
+                  prDescriptionContract.capabilityRuntimeEnvKey
+                ],
+              pr,
+              reviewRevisionHash: authorization.facts.reviewRevisionHash,
+              requestedModel: reviewer.requestedModel,
+              providerKind: laneEngineIsOcr
+                ? ReviewExecutionProviderKind.Ocr
+                : ReviewExecutionProviderKind.Codex,
+              language: config.outputLanguage,
+              config,
+              transport: input.accountGateway?.modelTransport,
+              warn: core.warning,
+            })?.unavailable();
+          const compatibilityKey = commonCompatibilityKey!;
+          const planInput = {
+            authorization,
+            pr,
+            config,
+            compatibilityKey,
+            reviewerId: reviewer.reviewerId,
+            reviewerRequired: reviewer.required,
+            lifecycleTargets: [] as readonly LifecycleTarget[],
+            liveLifecycleStateHash:
+              initialLifecycle.inventory.lifecycleStateHash,
+          };
+          const planned = laneEngineIsOcr
+            ? planOcrReviewAssignments(planInput)
+            : planAssignments({
+                ...planInput,
+                providerName: selectCodexProvider(config),
+                accountGateway: true,
+                maxDiscoverySlots: slotBudget?.discoverySlots,
+              });
+          const assignments = planned.assignments.map((assignment) => ({
+            workSlotId: assignment.workSlot.workSlotId,
+            taskKind: assignment.workSlot.taskKind,
+            providerKind: assignment.workSlot.providerKind,
+            providerVoteIdentityHash:
+              assignment.workSlot.providerVoteIdentityHash,
+            required: assignment.workSlot.required,
+            filePaths: assignment.context.files.map((file) => file.filename),
+          }));
+          const unavailable = async () => {
+            throw new ReviewInvocationConfigurationMismatchError(
+              ReviewInvocationConfigurationMismatchReason.ActualModelEvidenceUnavailable
+            );
+          };
+          return {
+            plan: planned.plan,
+            compatibilityKey,
+            assignments,
+            uncoveredPaths: planned.uncoveredPaths,
+            uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
+            cleanup: async () => {},
+            dependencies: {
+              controlPlane,
+              revisionGuard,
+              oidc: { getToken: () => oidc.requestToken(input.audience) },
+              invocationManifestAssembler:
+                new GeneratedProviderInvocationManifestAssembler(
+                  authorization,
+                  config,
+                  compatibilityKey
+                ),
+              invocations: { prepare: unavailable, execute: unavailable },
+              invocationFailureClassifier:
+                new ProviderInvocationFailureClassifier(
+                  input.accountGateway?.modelTransport.failureFact
+                ),
+              leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+              projectionBuilder: createProductionReviewProjectionBuilder({
+                authorizationFacts: authorization.facts,
+                pr,
+                config,
+                protocolLimits: authorization.limits,
+                assignments,
+                uncoveredPaths: planned.uncoveredPaths,
+                uncoveredLifecycleTargetIds:
+                  planned.uncoveredLifecycleTargetIds,
+                lifecycleInventory,
+                skillsReceipt,
+              }),
+              identities,
+              clock: new SystemReviewOrchestrationClock(),
+              delay: new CancellableReviewOrchestrationDelay(),
+              executionDeadline,
+              signal,
+              ...(this.progress ? { progress: this.progress } : {}),
+            },
+          };
+        }
+        const directProvider = input.providerApi
+          ? readDirectProviderSelection(
+              input.providerApi.runtimeConfig.runtimeEnv
+            )
+          : undefined;
+        const providerName = input.ocr
+          ? ''
+          : input.providerApi
+            ? directProvider!.providerName
+            : selectCodexProvider(config);
+        const model =
+          reviewer?.requestedModel ??
+          providerName.slice(providerName.indexOf('/') + 1);
+        const gatewayModelSettings =
+          input.accountGateway &&
+          !input.ocr &&
+          !isAccountGatewayMiMoModel(model)
+            ? readAdmittedGatewayCodexModelSettings(
+                input.accountGateway.runtimeConfig,
+                model
+              )
+            : undefined;
+        const serverReasoningEffort =
+          admittedRuntime?.runtimeEnv.CODEX_REASONING_EFFORT;
+        const reasoningEffort = resolveProductionInvestigationReasoningEffort({
+          codexModel: model,
+          accountGateway: !!input.accountGateway,
+          providerApi: !!input.providerApi,
+          ...(directProvider
+            ? { providerApiAuthMode: directProvider.mode }
+            : {}),
+          serverReasoningEffort,
+          gatewayModelSettings,
+        });
+        if (input.ocr) {
+          // Managed OCR review (plan 56): one FindingDiscovery slot over the whole
+          // inventory, no CodexProvider/PromptBuilder/Context Gateway and no RR
+          // investigation composition on this path.
+          const ocrRuntimeEnv = input.accountGateway!.runtimeConfig.runtimeEnv;
+          const ocrModel = ocrRuntimeEnv.CODEX_MODEL;
+          if (!ocrModel || !approvedOcrAgent) {
+            throw new Error('review_action_v2_ocr_model_missing');
+          }
+          const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
+          const ocrModelReasoningEffort =
+            resolveAdmittedGatewayOcrReasoningEffort(
+              input.accountGateway!.runtimeConfig,
+              ocrModel,
+              ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
+            );
+          const modelTransport = input.accountGateway!.modelTransport;
+          const capabilityAuthorization =
+            modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
+          if (!capabilityAuthorization) {
+            throw new Error('review_action_v2_ocr_capability_missing');
+          }
+          const contextTools = await prepareOcrContextTools({
+            runtimeEnv: ocrRuntimeEnv,
+            reviewerId: reviewer?.reviewerId,
+            githubJson: process.env[CONTEXT_TOOLS_CREDENTIALS_ENV],
+            apiUrl: input.apiUrl,
+            authorization: () => controlPlane.currentAuthorization(),
+            fetchImpl,
+            mask: core.setSecret,
+            checkoutRoot: path.resolve(input.workspacePath),
+            headSha: authorization.facts.headSha,
+            mergeBaseSha: authorization.facts.mergeBaseSha,
+            deadlineMs:
+              Date.now() +
+              executionDeadline.clampProviderTimeout(providerTimeoutMs),
+            ...(signal ? { signal } : {}),
+          });
+          try {
+            if (contextTools) {
+              if (!modelTransport.setContextToolsGuard)
+                throw contextToolsError('transport_guard_unavailable');
+              modelTransport.setContextToolsGuard(() => {
+                const receipt = contextTools.receipt();
+                if (!receipt.nativeConnected || receipt.hadFailure)
+                  throw contextToolsError('required_context_unavailable');
+              });
+              await writeFile(
+                input.ocr.run.configPath,
+                buildOcrManagedConfigJson({
+                  baseUrl: modelTransport.baseUrl,
+                  rawCapability: extractRawLoopbackCapability(
+                    capabilityAuthorization
+                  ),
+                  model: ocrModel,
+                  limits: {
+                    requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
+                  },
+                  modelReasoningEffort: ocrModelReasoningEffort,
+                  admittedRuntimeConfig: input.accountGateway!.runtimeConfig,
+                  language: ocrLanguage,
+                  contextTools: contextTools.config,
+                }),
+                { mode: 0o600 }
+              );
+            }
+            const baseOcrCompatibilityKey = hashIncrementalCompatibility(
+              config,
+              process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+              reviewSkillsCacheIdentity(reviewSkills)
+            );
+            const contextReceipt = contextTools?.receipt();
+            const ocrCompatibilityKey =
+              commonCompatibilityKey ??
+              (contextReceipt
+                ? sha256(
+                    canonicalJson({
+                      baseOcrCompatibilityKey,
+                      contextTools: {
+                        planDigest: contextReceipt.planDigest,
+                        schemaDigest: contextReceipt.schemaDigest,
+                      },
+                    })
+                  )
+                : baseOcrCompatibilityKey);
+            const ocrBackgroundParts = [
+              pr.title,
+              stripOwnedPrDescriptionBlocks(pr.body),
+            ].filter((part) => part.trim().length > 0);
+            const prDescription = createPrDescriptionGeneration({
+              enabled: config.updatePrDescription !== false,
+              scopedCompanionDispatch:
+                !!admittedRuntime?.runtimeEnv[
+                  lifecycleVerificationContract.capabilityRuntimeEnvKey
+                ],
+              capabilityJson:
+                admittedRuntime?.runtimeEnv[
+                  prDescriptionContract.capabilityRuntimeEnvKey
+                ],
+              pr,
+              reviewRevisionHash: authorization.facts.reviewRevisionHash,
+              requestedModel: ocrModel,
+              providerKind: ReviewExecutionProviderKind.Ocr,
+              language: config.outputLanguage,
+              config,
+              transport: modelTransport,
+              memorySnapshot: descriptionMemory.current(),
+              warn: core.warning,
+            });
+            const lifecycleCapability =
+              config.reviewThreadLifecycle !== 'off' && input.accountGateway
+                ? readLifecycleCapability(
+                    admittedRuntime?.runtimeEnv[
+                      lifecycleVerificationContract.capabilityRuntimeEnvKey
+                    ],
+                    ocrModel,
+                    ReviewExecutionProviderKind.Ocr
+                  )
+                : undefined;
+            let planned = planOcrReviewAssignments({
+              prDescriptionEnabled: prDescription !== undefined,
+              reviewerId: reviewer?.reviewerId,
+              reviewerRequired: reviewer?.required,
+              authorization,
+              pr,
+              config,
+              compatibilityKey: ocrCompatibilityKey,
+              lifecycleTargets: selectLegacyLifecycleTargets(
+                config.reviewThreadLifecycle,
+                admittedRuntime?.runtimeEnv[
+                  lifecycleVerificationContract.capabilityRuntimeEnvKey
+                ],
+                initialLifecycle.promptTargets
+              ),
+              liveLifecycleStateHash:
+                initialLifecycle.inventory.lifecycleStateHash,
+            });
+            assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
+            // Existing executions never select new companion work or reset its allowance.
+            const lifecycle = preplanningRestore
+              ? restoreProductionLifecycleVerification(
+                  preplanningRestore,
+                  planned.plan,
+                  config
+                )
+              : lifecycleCapability
+                ? await planProductionLifecycleVerification({
+                    capability: lifecycleCapability,
+                    authorization,
+                    plan: planned.plan,
+                    repository: input.repository,
+                    checkoutRoot: path.resolve(input.workspacePath),
+                    compatibilityKey: ocrCompatibilityKey,
+                    config,
+                    inventory: initialLifecycle.inventory,
+                    targets: initialLifecycle.revalidationTargets,
+                    resolutionHistory,
+                    renames: pr.files
+                      .filter((file) => !!file.previousFilename)
+                      .map((file) => ({
+                        previousFilename: file.previousFilename!,
+                        filename: file.filename,
+                      })),
+                  })
+                : undefined;
+            if (
+              preplanningRestore?.persistedPlan?.compatibilityKey &&
+              preplanningRestore.persistedPlan.compatibilityKey !==
+                ocrCompatibilityKey
+            )
+              throw new Error('review_restore_compatibility_changed');
+            const finalPlan = restorePersistedWorkPlan(
+              preplanningRestore,
+              lifecycle?.plan ?? planned.plan
+            );
+            planned = {
+              ...planned,
+              plan: finalPlan,
+              assignments: rebindReviewAssignmentsToWorkPlan(
+                planned.assignments,
+                finalPlan
+              ),
+            };
+            const bridge: OcrLoopbackBridge = {
+              baseUrl: modelTransport.baseUrl,
+              capabilityAuthorization,
+              actualModel: () => modelTransport.actualModel(),
+              requestCount: () => modelTransport.requestCount?.(),
+              effectFacts: input.ocr.effectFacts,
+              releaseRetrySafeFailure: () =>
+                modelTransport.releaseRetrySafeFailure?.() === true,
+              reopenConsumer: () => modelTransport.reopenConsumer?.() === true,
+            };
+            const invocationAdapter = new OcrReviewInvocationAdapter(
+              planned.assignments,
+              {
+                ...(signal ? { signal } : {}),
+                previewTimeoutMs: () =>
+                  Math.floor(
+                    executionDeadline.clampProviderTimeout(providerTimeoutMs)
+                  ),
                 model: ocrModel,
+                binaryPath: input.ocr.run.binaryPath,
+                binarySha256: approvedOcrAgent.binarySha256,
+                packageVersion: approvedOcrAgent.packageVersion,
+                profileRef: approvedOcrAgent.profileRef,
+                run: input.ocr.run,
+                ...(contextTools
+                  ? {
+                      contextTools,
+                      contextToolsReceipt: (
+                        receipt: import('../../context-tools/broker').ContextToolsReceipt
+                      ) =>
+                        logger.info('Managed OCR context tools', {
+                          planDigest: receipt.planDigest,
+                          schemaDigest: receipt.schemaDigest,
+                          selectedTools: receipt.availableTools,
+                          nativeConnected: receipt.nativeConnected,
+                          calls: receipt.calls,
+                          hadFailure: receipt.hadFailure,
+                          toolCalls: receipt.toolCalls,
+                        }),
+                    }
+                  : {}),
+                bridge,
                 limits: {
                   requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
                 },
+                ocrEffort: 'medium',
                 modelReasoningEffort: ocrModelReasoningEffort,
-                admittedRuntimeConfig: input.accountGateway!.runtimeConfig,
                 language: ocrLanguage,
-                contextTools: contextTools.config,
-              }),
-              { mode: 0o600 }
+                reviewSkills,
+                reviewMemory,
+                freshReviewSkillsSupply: (supply) =>
+                  skillsReceiptCollector.record(supply),
+                ruleText:
+                  reviewSkills.kind === 'legacy'
+                    ? buildOcrControlledRuleText({
+                        language: ocrLanguage,
+                        assignedPaths: pr.files
+                          .map((file) => file.filename)
+                          .sort(),
+                      })
+                    : buildOcrSkillsControlledRuleText({
+                        language: ocrLanguage,
+                        assignedPaths: pr.files
+                          .map((file) => file.filename)
+                          .sort(),
+                        reviewSkills,
+                      }),
+                backgroundText:
+                  ocrBackgroundParts.length > 0
+                    ? ocrBackgroundParts.join('\n\n')
+                    : null,
+                checkoutRoot: path.resolve(input.workspacePath),
+                processRunner: runOcrReviewProcess,
+                previewRunner: runOcrReviewProcess,
+                acceptanceDiagnostic: (diagnostic) =>
+                  logger.info('Managed OCR acceptance', diagnostic),
+              }
             );
+            if (
+              prDescription &&
+              !planned.plan.assignments.some(
+                (assignment) =>
+                  assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
+              )
+            )
+              core.warning(
+                'AI PR description omitted: no optional task budget remains.'
+              );
+            return {
+              dependencies: {
+                ...(prDescription ? { prDescription } : {}),
+                controlPlane,
+                revisionGuard,
+                oidc: {
+                  getToken: () => oidc.requestToken(input.audience),
+                },
+                invocationManifestAssembler: restoredLifecycleManifestAssembler(
+                  preplanningRestore,
+                  new GeneratedProviderInvocationManifestAssembler(
+                    authorization,
+                    config,
+                    ocrCompatibilityKey
+                  )
+                ),
+                invocations: preplanningRestore?.persistedPlan
+                  ? restoredLifecycleInvocations(
+                      preplanningRestore,
+                      invocationAdapter
+                    )
+                  : lifecycle && lifecycleCapability
+                    ? compositeLifecycleInvocations({
+                        discovery: invocationAdapter,
+                        packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
+                        capability: lifecycleCapability,
+                        outputCap: lifecycle.outputCap,
+                        reviewRevisionHash:
+                          authorization.facts.reviewRevisionHash,
+                        liveLifecycleStateHash:
+                          lifecycle.liveLifecycleStateHash,
+                        transport: modelTransport,
+                      })
+                    : invocationAdapter,
+                memoryAdmission,
+                invocationFailureClassifier:
+                  new ProviderInvocationFailureClassifier(
+                    modelTransport.failureFact
+                  ),
+                invocationDiagnostics: new LoggingReviewInvocationDiagnostics(
+                  logger
+                ),
+                investigationDiagnostics:
+                  new LoggingReviewInvestigationDiagnostics(logger),
+                leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+                projectionBuilder: createProductionReviewProjectionBuilder({
+                  authorizationFacts: authorization.facts,
+                  pr,
+                  config,
+                  protocolLimits: authorization.limits,
+                  assignments: planned.plan.assignments.map((assignment) => ({
+                    workSlotId: assignment.workSlot.workSlotId,
+                    taskKind: assignment.workSlot.taskKind,
+                    providerKind: assignment.workSlot.providerKind,
+                    providerVoteIdentityHash:
+                      assignment.workSlot.providerVoteIdentityHash,
+                    required: assignment.workSlot.required,
+                    filePaths:
+                      planned.assignments
+                        .find(
+                          (item) =>
+                            item.workSlot.workSlotId ===
+                            assignment.workSlot.workSlotId
+                        )
+                        ?.context.files.map((file) => file.filename) ?? [],
+                  })),
+                  uncoveredPaths: planned.uncoveredPaths,
+                  uncoveredLifecycleTargetIds:
+                    planned.uncoveredLifecycleTargetIds,
+                  lifecycleInventory,
+                  ...(lifecycle?.lifecycleVerification
+                    ? { lifecycleVerification: lifecycle.lifecycleVerification }
+                    : {}),
+                  skillsReceipt,
+                }),
+                identities,
+                clock: new SystemReviewOrchestrationClock(),
+                delay: new CancellableReviewOrchestrationDelay(),
+                executionDeadline,
+                signal,
+                ...(this.progress ? { progress: this.progress } : {}),
+              },
+              plan: planned.plan,
+              compatibilityKey: ocrCompatibilityKey,
+              assignments: planned.plan.assignments.map((assignment) => ({
+                workSlotId: assignment.workSlot.workSlotId,
+                taskKind: assignment.workSlot.taskKind,
+                providerKind: assignment.workSlot.providerKind,
+                providerVoteIdentityHash:
+                  assignment.workSlot.providerVoteIdentityHash,
+                required: assignment.workSlot.required,
+                filePaths:
+                  planned.assignments
+                    .find(
+                      (item) =>
+                        item.workSlot.workSlotId ===
+                        assignment.workSlot.workSlotId
+                    )
+                    ?.context.files.map((file) => file.filename) ?? [],
+              })),
+              uncoveredPaths: planned.uncoveredPaths,
+              uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
+              lifecycleVerification: lifecycle?.lifecycleVerification,
+              cleanup: async () => {
+                modelTransport.setContextToolsGuard?.(undefined);
+                await contextTools?.close();
+              },
+            };
+          } catch (error) {
+            modelTransport.setContextToolsGuard?.(undefined);
+            await contextTools?.close();
+            throw error;
           }
-          const baseOcrCompatibilityKey = hashIncrementalCompatibility(
+        }
+        const agenticContext = config.codexAgenticContext ?? true;
+        const investigationRolloutResolution =
+          resolveProductionReviewInvestigationRolloutResolution({
+            flags: readProductionReviewInvestigationRolloutFlags(),
+            agenticContext,
+            authorization,
+            primaryProviderKind: ReviewExecutionProviderKind.Codex,
+            reviewDepth: config.reviewDepth,
+          });
+        const investigationRollout = investigationRolloutResolution.rollout;
+        emitReviewInvestigationTelemetry(
+          formatProductionReviewInvestigationRolloutTelemetry(
+            investigationRolloutResolution
+          )
+        );
+        const investigationRecordingEnabled =
+          investigationRollout.recordingEnabled;
+        const provider = new CodexProvider(model, {
+          ...(usageDelivery
+            ? {
+                usageDelivery,
+                usageUpstreamBaseUrl:
+                  process.env.REVIEW_AUTH_MODE === 'openai-api'
+                    ? 'https://api.openai.com/v1'
+                    : input.providerInstanceId ||
+                        process.env.REVIEW_AUTH_MODE === 'codex-oauth'
+                      ? 'https://chatgpt.com/backend-api/codex'
+                      : undefined,
+              }
+            : {}),
+
+          agenticContext,
+          binaryPath: input.codexBinaryPath,
+          reasoningEffort,
+          waitForProcessClose: true,
+          eventAudit: config.codexEventAudit,
+          modelProvider: input.providerApi
+            ? directProvider!.modelProvider
+            : resolveAccountGatewayModelProvider(
+                model,
+                input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+                input.accountGateway?.modelTransport
+              ),
+          ...(input.providerApi
+            ? {
+                providerNamePrefix:
+                  directProvider!.mode === 'kimi-code-api'
+                    ? ('kimi' as const)
+                    : directProvider!.mode === 'mimo-token-plan-api'
+                      ? ('codex-mimo' as const)
+                      : ('openrouter' as const),
+                providerApiTransport: input.providerApi.modelTransport,
+                disableBuiltinTools: true,
+                waitForProcessClose: true,
+              }
+            : {}),
+          ...(input.accountGateway
+            ? {
+                accountGateway: input.accountGateway.modelTransport,
+                ...(gatewayModelSettings
+                  ? {
+                      accountGatewayModelSettings: gatewayModelSettings,
+                      accountGatewaySavedReasoningEffort: serverReasoningEffort,
+                    }
+                  : {}),
+              }
+            : {}),
+        });
+        const compatibilityKey =
+          commonCompatibilityKey ??
+          hashIncrementalCompatibility(
             config,
             process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
             reviewSkillsCacheIdentity(reviewSkills)
           );
-          const contextReceipt = contextTools?.receipt();
-          const ocrCompatibilityKey = contextReceipt
-            ? sha256(
-                canonicalJson({
-                  baseOcrCompatibilityKey,
-                  contextTools: {
-                    planDigest: contextReceipt.planDigest,
-                    schemaDigest: contextReceipt.schemaDigest,
-                  },
-                })
-              )
-            : baseOcrCompatibilityKey;
-          const ocrBackgroundParts = [
-            pr.title,
-            stripOwnedPrDescriptionBlocks(pr.body),
-          ].filter((part) => part.trim().length > 0);
-          const prDescription = createPrDescriptionGeneration({
-            enabled: config.updatePrDescription,
-            scopedCompanionDispatch:
-              !!admittedRuntime?.runtimeEnv[
-                lifecycleVerificationContract.capabilityRuntimeEnvKey
-              ],
-            capabilityJson:
-              admittedRuntime?.runtimeEnv[
-                prDescriptionContract.capabilityRuntimeEnvKey
-              ],
-            pr,
-            reviewRevisionHash: authorization.facts.reviewRevisionHash,
-            requestedModel: ocrModel,
-            providerKind: ReviewExecutionProviderKind.Ocr,
-            language: config.outputLanguage,
-            config,
-            transport: modelTransport,
-            memorySnapshot: descriptionMemory.current(),
-            warn: core.warning,
+        const gatewayBundlePath = resolveContextGatewayBundlePath();
+        const requiredContextWitness =
+          new SubprocessRequiredContextWitnessRunner();
+        const contextGatewayOptions =
+          resolveProductionContextGatewaySessionFactoryOptions({
+            agenticContext,
+            investigationRecordingEnabled,
+            checkoutRoot: path.resolve(input.workspacePath),
+            gatewayBundlePath,
           });
-          const lifecycleCapability =
-            config.reviewThreadLifecycle !== 'off' && input.accountGateway
-              ? readLifecycleCapability(
-                  admittedRuntime?.runtimeEnv[
-                    lifecycleVerificationContract.capabilityRuntimeEnvKey
-                  ],
-                  ocrModel,
-                  ReviewExecutionProviderKind.Ocr
-                )
-              : undefined;
-          let planned = planOcrReviewAssignments({
-            prDescriptionEnabled: prDescription !== undefined,
-            authorization,
-            pr,
-            config,
-            compatibilityKey: ocrCompatibilityKey,
-            lifecycleTargets: selectLegacyLifecycleTargets(
-              config.reviewThreadLifecycle,
-              admittedRuntime?.runtimeEnv[
-                lifecycleVerificationContract.capabilityRuntimeEnvKey
-              ],
-              initialLifecycle.promptTargets
-            ),
-            liveLifecycleStateHash:
-              initialLifecycle.inventory.lifecycleStateHash,
-          });
-          assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
-          // Existing executions never select new companion work or reset its allowance.
-          const lifecycle = preplanningRestore
-            ? restoreProductionLifecycleVerification(
-                preplanningRestore,
-                planned.plan,
-                config
-              )
-            : lifecycleCapability
-              ? await planProductionLifecycleVerification({
-                  capability: lifecycleCapability,
-                  authorization,
-                  plan: planned.plan,
-                  repository: input.repository,
-                  checkoutRoot: path.resolve(input.workspacePath),
-                  compatibilityKey: ocrCompatibilityKey,
-                  config,
-                  inventory: initialLifecycle.inventory,
-                  targets: initialLifecycle.revalidationTargets,
-                  resolutionHistory,
-                  renames: pr.files
-                    .filter((file) => !!file.previousFilename)
-                    .map((file) => ({
-                      previousFilename: file.previousFilename!,
-                      filename: file.filename,
-                    })),
-                })
-              : undefined;
-          if (
-            preplanningRestore?.persistedPlan?.compatibilityKey &&
-            preplanningRestore.persistedPlan.compatibilityKey !==
-              ocrCompatibilityKey
-          )
-            throw new Error('review_restore_compatibility_changed');
-          const finalPlan = restorePersistedWorkPlan(
-            preplanningRestore,
-            lifecycle?.plan ?? planned.plan
-          );
-          planned = {
-            ...planned,
-            plan: finalPlan,
-            assignments: rebindReviewAssignmentsToWorkPlan(
-              planned.assignments,
-              finalPlan
-            ),
-          };
-          const bridge: OcrLoopbackBridge = {
-            baseUrl: modelTransport.baseUrl,
-            capabilityAuthorization,
-            actualModel: () => modelTransport.actualModel(),
-            requestCount: () => modelTransport.requestCount?.(),
-            effectFacts: input.ocr.effectFacts,
-            releaseRetrySafeFailure: () =>
-              modelTransport.releaseRetrySafeFailure?.() === true,
-            reopenConsumer: () => modelTransport.reopenConsumer?.() === true,
-          };
-          const invocationAdapter = new OcrReviewInvocationAdapter(
-            planned.assignments,
-            {
-              ...(signal ? { signal } : {}),
-              previewTimeoutMs: () =>
-                Math.floor(
-                  executionDeadline.clampProviderTimeout(providerTimeoutMs)
-                ),
-              model: ocrModel,
-              binaryPath: input.ocr.run.binaryPath,
-              binarySha256: approvedOcrAgent.binarySha256,
-              packageVersion: approvedOcrAgent.packageVersion,
-              profileRef: approvedOcrAgent.profileRef,
-              run: input.ocr.run,
-              ...(contextTools
-                ? {
-                    contextTools,
-                    contextToolsReceipt: (
-                      receipt: import('../../context-tools/broker').ContextToolsReceipt
-                    ) =>
-                      logger.info('Managed OCR context tools', {
-                        planDigest: receipt.planDigest,
-                        schemaDigest: receipt.schemaDigest,
-                        selectedTools: receipt.availableTools,
-                        nativeConnected: receipt.nativeConnected,
-                        calls: receipt.calls,
-                        hadFailure: receipt.hadFailure,
-                        toolCalls: receipt.toolCalls,
-                      }),
-                  }
-                : {}),
-              bridge,
-              limits: {
-                requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
-              },
-              ocrEffort: 'medium',
-              modelReasoningEffort: ocrModelReasoningEffort,
-              language: ocrLanguage,
-              reviewSkills,
-              reviewMemory,
-              freshReviewSkillsSupply: (supply) =>
-                skillsReceiptCollector.record(supply),
-              ruleText:
-                reviewSkills.kind === 'legacy'
-                  ? buildOcrControlledRuleText({
-                      language: ocrLanguage,
-                      assignedPaths: pr.files
-                        .map((file) => file.filename)
-                        .sort(),
-                    })
-                  : buildOcrSkillsControlledRuleText({
-                      language: ocrLanguage,
-                      assignedPaths: pr.files
-                        .map((file) => file.filename)
-                        .sort(),
-                      reviewSkills,
-                    }),
-              backgroundText:
-                ocrBackgroundParts.length > 0
-                  ? ocrBackgroundParts.join('\n\n')
-                  : null,
-              checkoutRoot: path.resolve(input.workspacePath),
-              processRunner: runOcrReviewProcess,
-              previewRunner: runOcrReviewProcess,
-              acceptanceDiagnostic: (diagnostic) =>
-                logger.info('Managed OCR acceptance', diagnostic),
-            }
-          );
-          const identities = new DeterministicReviewOrchestrationIdentity();
-          if (
-            prDescription &&
-            !planned.plan.assignments.some(
-              (assignment) =>
-                assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
+        const contextGateway = contextGatewayOptions
+          ? new ContextGatewayInvocationSessionFactory(
+              controlPlane,
+              contextGatewayOptions,
+              requiredContextWitness
             )
+          : undefined;
+        const contextReplayRunner = contextGateway
+          ? new ContextAttestationReplayRunner({
+              checkoutRoot: path.resolve(input.workspacePath),
+              gatewayBundlePath,
+            })
+          : undefined;
+        const prDescription = createPrDescriptionGeneration({
+          enabled: config.updatePrDescription !== false,
+          scopedCompanionDispatch:
+            !!admittedRuntime?.runtimeEnv[
+              lifecycleVerificationContract.capabilityRuntimeEnvKey
+            ],
+          capabilityJson:
+            admittedRuntime?.runtimeEnv[
+              prDescriptionContract.capabilityRuntimeEnvKey
+            ],
+          pr,
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          requestedModel: model,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          language: config.outputLanguage,
+          config,
+          transport:
+            input.providerApi?.modelTransport ??
+            input.accountGateway?.modelTransport,
+          memorySnapshot: descriptionMemory.current(),
+          warn: core.warning,
+        });
+        const lifecycleCapability =
+          config.reviewThreadLifecycle !== 'off' && input.accountGateway
+            ? readLifecycleCapability(
+                admittedRuntime?.runtimeEnv[
+                  lifecycleVerificationContract.capabilityRuntimeEnvKey
+                ],
+                model,
+                ReviewExecutionProviderKind.Codex
+              )
+            : undefined;
+        let planned = planAssignments({
+          prDescriptionEnabled: prDescription !== undefined,
+          reviewerId: reviewer?.reviewerId,
+          reviewerRequired: reviewer?.required,
+          maxDiscoverySlots: slotBudget?.discoverySlots,
+          authorization,
+          pr,
+          config,
+          providerName: provider.name,
+          compatibilityKey,
+          lifecycleTargets: selectLegacyLifecycleTargets(
+            config.reviewThreadLifecycle,
+            admittedRuntime?.runtimeEnv[
+              lifecycleVerificationContract.capabilityRuntimeEnvKey
+            ],
+            initialLifecycle.promptTargets
+          ),
+          liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+          accountGateway: input.accountGateway !== undefined,
+        });
+        assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
+        // Existing executions never select new companion work or reset its allowance.
+        const lifecycle = preplanningRestore
+          ? restoreProductionLifecycleVerification(
+              preplanningRestore,
+              planned.plan,
+              config
+            )
+          : lifecycleCapability
+            ? await planProductionLifecycleVerification({
+                capability: lifecycleCapability,
+                authorization,
+                plan: planned.plan,
+                repository: input.repository,
+                checkoutRoot: path.resolve(input.workspacePath),
+                compatibilityKey,
+                config,
+                inventory: initialLifecycle.inventory,
+                targets: initialLifecycle.revalidationTargets,
+                resolutionHistory,
+                renames: pr.files
+                  .filter((file) => !!file.previousFilename)
+                  .map((file) => ({
+                    previousFilename: file.previousFilename!,
+                    filename: file.filename,
+                  })),
+              })
+            : undefined;
+        if (
+          preplanningRestore?.persistedPlan?.compatibilityKey &&
+          preplanningRestore.persistedPlan.compatibilityKey !== compatibilityKey
+        )
+          throw new Error('review_restore_compatibility_changed');
+        const finalPlan = restorePersistedWorkPlan(
+          preplanningRestore,
+          lifecycle?.plan ?? planned.plan
+        );
+        planned = {
+          ...planned,
+          plan: finalPlan,
+          assignments: rebindReviewAssignmentsToWorkPlan(
+            planned.assignments,
+            finalPlan
+          ),
+        };
+        const invocationAdapter = new CodexReviewInvocationAdapter(
+          provider,
+          new PromptBuilder(
+            config,
+            'standard',
+            undefined,
+            undefined,
+            undefined,
+            reviewSkills
+          ),
+          planned.assignments,
+          providerTimeoutMs,
+          agenticContext,
+          contextGateway,
+          false,
+          input.providerApi || gatewayModelSettings ? reasoningEffort : 'xhigh',
+          input.providerApi?.credentialLease,
+          gatewayModelSettings,
+          reviewMemory
+        );
+        const investigationInvocationAdapter =
+          createProductionReviewInvestigationInvocation({
+            rollout: investigationRollout,
+            create: () =>
+              new CodexReviewInvocationAdapter(
+                provider,
+                new PromptBuilder(
+                  config,
+                  'standard',
+                  undefined,
+                  undefined,
+                  undefined,
+                  reviewSkills
+                ),
+                planned.assignments,
+                providerTimeoutMs,
+                agenticContext,
+                contextGateway,
+                true,
+                reasoningEffort,
+                input.providerApi?.credentialLease,
+                gatewayModelSettings,
+                reviewMemory
+              ),
+          });
+        const investigationProtocol = investigationRecordingEnabled
+          ? new ReviewActionV2InvestigationAdapter(reviewActionClient)
+          : undefined;
+        const investigationRecording =
+          investigationProtocol && contextGatewayOptions
+            ? new ReviewInvestigationRecordingAdapter(
+                (recordingInput) => {
+                  const legacyFallbackGate =
+                    new ReviewInvestigationLegacyFallbackGate();
+                  if (input.accountGateway) legacyFallbackGate.close();
+                  const investigationControlPlane =
+                    new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
+                      investigationProtocol,
+                      legacyFallbackGate
+                    );
+                  const currency =
+                    new RevisionGuardInvestigationCurrencyAdapter(
+                      revisionGuard
+                    );
+                  const investigationGatewayFactory =
+                    createProductionReviewInvestigationGatewayFactory(
+                      new ContextGatewayInvocationSessionFactory(
+                        new ReviewActionV2InvestigationContextAttestationAdapter(
+                          reviewActionClient,
+                          recordingInput.authorization.authorizationToken
+                        ),
+                        contextGatewayOptions,
+                        requiredContextWitness
+                      )
+                    );
+                  const gateway = new ContextGatewayV4InvestigationAdapter(
+                    investigationGatewayFactory,
+                    {
+                      revision: {
+                        baseSha: authorization.facts.baseSha,
+                        mergeBaseSha: authorization.facts.mergeBaseSha,
+                        headSha: authorization.facts.headSha,
+                      },
+                      preparedManifestKey: recordingInput.manifest.manifestKey,
+                      providerKind:
+                        recordingInput.invocation.manifestFacts.providerKind,
+                      requestedModel: recordingInput.invocation.requestedModel,
+                      executionProfile:
+                        recordingInput.invocation.manifestFacts
+                          .executionProfile,
+                      providerInvocationKey:
+                        recordingInput.manifest.providerInvocationKey,
+                      toolPolicyHash:
+                        recordingInput.invocation.manifestFacts.toolPolicyHash,
+                    }
+                  );
+                  const agents =
+                    createProductionReviewInvestigationAgentSelector({
+                      authorization,
+                      primaryProviderKind: ReviewAgentProviderKind.Codex,
+                      contextCriticEnabled:
+                        investigationRollout.contextCriticEnabled,
+                      agents: createConfiguredProductionInvestigationAgents({
+                        approvedAgent,
+                        ...(input.providerApi
+                          ? {
+                              directCredentialLease:
+                                input.providerApi.credentialLease,
+                              directModelProvider:
+                                directProvider!.modelProvider,
+                            }
+                          : {}),
+                        codexModel: model,
+                        codexBinaryPath: input.codexBinaryPath,
+                        executionSessions: gateway,
+                        modelTransport:
+                          input.providerApi?.modelTransport ??
+                          input.accountGateway?.modelTransport,
+                        admittedGatewayModel:
+                          input.accountGateway?.runtimeConfig.runtimeEnv
+                            .CODEX_MODEL,
+                        reasoningEffort,
+                        gatewayModelSettings,
+                      }),
+                    });
+                  return new RunInvestigationWorkSlot({
+                    controlPlane: investigationControlPlane,
+                    legacyFallbackGate,
+                    delay: new CancellableReviewOrchestrationDelay(),
+                    leases: new ReviewActionV2InvestigationLeaseAdapter(
+                      reviewActionClient
+                    ),
+                    ...(investigationRollout.crossRevisionReplayEnabled &&
+                    contextReplayRunner
+                      ? {
+                          replay: new ReplayInvestigationOnRevision({
+                            controlPlane: investigationControlPlane,
+                            receipts: contextReplayRunner,
+                            currency,
+                          }),
+                        }
+                      : {}),
+                    turnRunner: new RunInvestigationTurn({
+                      controlPlane: investigationControlPlane,
+                      currency,
+                      gateway,
+                      agents,
+                      diagnostics:
+                        new LoggingInvestigationOperationalDiagnostics(logger),
+                      now: () => new Date(),
+                    }),
+                  });
+                },
+                {
+                  workingDirectory: path.resolve(input.workspacePath),
+                  leaseDurationMs: providerTimeoutMs + 5 * 60_000,
+                  providerTimeoutMs: providerTimeoutMs,
+                  certificateTtlMs: 24 * 60 * 60_000,
+                  minimumCapacityParkMs: 60_000,
+                  actionBudget: reviewInvestigationActionBudgetForDepth(
+                    config.reviewDepth
+                  ),
+                  policy: REVIEW_INVESTIGATION_PRODUCTION_POLICY,
+                },
+                productionReviewInvestigationRecordingMode(
+                  investigationRollout
+                ),
+                investigationRollout.verifiedCleanEnabled
+              )
+            : undefined;
+        if (
+          prDescription &&
+          !planned.plan.assignments.some(
+            (assignment) =>
+              assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
           )
-            core.warning(
-              'AI PR description omitted: no optional task budget remains.'
-            );
-          const useCase = new RunT0ReviewOrchestration({
+        )
+          core.warning(
+            'AI PR description omitted: no optional task budget remains.'
+          );
+        const nativeDiscoveryInvocations = observeNativeReviewSkillsSupply(
+          invocationAdapter,
+          skillsReceiptCollector,
+          () =>
+            (
+              input.providerApi?.modelTransport ??
+              input.accountGateway?.modelTransport
+            )?.requestCount?.()
+        );
+        return {
+          dependencies: {
             ...(prDescription ? { prDescription } : {}),
             controlPlane,
             revisionGuard,
@@ -882,29 +1662,32 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               new GeneratedProviderInvocationManifestAssembler(
                 authorization,
                 config,
-                ocrCompatibilityKey
+                compatibilityKey
               )
             ),
             invocations: preplanningRestore?.persistedPlan
               ? restoredLifecycleInvocations(
                   preplanningRestore,
-                  invocationAdapter
+                  nativeDiscoveryInvocations
                 )
               : lifecycle && lifecycleCapability
                 ? compositeLifecycleInvocations({
-                    discovery: invocationAdapter,
+                    discovery: nativeDiscoveryInvocations,
                     packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
                     capability: lifecycleCapability,
                     outputCap: lifecycle.outputCap,
                     reviewRevisionHash: authorization.facts.reviewRevisionHash,
                     liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
-                    transport: modelTransport,
+                    transport: input.accountGateway!.modelTransport,
                   })
-                : invocationAdapter,
+                : nativeDiscoveryInvocations,
             memoryAdmission,
+            ...(investigationInvocationAdapter
+              ? { investigationInvocations: investigationInvocationAdapter }
+              : {}),
             invocationFailureClassifier:
               new ProviderInvocationFailureClassifier(
-                modelTransport.failureFact
+                input.accountGateway?.modelTransport.failureFact
               ),
             invocationDiagnostics: new LoggingReviewInvocationDiagnostics(
               logger
@@ -913,6 +1696,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               logger
             ),
             leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+            ...(investigationRecording ? { investigationRecording } : {}),
             projectionBuilder: createProductionReviewProjectionBuilder({
               authorizationFacts: authorization.facts,
               pr,
@@ -922,6 +1706,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 workSlotId: assignment.workSlot.workSlotId,
                 taskKind: assignment.workSlot.taskKind,
                 providerKind: assignment.workSlot.providerKind,
+                providerVoteIdentityHash:
+                  assignment.workSlot.providerVoteIdentityHash,
                 required: assignment.workSlot.required,
                 filePaths:
                   planned.assignments
@@ -940,484 +1726,27 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 : {}),
               skillsReceipt,
             }),
+            ...(contextGateway
+              ? {
+                  contextReplay: contextReplayRunner,
+                  contextAttestations: controlPlane,
+                }
+              : {}),
             identities,
             clock: new SystemReviewOrchestrationClock(),
             delay: new CancellableReviewOrchestrationDelay(),
             executionDeadline,
             signal,
             ...(this.progress ? { progress: this.progress } : {}),
-          });
-          const result = await useCase.executeAuthorized(
-            {
-              executionId: identities.deterministicId('execution', [
-                authorization.authorizationId,
-                authorization.facts.reviewRevisionHash,
-                planned.plan.planHash,
-              ]),
-              baseSha: authorization.facts.baseSha,
-              mergeBaseSha: authorization.facts.mergeBaseSha,
-              headSha: authorization.facts.headSha,
-              reviewRevisionHash: authorization.facts.reviewRevisionHash,
-              compatibilityKey: ocrCompatibilityKey,
-              planHash: planned.plan.planHash,
-              workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
-              assignmentManifestCanonicalJson:
-                planned.plan.assignmentManifestCanonicalJson,
-              assignmentManifestHash: planned.plan.assignmentManifestHash,
-              workSlots: planned.plan.assignments.map(
-                (assignment) => assignment.workSlot
-              ),
-              sourceRunId: authorization.facts.sourceRunId,
-              sourceRunAttempt: authorization.facts.sourceRunAttempt,
-              ownerIdHash: sha256(
-                canonicalJson({
-                  authorizationId: authorization.authorizationId,
-                  providerInstanceId: input.providerInstanceId,
-                  sourceRunAttempt: authorization.facts.sourceRunAttempt,
-                  sourceRunId: authorization.facts.sourceRunId,
-                })
-              ),
-              allowPartial: true,
-              ...(preplanningRestore
-                ? { restoredExecution: preplanningRestore, restoreOnly: true }
-                : {}),
-            },
-            authorization
-          );
-          signal?.throwIfAborted();
-          return mapOrchestrationResultToCodexOutcome(result);
-        } finally {
-          modelTransport.setContextToolsGuard?.(undefined);
-          await contextTools?.close();
-        }
-      }
-      const agenticContext = config.codexAgenticContext ?? true;
-      const investigationRolloutResolution =
-        resolveProductionReviewInvestigationRolloutResolution({
-          flags: readProductionReviewInvestigationRolloutFlags(),
-          agenticContext,
-          authorization,
-          primaryProviderKind: ReviewExecutionProviderKind.Codex,
-          reviewDepth: config.reviewDepth,
-        });
-      const investigationRollout = investigationRolloutResolution.rollout;
-      emitReviewInvestigationTelemetry(
-        formatProductionReviewInvestigationRolloutTelemetry(
-          investigationRolloutResolution
-        )
-      );
-      const investigationRecordingEnabled =
-        investigationRollout.recordingEnabled;
-      const provider = new CodexProvider(model, {
-        ...(usageDelivery
-          ? {
-              usageDelivery,
-              usageUpstreamBaseUrl:
-                process.env.REVIEW_AUTH_MODE === 'openai-api'
-                  ? 'https://api.openai.com/v1'
-                  : input.providerInstanceId ||
-                      process.env.REVIEW_AUTH_MODE === 'codex-oauth'
-                    ? 'https://chatgpt.com/backend-api/codex'
-                    : undefined,
-            }
-          : {}),
-
-        agenticContext,
-        eventAudit: config.codexEventAudit,
-        modelProvider: input.providerApi
-          ? directProvider!.modelProvider
-          : resolveAccountGatewayModelProvider(
-              model,
-              input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-              input.accountGateway?.modelTransport
-            ),
-        ...(input.providerApi
-          ? {
-              providerNamePrefix:
-                directProvider!.mode === 'kimi-code-api'
-                  ? ('kimi' as const)
-                  : directProvider!.mode === 'mimo-token-plan-api'
-                    ? ('codex-mimo' as const)
-                    : ('openrouter' as const),
-              providerApiTransport: input.providerApi.modelTransport,
-              disableBuiltinTools: true,
-              waitForProcessClose: true,
-            }
-          : {}),
-        ...(input.accountGateway
-          ? {
-              accountGateway: input.accountGateway.modelTransport,
-              ...(gatewayModelSettings
-                ? {
-                    accountGatewayModelSettings: gatewayModelSettings,
-                    accountGatewaySavedReasoningEffort: serverReasoningEffort,
-                  }
-                : {}),
-            }
-          : {}),
-      });
-      const compatibilityKey = hashIncrementalCompatibility(
-        config,
-        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
-        reviewSkillsCacheIdentity(reviewSkills)
-      );
-      const gatewayBundlePath = resolveContextGatewayBundlePath();
-      const requiredContextWitness =
-        new SubprocessRequiredContextWitnessRunner();
-      const contextGatewayOptions =
-        resolveProductionContextGatewaySessionFactoryOptions({
-          agenticContext,
-          investigationRecordingEnabled,
-          checkoutRoot: path.resolve(input.workspacePath),
-          gatewayBundlePath,
-        });
-      const contextGateway = contextGatewayOptions
-        ? new ContextGatewayInvocationSessionFactory(
-            controlPlane,
-            contextGatewayOptions,
-            requiredContextWitness
-          )
-        : undefined;
-      const contextReplayRunner = contextGateway
-        ? new ContextAttestationReplayRunner({
-            checkoutRoot: path.resolve(input.workspacePath),
-            gatewayBundlePath,
-          })
-        : undefined;
-      const prDescription = createPrDescriptionGeneration({
-        enabled: config.updatePrDescription,
-        scopedCompanionDispatch:
-          !!admittedRuntime?.runtimeEnv[
-            lifecycleVerificationContract.capabilityRuntimeEnvKey
-          ],
-        capabilityJson:
-          admittedRuntime?.runtimeEnv[
-            prDescriptionContract.capabilityRuntimeEnvKey
-          ],
-        pr,
-        reviewRevisionHash: authorization.facts.reviewRevisionHash,
-        requestedModel: model,
-        providerKind: ReviewExecutionProviderKind.Codex,
-        language: config.outputLanguage,
-        config,
-        transport:
-          input.providerApi?.modelTransport ??
-          input.accountGateway?.modelTransport,
-        memorySnapshot: descriptionMemory.current(),
-        warn: core.warning,
-      });
-      const lifecycleCapability =
-        config.reviewThreadLifecycle !== 'off' && input.accountGateway
-          ? readLifecycleCapability(
-              admittedRuntime?.runtimeEnv[
-                lifecycleVerificationContract.capabilityRuntimeEnvKey
-              ],
-              model,
-              ReviewExecutionProviderKind.Codex
-            )
-          : undefined;
-      let planned = planAssignments({
-        prDescriptionEnabled: prDescription !== undefined,
-        authorization,
-        pr,
-        config,
-        providerName: provider.name,
-        compatibilityKey,
-        lifecycleTargets: selectLegacyLifecycleTargets(
-          config.reviewThreadLifecycle,
-          admittedRuntime?.runtimeEnv[
-            lifecycleVerificationContract.capabilityRuntimeEnvKey
-          ],
-          initialLifecycle.promptTargets
-        ),
-        liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
-        accountGateway: input.accountGateway !== undefined,
-      });
-      assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
-      // Existing executions never select new companion work or reset its allowance.
-      const lifecycle = preplanningRestore
-        ? restoreProductionLifecycleVerification(
-            preplanningRestore,
-            planned.plan,
-            config
-          )
-        : lifecycleCapability
-          ? await planProductionLifecycleVerification({
-              capability: lifecycleCapability,
-              authorization,
-              plan: planned.plan,
-              repository: input.repository,
-              checkoutRoot: path.resolve(input.workspacePath),
-              compatibilityKey,
-              config,
-              inventory: initialLifecycle.inventory,
-              targets: initialLifecycle.revalidationTargets,
-              resolutionHistory,
-              renames: pr.files
-                .filter((file) => !!file.previousFilename)
-                .map((file) => ({
-                  previousFilename: file.previousFilename!,
-                  filename: file.filename,
-                })),
-            })
-          : undefined;
-      if (
-        preplanningRestore?.persistedPlan?.compatibilityKey &&
-        preplanningRestore.persistedPlan.compatibilityKey !== compatibilityKey
-      )
-        throw new Error('review_restore_compatibility_changed');
-      const finalPlan = restorePersistedWorkPlan(
-        preplanningRestore,
-        lifecycle?.plan ?? planned.plan
-      );
-      planned = {
-        ...planned,
-        plan: finalPlan,
-        assignments: rebindReviewAssignmentsToWorkPlan(
-          planned.assignments,
-          finalPlan
-        ),
-      };
-      const invocationAdapter = new CodexReviewInvocationAdapter(
-        provider,
-        new PromptBuilder(
-          config,
-          'standard',
-          undefined,
-          undefined,
-          undefined,
-          reviewSkills
-        ),
-        planned.assignments,
-        providerTimeoutMs,
-        agenticContext,
-        contextGateway,
-        false,
-        input.providerApi || gatewayModelSettings ? reasoningEffort : 'xhigh',
-        input.providerApi?.credentialLease,
-        gatewayModelSettings,
-        reviewMemory
-      );
-      const investigationInvocationAdapter =
-        createProductionReviewInvestigationInvocation({
-          rollout: investigationRollout,
-          create: () =>
-            new CodexReviewInvocationAdapter(
-              provider,
-              new PromptBuilder(
-                config,
-                'standard',
-                undefined,
-                undefined,
-                undefined,
-                reviewSkills
-              ),
-              planned.assignments,
-              providerTimeoutMs,
-              agenticContext,
-              contextGateway,
-              true,
-              reasoningEffort,
-              input.providerApi?.credentialLease,
-              gatewayModelSettings,
-              reviewMemory
-            ),
-        });
-      const identities = new DeterministicReviewOrchestrationIdentity();
-      const investigationProtocol = investigationRecordingEnabled
-        ? new ReviewActionV2InvestigationAdapter(reviewActionClient)
-        : undefined;
-      const investigationRecording =
-        investigationProtocol && contextGatewayOptions
-          ? new ReviewInvestigationRecordingAdapter(
-              (recordingInput) => {
-                const legacyFallbackGate =
-                  new ReviewInvestigationLegacyFallbackGate();
-                if (input.accountGateway) legacyFallbackGate.close();
-                const investigationControlPlane =
-                  new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
-                    investigationProtocol,
-                    legacyFallbackGate
-                  );
-                const currency = new RevisionGuardInvestigationCurrencyAdapter(
-                  revisionGuard
-                );
-                const investigationGatewayFactory =
-                  createProductionReviewInvestigationGatewayFactory(
-                    new ContextGatewayInvocationSessionFactory(
-                      new ReviewActionV2InvestigationContextAttestationAdapter(
-                        reviewActionClient,
-                        recordingInput.authorization.authorizationToken
-                      ),
-                      contextGatewayOptions,
-                      requiredContextWitness
-                    )
-                  );
-                const gateway = new ContextGatewayV4InvestigationAdapter(
-                  investigationGatewayFactory,
-                  {
-                    revision: {
-                      baseSha: authorization.facts.baseSha,
-                      mergeBaseSha: authorization.facts.mergeBaseSha,
-                      headSha: authorization.facts.headSha,
-                    },
-                    preparedManifestKey: recordingInput.manifest.manifestKey,
-                    providerKind:
-                      recordingInput.invocation.manifestFacts.providerKind,
-                    requestedModel: recordingInput.invocation.requestedModel,
-                    executionProfile:
-                      recordingInput.invocation.manifestFacts.executionProfile,
-                    providerInvocationKey:
-                      recordingInput.manifest.providerInvocationKey,
-                    toolPolicyHash:
-                      recordingInput.invocation.manifestFacts.toolPolicyHash,
-                  }
-                );
-                const agents = createProductionReviewInvestigationAgentSelector(
-                  {
-                    authorization,
-                    primaryProviderKind: ReviewAgentProviderKind.Codex,
-                    contextCriticEnabled:
-                      investigationRollout.contextCriticEnabled,
-                    agents: createConfiguredProductionInvestigationAgents({
-                      approvedAgent,
-                      ...(input.providerApi
-                        ? {
-                            directCredentialLease:
-                              input.providerApi.credentialLease,
-                            directModelProvider: directProvider!.modelProvider,
-                          }
-                        : {}),
-                      codexModel: model,
-                      codexBinaryPath: input.codexBinaryPath,
-                      executionSessions: gateway,
-                      modelTransport:
-                        input.providerApi?.modelTransport ??
-                        input.accountGateway?.modelTransport,
-                      admittedGatewayModel:
-                        input.accountGateway?.runtimeConfig.runtimeEnv
-                          .CODEX_MODEL,
-                      reasoningEffort,
-                      gatewayModelSettings,
-                    }),
-                  }
-                );
-                return new RunInvestigationWorkSlot({
-                  controlPlane: investigationControlPlane,
-                  legacyFallbackGate,
-                  delay: new CancellableReviewOrchestrationDelay(),
-                  leases: new ReviewActionV2InvestigationLeaseAdapter(
-                    reviewActionClient
-                  ),
-                  ...(investigationRollout.crossRevisionReplayEnabled &&
-                  contextReplayRunner
-                    ? {
-                        replay: new ReplayInvestigationOnRevision({
-                          controlPlane: investigationControlPlane,
-                          receipts: contextReplayRunner,
-                          currency,
-                        }),
-                      }
-                    : {}),
-                  turnRunner: new RunInvestigationTurn({
-                    controlPlane: investigationControlPlane,
-                    currency,
-                    gateway,
-                    agents,
-                    diagnostics: new LoggingInvestigationOperationalDiagnostics(
-                      logger
-                    ),
-                    now: () => new Date(),
-                  }),
-                });
-              },
-              {
-                workingDirectory: path.resolve(input.workspacePath),
-                leaseDurationMs: providerTimeoutMs + 5 * 60_000,
-                providerTimeoutMs: providerTimeoutMs,
-                certificateTtlMs: 24 * 60 * 60_000,
-                minimumCapacityParkMs: 60_000,
-                actionBudget: reviewInvestigationActionBudgetForDepth(
-                  config.reviewDepth
-                ),
-                policy: REVIEW_INVESTIGATION_PRODUCTION_POLICY,
-              },
-              productionReviewInvestigationRecordingMode(investigationRollout),
-              investigationRollout.verifiedCleanEnabled
-            )
-          : undefined;
-      if (
-        prDescription &&
-        !planned.plan.assignments.some(
-          (assignment) =>
-            assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
-        )
-      )
-        core.warning(
-          'AI PR description omitted: no optional task budget remains.'
-        );
-      const nativeDiscoveryInvocations = observeNativeReviewSkillsSupply(
-        invocationAdapter,
-        skillsReceiptCollector,
-        () =>
-          (
-            input.providerApi?.modelTransport ??
-            input.accountGateway?.modelTransport
-          )?.requestCount?.()
-      );
-      const useCase = new RunT0ReviewOrchestration({
-        ...(prDescription ? { prDescription } : {}),
-        controlPlane,
-        revisionGuard,
-        oidc: {
-          getToken: () => oidc.requestToken(input.audience),
-        },
-        invocationManifestAssembler: restoredLifecycleManifestAssembler(
-          preplanningRestore,
-          new GeneratedProviderInvocationManifestAssembler(
-            authorization,
-            config,
-            compatibilityKey
-          )
-        ),
-        invocations: preplanningRestore?.persistedPlan
-          ? restoredLifecycleInvocations(
-              preplanningRestore,
-              nativeDiscoveryInvocations
-            )
-          : lifecycle && lifecycleCapability
-            ? compositeLifecycleInvocations({
-                discovery: nativeDiscoveryInvocations,
-                packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
-                capability: lifecycleCapability,
-                outputCap: lifecycle.outputCap,
-                reviewRevisionHash: authorization.facts.reviewRevisionHash,
-                liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
-                transport: input.accountGateway!.modelTransport,
-              })
-            : nativeDiscoveryInvocations,
-        memoryAdmission,
-        ...(investigationInvocationAdapter
-          ? { investigationInvocations: investigationInvocationAdapter }
-          : {}),
-        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
-          input.accountGateway?.modelTransport.failureFact
-        ),
-        invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
-        investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
-          logger
-        ),
-        leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
-        ...(investigationRecording ? { investigationRecording } : {}),
-        projectionBuilder: createProductionReviewProjectionBuilder({
-          authorizationFacts: authorization.facts,
-          pr,
-          config,
-          protocolLimits: authorization.limits,
+          },
+          plan: planned.plan,
+          compatibilityKey: compatibilityKey,
           assignments: planned.plan.assignments.map((assignment) => ({
             workSlotId: assignment.workSlot.workSlotId,
             taskKind: assignment.workSlot.taskKind,
             providerKind: assignment.workSlot.providerKind,
+            providerVoteIdentityHash:
+              assignment.workSlot.providerVoteIdentityHash,
             required: assignment.workSlot.required,
             filePaths:
               planned.assignments
@@ -1429,47 +1758,221 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           })),
           uncoveredPaths: planned.uncoveredPaths,
           uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
-          lifecycleInventory,
-          ...(lifecycle?.lifecycleVerification
-            ? { lifecycleVerification: lifecycle.lifecycleVerification }
-            : {}),
-          skillsReceipt,
-        }),
-        ...(contextGateway
+          lifecycleVerification: lifecycle?.lifecycleVerification,
+          cleanup: async () => {},
+        };
+      };
+      const preparedLanes: ProductionReviewLane[] = [];
+      try {
+        const runtimes = input.accountGateway?.reviewers;
+        if (reviewerPlan && runtimes) {
+          if (
+            runtimes.length !== reviewerPlan.reviewers.length ||
+            runtimes.some(
+              (runtime, index) =>
+                runtime.reviewer.reviewerId !==
+                reviewerPlan.reviewers[index]?.reviewerId
+            )
+          )
+            throw new Error('review_action_v2_reviewer_sessions_mismatch');
+          const budgets = planReviewerSlotBudgets({
+            runtimes,
+            authorization,
+            pr,
+            config: parentConfig,
+            compatibilityKey: commonCompatibilityKey!,
+            lifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+          });
+          for (const runtime of runtimes) {
+            const laneInput = {
+              ...input,
+              codexHome: runtime.codexHome,
+              codexBinaryPath: runtime.codexBinaryPath,
+              ocr: runtime.ocr,
+              accountGateway: {
+                ...input.accountGateway!,
+                runtimeConfig: runtime.runtimeConfig,
+                modelTransport: runtime.modelTransport,
+              },
+            };
+            preparedLanes.push(
+              await prepareLane(
+                laneInput,
+                runtime.reviewer,
+                budgets.get(runtime.reviewer.reviewerId),
+                runtime.bootstrapFailure === true
+              )
+            );
+          }
+        } else preparedLanes.push(await prepareLane(input));
+        const primaryIndex = reviewerPlan
+          ? reviewerPlan.reviewers.findIndex(
+              (reviewer) =>
+                reviewer.reviewerId === reviewerPlan.primaryReviewerId
+            )
+          : 0;
+        const primary = preparedLanes[primaryIndex];
+        const combined = reviewerPlan
+          ? combineProductionReviewLanes(
+              preparedLanes,
+              commonCompatibilityKey!,
+              authorization
+            )
+          : primary;
+        const plan = restorePersistedWorkPlan(parentRestore, combined.plan);
+        assertLegacyReviewPlanRestorable(parentRestore, plan);
+        const compatibilityKey = combined.compatibilityKey;
+        if (
+          parentRestore?.persistedPlan?.compatibilityKey &&
+          parentRestore.persistedPlan.compatibilityKey !== compatibilityKey
+        )
+          throw new Error('review_restore_compatibility_changed');
+        const byVote = new Map(
+          preparedLanes.map((lane, index) => [
+            reviewerPlan?.reviewers[index].providerVoteIdentityHash ??
+              lane.plan.assignments[0].workSlot.providerVoteIdentityHash,
+            lane,
+          ])
+        );
+        const route = (slot: { providerVoteIdentityHash: string }) => {
+          const lane = byVote.get(slot.providerVoteIdentityHash);
+          if (!lane) throw new Error('review_action_v2_reviewer_vote_missing');
+          return lane;
+        };
+        const slots = new Map(
+          plan.assignments.map((assignment) => [
+            assignment.workSlot.workSlotId,
+            assignment.workSlot,
+          ])
+        );
+        const invocationSlot = (invocation: { workSlotId: string }) => {
+          const slot = slots.get(invocation.workSlotId);
+          if (!slot) throw new Error('review_action_v2_reviewer_slot_missing');
+          return slot;
+        };
+        const laneInvocations: import('../application').PreparedReviewInvocationPort =
+          {
+            prepare: (request) =>
+              route(request.workSlot).dependencies.invocations.prepare(request),
+            execute: (request) =>
+              route(
+                invocationSlot(request.invocation)
+              ).dependencies.invocations.execute(request),
+          };
+        const lifecycleVerification = parentRestore
+          ? restoreProductionLifecycleVerification(
+              parentRestore,
+              plan,
+              parentConfig
+            ).lifecycleVerification
+          : primary.lifecycleVerification;
+        const modelTransports = new Map(
+          runtimes?.map((runtime) => [
+            runtime.reviewer.providerVoteIdentityHash,
+            runtime.modelTransport,
+          ]) ?? []
+        );
+        const dependencies: RunT0ReviewOrchestrationDependencies = reviewerPlan
           ? {
-              contextReplay: contextReplayRunner,
-              contextAttestations: controlPlane,
+              ...primary.dependencies,
+              memoryAdmission,
+              invocations: parentRestore?.persistedPlan
+                ? restoredLifecycleInvocations(parentRestore, laneInvocations)
+                : laneInvocations,
+              invocationManifestAssembler: restoredLifecycleManifestAssembler(
+                parentRestore,
+                {
+                  assemble: (invocation) =>
+                    route(
+                      invocationSlot(invocation)
+                    ).dependencies.invocationManifestAssembler.assemble(
+                      invocation
+                    ),
+                }
+              ),
+              investigationInvocations: {
+                prepare: (request) => {
+                  const port = route(request.workSlot).dependencies
+                    .investigationInvocations;
+                  if (!port)
+                    throw new Error(
+                      'review_investigation_reviewer_unavailable'
+                    );
+                  return port.prepare(request);
+                },
+                execute: (request) => {
+                  const port = route(invocationSlot(request.invocation))
+                    .dependencies.investigationInvocations;
+                  if (!port)
+                    throw new Error(
+                      'review_investigation_reviewer_unavailable'
+                    );
+                  return port.execute(request);
+                },
+              },
+              resolveInvestigationRecording: (slot) =>
+                route(slot).dependencies.investigationRecording,
+              ...(preparedLanes.some((lane) => lane.dependencies.contextReplay)
+                ? {
+                    contextReplay: {
+                      replay: (request) =>
+                        route(
+                          request.candidate.observation
+                        ).dependencies.contextReplay?.replay(request) ??
+                        Promise.resolve(null),
+                    },
+                    contextAttestations: controlPlane,
+                  }
+                : {}),
+              invocationFailureClassifier:
+                new ProviderInvocationFailureClassifier((context) =>
+                  context
+                    ? modelTransports
+                        .get(context.workSlot.providerVoteIdentityHash)
+                        ?.failureFact()
+                    : undefined
+                ),
+              reviewerScheduling: {
+                maxParallelReviewers: reviewerPlan.maxParallelReviewers,
+                reviewers: reviewerPlan.reviewers,
+                concurrencyGroups: reviewerPlan.concurrencyGroups.map(
+                  (group) => ({
+                    id: group.concurrencyGroupId,
+                    maxParallel: group.maxParallel,
+                  })
+                ),
+              },
+              projectionBuilder: createProductionReviewProjectionBuilder({
+                authorizationFacts: authorization.facts,
+                pr,
+                config: {
+                  ...parentConfig,
+                  inlineMinAgreement: reviewerPlan.inlineMinAgreement,
+                },
+                protocolLimits: authorization.limits,
+                assignments: combined.assignments,
+                uncoveredPaths: combined.uncoveredPaths,
+                uncoveredLifecycleTargetIds:
+                  combined.uncoveredLifecycleTargetIds,
+                lifecycleInventory,
+                ...(lifecycleVerification ? { lifecycleVerification } : {}),
+                skillsReceipt,
+              }),
             }
-          : {}),
-        identities,
-        clock: new SystemReviewOrchestrationClock(),
-        delay: new CancellableReviewOrchestrationDelay(),
-        executionDeadline,
-        signal,
-        ...(this.progress ? { progress: this.progress } : {}),
-      });
-      const result = await useCase.executeAuthorized(
-        {
+          : primary.dependencies;
+        const command: RunT0ReviewOrchestrationCommand = {
           executionId: identities.deterministicId('execution', [
             authorization.authorizationId,
             authorization.facts.reviewRevisionHash,
-            planned.plan.planHash,
+            plan.planHash,
           ]),
-          baseSha: authorization.facts.baseSha,
-          mergeBaseSha: authorization.facts.mergeBaseSha,
-          headSha: authorization.facts.headSha,
-          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          ...authorization.facts,
           compatibilityKey,
-          planHash: planned.plan.planHash,
-          workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
-          assignmentManifestCanonicalJson:
-            planned.plan.assignmentManifestCanonicalJson,
-          assignmentManifestHash: planned.plan.assignmentManifestHash,
-          workSlots: planned.plan.assignments.map(
-            (assignment) => assignment.workSlot
-          ),
-          sourceRunId: authorization.facts.sourceRunId,
-          sourceRunAttempt: authorization.facts.sourceRunAttempt,
+          planHash: plan.planHash,
+          workSlotsCanonicalJson: plan.workSlotsCanonicalJson,
+          assignmentManifestCanonicalJson: plan.assignmentManifestCanonicalJson,
+          assignmentManifestHash: plan.assignmentManifestHash,
+          workSlots: plan.assignments.map((assignment) => assignment.workSlot),
           ownerIdHash: sha256(
             canonicalJson({
               authorizationId: authorization.authorizationId,
@@ -1479,14 +1982,18 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             })
           ),
           allowPartial: true,
-          ...(preplanningRestore
-            ? { restoredExecution: preplanningRestore, restoreOnly: true }
+          ...(parentRestore
+            ? { restoredExecution: parentRestore, restoreOnly: true }
             : {}),
-        },
-        authorization
-      );
-      signal?.throwIfAborted();
-      return mapOrchestrationResultToCodexOutcome(result);
+        };
+        const result = await new RunT0ReviewOrchestration(
+          dependencies
+        ).executeAuthorized(command, authorization);
+        signal?.throwIfAborted();
+        return mapOrchestrationResultToCodexOutcome(result);
+      } finally {
+        for (const lane of preparedLanes) await lane.cleanup();
+      }
     } finally {
       await usageDelivery?.cleanup();
     }
@@ -2595,6 +3102,9 @@ export function assertLegacyReviewPlanRestorable(
 }
 
 export function planAssignments(input: {
+  readonly maxDiscoverySlots?: number;
+  readonly reviewerId?: string;
+  readonly reviewerRequired?: boolean;
   readonly prDescriptionEnabled?: boolean;
   readonly accountGateway?: boolean;
   readonly authorization: ReviewRunAuthorization;
@@ -2631,13 +3141,17 @@ export function planAssignments(input: {
     input.providerName,
   ]);
   const allBatches = tokenSafeBatches.length === 0 ? [[]] : tokenSafeBatches;
-  const batches = allBatches.slice(0, maxSlots);
+  const discoverySlots = Math.min(
+    maxSlots,
+    input.maxDiscoverySlots ?? maxSlots
+  );
+  const batches = allBatches.slice(0, discoverySlots);
   // Optional generation never displaces a required review assignment.
   const descriptionEnabled =
     input.prDescriptionEnabled === true && batches.length < maxSlots;
   const uncoveredPaths = Object.freeze(
     allBatches
-      .slice(maxSlots)
+      .slice(discoverySlots)
       .flatMap((batch) => batch.map((file) => file.filename))
       .sort()
   );
@@ -2704,10 +3218,12 @@ export function planAssignments(input: {
     compatibilityKey: input.compatibilityKey,
     providers: [
       {
-        providerName: input.providerName,
+        providerName: input.reviewerId
+          ? `${input.providerName}:${input.reviewerId}`
+          : input.providerName,
         providerKind: ReviewExecutionProviderKind.Codex,
         providerVoteIdentityHash: codexLanes[0].providerVoteIdentityHash,
-        required: true,
+        required: input.reviewerRequired ?? true,
         attemptBudget,
         retryPolicyVersion: input.accountGateway
           ? 'account-gateway-no-replay.v1'
@@ -3038,3 +3554,152 @@ class CancellableReviewOrchestrationDelay extends SystemReviewOrchestrationDelay
     });
   }
 }
+
+type ProductionReviewLane = Readonly<{
+  dependencies: RunT0ReviewOrchestrationDependencies;
+  plan: StableReviewWorkPlan;
+  compatibilityKey: string;
+  assignments: readonly ProductionWorkAssignmentFacts[];
+  uncoveredPaths: readonly string[];
+  uncoveredLifecycleTargetIds: readonly string[];
+  lifecycleVerification?: ProductionLifecycleVerificationPlan;
+  cleanup(): Promise<void>;
+}>;
+
+/** Retain each engine's existing planner; combine exact lane assignments once. */
+function combineProductionReviewLanes(
+  lanes: readonly ProductionReviewLane[],
+  compatibilityKey: string,
+  authorization: ReviewRunAuthorization
+): ProductionReviewLane {
+  const assignments = lanes.flatMap((lane) => lane.plan.assignments);
+  if (assignments.length > authorization.limits.maxWorkSlots)
+    throw new Error('review_work_plan_slot_limit_exceeded');
+  const manifests = lanes.map(
+    (lane) =>
+      JSON.parse(lane.plan.assignmentManifestCanonicalJson) as {
+        assignments: { workSlotId: string; paths: string[] }[];
+        eligiblePaths: string[];
+        excludedPaths: string[];
+        lifecyclePlan?: unknown;
+      }
+  );
+  const eligiblePaths = [
+    ...new Set(manifests.flatMap((manifest) => manifest.eligiblePaths)),
+  ].sort();
+  const assignedPaths = new Set(
+    manifests.flatMap((manifest) =>
+      manifest.assignments.flatMap((assignment) => assignment.paths)
+    )
+  );
+  const lifecyclePlan = manifests.find(
+    (manifest) => manifest.lifecyclePlan !== undefined
+  )?.lifecyclePlan;
+  const manifest = createStableReviewAssignmentManifest({
+    assignments: manifests.flatMap((manifest) => manifest.assignments),
+    eligiblePaths,
+    uncoveredPaths: eligiblePaths.filter((path) => !assignedPaths.has(path)),
+    excludedPaths: manifests.flatMap((manifest) => manifest.excludedPaths),
+    ...(lifecyclePlan !== undefined ? { lifecyclePlan } : {}),
+  });
+  const workSlots = assignments
+    .map((assignment) => assignment.workSlot)
+    .sort((left, right) => (left.workSlotId < right.workSlotId ? -1 : 1));
+  const workSlotsCanonicalJson = canonicalJson(workSlots);
+  const planHash = sha256(
+    `rr.review-work-plan.v2\0${canonicalJson({
+      assignmentManifestHash: manifest.assignmentManifestHash,
+      compatibilityKey,
+      reviewRevisionHash: authorization.facts.reviewRevisionHash,
+      workSlots,
+    })}`
+  );
+  return {
+    ...lanes[0],
+    compatibilityKey,
+    plan: { ...manifest, workSlotsCanonicalJson, planHash, assignments },
+    assignments: lanes.flatMap((lane) => lane.assignments),
+    uncoveredPaths: [
+      ...new Set(lanes.flatMap((lane) => lane.uncoveredPaths)),
+    ].sort(),
+    uncoveredLifecycleTargetIds: [
+      ...new Set(lanes.flatMap((lane) => lane.uncoveredLifecycleTargetIds)),
+    ].sort(),
+  };
+}
+
+/** Reserve full OCR inventories and a first Codex batch before optional work.
+ * Further Codex batches consume complete per-reviewer groups in roster order. */
+function planReviewerSlotBudgets(input: {
+  runtimes: readonly AccountGatewayReviewerRuntime[];
+  authorization: ReviewRunAuthorization;
+  pr: PRContext;
+  config: ReviewConfig;
+  compatibilityKey: string;
+  lifecycleStateHash: string;
+}): ReadonlyMap<string, ReviewerSlotBudget> {
+  const maximum = input.authorization.limits.maxWorkSlots;
+  if (input.runtimes.length > maximum)
+    throw new Error('review_work_plan_required_group_cannot_fit');
+  const counts = input.runtimes.map((runtime) => {
+    if (runtime.reviewer.agentProfile.agentKind === 'ocr') return 1;
+    const config = ConfigLoader.loadRuntimeEnvironment(
+      runtime.runtimeConfig.runtimeEnv,
+      { modelTransport: true }
+    );
+    const authorization: ReviewRunAuthorization = {
+      ...input.authorization,
+      facts: {
+        ...input.authorization.facts,
+        providerVoteLanes: [
+          {
+            providerKind: ReviewExecutionProviderKind.Codex,
+            providerVoteIdentityHash: runtime.reviewer.providerVoteIdentityHash,
+          },
+        ],
+      },
+    };
+    return planAssignments({
+      authorization,
+      pr: input.pr,
+      config,
+      providerName: selectCodexProvider(config),
+      compatibilityKey: input.compatibilityKey,
+      lifecycleTargets: [],
+      liveLifecycleStateHash: input.lifecycleStateHash,
+      accountGateway: true,
+    }).plan.assignments.length;
+  });
+  const budgets = input.runtimes.map(() => 1);
+  let remaining = maximum - budgets.length;
+  for (const required of [true, false]) {
+    while (remaining > 0) {
+      const nextGroup = input.runtimes
+        .map((runtime, index) => ({ runtime, index }))
+        .filter(
+          ({ runtime, index }) =>
+            runtime.reviewer.required === required &&
+            budgets[index] < counts[index]
+        );
+      if (!nextGroup.length || nextGroup.length > remaining) break;
+      for (const { index } of nextGroup) {
+        budgets[index] += 1;
+        remaining -= 1;
+      }
+    }
+  }
+  const discoverySlots = [...budgets];
+  // Only the captured primary may spend remaining slots on parent companions.
+  if (remaining > 0) budgets[0] += remaining;
+  return new Map(
+    input.runtimes.map((runtime, index) => [
+      runtime.reviewer.reviewerId,
+      { maxSlots: budgets[index], discoverySlots: discoverySlots[index] },
+    ])
+  );
+}
+
+type ReviewerSlotBudget = Readonly<{
+  maxSlots: number;
+  discoverySlots: number;
+}>;

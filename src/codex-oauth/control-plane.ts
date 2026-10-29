@@ -42,7 +42,9 @@ export type CodexRotatingWritebackPreflightResponse =
       protocolVersion: 1;
       status: 'skipped';
       reason:
-        'lease_not_active' | 'stale_queued_secret' | 'permission_required';
+        | 'lease_not_active'
+        | 'stale_queued_secret'
+        | 'permission_required';
     };
 
 export type CodexRotatingWritebackResponse = {

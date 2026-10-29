@@ -534,7 +534,9 @@ describe('GitHub integration mock (no network)', () => {
     );
     expect(fakeOctokit.issues.updateComment).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: expect.stringContaining('<!-- reviewrouter:review-status:complete -->')
+        body: expect.stringContaining(
+          '<!-- reviewrouter:review-status:complete -->'
+        ),
       })
     );
     expect(fakeOctokit.issues.deleteComment).not.toHaveBeenCalled();

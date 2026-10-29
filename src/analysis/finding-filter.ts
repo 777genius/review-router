@@ -1219,9 +1219,7 @@ export class FindingFilter {
         ).sort();
         seen.set(
           key,
-          sourceFindingIds.length > 0
-            ? { ...winner, sourceFindingIds }
-            : winner
+          sourceFindingIds.length > 0 ? { ...winner, sourceFindingIds } : winner
         );
       }
     }

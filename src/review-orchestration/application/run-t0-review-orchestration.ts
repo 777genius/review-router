@@ -37,6 +37,8 @@ import {
   type ReviewInvocationLease,
   type ReviewInvocationDiagnosticsPort,
   type ReviewInvocationFailureClassifierPort,
+  type ReviewInvocationFailureContext,
+  type ReviewInvocationFailureScope,
   type ReviewInvocationLeaseSupervisorPort,
   type ReviewInvestigationRecordingPort,
   type ReviewInvestigationDiagnosticsPort,
@@ -142,6 +144,9 @@ export type RunT0ReviewOrchestrationDependencies = {
   readonly invocationFailureClassifier: ReviewInvocationFailureClassifierPort;
   readonly invocationDiagnostics?: ReviewInvocationDiagnosticsPort;
   readonly investigationRecording?: ReviewInvestigationRecordingPort;
+  readonly resolveInvestigationRecording?: (
+    workSlot: ReviewWorkSlotPlan
+  ) => ReviewInvestigationRecordingPort | undefined;
   readonly investigationDiagnostics?: ReviewInvestigationDiagnosticsPort;
   readonly leaseSupervisor: ReviewInvocationLeaseSupervisorPort;
   readonly projectionBuilder: CurrentReviewProjectionBuilderPort;
@@ -154,6 +159,16 @@ export type RunT0ReviewOrchestrationDependencies = {
   };
   readonly executionDeadline?: ExecutionDeadline;
   readonly signal?: AbortSignal;
+  /** One serial batch stream per exact reviewer and permits for its captured allowance. */
+  readonly reviewerScheduling?: Readonly<{
+    maxParallelReviewers: number;
+    reviewers: readonly Readonly<{
+      reviewerId: string;
+      providerVoteIdentityHash: string;
+      concurrencyGroupId: string;
+    }>[];
+    concurrencyGroups: readonly Readonly<{ id: string; maxParallel: number }>[];
+  }>;
   readonly progress?: ReviewOrchestrationProgressPort;
 };
 
@@ -171,6 +186,70 @@ export interface ReviewOrchestrationProgressPort {
 }
 
 export class RunT0ReviewOrchestration {
+  private parentCommandTail: Promise<unknown> = Promise.resolve();
+  private coordinatedExecution?: ReviewExecutionAdmission;
+  private runAbort?: AbortController;
+  private readonly laneSignals = new Map<string, AbortSignal>();
+
+  private failureContext(
+    workSlot: ReviewWorkSlotPlan,
+    invocation?: PreparedReviewInvocation
+  ): ReviewInvocationFailureContext {
+    const reviewer = this.dependencies.reviewerScheduling?.reviewers.find(
+      (item) =>
+        item.providerVoteIdentityHash === workSlot.providerVoteIdentityHash
+    );
+    return {
+      workSlot,
+      ...(invocation ? { invocation } : {}),
+      ...(reviewer ?? {}),
+    };
+  }
+
+  private parentLeaseCommand<T>(operation: () => Promise<T>): Promise<T> {
+    if (!this.dependencies.reviewerScheduling) return operation();
+    const command = this.parentCommandTail.then(operation);
+    this.parentCommandTail = command.catch(() => undefined);
+    return command;
+  }
+
+  /** Only parent commands observe and advance the current stream version. */
+  private async parentCommand<T>(
+    input: {
+      authorization: ReviewRunAuthorization;
+      execution: ReviewExecutionAdmission;
+      revision: ReviewRevisionFacts;
+    },
+    operation: (execution: ReviewExecutionAdmission) => Promise<T>
+  ): Promise<T> {
+    if (!this.dependencies.reviewerScheduling)
+      return operation(input.execution);
+    return this.parentLeaseCommand(async () => {
+      const restored = await this.dependencies.controlPlane.restoreExecution({
+        authorization: input.authorization,
+        reviewRevisionHash: input.revision.reviewRevisionHash,
+      });
+      const latest = refreshExecutionAdmission(
+        this.coordinatedExecution ?? input.execution,
+        restored
+      );
+      this.coordinatedExecution = latest;
+      const result = await operation(latest);
+      if (
+        result &&
+        typeof result === 'object' &&
+        'streamVersion' in result &&
+        typeof result.streamVersion === 'string'
+      ) {
+        this.coordinatedExecution = {
+          ...latest,
+          streamVersion: maxVersion(latest.streamVersion, result.streamVersion),
+        };
+      }
+      return result;
+    });
+  }
+
   constructor(
     private readonly dependencies: RunT0ReviewOrchestrationDependencies,
     private readonly maxPublicationPolls: number | null = null,
@@ -382,15 +461,16 @@ export class RunT0ReviewOrchestration {
         )
       )
         throw new Error('review_orchestration_description_plan_invalid');
-      for (const workSlot of command.workSlots.filter(
-        (slot) => slot.taskKind !== ReviewTaskKind.PrDescription
-      )) {
+      this.coordinatedExecution = execution;
+      const runWorkSlot = async (
+        workSlot: ReviewWorkSlotPlan
+      ): Promise<void> => {
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
           throw new Error('review_orchestration_restored_work_slot_missing');
         }
         const persistedSlot =
-          execution.restoredExecution.persistedPlan?.workSlots.find(
+          execution!.restoredExecution.persistedPlan?.workSlots.find(
             (slot) => slot.workSlotId === workSlot.workSlotId
           );
         const restoredSatisfied =
@@ -424,7 +504,7 @@ export class RunT0ReviewOrchestration {
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: workSlot.workSlotId,
           });
-          continue;
+          return;
         }
         if (
           restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied &&
@@ -439,7 +519,7 @@ export class RunT0ReviewOrchestration {
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: workSlot.workSlotId,
           });
-          continue;
+          return;
         }
         if (
           restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied &&
@@ -456,12 +536,12 @@ export class RunT0ReviewOrchestration {
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: workSlot.workSlotId,
           });
-          continue;
+          return;
         }
         await this.assertRevisionCurrent(command);
         const outcome = await this.satisfyWorkSlot({
-          authorization,
-          execution,
+          authorization: authorization!,
+          execution: execution!,
           workSlot,
           planHash: command.planHash,
           ownerIdHash: command.ownerIdHash,
@@ -469,12 +549,20 @@ export class RunT0ReviewOrchestration {
           restoredSlot,
           restoreOnly: command.restoreOnly === true,
           busyPollsByProviderLane,
-          admissionLimited,
+          admissionLimited: this.dependencies.reviewerScheduling
+            ? false
+            : admissionLimited,
           onEvent: (event) => {
             state = evolveReviewOrchestration(state, event);
           },
         });
-        execution = { ...execution, streamVersion: outcome.streamVersion };
+        execution = {
+          ...execution!,
+          streamVersion: maxVersion(
+            execution!.streamVersion,
+            outcome.streamVersion
+          ),
+        };
         if (outcome.observation) {
           if (!outcome.coverageManifest) {
             throw new Error('review_orchestration_coverage_manifest_missing');
@@ -509,43 +597,260 @@ export class RunT0ReviewOrchestration {
           });
           const terminal = terminalizeCommand(outcome.exhaustionReason);
           if (terminal) {
-            const latestExecution =
-              await this.dependencies.controlPlane.restoreExecution({
-                authorization,
-                reviewRevisionHash: command.reviewRevisionHash,
-              });
-            execution = refreshExecutionAdmission(execution, latestExecution);
-            const latestSlot = execution.restoredExecution.workSlots.find(
-              (slot) => slot.workSlotId === workSlot.workSlotId
+            const terminalizedResult = await this.parentCommand(
+              {
+                authorization: authorization!,
+                execution: execution!,
+                revision: command,
+              },
+              async (parentExecution) => {
+                let execution = parentExecution;
+                const latestExecution =
+                  await this.dependencies.controlPlane.restoreExecution({
+                    authorization: authorization!,
+                    reviewRevisionHash: command.reviewRevisionHash,
+                  });
+                execution = refreshExecutionAdmission(
+                  execution!,
+                  latestExecution
+                );
+                const latestSlot = execution!.restoredExecution.workSlots.find(
+                  (slot) => slot.workSlotId === workSlot.workSlotId
+                );
+                // Releasing the final provider attempt already exhausts the server slot.
+                const alreadyExhausted =
+                  execution!.restoredExecution.state ===
+                    RestoredReviewExecutionState.Running &&
+                  latestSlot?.state === RestoredReviewWorkSlotState.Exhausted &&
+                  latestSlot.activeLeaseId === null;
+                if (!alreadyExhausted) {
+                  const terminalized =
+                    await this.dependencies.controlPlane.terminalizeWorkSlot({
+                      authorization: authorization!,
+                      idempotencyKey: this.idempotencyKey('slot-terminalize', [
+                        execution.executionId,
+                        execution.generation,
+                        workSlot.workSlotId,
+                        terminal.terminalState,
+                        terminal.reasonCode,
+                      ]),
+                      execution: execution!,
+                      reviewRevisionHash: command.reviewRevisionHash,
+                      workSlotId: workSlot.workSlotId,
+                      terminal,
+                    });
+                  execution = {
+                    ...execution,
+                    streamVersion: terminalized.streamVersion,
+                  };
+                }
+                return { streamVersion: execution.streamVersion };
+              }
             );
-            // Releasing the final provider attempt already exhausts the server slot.
-            const alreadyExhausted =
-              execution.restoredExecution.state ===
-                RestoredReviewExecutionState.Running &&
-              latestSlot?.state === RestoredReviewWorkSlotState.Exhausted &&
-              latestSlot.activeLeaseId === null;
-            if (!alreadyExhausted) {
-              const terminalized =
-                await this.dependencies.controlPlane.terminalizeWorkSlot({
-                  authorization,
-                  idempotencyKey: this.idempotencyKey('slot-terminalize', [
-                    execution.executionId,
-                    execution.generation,
-                    workSlot.workSlotId,
-                    terminal.terminalState,
-                    terminal.reasonCode,
-                  ]),
-                  execution,
-                  reviewRevisionHash: command.reviewRevisionHash,
-                  workSlotId: workSlot.workSlotId,
-                  terminal,
-                });
-              execution = {
-                ...execution,
-                streamVersion: terminalized.streamVersion,
-              };
-            }
+            execution = {
+              ...execution!,
+              streamVersion: maxVersion(
+                execution!.streamVersion,
+                terminalizedResult.streamVersion
+              ),
+            };
           }
+          if (
+            this.dependencies.reviewerScheduling &&
+            [
+              ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted,
+              ReviewWorkSlotExhaustionReason.AdmissionLimited,
+              ReviewWorkSlotExhaustionReason.InvestigationDeferred,
+            ].includes(outcome.exhaustionReason!)
+          )
+            throw new ReviewScopedInvocationFailure(
+              'reviewer',
+              new Error('review_reviewer_work_exhausted')
+            );
+        }
+      };
+      if (!this.dependencies.reviewerScheduling) {
+        for (const slot of command.workSlots.filter(
+          (slot) => slot.taskKind !== ReviewTaskKind.PrDescription
+        ))
+          await runWorkSlot(slot);
+      } else {
+        const scheduling = this.dependencies.reviewerScheduling;
+        const lanes = scheduling.reviewers.map((reviewer) => ({
+          ...reviewer,
+          slots: command.workSlots.filter(
+            (slot) =>
+              slot.taskKind !== ReviewTaskKind.PrDescription &&
+              slot.providerVoteIdentityHash ===
+                reviewer.providerVoteIdentityHash
+          ),
+          abort: new AbortController(),
+        }));
+        if (
+          !Number.isSafeInteger(scheduling.maxParallelReviewers) ||
+          scheduling.maxParallelReviewers < 1 ||
+          scheduling.maxParallelReviewers > 16 ||
+          lanes.length > 16 ||
+          new Set(lanes.map((lane) => lane.providerVoteIdentityHash)).size !==
+            lanes.length ||
+          command.workSlots.some(
+            (slot) =>
+              !lanes.some(
+                (lane) =>
+                  lane.providerVoteIdentityHash ===
+                  slot.providerVoteIdentityHash
+              )
+          )
+        )
+          throw new Error('review_reviewer_scheduling_invalid');
+        const groups = new Map(
+          scheduling.concurrencyGroups.map((group) => [
+            group.id,
+            group.maxParallel,
+          ])
+        );
+        if (
+          lanes.some(
+            (lane) =>
+              !Number.isSafeInteger(groups.get(lane.concurrencyGroupId)) ||
+              groups.get(lane.concurrencyGroupId)! < 1
+          )
+        )
+          throw new Error('review_reviewer_scheduling_group_invalid');
+        const busyGroups = new Map<string, number>();
+        const stoppedVotes = new Set<string>();
+        const pending = [...lanes];
+        const active = new Set<Promise<void>>();
+        let parentFailure: unknown;
+        this.runAbort = new AbortController();
+        const stopRun = () =>
+          this.runAbort!.abort(this.dependencies.signal?.reason);
+        this.dependencies.signal?.addEventListener('abort', stopRun, {
+          once: true,
+        });
+        if (this.dependencies.signal?.aborted) stopRun();
+        const markExhausted = (slot: ReviewWorkSlotPlan) => {
+          if (
+            acceptedEvidence.some(
+              (item) => item.workSlotId === slot.workSlotId
+            ) ||
+            exhaustedWorkSlotIds.includes(slot.workSlotId)
+          )
+            return;
+          exhaustedWorkSlotIds.push(slot.workSlotId);
+          exhaustedWorkSlotReasons.set(
+            slot.workSlotId,
+            ReviewWorkSlotExhaustionReason.AdmissionLimited
+          );
+          state = evolveReviewOrchestration(state, {
+            type: ReviewOrchestrationEventType.SlotExhausted,
+            workSlotId: slot.workSlotId,
+          });
+          this.dependencies.progress?.report({
+            type: 'exhausted',
+            workSlotId: slot.workSlotId,
+          });
+        };
+        try {
+          while (pending.length || active.size) {
+            while (
+              !parentFailure &&
+              !this.runAbort.signal.aborted &&
+              active.size < scheduling.maxParallelReviewers
+            ) {
+              // Choose a ready allocation before taking global capacity.
+              const index = pending.findIndex(
+                (lane) =>
+                  stoppedVotes.has(lane.providerVoteIdentityHash) ||
+                  (busyGroups.get(lane.concurrencyGroupId) ?? 0) <
+                    groups.get(lane.concurrencyGroupId)!
+              );
+              if (index < 0) break;
+              const lane = pending.splice(index, 1)[0];
+              if (stoppedVotes.has(lane.providerVoteIdentityHash)) {
+                lane.slots.forEach(markExhausted);
+                continue;
+              }
+              busyGroups.set(
+                lane.concurrencyGroupId,
+                (busyGroups.get(lane.concurrencyGroupId) ?? 0) + 1
+              );
+              this.laneSignals.set(
+                lane.providerVoteIdentityHash,
+                AbortSignal.any([this.runAbort.signal, lane.abort.signal])
+              );
+              const worker: Promise<void> = (async () => {
+                for (const slot of lane.slots) {
+                  if (stoppedVotes.has(lane.providerVoteIdentityHash)) {
+                    markExhausted(slot);
+                    continue;
+                  }
+                  this.runAbort!.signal.throwIfAborted();
+                  try {
+                    await runWorkSlot(slot);
+                  } catch (error) {
+                    const scopedFailure =
+                      error instanceof ReviewScopedInvocationFailure
+                        ? error
+                        : error instanceof
+                            ReviewInvocationConfigurationMismatchError
+                          ? new ReviewScopedInvocationFailure('reviewer', error)
+                          : undefined;
+                    if (
+                      !scopedFailure &&
+                      !stoppedVotes.has(lane.providerVoteIdentityHash)
+                    )
+                      throw error;
+                    const scope = scopedFailure?.scope ?? 'reviewer';
+                    if (scope === 'run') throw error;
+                    const affected =
+                      scope === 'allocation'
+                        ? lanes.filter(
+                            (candidate) =>
+                              candidate.concurrencyGroupId ===
+                              lane.concurrencyGroupId
+                          )
+                        : [lane];
+                    for (const sibling of affected) {
+                      stoppedVotes.add(sibling.providerVoteIdentityHash);
+                      sibling.abort.abort(error);
+                    }
+                    markExhausted(slot);
+                  }
+                }
+              })()
+                .catch((error) => {
+                  parentFailure ??= error;
+                  this.runAbort!.abort(error);
+                })
+                .finally(() => {
+                  busyGroups.set(
+                    lane.concurrencyGroupId,
+                    busyGroups.get(lane.concurrencyGroupId)! - 1
+                  );
+                  active.delete(worker);
+                  this.laneSignals.delete(lane.providerVoteIdentityHash);
+                });
+              active.add(worker);
+            }
+            if (!active.size) break;
+            await Promise.race(active);
+          }
+          await Promise.allSettled(active);
+          await this.parentCommandTail;
+          this.dependencies.signal?.throwIfAborted();
+          execution = refreshExecutionAdmission(
+            this.coordinatedExecution ?? execution!,
+            await this.dependencies.controlPlane.restoreExecution({
+              authorization: authorization!,
+              reviewRevisionHash: command.reviewRevisionHash,
+            })
+          );
+          this.coordinatedExecution = execution;
+          if (parentFailure) throw parentFailure;
+        } finally {
+          this.dependencies.signal?.removeEventListener('abort', stopRun);
+          this.laneSignals.clear();
         }
       }
 
@@ -994,6 +1299,10 @@ export class RunT0ReviewOrchestration {
     readonly streamVersion: string;
     readonly attemptOrdinal?: number;
   }> {
+    const reviewerSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest: ProviderInvocationManifest | null = null;
     let handledInvestigationOrdinal: number | null = null;
@@ -1003,6 +1312,7 @@ export class RunT0ReviewOrchestration {
       attemptOrdinal += 1
     ) {
       try {
+        reviewerSignal?.throwIfAborted();
         this.dependencies.progress?.report({
           type: 'running',
           workSlotId: input.workSlot.workSlotId,
@@ -1017,7 +1327,9 @@ export class RunT0ReviewOrchestration {
           await this.dependencies.invocations.prepare({
             workSlot: input.workSlot,
             attemptOrdinal,
+            ...(reviewerSignal ? { signal: reviewerSignal } : {}),
           });
+        reviewerSignal?.throwIfAborted();
         const authoritativeManifest =
           await this.dependencies.invocationManifestAssembler.assemble(
             authoritativeInvocation
@@ -1118,8 +1430,16 @@ export class RunT0ReviewOrchestration {
                   ReviewWorkSlotExhaustionReason.DeadlineReached,
               };
             }
-            if (!(error instanceof ReviewInvestigationDeferredSignal))
+            if (!(error instanceof ReviewInvestigationDeferredSignal)) {
+              const scope = this.dependencies.reviewerScheduling
+                ? this.dependencies.invocationFailureClassifier.scope?.(
+                    error,
+                    this.failureContext(input.workSlot)
+                  )
+                : undefined;
+              if (scope) throw new ReviewScopedInvocationFailure(scope, error);
               throw error;
+            }
             this.recordInvestigationDiagnostic({
               outcome:
                 ReviewInvestigationDiagnosticOutcome.AuthoritativeDeferred,
@@ -1138,10 +1458,12 @@ export class RunT0ReviewOrchestration {
             };
           }
         }
+        const recording = this.dependencies.resolveInvestigationRecording
+          ? this.dependencies.resolveInvestigationRecording(input.workSlot)
+          : this.dependencies.investigationRecording;
         const selectedInvestigationCandidate =
           investigationCandidate !== null &&
-          this.dependencies.investigationRecording?.mode ===
-            ReviewInvestigationRecordingMode.Authoritative &&
+          recording?.mode === ReviewInvestigationRecordingMode.Authoritative &&
           !authoritativeInvocation.manifestFacts.taskKindSet.includes(
             ReviewTaskKind.LifecycleRevalidation
           ) &&
@@ -1149,8 +1471,7 @@ export class RunT0ReviewOrchestration {
             (investigationCandidate.observation.qualityFlags.includes(
               'investigation_verified_clean'
             ) &&
-              this.dependencies.investigationRecording
-                .verifiedCleanEffectsEnabled === true))
+              recording.verifiedCleanEffectsEnabled === true))
             ? investigationCandidate
             : null;
         const invocation = selectedInvestigationCandidate
@@ -1200,7 +1521,9 @@ export class RunT0ReviewOrchestration {
         let lease: ReviewInvocationLease | null = null;
         let localBusyPollCount = 0;
         while (lease === null) {
+          reviewerSignal?.throwIfAborted();
           await this.assertMemoryEligible(invocation);
+          reviewerSignal?.throwIfAborted();
           if (!this.canStartInvocation(attemptOrdinal)) {
             input.onEvent({
               type: ReviewOrchestrationEventType.SlotExhausted,
@@ -1240,14 +1563,12 @@ export class RunT0ReviewOrchestration {
                   ReviewWorkSlotExhaustionReason.DeadlineReached,
               };
             }
-            if (this.dependencies.signal) {
-              await this.dependencies.delay.sleep(
-                delayMs,
-                this.dependencies.signal
-              );
+            if (waitSignal) {
+              await this.dependencies.delay.sleep(delayMs, waitSignal);
             } else {
               await this.dependencies.delay.sleep(delayMs);
             }
+            reviewerSignal?.throwIfAborted();
             await this.assertRevisionCurrent(input.revision);
             const joined = await this.trySatisfyFromLookup({
               ...input,
@@ -1263,8 +1584,10 @@ export class RunT0ReviewOrchestration {
               };
             }
           }
-          const acquire =
-            await this.dependencies.controlPlane.acquireInvocationLease({
+          const acquire = await this.parentLeaseCommand(() => {
+            // A sibling may stop this lane while its admission is queued.
+            reviewerSignal?.throwIfAborted();
+            return this.dependencies.controlPlane.acquireInvocationLease({
               authorization: input.authorization,
               idempotencyKey: this.idempotencyKey('lease-acquire', [
                 input.execution.executionId,
@@ -1277,6 +1600,7 @@ export class RunT0ReviewOrchestration {
               acquireRequestId,
               ownerIdHash: input.ownerIdHash,
             });
+          });
           if (
             acquire.status ===
             ReviewInvocationLeaseAcquireOutcomeStatus.Acquired
@@ -1348,11 +1672,13 @@ export class RunT0ReviewOrchestration {
           }
         }
         try {
+          reviewerSignal?.throwIfAborted();
           input.onEvent({
             type: ReviewOrchestrationEventType.SlotLeaseAcquired,
             workSlotId: input.workSlot.workSlotId,
           });
           await this.assertRevisionCurrent(input.revision);
+          reviewerSignal?.throwIfAborted();
         } catch (error) {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
           throw error;
@@ -1387,7 +1713,16 @@ export class RunT0ReviewOrchestration {
                       manifest,
                       currentLease,
                       sourceExecutionId: input.execution.executionId,
-                      signal,
+                      signal: this.laneSignals.has(
+                        input.workSlot.providerVoteIdentityHash
+                      )
+                        ? AbortSignal.any([
+                            signal,
+                            this.laneSignals.get(
+                              input.workSlot.providerVoteIdentityHash
+                            )!,
+                          ])
+                        : signal,
                       revision: input.revision,
                     })
                   : Promise.resolve(precomputedObservation);
@@ -1436,8 +1771,13 @@ export class RunT0ReviewOrchestration {
             observationPayload = error.currentRevisionObservation;
           } else {
             await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
+            // Provider abort errors need not preserve the lane's stop reason.
+            reviewerSignal?.throwIfAborted();
             const failureClass =
-              this.dependencies.invocationFailureClassifier.classify(error);
+              this.dependencies.invocationFailureClassifier.classify(
+                error,
+                this.failureContext(input.workSlot, invocation)
+              );
             try {
               this.dependencies.invocationDiagnostics?.recordFailure({
                 invocation,
@@ -1447,6 +1787,19 @@ export class RunT0ReviewOrchestration {
               });
             } catch {
               // Diagnostics must never change review retry or safety decisions.
+            }
+            if (this.dependencies.reviewerScheduling) {
+              const context = this.failureContext(input.workSlot, invocation);
+              const scope =
+                this.dependencies.invocationFailureClassifier.scope?.(
+                  error,
+                  context
+                ) ?? 'reviewer';
+              if (
+                scope !== 'reviewer' ||
+                failureClass !== ReviewInvocationFailureClass.Retryable
+              )
+                throw new ReviewScopedInvocationFailure(scope, error);
             }
             if (
               failureClass === ReviewInvocationFailureClass.CapacityUnavailable
@@ -1492,11 +1845,8 @@ export class RunT0ReviewOrchestration {
                 ? this.clampProviderDelay(30_000)
                 : 0;
             if (retryDelayMs > 0) {
-              if (this.dependencies.signal) {
-                await this.dependencies.delay.sleep(
-                  retryDelayMs,
-                  this.dependencies.signal
-                );
+              if (waitSignal) {
+                await this.dependencies.delay.sleep(retryDelayMs, waitSignal);
               } else {
                 await this.dependencies.delay.sleep(retryDelayMs);
               }
@@ -1513,17 +1863,18 @@ export class RunT0ReviewOrchestration {
             invocation.manifestFacts.executionProfile,
             observationPayload
           );
-          const committed = await this.dependencies.controlPlane.commitEvidence(
-            {
+          const completedLease = lease;
+          const committed = await this.parentLeaseCommand(() =>
+            this.dependencies.controlPlane.commitEvidence({
               authorization: input.authorization,
               idempotencyKey: this.idempotencyKey('evidence-commit', [
-                lease.attemptId,
+                completedLease.attemptId,
                 observationPayload.payloadHash,
               ]),
-              lease,
+              lease: completedLease,
               ownerIdHash: input.ownerIdHash,
               observation: observationPayload,
-            }
+            })
           );
           await this.assertRevisionCurrent(input.revision);
           // historicalOnly only disables future cross-revision reuse. The current
@@ -1537,19 +1888,20 @@ export class RunT0ReviewOrchestration {
             providerInvocationKey: manifest.providerInvocationKey,
             providerVoteIdentityHash: manifest.providerVoteIdentityHash,
           };
-          const attached =
-            await this.dependencies.controlPlane.attachObservation({
+          const attached = await this.parentCommand(input, (execution) =>
+            this.dependencies.controlPlane.attachObservation({
               authorization: input.authorization,
               idempotencyKey: this.idempotencyKey('attach', [
                 input.execution.executionId,
                 input.workSlot.workSlotId,
                 observation.observationId,
               ]),
-              execution: { ...input.execution, streamVersion },
+              execution,
               workSlot: input.workSlot,
               observation,
-              attachmentCapability: lease.leaseCapability,
-            });
+              attachmentCapability: lease!.leaseCapability,
+            })
+          );
           streamVersion = attached.streamVersion;
           input.onEvent({
             type: ReviewOrchestrationEventType.SlotSatisfied,
@@ -1602,6 +1954,10 @@ export class RunT0ReviewOrchestration {
     readonly revision: ReviewRevisionFacts;
     readonly workSlot: ReviewWorkSlotPlan;
   }): Promise<string> {
+    const reviewerSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let manifest = input.manifest;
     const busyPollBudget = this.providerLaneBusyPollBudget();
     for (
@@ -1609,14 +1965,16 @@ export class RunT0ReviewOrchestration {
       busyPollCount < busyPollBudget;
       busyPollCount += 1
     ) {
+      reviewerSignal?.throwIfAborted();
       await this.assertRevisionCurrent(input.revision);
       const acquireRequestId = this.identity('acquire-request-exhaustion', [
         input.execution.executionId,
         input.workSlot.workSlotId,
         manifest.providerInvocationKey,
       ]);
-      const acquire =
-        await this.dependencies.controlPlane.acquireInvocationLease({
+      const acquire = await this.parentLeaseCommand(() => {
+        reviewerSignal?.throwIfAborted();
+        return this.dependencies.controlPlane.acquireInvocationLease({
           authorization: input.authorization,
           idempotencyKey: this.idempotencyKey('lease-acquire-exhaustion', [
             input.execution.executionId,
@@ -1629,9 +1987,11 @@ export class RunT0ReviewOrchestration {
           acquireRequestId,
           ownerIdHash: input.ownerIdHash,
         });
+      });
       if (
         acquire.status === ReviewInvocationLeaseAcquireOutcomeStatus.InputStale
       ) {
+        reviewerSignal?.throwIfAborted();
         const staleManifest = JSON.parse(manifest.manifestCanonicalJson) as {
           readonly memoryBundleHash?: unknown;
         };
@@ -1647,6 +2007,7 @@ export class RunT0ReviewOrchestration {
         const invocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
           attemptOrdinal: input.workSlot.attemptBudget + 1,
+          ...(reviewerSignal ? { signal: reviewerSignal } : {}),
         });
         manifest =
           await this.dependencies.invocationManifestAssembler.assemble(
@@ -1687,11 +2048,8 @@ export class RunT0ReviewOrchestration {
           Math.min(5_000, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        if (this.dependencies.signal) {
-          await this.dependencies.delay.sleep(
-            delayMs,
-            this.dependencies.signal
-          );
+        if (waitSignal) {
+          await this.dependencies.delay.sleep(delayMs, waitSignal);
         } else {
           await this.dependencies.delay.sleep(delayMs);
         }
@@ -1801,20 +2159,22 @@ export class RunT0ReviewOrchestration {
       await this.assertRevisionCurrent(input.revision);
       if (!isOriginalAcceptedManifest(input, input.manifest))
         await this.assertMemoryEligible(input.invocation);
-      const attached = await this.dependencies.controlPlane.attachObservation({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey('attach-replayed', [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          lookup.observation.observationId,
-          lookup.attestationId,
-          input.revision.reviewRevisionHash,
-        ]),
-        execution: input.execution,
-        workSlot: input.workSlot,
-        observation: lookup.observation,
-        attachmentCapability: replayed.attachmentCapability,
-      });
+      const attached = await this.parentCommand(input, (execution) =>
+        this.dependencies.controlPlane.attachObservation({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey('attach-replayed', [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            lookup.observation.observationId,
+            lookup.attestationId,
+            input.revision.reviewRevisionHash,
+          ]),
+          execution,
+          workSlot: input.workSlot,
+          observation: lookup.observation,
+          attachmentCapability: replayed.attachmentCapability,
+        })
+      );
       streamVersion = attached.streamVersion;
     } else if (
       input.restoredSlot.state === RestoredReviewWorkSlotState.Satisfied
@@ -1832,45 +2192,53 @@ export class RunT0ReviewOrchestration {
         );
       }
     } else if (lookup.attachment.kind === 'exact_revision_reuse') {
-      const attached = await this.dependencies.controlPlane.attachObservation({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey('attach', [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          lookup.observation.observationId,
-        ]),
-        execution: input.execution,
-        workSlot: input.workSlot,
-        observation: lookup.observation,
-        attachmentCapability: lookup.attachment.capability,
-      });
+      const attachment = lookup.attachment;
+      const attached = await this.parentCommand(input, (execution) =>
+        this.dependencies.controlPlane.attachObservation({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey('attach', [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            lookup.observation.observationId,
+          ]),
+          execution,
+          workSlot: input.workSlot,
+          observation: lookup.observation,
+          attachmentCapability: attachment.capability,
+        })
+      );
       streamVersion = attached.streamVersion;
     } else {
-      const latestExecution =
-        await this.dependencies.controlPlane.restoreExecution({
-          authorization: input.authorization,
-          reviewRevisionHash: input.revision.reviewRevisionHash,
-        });
-      const adoptionExecution = refreshExecutionAdmission(
-        input.execution,
-        latestExecution
+      const attachment = lookup.attachment;
+      const adoptionExecution = this.dependencies.reviewerScheduling
+        ? input.execution
+        : refreshExecutionAdmission(
+            input.execution,
+            await this.dependencies.controlPlane.restoreExecution({
+              authorization: input.authorization,
+              reviewRevisionHash: input.revision.reviewRevisionHash,
+            })
+          );
+      const adopted = await this.parentCommand(
+        { ...input, execution: adoptionExecution },
+        (execution) =>
+          this.dependencies.controlPlane.adoptObservation({
+            authorization: input.authorization,
+            idempotencyKey: this.idempotencyKey('adopt', [
+              input.execution.executionId,
+              input.workSlot.workSlotId,
+              lookup.observation.observationId,
+              attachment.sourceLeaseId,
+              attachment.sourceFencingToken,
+            ]),
+            execution,
+            workSlot: input.workSlot,
+            planHash: input.planHash,
+            manifest: input.manifest,
+            observation: lookup.observation,
+            source: attachment,
+          })
       );
-      const adopted = await this.dependencies.controlPlane.adoptObservation({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey('adopt', [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          lookup.observation.observationId,
-          lookup.attachment.sourceLeaseId,
-          lookup.attachment.sourceFencingToken,
-        ]),
-        execution: adoptionExecution,
-        workSlot: input.workSlot,
-        planHash: input.planHash,
-        manifest: input.manifest,
-        observation: lookup.observation,
-        source: lookup.attachment,
-      });
       streamVersion = adopted.streamVersion;
     }
 
@@ -1904,13 +2272,15 @@ export class RunT0ReviewOrchestration {
       });
       if (!replay) return null;
       await this.assertRevisionCurrent(input.revision);
-      return this.dependencies.contextAttestations.commitContextReplay({
-        authorization: input.authorization,
-        execution: input.execution,
-        workSlot: input.workSlot,
-        candidate: input.candidate,
-        result: replay,
-      });
+      return this.parentCommand(input, (execution) =>
+        this.dependencies.contextAttestations!.commitContextReplay({
+          authorization: input.authorization,
+          execution,
+          workSlot: input.workSlot,
+          candidate: input.candidate,
+          result: replay,
+        })
+      );
     } catch {
       return null;
     }
@@ -1938,16 +2308,18 @@ export class RunT0ReviewOrchestration {
       lease.fencingToken,
       lease.expiresAt,
     ]);
-    const renewed = await this.dependencies.controlPlane.renewInvocationLease({
-      idempotencyKey: this.idempotencyKey('lease-renew', [
-        lease.leaseId,
-        lease.fencingToken,
+    const renewed = await this.parentLeaseCommand(() =>
+      this.dependencies.controlPlane.renewInvocationLease({
+        idempotencyKey: this.idempotencyKey('lease-renew', [
+          lease.leaseId,
+          lease.fencingToken,
+          renewRequestId,
+        ]),
+        lease,
+        ownerIdHash,
         renewRequestId,
-      ]),
-      lease,
-      ownerIdHash,
-      renewRequestId,
-    });
+      })
+    );
     if (
       renewed.leaseId !== lease.leaseId ||
       renewed.attemptId !== lease.attemptId ||
@@ -2097,13 +2469,24 @@ export class RunT0ReviewOrchestration {
     readonly manifest: ProviderInvocationManifest;
     readonly observation: ReviewObservationPayload;
   } | null> {
-    const recording = this.dependencies.investigationRecording;
+    const laneSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const scopedSignal =
+      laneSignal && this.dependencies.signal
+        ? AbortSignal.any([laneSignal, this.dependencies.signal])
+        : (laneSignal ?? this.dependencies.signal);
+    const recording = this.dependencies.resolveInvestigationRecording
+      ? this.dependencies.resolveInvestigationRecording(input.workSlot)
+      : this.dependencies.investigationRecording;
     const invocations = this.dependencies.investigationInvocations;
     if (!recording || !invocations) return null;
     try {
+      laneSignal?.throwIfAborted();
       const invocation = await invocations.prepare({
         workSlot: input.workSlot,
         attemptOrdinal: input.attemptOrdinal,
+        ...(laneSignal ? { signal: laneSignal } : {}),
       });
       const manifest =
         await this.dependencies.invocationManifestAssembler.assemble(
@@ -2123,15 +2506,15 @@ export class RunT0ReviewOrchestration {
         return null;
       }
 
-      this.dependencies.signal?.throwIfAborted();
+      scopedSignal?.throwIfAborted();
       const abort = new AbortController();
       const monitorStop = new AbortController();
       const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
-      const cancel = () => abort.abort(this.dependencies.signal?.reason);
-      this.dependencies.signal?.addEventListener('abort', cancel, {
+      const cancel = () => abort.abort(scopedSignal?.reason);
+      scopedSignal?.addEventListener('abort', cancel, {
         once: true,
       });
-      if (this.dependencies.signal?.aborted) cancel();
+      if (scopedSignal?.aborted) cancel();
       let stopped = false;
       const monitor = async () => {
         while (!stopped && !abort.signal.aborted) {
@@ -2174,7 +2557,7 @@ export class RunT0ReviewOrchestration {
           sourceReviewRevisionHash: input.revision.reviewRevisionHash,
           signal: abort.signal,
         });
-        this.dependencies.signal?.throwIfAborted();
+        scopedSignal?.throwIfAborted();
         if (
           abort.signal.reason instanceof ReviewExecutionDeadlineReachedSignal
         ) {
@@ -2194,10 +2577,10 @@ export class RunT0ReviewOrchestration {
         stopped = true;
         monitorStop.abort();
         await monitorPromise;
-        this.dependencies.signal?.removeEventListener('abort', cancel);
+        scopedSignal?.removeEventListener('abort', cancel);
       }
     } catch (error) {
-      this.dependencies.signal?.throwIfAborted();
+      scopedSignal?.throwIfAborted();
       if (
         error instanceof ReviewExecutionSupersededSignal ||
         error instanceof ReviewExecutionCancelledSignal ||
@@ -2350,8 +2733,8 @@ export class RunT0ReviewOrchestration {
             return undefined;
           }
         }
-        const acquired =
-          await this.dependencies.controlPlane.acquireInvocationLease({
+        const acquired = await this.parentLeaseCommand(() =>
+          this.dependencies.controlPlane.acquireInvocationLease({
             authorization: input.authorization,
             idempotencyKey: this.idempotencyKey('description-lease-acquire', [
               acquireRequestId,
@@ -2361,7 +2744,8 @@ export class RunT0ReviewOrchestration {
             manifest,
             acquireRequestId,
             ownerIdHash: input.command.ownerIdHash,
-          });
+          })
+        );
         if (
           acquired.status === ReviewInvocationLeaseAcquireOutcomeStatus.Busy
         ) {
@@ -2504,16 +2888,18 @@ export class RunT0ReviewOrchestration {
       String(attemptOrdinal),
     ]);
     try {
-      await this.dependencies.controlPlane.releaseInvocationLease({
-        idempotencyKey: this.idempotencyKey('lease-release', [
-          lease.leaseId,
-          lease.fencingToken,
+      await this.parentLeaseCommand(() =>
+        this.dependencies.controlPlane.releaseInvocationLease({
+          idempotencyKey: this.idempotencyKey('lease-release', [
+            lease.leaseId,
+            lease.fencingToken,
+            releaseRequestId,
+          ]),
+          lease,
+          ownerIdHash,
           releaseRequestId,
-        ]),
-        lease,
-        ownerIdHash,
-        releaseRequestId,
-      });
+        })
+      );
       return true;
     } catch {
       // Expiry is the safety fallback; release is cleanup after durable reporting.
@@ -3094,4 +3480,17 @@ function isOriginalAcceptedManifest(
     original.providerInvocationKey === manifest.providerInvocationKey &&
     original.providerVoteIdentityHash === manifest.providerVoteIdentityHash
   );
+}
+
+function maxVersion(left: string, right: string): string {
+  return BigInt(left) >= BigInt(right) ? left : right;
+}
+
+class ReviewScopedInvocationFailure extends Error {
+  constructor(
+    readonly scope: ReviewInvocationFailureScope,
+    cause: unknown
+  ) {
+    super('review_invocation_scoped_failure', { cause });
+  }
 }

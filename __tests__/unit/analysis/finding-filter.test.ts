@@ -330,7 +330,9 @@ index 51097d9..d0723db 100644
       const excluded = filter.filter([finding], '');
       expect(excluded.findings).toHaveLength(0);
       expect(
-        excluded.stats.reasons['test file/infrastructure (excluded from review)']
+        excluded.stats.reasons[
+          'test file/infrastructure (excluded from review)'
+        ]
       ).toBe(1);
       expect(
         excluded.stats.reasons['suggestion/optimization (not a bug)']

@@ -241,7 +241,8 @@ export class ContextAttestationReplayRunner
     readonly candidate: ReplayCandidate;
     readonly plan: ReplayPlanV4;
     readonly targetRevision:
-      ReviewRevisionFacts | ReviewInvestigationTargetRevision;
+      | ReviewRevisionFacts
+      | ReviewInvestigationTargetRevision;
     readonly targetCheckoutTreeOid: string;
     readonly gatewayBinaryHash: string;
   }) {

@@ -31,6 +31,7 @@ export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   streamOutputBytes: 8_388_608,
   streamFrameBytes: 1_048_576,
   jsonBytes: 65_536,
+  checkoutV4JsonBytes: 131_072,
   headerBytes: 16_384,
   bufferBytes: 65_536,
   requestMs: 3_600_000,
@@ -61,6 +62,8 @@ export type GatewayFailureFact = Readonly<{
   code: string;
   effect: string;
   requestRef?: string;
+  failureScope?: 'reviewer' | 'allocation' | 'run';
+  concurrencyGroupId?: string;
 }>;
 export type GatewayResponses = Readonly<{
   httpStatus: number;
@@ -241,7 +244,8 @@ export class AccountGatewayModelTransport {
     private readonly directProvider?: DirectProviderApiLimits,
     private readonly auxiliaryDescription: boolean = false,
     private readonly completedDescriptionResponse?: (response: unknown) => void,
-    private readonly companionDispatch?: ReviewCompanionDispatchContextV1
+    private readonly companionDispatch?: ReviewCompanionDispatchContextV1,
+    private readonly reviewerId?: string
   ) {
     this.origin = trustedGatewayOrigin(apiUrl);
     if (
@@ -349,7 +353,8 @@ export class AccountGatewayModelTransport {
       (response) => {
         markdown = completedPrDescriptionText(response);
       },
-      input.dispatch
+      input.dispatch,
+      this.reviewerId
     );
     const abort = new AbortController();
     this.held.add(abort);
@@ -416,7 +421,8 @@ export class AccountGatewayModelTransport {
           false
         );
       },
-      input.dispatch
+      input.dispatch,
+      this.reviewerId
     );
     const abort = new AbortController();
     this.held.add(abort);
@@ -812,7 +818,13 @@ export class AccountGatewayModelTransport {
     request: AccountGatewayCheckoutRequest,
     signal?: AbortSignal
   ): Promise<GatewayReadback> {
-    return this.json('POST', `${BASE}/checkout`, request, signal);
+    return this.json(
+      'POST',
+      `${BASE}/checkout`,
+      request,
+      signal,
+      ACCOUNT_GATEWAY_BOUNDS.checkoutV4JsonBytes
+    );
   }
 
   providerApiCheckoutCapability(
@@ -835,7 +847,8 @@ export class AccountGatewayModelTransport {
     method: string,
     route: string,
     payload?: unknown,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    maximumBytes: number = ACCOUNT_GATEWAY_BOUNDS.jsonBytes
   ): Promise<GatewayReadback> {
     const controller = new AbortController();
     const abort = () => controller.abort(signal?.reason);
@@ -860,16 +873,16 @@ export class AccountGatewayModelTransport {
         )
       )
         throw new Error();
-      const bytes = await boundedBytes(
-        response,
-        ACCOUNT_GATEWAY_BOUNDS.jsonBytes
+      const bytes = await boundedBytes(response, maximumBytes);
+      const value: unknown = JSON.parse(
+        new TextDecoder('utf-8', { fatal: true }).decode(bytes)
       );
-      return {
-        httpStatus: response.statusCode ?? 0,
-        value: JSON.parse(
-          new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-        ) as unknown,
-      };
+      if (
+        bytes.length > ACCOUNT_GATEWAY_BOUNDS.jsonBytes &&
+        !hasReviewerPlan(value)
+      )
+        throw new Error('account_gateway_legacy_checkout_too_large');
+      return { httpStatus: response.statusCode ?? 0, value };
     } catch {
       throw new Error('account_gateway_readback_unknown');
     } finally {
@@ -912,6 +925,9 @@ export class AccountGatewayModelTransport {
           maxHeaderSize: ACCOUNT_GATEWAY_BOUNDS.headerBytes,
           headers: {
             authorization: `Bearer ${token}`,
+            ...(this.reviewerId
+              ? { 'x-reviewrouter-reviewer-id': this.reviewerId }
+              : {}),
             ...(this.directProvider
               ? {
                   'user-agent': 'ReviewRouter/1.0 provider-api',
@@ -1317,7 +1333,24 @@ function failureFact(
     const requestRef =
       'requestRef' in error ? safeReference(error.requestRef) : ref;
     return code && effect
-      ? { code, effect, ...(requestRef ? { requestRef } : {}) }
+      ? {
+          code,
+          effect,
+          ...(requestRef ? { requestRef } : {}),
+          ...('failureScope' in error &&
+          ['reviewer', 'allocation', 'run'].includes(String(error.failureScope))
+            ? {
+                failureScope: error.failureScope as
+                  | 'reviewer'
+                  | 'allocation'
+                  | 'run',
+              }
+            : {}),
+          ...('concurrencyGroupId' in error &&
+          safeReference(error.concurrencyGroupId)
+            ? { concurrencyGroupId: safeReference(error.concurrencyGroupId)! }
+            : {}),
+        }
       : undefined;
   } catch {
     return undefined;
@@ -1489,5 +1522,24 @@ function isPrDescriptionMessageInput(value: unknown): boolean {
     Object.keys(content).sort().join(',') === 'text,type' &&
     content.type === 'input_text' &&
     typeof content.text === 'string'
+  );
+}
+
+function hasReviewerPlan(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || !('runtimeConfig' in value))
+    return false;
+  const runtimeConfig = value.runtimeConfig;
+  if (
+    !runtimeConfig ||
+    typeof runtimeConfig !== 'object' ||
+    !('runtimeEnv' in runtimeConfig)
+  )
+    return false;
+  const env = runtimeConfig.runtimeEnv;
+  return (
+    !!env &&
+    typeof env === 'object' &&
+    'REVIEW_ROUTER_REVIEWER_PLAN_JSON' in env &&
+    typeof env.REVIEW_ROUTER_REVIEWER_PLAN_JSON === 'string'
   );
 }

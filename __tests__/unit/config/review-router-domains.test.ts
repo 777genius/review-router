@@ -10,7 +10,10 @@ import {
 } from '../../../src/config/review-router-endpoints';
 
 const repoRoot = path.resolve(__dirname, '../../..');
-const syncScript = path.join(repoRoot, 'scripts/sync-review-router-domains.mjs');
+const syncScript = path.join(
+  repoRoot,
+  'scripts/sync-review-router-domains.mjs'
+);
 
 const ORIGIN_PATTERN =
   /https:\/\/(?:api\.)?reviewrouter\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*/;
@@ -70,7 +73,9 @@ describe('review-router domain single source', () => {
     expect(CODEX_SEED_SCRIPT_URL).toBe(
       `${REVIEW_ROUTER_WEB_ORIGIN}/install/codex`
     );
-    expect(NEWTEST_V4_ROOT_URL).toBe(`${REVIEW_ROUTER_API_ORIGIN}/__newtest_v4/`);
+    expect(NEWTEST_V4_ROOT_URL).toBe(
+      `${REVIEW_ROUTER_API_ORIGIN}/__newtest_v4/`
+    );
   });
 
   it('rejects stale managed fields and foreign URLs instead of treating them as in sync', () => {

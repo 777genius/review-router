@@ -109,9 +109,7 @@ describe('PromptBuilder', () => {
         prepared.prompt,
         prepared.investigationContextPrompt,
       ]) {
-        expect(prompt).toContain(
-          'material failures introduced or aggravated'
-        );
+        expect(prompt).toContain('material failures introduced or aggravated');
         expect(prompt).toContain('compare before and after');
         expect(prompt).toContain('Exclude unchanged pre-existing bugs');
         expect(prompt).toContain('without a causal change');

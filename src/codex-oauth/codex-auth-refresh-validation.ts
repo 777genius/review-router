@@ -59,13 +59,18 @@ function authFacts(bytes: string): AuthFacts {
   };
 }
 
-/** Claim inspection is local lifetime validation, not independent JWT authentication.
- * The official, pinned helper obtains the token from the approved OAuth endpoint. */
+/** Validate the official helper's confirmed rotation for encrypted writeback.
+ * This is not inference admission: even an access token with insufficient
+ * remaining lifetime must not cause a new, possibly single-use refresh token
+ * to be discarded. The prepared route checks lifetime after definite writeback.
+ * Claim inspection is not independent JWT authentication; the pinned official
+ * helper obtains the token from the approved OAuth endpoint. */
 export function validateCodexRefreshedAuth(input: {
   readonly originalAuthJson: string;
   readonly refreshedAuthJson: string;
   readonly startedAt: number;
   readonly now: number;
+  /** Retained for caller compatibility; enforced by the prepared route instead. */
   readonly requiredValidUntil: number;
 }): Readonly<{
   authJsonBytes: string;
@@ -84,11 +89,7 @@ export function validateCodexRefreshedAuth(input: {
       before.refreshToken === after.refreshToken)
   )
     throw new Error('codex_oauth_refresh_not_confirmed');
-  const credential = preparedCredentialFromFacts(
-    after,
-    input.requiredValidUntil,
-    input.now
-  );
+  const credential = decodedCredentialFromFacts(after);
   return Object.freeze({
     authJsonBytes: after.compact,
     credentialValidUntil: credential.credentialValidUntil,
@@ -102,18 +103,18 @@ export function readPreparedCodexCredential(
   authJsonBytes: string,
   requiredValidUntil: number
 ): PreparedCodexCredential {
-  return preparedCredentialFromFacts(
-    authFacts(authJsonBytes),
-    requiredValidUntil,
-    Date.now()
-  );
+  const credential = decodedCredentialFromFacts(authFacts(authJsonBytes));
+  if (
+    !Number.isSafeInteger(requiredValidUntil) ||
+    requiredValidUntil < Date.now() ||
+    credential.credentialValidUntil <
+      requiredValidUntil + CODEX_AUTH_EXPIRY_MARGIN_MS
+  )
+    throw new Error('codex_oauth_refresh_lifetime_insufficient');
+  return credential;
 }
 
-function preparedCredentialFromFacts(
-  facts: AuthFacts,
-  requiredValidUntil: number,
-  now: number
-): PreparedCodexCredential {
+function decodedCredentialFromFacts(facts: AuthFacts): PreparedCodexCredential {
   let claims: unknown;
   try {
     const parts = facts.accessToken.split('.');
@@ -131,16 +132,9 @@ function preparedCredentialFromFacts(
     !Number.isSafeInteger(claims.exp * 1_000)
   )
     throw new Error('codex_oauth_refresh_expiry_unavailable');
-  const credentialValidUntil = claims.exp * 1_000;
-  if (
-    !Number.isSafeInteger(requiredValidUntil) ||
-    requiredValidUntil < now ||
-    credentialValidUntil < requiredValidUntil + CODEX_AUTH_EXPIRY_MARGIN_MS
-  )
-    throw new Error('codex_oauth_refresh_lifetime_insufficient');
   return Object.freeze({
     accessToken: facts.accessToken,
-    credentialValidUntil,
+    credentialValidUntil: claims.exp * 1_000,
     accountId: facts.accountId,
   });
 }

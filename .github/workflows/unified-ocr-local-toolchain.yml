@@ -1,4 +1,4 @@
-# Temporary exact-pair qualification; removed from the verified candidate.
+# Temporary exact-pair qualification; excluded before tests and publication.
 name: Unified OCR integrated runtime
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24.21.0
-      - name: Integrate exact main without dropping either owner's guards
+      - name: Integrate exact main and the captured-policy test fixture
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 777genius/review-router
@@ -37,14 +37,14 @@ jobs:
           git switch -C feat/unified-ocr-review-20261026
           git merge --no-commit --no-ff "$MAIN_SHA" || test -n "$(git ls-files -u)"
           python3 - <<'PY'
-          import os, pathlib, re, subprocess
-          runner = 'src/review-orchestration/infrastructure/production-t0-review-runner.ts'
-          test = '__tests__/unit/review-orchestration/lifecycle-verification-invocation.test.ts'
-          generated = ['action-dist/conflict-runtime.cjs','dist/index.js','dist/index.js.map','dist/single-t0-plan.js']
-          unmerged = subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).splitlines()
-          assert set(unmerged) == {runner,test,*generated}, unmerged
-          pattern = r'<<<<<<< HEAD\n(.*?)=======\n(.*?)>>>>>>> ' + os.environ['MAIN_SHA'] + r'\n'
-          ordinal = [0]
+          import os,pathlib,re,subprocess
+          runner='src/review-orchestration/infrastructure/production-t0-review-runner.ts'
+          test='__tests__/unit/review-orchestration/lifecycle-verification-invocation.test.ts'
+          generated=['action-dist/conflict-runtime.cjs','dist/index.js','dist/index.js.map','dist/single-t0-plan.js']
+          unmerged=subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).splitlines()
+          assert set(unmerged)=={runner,test,*generated},unmerged
+          pattern=r'<<<<<<< HEAD\n(.*?)=======\n(.*?)>>>>>>> '+os.environ['MAIN_SHA']+r'\n'
+          ordinal=[0]
           def resolve(m):
               i=ordinal[0];ordinal[0]+=1
               if i==0:
@@ -63,6 +63,14 @@ jobs:
           subprocess.run(['git','checkout','--ours','--',*generated],check=True)
           subprocess.run(['git','add','--',runner,test,*generated],check=True)
           assert not subprocess.check_output(['git','ls-files','-u'])
+          p=pathlib.Path('__tests__/unit/review-orchestration/production-t0-review-runner.test.ts')
+          assert subprocess.check_output(['git','hash-object',str(p)],text=True).strip()=='a4d2932c54ae23612c473d0e77e0929153b34d4f'
+          old="            ...admittedAgentEnv,\n            CODEX_MODEL: 'gpt-memory-test',"
+          new=old+"\n            // Prepared routes use captured policy, not the legacy ConfigLoader spy.\n            CODEX_AGENTIC_CONTEXT: 'false',"
+          text=p.read_text();assert text.count(old)==1;p.write_text(text.replace(old,new))
+          assert subprocess.check_output(['git','hash-object',str(p)],text=True).strip()=='f0699f879ad40127633fbe464fe21f2d88a2a3c4'
+          # Test the final workflow inventory, not this disposable preparation job.
+          pathlib.Path('.github/workflows/unified-ocr-local-toolchain.yml').unlink()
           PY
           mkdir -p "$RUNNER_TEMP/ocr-integration"
       - name: Check out the verified merged control plane
@@ -84,11 +92,9 @@ jobs:
           pnpm protocol:check
           pnpm action:build
           git diff --exit-code
-      - name: Regenerate the canonical handoff and sync only the curated wrapper
+      - name: Regenerate the canonical handoff and curated wrapper
         run: |
           set -euo pipefail
-          # Generated files are replaced only by their owning exporter. Restore
-          # its known target input before exporting the complete merged source.
           git restore --source="$GITHUB_SHA" --staged --worktree -- src/control-plane/generated/review-action-v2
           node tmp/control-plane/scripts/export-public-review-action-v2-contract.mjs \
             --saas-repo "$PWD/tmp/control-plane" --action-repo "$PWD" \
@@ -97,12 +103,14 @@ jobs:
           node tmp/control-plane/scripts/sync-public-action-runtime.mjs \
             --saas-repo "$PWD/tmp/control-plane" --action-repo "$PWD" \
             --expected-action-branch feat/unified-ocr-review-20261026 --write
-      - name: Install and check the locked public runtime
+      - name: Install, typecheck and build every test entrypoint
         run: |
           npm ci --ignore-scripts
-          npx --no-install prettier --write src/review-orchestration/infrastructure/production-t0-review-runner.ts __tests__/unit/review-orchestration/lifecycle-verification-invocation.test.ts
+          npx --no-install prettier --write src/review-orchestration/infrastructure/production-t0-review-runner.ts __tests__/unit/review-orchestration/lifecycle-verification-invocation.test.ts __tests__/unit/review-orchestration/production-t0-review-runner.test.ts
           npm run lint
           npm run typecheck
+          npm run build
+          test -f dist/cli/index.js
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.26.10'
@@ -133,7 +141,7 @@ jobs:
           REVIEWROUTER_TEST_APPROVED_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview
           REVIEWROUTER_TEST_LIVE_MCP: '0'
         run: npm test -- __tests__/unit/context-tools/ocr-native.test.ts --runInBand --json --outputFile="$RUNNER_TEMP/ocr-integration/native-mcp.json"
-      - name: Rebuild and confirm deterministic public artifacts
+      - name: Confirm deterministic committed runtime artifacts
         run: |
           npm run build
           npm run check:context-gateway-release-metadata
@@ -160,7 +168,7 @@ jobs:
           assert git('rev-parse','HEAD').decode().strip()==head
           assert git('rev-parse','MERGE_HEAD').decode().strip()==main
           assert api('git/ref/heads/feat/unified-ocr-review-20261026')['object']['sha']==head
-          pathlib.Path('.github/workflows/unified-ocr-local-toolchain.yml').unlink()
+          assert not pathlib.Path('.github/workflows/unified-ocr-local-toolchain.yml').exists()
           subprocess.run(['git','add','--all'],check=True)
           subprocess.run(['git','diff','--cached','--check',main],check=True)
           assert not git('ls-files','-u')

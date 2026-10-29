@@ -36,7 +36,7 @@ export function prepareClaudeSubscriptionCredential(
   for (const name of CLAUDE_SECRET_INPUTS) {
     const raw = env[name];
     delete env[name];
-    if (raw !== undefined) values.push(raw);
+    if (raw !== undefined && raw.trim() !== '') values.push(raw);
   }
   for (const raw of values) if (raw) core.setSecret(raw);
   input.signal?.throwIfAborted();
@@ -106,6 +106,7 @@ export async function prepareClaudeSubscriptionModelRoute(input: {
       credentialLifetime: input.credential.lifetime,
       modelDispatch: input.modelDispatch,
       deadlineMs: input.deadlineMs,
+      reasoningEffort: env.CODEX_REASONING_EFFORT ?? null,
       signal: input.signal,
       fetchImpl: input.fetchImpl,
     });

@@ -249836,7 +249836,7 @@ function prepareClaudeSubscriptionCredential(input = {}) {
   for (const name of CLAUDE_SECRET_INPUTS) {
     const raw = env[name];
     delete env[name];
-    if (raw !== void 0) values.push(raw);
+    if (raw !== void 0 && raw.trim() !== "") values.push(raw);
   }
   for (const raw of values) if (raw) setSecret(raw);
   input.signal?.throwIfAborted();
@@ -249880,6 +249880,7 @@ async function prepareClaudeSubscriptionModelRoute(input) {
       credentialLifetime: input.credential.lifetime,
       modelDispatch: input.modelDispatch,
       deadlineMs: input.deadlineMs,
+      reasoningEffort: env.CODEX_REASONING_EFFORT ?? null,
       signal: input.signal,
       fetchImpl: input.fetchImpl
     });
@@ -251488,18 +251489,22 @@ async function runCodexOAuthRotatingAction(options = {}) {
       fetchImpl: options.fetchImpl
     })
   });
-  const t0WorkspacePath = reviewActionV2Activation.mode === "t0" /* T0 */ ? await createIsolatedCheckoutWorkspace({
-    runnerTempPath: process.env.RUNNER_TEMP,
-    githubWorkspacePath: inputs.workspacePath
-  }) : null;
+  let t0WorkspacePath = null;
   const ciProgress = reviewActionV2Activation.mode === "t0" /* T0 */ ? createCiReviewProgressPublisher({
     repository: inputs.repository,
     pullRequestNumber: inputs.pullRequestNumber
   }) : null;
   const ciProgressReporter = ciProgress ? new CiOrchestrationProgressReporter(ciProgress) : null;
   try {
-    process.on("SIGINT", cancelRun);
-    process.on("SIGTERM", cancelRun);
+    if (reviewActionV2Activation.mode === "t0" /* T0 */) {
+      process.on("SIGINT", cancelRun);
+      process.on("SIGTERM", cancelRun);
+      t0WorkspacePath = await createIsolatedCheckoutWorkspace({
+        runnerTempPath: process.env.RUNNER_TEMP,
+        githubWorkspacePath: inputs.workspacePath
+      });
+      runController.signal.throwIfAborted();
+    }
     const runtime = reviewActionV2Activation.mode === "t0" /* T0 */ ? await runCodexOAuthRotatingRuntime(
       {
         ...inputs,

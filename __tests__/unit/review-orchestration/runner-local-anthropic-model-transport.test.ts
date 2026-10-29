@@ -12,6 +12,10 @@ import {
   type LocalGatewayModelTransport,
 } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 import { encodeAnthropicVerificationRequest } from '../../../src/review-orchestration/infrastructure/anthropic-messages-codec';
+import {
+  prepareClaudeSubscriptionCredential,
+  prepareClaudeSubscriptionModelRoute,
+} from '../../../src/codex-oauth/claude-subscription-bootstrap';
 
 const model = 'claude-fixture';
 const token = 'sk-ant-oat01-synthetic_fixture';
@@ -75,6 +79,7 @@ async function harness(
     settlementGate?: ReturnType<typeof gate>;
     loseSettlementAck?: boolean;
     maxRequests?: number;
+    useClaudeBootstrap?: boolean;
   } = {}
 ) {
   const deadline = new Date(Date.now() + 60_000).toISOString();
@@ -136,6 +141,7 @@ async function harness(
       wireProtocol: 'anthropic-messages',
       outputTokenLimit: 'upstream_request',
       providerIndex: 0,
+      ...(options.useClaudeBootstrap ? { configuredModel: 'sonnet' } : {}),
       model,
       deadline,
       maxRequests: options.maxRequests ?? 2,
@@ -150,7 +156,14 @@ async function harness(
     }),
     fetchImpl: control as typeof fetch,
   });
-  const readToken = jest.fn(() => token);
+  const credential = options.useClaudeBootstrap
+    ? prepareClaudeSubscriptionCredential({
+        env: { CLAUDE_CODE_OAUTH_TOKEN: token },
+      })
+    : undefined;
+  const readToken = jest.fn(() =>
+    credential ? credential.readToken() : token
+  );
   const upstream = jest.fn(
     async (url: string | URL | Request, init?: RequestInit) => {
       events.push('upstream');
@@ -160,13 +173,41 @@ async function harness(
         : response(outbound.length === 1);
     }
   );
-  const transport = await startRunnerLocalAnthropicModelTransport({
-    readToken,
-    modelDispatch: controller,
-    credentialLifetime: { kind: 'opaque_provider_validated' },
-    reasoningEffort: 'high',
-    fetchImpl: upstream as typeof fetch,
+  // Component fixture admission: current SaaS Claude defaults do not emit effort.
+  const profile = JSON.stringify({
+    profileRef: 'ocr-native-fixture',
+    agentKind: 'ocr',
+    packageVersion: '1.13.1-rr.6',
+    binarySha256: 'a'.repeat(64),
+    modelTransports: ['provider_api'],
+    contextGateway: false,
+    cancellation: true,
   });
+  const transport = credential
+    ? await prepareClaudeSubscriptionModelRoute({
+        runtimeConfig: {
+          protocolVersion: 1,
+          configVersion: 1,
+          runtimeEnv: {
+            REVIEW_AUTH_MODE: 'claude-oauth',
+            REVIEW_PROVIDERS: 'claude/sonnet',
+            CLAUDE_MODEL: 'sonnet',
+            CODEX_REASONING_EFFORT: 'high',
+            REVIEW_ROUTER_AGENT_PROFILE_JSON: profile,
+            REVIEW_ROUTER_AGENT_PROFILE_DIGEST: hash(Buffer.from(profile)),
+          },
+        },
+        modelDispatch: controller,
+        credential: { ...credential, readToken },
+        fetchImpl: upstream as typeof fetch,
+      })
+    : await startRunnerLocalAnthropicModelTransport({
+        readToken,
+        modelDispatch: controller,
+        credentialLifetime: { kind: 'opaque_provider_validated' },
+        reasoningEffort: 'high',
+        fetchImpl: upstream as typeof fetch,
+      });
   transports.push(transport);
   const release = transport.beginInvocation!(() => scope);
   const request = (body: Uint8Array = discovery) =>
@@ -238,8 +279,8 @@ describe('prepared native Anthropic route', () => {
     expect(fixture.upstream).not.toHaveBeenCalled();
   });
 
-  it('shares one captured account/model and durable budget between OCR and verifier', async () => {
-    const fixture = await harness();
+  it('shares the real Claude bootstrap effort, captured account/model and durable budget between OCR and verifier', async () => {
+    const fixture = await harness({ useClaudeBootstrap: true });
     const first = await fixture.request();
     expect(first.status).toBe(200);
     await first.json();
@@ -289,6 +330,9 @@ describe('prepared native Anthropic route', () => {
         'user-agent': RUNNER_LOCAL_ANTHROPIC_ROUTE.userAgent,
       });
       expect(JSON.parse(String(outbound.init.body)).model).toBe(model);
+      expect(JSON.parse(String(outbound.init.body)).output_config).toEqual({
+        effort: 'high',
+      });
     }
     expect(JSON.parse(String(fixture.outbound[0].init.body)).max_tokens).toBe(
       100

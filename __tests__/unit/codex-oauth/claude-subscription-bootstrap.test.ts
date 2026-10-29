@@ -43,7 +43,43 @@ it('captures the existing opaque secret once and exposes no invented expiry', ()
 });
 
 it.each([
+  ['INPUT_CLAUDE_CODE_OAUTH_TOKEN', ''],
+  ['INPUT_CLAUDE_CODE_OAUTH_TOKEN', ' \t\n'],
+  ['INPUT_CLAUDE-CODE-OAUTH-TOKEN', ''],
+  ['INPUT_CLAUDE-CODE-OAUTH-TOKEN', ' \t\n'],
+])(
+  'ignores the empty optional alias %s without changing the captured account',
+  (alias, empty) => {
+    const env: NodeJS.ProcessEnv = {
+      [alias]: empty,
+      CLAUDE_CODE_OAUTH_TOKEN: token,
+    };
+    const credential = prepareClaudeSubscriptionCredential({ env });
+    try {
+      expect(credential.readToken()).toBe(token);
+      expect(env).toEqual({});
+      expect(core.setSecret).toHaveBeenCalledWith(token);
+    } finally {
+      credential.dispose();
+    }
+  }
+);
+
+it.each([
   { CLAUDE_CODE_OAUTH_TOKEN: '' },
+  {
+    INPUT_CLAUDE_CODE_OAUTH_TOKEN: '',
+    'INPUT_CLAUDE-CODE-OAUTH-TOKEN': ' \t\n',
+    CLAUDE_CODE_OAUTH_TOKEN: ' ',
+  },
+  {
+    INPUT_CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-api03-synthetic-key',
+    CLAUDE_CODE_OAUTH_TOKEN: token,
+  },
+  {
+    'INPUT_CLAUDE-CODE-OAUTH-TOKEN': 'not-a-subscription-token',
+    CLAUDE_CODE_OAUTH_TOKEN: token,
+  },
   { CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-api03-synthetic-key' },
   { CLAUDE_CODE_OAUTH_TOKEN: 'gh secret set CLAUDE_CODE_OAUTH_TOKEN' },
   {
@@ -141,33 +177,39 @@ function fixture(runtimeChanges: Record<string, string> = {}) {
   };
 }
 
-it('prepares the captured canonical route for both phases while preserving configured alias and supplied-diff mode', async () => {
-  const f = fixture();
-  const dispose = jest.fn(async () => undefined);
-  start.mockResolvedValue({
-    protocol: 'anthropic-messages',
-    baseUrl: 'http://127.0.0.1:1234',
-    environment: {},
-    configuration: [],
-    actualModel: () => undefined,
-    failureFact: () => undefined,
-    dispose,
-  });
-  const route = await prepareClaudeSubscriptionModelRoute(f);
-  expect(start).toHaveBeenCalledTimes(1);
-  const args = start.mock.calls[0][0];
-  expect(args.modelDispatch.capability.model).toBe('claude-sonnet-fixture');
-  expect(args.credentialLifetime).toEqual({
-    kind: 'opaque_provider_validated',
-  });
-  expect(await args.readToken()).toBe(token);
-  expect(f.runtimeConfig.runtimeEnv.CLAUDE_MODEL).toBe('sonnet');
-  await route.dispose();
-  expect(dispose).toHaveBeenCalledTimes(1);
-  expect(() => f.credential.readToken()).toThrow(
-    'claude_subscription_credential_disposed'
-  );
-});
+it.each([undefined, 'high'] as const)(
+  'prepares the captured canonical route with admitted effort %s',
+  async (effort) => {
+    const f = fixture(
+      effort === undefined ? {} : { CODEX_REASONING_EFFORT: effort }
+    );
+    const dispose = jest.fn(async () => undefined);
+    start.mockResolvedValue({
+      protocol: 'anthropic-messages',
+      baseUrl: 'http://127.0.0.1:1234',
+      environment: {},
+      configuration: [],
+      actualModel: () => undefined,
+      failureFact: () => undefined,
+      dispose,
+    });
+    const route = await prepareClaudeSubscriptionModelRoute(f);
+    expect(start).toHaveBeenCalledTimes(1);
+    const args = start.mock.calls[0][0];
+    expect(args.modelDispatch.capability.model).toBe('claude-sonnet-fixture');
+    expect(args.reasoningEffort).toBe(effort ?? null);
+    expect(args.credentialLifetime).toEqual({
+      kind: 'opaque_provider_validated',
+    });
+    expect(await args.readToken()).toBe(token);
+    expect(f.runtimeConfig.runtimeEnv.CLAUDE_MODEL).toBe('sonnet');
+    await route.dispose();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(() => f.credential.readToken()).toThrow(
+      'claude_subscription_credential_disposed'
+    );
+  }
+);
 
 it.each<Record<string, string>>([
   { CLAUDE_MODEL: 'opus' },

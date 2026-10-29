@@ -230,13 +230,7 @@ export async function runCodexOAuthRotatingAction(
         fetchImpl: options.fetchImpl,
       }),
     });
-  const t0WorkspacePath =
-    reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0
-      ? await createIsolatedCheckoutWorkspace({
-          runnerTempPath: process.env.RUNNER_TEMP,
-          githubWorkspacePath: inputs.workspacePath,
-        })
-      : null;
+  let t0WorkspacePath: string | null = null;
   const ciProgress =
     reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0
       ? createCiReviewProgressPublisher({
@@ -248,8 +242,15 @@ export async function runCodexOAuthRotatingAction(
     ? new CiOrchestrationProgressReporter(ciProgress)
     : null;
   try {
-    process.on('SIGINT', cancelRun);
-    process.on('SIGTERM', cancelRun);
+    if (reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0) {
+      process.on('SIGINT', cancelRun);
+      process.on('SIGTERM', cancelRun);
+      t0WorkspacePath = await createIsolatedCheckoutWorkspace({
+        runnerTempPath: process.env.RUNNER_TEMP,
+        githubWorkspacePath: inputs.workspacePath,
+      });
+      runController.signal.throwIfAborted();
+    }
     const runtime =
       reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0
         ? await runCodexOAuthRotatingRuntime(

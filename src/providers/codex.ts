@@ -60,6 +60,9 @@ import {
 } from '../context-gateway/context-gateway-v4-contract';
 
 export interface CodexProviderOptions {
+  /** Captured child settings; sibling execution never changes process.env. */
+  binaryPath?: string;
+  reasoningEffort?: string | null;
   usageDelivery?: UsageDelivery;
   /** Trusted T0 composition selects the existing authorized OpenAI endpoint. */
   usageUpstreamBaseUrl?:
@@ -1561,7 +1564,9 @@ export class CodexProvider extends Provider {
     if (this.options.modelProvider === 'kimi') return undefined;
     return healthCheck
       ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || 'low'
-      : process.env.CODEX_REASONING_EFFORT;
+      : this.options.reasoningEffort !== undefined
+        ? (this.options.reasoningEffort ?? undefined)
+        : process.env.CODEX_REASONING_EFFORT;
   }
 
   private async buildRepositoryContextSeed(prompt: string): Promise<string> {
@@ -2791,6 +2796,7 @@ export class CodexProvider extends Provider {
   }
 
   private async resolveBinary(): Promise<string> {
+    if (this.options.binaryPath) return this.options.binaryPath;
     if (
       CodexProvider.preparedBinaryPath &&
       (await this.canRun(CodexProvider.preparedBinaryPath, ['--version']))

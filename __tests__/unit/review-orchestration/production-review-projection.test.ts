@@ -37,6 +37,67 @@ import {
 } from '../../../src/review-projection/domain';
 
 describe('production review projection coverage', () => {
+  it('counts exact reviewer votes of one engine and preserves a failed required reviewer in the denominator', async () => {
+    const assignments = [
+      {
+        ...assignment('first', true),
+        providerVoteIdentityHash: 'a'.repeat(64),
+      },
+      {
+        ...assignment('second', true),
+        providerVoteIdentityHash: 'b'.repeat(64),
+      },
+    ];
+    const evidence = assignments.map((assigned) => {
+      const accepted = acceptedEvidence(
+        assigned.workSlotId,
+        fullCoverageManifest(assigned.workSlotId)
+      );
+      return {
+        ...accepted,
+        observation: {
+          ...accepted.observation,
+          providerVoteIdentityHash: assigned.providerVoteIdentityHash,
+        },
+      };
+    });
+    const builder = projectionBuilder(assignments);
+    const complete = await builder.build({
+      acceptedEvidence: evidence,
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    expect(
+      JSON.parse(complete.projectionEnvelopeCanonicalJson).publishing.summary
+        .body
+    ).toContain('2/2');
+    const partial = await builder.build({
+      acceptedEvidence: [evidence[0]],
+      exhaustedWorkSlotIds: ['second'],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    expect(partial.coverageComplete).toBe(false);
+    expect(
+      JSON.parse(partial.projectionEnvelopeCanonicalJson).publishing.summary
+        .body
+    ).toContain('1/2');
+    await expect(
+      builder.build({
+        acceptedEvidence: [
+          {
+            ...evidence[0],
+            observation: {
+              ...evidence[0].observation,
+              providerVoteIdentityHash: assignments[1].providerVoteIdentityHash,
+            },
+          },
+        ],
+        exhaustedWorkSlotIds: ['second'],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      })
+    ).rejects.toThrow('review_projection_coverage_manifest_scope_invalid');
+  });
+
   it('freezes a private-safe receipt into the real canonical publication before hashing', async () => {
     const collector = new ReviewSkillsReceiptCollector();
     const skills = createMaterializedReviewSkills(

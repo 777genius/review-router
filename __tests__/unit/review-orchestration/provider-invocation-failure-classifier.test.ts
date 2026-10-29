@@ -1,4 +1,6 @@
 import {
+  ReviewExecutionProviderKind,
+  ReviewTaskKind,
   ReviewInvocationConfigurationMismatchError,
   ReviewInvocationConfigurationMismatchReason,
   ReviewInvocationFailureClass,
@@ -90,4 +92,42 @@ describe('ProviderInvocationFailureClassifier', () => {
       ReviewInvocationFailureClass.CapacityUnavailable
     );
   });
+});
+
+test('reads failure facts from the exact work slot and rejects a foreign allocation cancellation hint', () => {
+  const context = {
+    reviewerId: 'reviewer-one',
+    concurrencyGroupId: 'allocation-one',
+    workSlot: {
+      workSlotId: 'slot-one',
+      providerKind: ReviewExecutionProviderKind.Codex,
+      providerVoteIdentityHash: 'a'.repeat(64),
+      taskKind: ReviewTaskKind.FindingDiscovery,
+      shardKey: 'all',
+      required: true,
+      attemptBudget: 1,
+      retryPolicyVersion: 'no-replay',
+    },
+  };
+  const facts = jest.fn(() => ({
+    code: 'admission_limited',
+    effect: 'not_dispatched',
+    failureScope: 'allocation' as const,
+    concurrencyGroupId: 'allocation-one',
+  }));
+  const classifier = new ProviderInvocationFailureClassifier(facts);
+  expect(classifier.classify(new Error('provider failed'), context)).toBe(
+    ReviewInvocationFailureClass.AdmissionLimited
+  );
+  expect(classifier.scope(new Error('provider failed'), context)).toBe(
+    'allocation'
+  );
+  expect(facts).toHaveBeenCalledWith(context);
+  facts.mockReturnValue({
+    code: 'admission_limited',
+    effect: 'not_dispatched',
+    failureScope: 'allocation',
+    concurrencyGroupId: 'foreign-allocation',
+  });
+  expect(classifier.scope(new Error('provider failed'), context)).toBe('run');
 });

@@ -5,9 +5,7 @@
  * failed process or a missing attribution.
  */
 
-import {
-  OcrOutputTooLargeError,
-} from '../../../src/review-orchestration/infrastructure/ocr-review-normalization';
+import { OcrOutputTooLargeError } from '../../../src/review-orchestration/infrastructure/ocr-review-normalization';
 import {
   OCR_RESULT_FILE_LIMIT_BYTES,
   acceptOcrManagedReviewResult,
@@ -28,7 +26,9 @@ import {
 const MERGE_BASE = 'b'.repeat(40);
 const HEAD = 'c'.repeat(40);
 
-function argvInput(overrides: Partial<OcrReviewArgvInput> = {}): OcrReviewArgvInput {
+function argvInput(
+  overrides: Partial<OcrReviewArgvInput> = {}
+): OcrReviewArgvInput {
   return {
     binaryPath: '/opt/ocr/opencodereview',
     repoPath: '/work/checkout',
@@ -45,7 +45,9 @@ function argvInput(overrides: Partial<OcrReviewArgvInput> = {}): OcrReviewArgvIn
   };
 }
 
-const closedProcess = (overrides: Partial<OcrReviewProcessResult> = {}): OcrReviewProcessResult => ({
+const closedProcess = (
+  overrides: Partial<OcrReviewProcessResult> = {}
+): OcrReviewProcessResult => ({
   closed: true,
   exitCode: 0,
   signal: null,
@@ -113,7 +115,10 @@ function acceptInput(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function acceptanceErrorOf(build: () => unknown): { code: string; message: string } {
+function acceptanceErrorOf(build: () => unknown): {
+  code: string;
+  message: string;
+} {
   try {
     build();
   } catch (error) {
@@ -145,7 +150,12 @@ describe('buildOcrReviewArgv (§5.1)', () => {
   it('builds the managed argv with the reviewrouter-managed mode flag', () => {
     const argv = buildOcrReviewArgv(
       argvInput({
-        limits: { requestTimeoutSec: 600, timeoutMinutes: 15, maxTokens: 4000, maxTokensBudget: 90000 },
+        limits: {
+          requestTimeoutSec: 600,
+          timeoutMinutes: 15,
+          maxTokens: 4000,
+          maxTokensBudget: 90000,
+        },
         preview: true,
       })
     );
@@ -160,7 +170,9 @@ describe('buildOcrReviewArgv (§5.1)', () => {
     expect(argv[argv.indexOf('--max-tokens-budget') + 1]).toBe('90000');
     expect(argv).toContain('--preview');
     // Captured values, never shell substitutions.
-    expect(argv.every((value) => !value.includes(';') && !value.includes('`'))).toBe(true);
+    expect(
+      argv.every((value) => !value.includes(';') && !value.includes('`'))
+    ).toBe(true);
     // Native embedded tools; no resume/commit/tools overrides.
     expect(argv).not.toContain('--tools');
     expect(argv).not.toContain('--resume');
@@ -239,7 +251,9 @@ describe('managed config and child environment (§5.1)', () => {
   });
 
   it('extracts the raw capability from exactly one Bearer prefix', () => {
-    expect(extractRawLoopbackCapability(`Bearer ${capability}`)).toBe(capability);
+    expect(extractRawLoopbackCapability(`Bearer ${capability}`)).toBe(
+      capability
+    );
     expect(() =>
       extractRawLoopbackCapability(`Bearer Bearer ${capability}`)
     ).toThrow('review_action_v2_ocr_capability_format_invalid');
@@ -263,7 +277,9 @@ describe('managed config and child environment (§5.1)', () => {
       'REVIEWROUTER_LOCAL_MODEL_TOKEN',
     ]);
     expect(env.REVIEWROUTER_LOCAL_MODEL_TOKEN).toBe(`Bearer ${capability}`);
-    expect(env.REVIEWROUTER_LOCAL_MODEL_TOKEN!.match(/Bearer /g)).toHaveLength(1);
+    expect(env.REVIEWROUTER_LOCAL_MODEL_TOKEN!.match(/Bearer /g)).toHaveLength(
+      1
+    );
     expect(env.HOME).toBe('/run/home');
     // No upstream/control credentials ever inherit into the OCR child.
     expect(env.GITHUB_TOKEN).toBeUndefined();
@@ -369,7 +385,9 @@ describe('acceptOcrManagedReviewResult (§8.4 order 1-8)', () => {
     ).toBe('result_contract');
     expect(
       acceptanceErrorOf(() =>
-        acceptOcrManagedReviewResult(acceptInput({ resultBytes: Buffer.from('{}') }))
+        acceptOcrManagedReviewResult(
+          acceptInput({ resultBytes: Buffer.from('{}') })
+        )
       ).code
     ).toBe('result_contract');
   });
@@ -388,9 +406,7 @@ describe('acceptOcrManagedReviewResult (§8.4 order 1-8)', () => {
 
   it('rejects a proven zero model requests run', () => {
     const error = acceptanceErrorOf(() =>
-      acceptOcrManagedReviewResult(
-        acceptInput({ observedRequestCount: 0 })
-      )
+      acceptOcrManagedReviewResult(acceptInput({ observedRequestCount: 0 }))
     );
     expect(error.code).toBe('no_model_requests');
   });

@@ -47,6 +47,7 @@ import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import { ExecutionDeadline } from '../../../src/review-execution/domain/execution-deadline';
 
 import { GeneratedProviderInvocationManifestAssembler } from '../../../src/review-orchestration/infrastructure/codex-review-invocation-adapter';
+import { ProviderInvocationFailureClassifier } from '../../../src/review-orchestration/infrastructure/provider-invocation-failure-classifier';
 import type { ReviewConfig } from '../../../src/types';
 
 describe('RunT0ReviewOrchestration', () => {
@@ -4064,4 +4065,740 @@ function canonicalJson(value: unknown): string {
       .join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+describe('exact reviewer concurrency in the parent orchestration', () => {
+  it('overlaps two reviewers while keeping each reviewer batch stream serial and finalizing once', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'a', 'b', 'b'],
+      { a: 'shared', b: 'shared' },
+      { shared: 2 },
+      2
+    );
+    const gates = new Map(
+      fixture.command.workSlots.map((slot) => [
+        slot.workSlotId,
+        deferred<void>(),
+      ])
+    );
+    const started = new Map(
+      fixture.command.workSlots.map((slot) => [
+        slot.workSlotId,
+        deferred<void>(),
+      ])
+    );
+    const active = new Map<string, number>();
+    let maximum = 0;
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ invocation }) => {
+        const vote = fixture.command.workSlots.find(
+          (slot) => slot.workSlotId === invocation.workSlotId
+        )!.providerVoteIdentityHash;
+        expect(active.get(vote) ?? 0).toBe(0);
+        active.set(vote, 1);
+        maximum = Math.max(maximum, active.size);
+        started.get(invocation.workSlotId)!.resolve();
+        await gates.get(invocation.workSlotId)!.promise;
+        active.delete(vote);
+        return observationPayload;
+      });
+    const running = fixture.useCase.execute(fixture.command);
+    await Promise.all([
+      started.get('slot-1')!.promise,
+      started.get('slot-3')!.promise,
+    ]);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(2);
+    gates.get('slot-3')!.resolve();
+    await started.get('slot-4')!.promise;
+    gates.get('slot-4')!.resolve();
+    gates.get('slot-1')!.resolve();
+    await started.get('slot-2')!.promise;
+    gates.get('slot-2')!.resolve();
+    const result = await running;
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(maximum).toBe(2);
+    expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.requestPublication).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.attachObservation).toHaveBeenCalledTimes(4);
+    expect(fixture.lastFinalizedVersion()).toBe(fixture.currentVersion());
+  });
+
+  it('queues a concurrency-one sibling beyond the transport wait budget and admits an independent ready group', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'b', 'c'],
+      { a: 'shared', b: 'shared', c: 'independent' },
+      { shared: 1, independent: 1 },
+      2
+    );
+    const gates = ['slot-1', 'slot-2', 'slot-3'].map(() => deferred<void>());
+    const started = ['slot-1', 'slot-2', 'slot-3'].map(() => deferred<void>());
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ invocation }) => {
+        const index = Number(invocation.workSlotId.slice(5)) - 1;
+        started[index].resolve();
+        await gates[index].promise;
+        return observationPayload;
+      });
+    const running = fixture.useCase.execute(fixture.command);
+    await Promise.all([started[0].promise, started[2].promise]);
+    jest
+      .mocked(fixture.dependencies.clock.monotonicNowMs)
+      .mockReturnValue(180_001);
+    expect(
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mock.calls.map(([request]) => request.invocation.workSlotId)
+    ).toEqual(['slot-1', 'slot-3']);
+    gates[2].resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(2);
+    gates[0].resolve();
+    await started[1].promise;
+    gates[1].resolve();
+    expect((await running).status).toBe(
+      ReviewOrchestrationResultStatus.Completed
+    );
+  });
+
+  it('stops and drains an exhausted allocation while another allocation completes its batches', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'a', 'b', 'c', 'c'],
+      { a: 'shared', b: 'shared', c: 'independent' },
+      { shared: 2, independent: 1 },
+      3
+    );
+    const started = deferred<void>();
+    const fail = deferred<void>();
+    const finish = deferred<void>();
+    let active = 0;
+    let drained = false;
+    Object.assign(fixture.dependencies.invocationFailureClassifier, {
+      classify: jest.fn(() => ReviewInvocationFailureClass.AdmissionLimited),
+      scope: jest.fn((_error, context) =>
+        context.workSlot.providerVoteIdentityHash === hash('vote-a')
+          ? 'allocation'
+          : 'reviewer'
+      ),
+    });
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ invocation, signal }) => {
+        active += 1;
+        if (active === 3) started.resolve();
+        if (invocation.workSlotId === 'slot-1') {
+          await fail.promise;
+          active -= 1;
+          throw new Error('budget_exhausted');
+        }
+        if (invocation.workSlotId === 'slot-3')
+          return new Promise<never>((_resolve, reject) =>
+            signal.addEventListener(
+              'abort',
+              () => {
+                active -= 1;
+                drained = true;
+                reject(signal.reason);
+              },
+              { once: true }
+            )
+          );
+        await finish.promise;
+        active -= 1;
+        return observationPayload;
+      });
+    const running = fixture.useCase.execute({
+      ...fixture.command,
+      allowPartial: true,
+    });
+    await started.promise;
+    fail.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(drained).toBe(true);
+    finish.resolve();
+    const result = await running;
+    expect(result.status).toBe(
+      ReviewOrchestrationResultStatus.PartialCompleted
+    );
+    expect(active).toBe(0);
+    expect(
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mock.calls.map(([request]) => request.invocation.workSlotId)
+    ).not.toContain('slot-2');
+    expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exhaustedWorkSlotIds: expect.arrayContaining([
+          'slot-1',
+          'slot-2',
+          'slot-3',
+        ]),
+      })
+    );
+    expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([1, 2])(
+    'does not retry or reconcile an aborted allocation sibling with attempt budget %i',
+    async (maxAttempts) => {
+      const fixture = concurrentFixture(
+        ['a', 'b', 'c'],
+        { a: 'shared', b: 'shared', c: 'independent' },
+        { shared: 2, independent: 1 },
+        3,
+        new Set(),
+        maxAttempts
+      );
+      const started = deferred<void>();
+      const fail = deferred<void>();
+      let count = 0;
+      Object.assign(fixture.dependencies, {
+        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+          (context) =>
+            context?.reviewerId === 'a'
+              ? {
+                  code: 'admission_limited',
+                  effect: 'not_dispatched',
+                  failureScope: 'allocation',
+                  concurrencyGroupId: 'shared',
+                }
+              : undefined
+        ),
+      });
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mockImplementation(async ({ invocation, signal }) => {
+          if (++count === 3) started.resolve();
+          if (invocation.workSlotId === 'slot-1') {
+            await fail.promise;
+            throw new Error('budget_exhausted');
+          }
+          if (invocation.workSlotId === 'slot-2')
+            return new Promise<never>((_resolve, reject) => {
+              // The Codex process returns its own AbortError, not signal.reason.
+              const abort = () =>
+                reject(
+                  Object.assign(new Error('Codex CLI aborted'), {
+                    name: 'AbortError',
+                  })
+                );
+              if (signal.aborted) abort();
+              else signal.addEventListener('abort', abort, { once: true });
+            });
+          return observationPayload;
+        });
+      const running = fixture.useCase.execute(fixture.command);
+      await started.promise;
+      fail.resolve();
+      const result = await running;
+
+      expect(result.status).toBe(
+        ReviewOrchestrationResultStatus.PartialCompleted
+      );
+      expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+        3
+      );
+      expect(
+        jest
+          .mocked(fixture.dependencies.invocations.prepare)
+          .mock.calls.filter(
+            ([request]) => request.workSlot.workSlotId === 'slot-2'
+          )
+      ).toHaveLength(1);
+      expect(
+        jest
+          .mocked(fixture.dependencies.delay.sleep)
+          .mock.calls.some(([delayMs]) => delayMs === 30_000)
+      ).toBe(false);
+      expect(
+        fixture.controlPlane.releaseInvocationLease.mock.calls.filter(
+          ([request]) => request.lease.leaseId === 'lease-slot-2'
+        )
+      ).toHaveLength(1);
+      expect(fixture.controlPlane.attachObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workSlot: expect.objectContaining({ workSlotId: 'slot-3' }),
+        })
+      );
+      expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each(['admission', 'retry'] as const)(
+    'stops an allocation sibling during its %s delay without acquiring again',
+    async (phase) => {
+      const fixture = concurrentFixture(
+        ['a', 'b', 'c'],
+        { a: 'shared', b: 'shared', c: 'independent' },
+        { shared: 2, independent: 1 },
+        3,
+        new Set(),
+        2
+      );
+      const waiting = deferred<void>();
+      const resumeWait = deferred<void>();
+      const stopped = deferred<void>();
+      const fail = deferred<void>();
+      const progress: NonNullable<
+        RunT0ReviewOrchestrationDependencies['progress']
+      > = {
+        report(event) {
+          if (event.type === 'exhausted' && event.workSlotId === 'slot-1')
+            stopped.resolve();
+        },
+      };
+      let waitSignal: AbortSignal | undefined;
+      const acquire =
+        fixture.controlPlane.acquireInvocationLease.getMockImplementation()!;
+      let siblingAcquisitions = 0;
+      fixture.controlPlane.acquireInvocationLease.mockImplementation(
+        async (request) => {
+          if (
+            phase === 'admission' &&
+            request.workSlot.workSlotId === 'slot-2' &&
+            ++siblingAcquisitions === 1
+          )
+            return { status: ReviewInvocationLeaseAcquireOutcomeStatus.Busy };
+          return acquire(request);
+        }
+      );
+      const sleep = jest
+        .mocked(fixture.dependencies.delay.sleep)
+        .getMockImplementation()!;
+      jest
+        .mocked(fixture.dependencies.delay.sleep)
+        .mockImplementation(async (delayMs, signal) => {
+          if (delayMs !== (phase === 'admission' ? 500 : 30_000))
+            return sleep(delayMs, signal);
+          waitSignal = signal;
+          waiting.resolve();
+          await new Promise<void>((resolve) => {
+            const finish = () => {
+              signal?.removeEventListener('abort', finish);
+              resolve();
+            };
+            void resumeWait.promise.then(finish);
+            if (signal?.aborted) finish();
+            else signal?.addEventListener('abort', finish, { once: true });
+          });
+        });
+      Object.assign(fixture.dependencies, {
+        progress,
+        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+          (context) =>
+            context?.reviewerId === 'a'
+              ? {
+                  code: 'admission_limited',
+                  effect: 'not_dispatched',
+                  failureScope: 'allocation',
+                  concurrencyGroupId: 'shared',
+                }
+              : undefined
+        ),
+      });
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mockImplementation(async ({ invocation }) => {
+          if (invocation.workSlotId === 'slot-1') {
+            await fail.promise;
+            throw new Error('budget_exhausted');
+          }
+          if (invocation.workSlotId === 'slot-2')
+            throw new Error('temporary_provider_failure');
+          return observationPayload;
+        });
+      const running = fixture.useCase.execute(fixture.command);
+      await waiting.promise;
+      fail.resolve();
+      await stopped.promise;
+      const cancelledDuringWait = waitSignal?.aborted;
+      resumeWait.resolve();
+      const result = await running;
+
+      expect(cancelledDuringWait).toBe(true);
+      expect(result.status).toBe(
+        ReviewOrchestrationResultStatus.PartialCompleted
+      );
+      expect(
+        fixture.controlPlane.acquireInvocationLease.mock.calls.filter(
+          ([request]) => request.workSlot.workSlotId === 'slot-2'
+        )
+      ).toHaveLength(1);
+      expect(
+        jest
+          .mocked(fixture.dependencies.invocations.execute)
+          .mock.calls.filter(
+            ([request]) => request.invocation.workSlotId === 'slot-2'
+          )
+      ).toHaveLength(phase === 'admission' ? 0 : 1);
+      expect(fixture.controlPlane.attachObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workSlot: expect.objectContaining({ workSlotId: 'slot-3' }),
+        })
+      );
+    }
+  );
+
+  it('cancels queued admission and releases a lease acquired while cancellation was in flight', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'b'],
+      { a: 'a', b: 'b' },
+      { a: 1, b: 1 },
+      2
+    );
+    const abort = new AbortController();
+    Object.assign(fixture.dependencies, { signal: abort.signal });
+    const requested = deferred<void>();
+    const respond = deferred<void>();
+    const acquire =
+      fixture.controlPlane.acquireInvocationLease.getMockImplementation()!;
+    fixture.controlPlane.acquireInvocationLease.mockImplementation(
+      async (request) => {
+        if (request.workSlot.workSlotId === 'slot-1') {
+          requested.resolve();
+          await respond.promise;
+        }
+        return acquire(request);
+      }
+    );
+    const running = fixture.useCase.execute(fixture.command);
+    await requested.promise;
+    // The second lane reaches the parent command queue while the first is in flight.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const abortReason = new Error('run_cancelled');
+    abort.abort(abortReason);
+    respond.resolve();
+    await expect(running).rejects.toBe(abortReason);
+
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lease: expect.objectContaining({ leaseId: 'lease-slot-1' }),
+      })
+    );
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+  });
+
+  it('settles an optional reviewer failure without failing a healthy required reviewer', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'b'],
+      { a: 'a', b: 'b' },
+      { a: 1, b: 1 },
+      2,
+      new Set(['a'])
+    );
+    Object.assign(fixture.dependencies.invocationFailureClassifier, {
+      classify: jest.fn(
+        () => ReviewInvocationFailureClass.AuthenticationUnavailable
+      ),
+      scope: jest.fn(() => 'reviewer'),
+    });
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ invocation }) => {
+        if (invocation.workSlotId === 'slot-1')
+          throw new Error('account_unavailable');
+        return observationPayload;
+      });
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      allowPartial: true,
+    });
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ allowPartial: false })
+    );
+    expect(
+      fixture.dependencies.invocationFailureClassifier.classify
+    ).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        reviewerId: 'a',
+        concurrencyGroupId: 'a',
+        workSlot: fixture.command.workSlots[0],
+        invocation: expect.objectContaining({ workSlotId: 'slot-1' }),
+      })
+    );
+  });
+
+  it('aborts every child and waits for settlement before returning a parent authority failure', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'b'],
+      { a: 'a', b: 'b' },
+      { a: 1, b: 1 },
+      2
+    );
+    const bothStarted = deferred<void>();
+    const fail = deferred<void>();
+    let count = 0;
+    let drained = false;
+    Object.assign(fixture.dependencies.invocationFailureClassifier, {
+      classify: jest.fn(
+        () => ReviewInvocationFailureClass.AuthenticationUnavailable
+      ),
+      scope: jest.fn(() => 'run'),
+    });
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ invocation, signal }) => {
+        count += 1;
+        if (count === 2) bothStarted.resolve();
+        if (invocation.workSlotId === 'slot-1') {
+          await fail.promise;
+          throw new Error('parent_revoked');
+        }
+        return new Promise<never>((_resolve, reject) =>
+          signal.addEventListener(
+            'abort',
+            () => {
+              drained = true;
+              reject(signal.reason);
+            },
+            { once: true }
+          )
+        );
+      });
+    const running = fixture.useCase.execute(fixture.command);
+    await bothStarted.promise;
+    fail.resolve();
+    const result = await running;
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Failed);
+    expect(drained).toBe(true);
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      2
+    );
+    expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+  });
+});
+
+describe('parallel reviewer evidence ownership', () => {
+  it('refreshes mixed reused and fresh evidence against authoritative state after reversed reply timing', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'b'],
+      { a: 'a', b: 'b' },
+      { a: 1, b: 1 },
+      2
+    );
+    const freshAttached = deferred<void>();
+    const attach =
+      fixture.controlPlane.attachObservation.getMockImplementation()!;
+    fixture.controlPlane.attachObservation.mockImplementation(
+      async (request) => {
+        const result = await attach(request);
+        if (request.workSlot.workSlotId === 'slot-2') freshAttached.resolve();
+        return result;
+      }
+    );
+    fixture.controlPlane.lookupEvidence.mockImplementation(async (request) => {
+      if (request.workSlot.workSlotId === 'slot-2')
+        return { kind: ReviewEvidenceLookupKind.Miss };
+      await freshAttached.promise;
+      return {
+        kind: ReviewEvidenceLookupKind.Hit,
+        observation: {
+          ...acceptedObservation,
+          providerVoteIdentityHash: request.workSlot.providerVoteIdentityHash,
+        },
+        attachment: sameExecutionAttachment,
+      };
+    });
+    fixture.controlPlane.adoptObservation.mockImplementation(async (request) =>
+      fixture.controlPlane.attachObservation({
+        ...request,
+        attachmentCapability: 'accepted-reuse',
+      })
+    );
+    expect((await fixture.useCase.execute(fixture.command)).status).toBe(
+      ReviewOrchestrationResultStatus.Completed
+    );
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.adoptObservation).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.lastFinalizedVersion()).toBe(fixture.currentVersion());
+  });
+
+  it('does not lend a primary investigation grant to an unauthorized same-kind reviewer', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'b'],
+      { a: 'a', b: 'b' },
+      { a: 1, b: 1 },
+      2
+    );
+    const recording = createFixture({
+      investigationMode: ReviewInvestigationRecordingMode.Authoritative,
+      investigationVerifiedCleanEffectsEnabled: true,
+    });
+    Object.assign(fixture.dependencies, {
+      investigationRecording: recording.investigationRecording,
+      investigationInvocations: recording.dependencies.investigationInvocations,
+      resolveInvestigationRecording: (slot: ReviewWorkSlotPlan) =>
+        slot.providerVoteIdentityHash === hash('vote-a')
+          ? recording.investigationRecording
+          : undefined,
+    });
+    expect((await fixture.useCase.execute(fixture.command)).status).toBe(
+      ReviewOrchestrationResultStatus.Completed
+    );
+    expect(recording.investigationRecording!.execute).toHaveBeenCalledTimes(1);
+    expect(recording.investigationRecording!.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workSlot: expect.objectContaining({
+          workSlotId: 'slot-1',
+          providerVoteIdentityHash: hash('vote-a'),
+        }),
+      })
+    );
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({ workSlotId: 'slot-2' }),
+      })
+    );
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((success, failure) => {
+    resolve = success;
+    reject = failure;
+  });
+  return { promise, resolve, reject };
+}
+
+function concurrentFixture(
+  laneNames: readonly string[],
+  groupByLane: Readonly<Record<string, string>>,
+  permits: Readonly<Record<string, number>>,
+  parallel: number,
+  optional = new Set<string>(),
+  maxAttempts = 1
+) {
+  const fixture = createFixture({
+    workSlotCount: laneNames.length,
+    allowPartial: true,
+    maxAttempts,
+  });
+  const workSlots = fixture.command.workSlots.map((slot, index) => ({
+    ...slot,
+    providerVoteIdentityHash: hash(`vote-${laneNames[index]}`),
+    required: !optional.has(laneNames[index]),
+  }));
+  const command = {
+    ...fixture.command,
+    workSlots,
+    workSlotsCanonicalJson: canonicalizeReviewWorkSlots(workSlots),
+  };
+  const lanes = [...new Set(laneNames)].map((name) => ({
+    reviewerId: name,
+    providerVoteIdentityHash: hash(`vote-${name}`),
+    concurrencyGroupId: groupByLane[name],
+  }));
+  Object.assign(fixture.dependencies, {
+    reviewerScheduling: {
+      maxParallelReviewers: parallel,
+      reviewers: lanes,
+      concurrencyGroups: Object.entries(permits).map(([id, maxParallel]) => ({
+        id,
+        maxParallel,
+      })),
+    },
+  });
+  const current = restoredAdmission(command, {
+    state: RestoredReviewWorkSlotState.Pending,
+    acceptedObservationRefId: null,
+  }).restoredExecution;
+  let server: typeof current | null = null;
+  let finalizedVersion: string | undefined;
+  const advance = () => {
+    server = {
+      ...server!,
+      version: String(BigInt(server!.version) + 1n),
+      streamVersion: String(BigInt(server!.streamVersion) + 1n),
+    };
+  };
+  fixture.controlPlane.startExecution.mockImplementation(async () => {
+    server = structuredClone(current);
+    return {
+      ...restoredAdmission(command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }),
+      restoredExecution: structuredClone(server),
+    };
+  });
+  fixture.controlPlane.restoreExecution
+    .mockReset()
+    .mockImplementation(async () => structuredClone(server));
+  fixture.controlPlane.acquireInvocationLease.mockImplementation(
+    async ({ workSlot }) => {
+      advance();
+      return {
+        status: ReviewInvocationLeaseAcquireOutcomeStatus.Acquired,
+        lease: {
+          ...lease,
+          leaseId: `lease-${workSlot.workSlotId}`,
+          attemptId: `attempt-${workSlot.workSlotId}`,
+        },
+      };
+    }
+  );
+  fixture.controlPlane.commitEvidence.mockImplementation(async (request) => {
+    advance();
+    return {
+      observationId: `observation-${request.lease.attemptId}`,
+      historicalOnly: false,
+      eligibilityPolicyVersion: 't0-v1',
+    };
+  });
+  fixture.controlPlane.attachObservation.mockImplementation(async (request) => {
+    expect(request.execution.streamVersion).toBe(server!.streamVersion);
+    advance();
+    return { streamVersion: server!.streamVersion };
+  });
+  fixture.controlPlane.finalizeExecution.mockImplementation(async (request) => {
+    finalizedVersion = request.execution.streamVersion;
+    expect(finalizedVersion).toBe(server!.streamVersion);
+    return { publicationPermit: 'publication.permit' };
+  });
+  jest
+    .mocked(fixture.dependencies.invocationManifestAssembler.assemble)
+    .mockImplementation(async (invocation) => ({
+      manifestCanonicalJson: '{"fixture":true}',
+      manifestKey: hash(`manifest-${invocation.workSlotId}`),
+      providerInvocationKey: hash(`invocation-${invocation.workSlotId}`),
+      providerVoteIdentityHash: workSlots.find(
+        (slot) => slot.workSlotId === invocation.workSlotId
+      )!.providerVoteIdentityHash,
+    }));
+  jest
+    .mocked(fixture.dependencies.leaseSupervisor.run)
+    .mockImplementation(async ({ lease: grantedLease, operation }) =>
+      operation(new AbortController().signal, () => grantedLease)
+    );
+  jest
+    .mocked(fixture.dependencies.delay.sleep)
+    .mockImplementation(async (_ms, signal?: AbortSignal) => {
+      if (!signal) return;
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) resolve();
+        else signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+    });
+  return {
+    ...fixture,
+    command,
+    useCase: new RunT0ReviewOrchestration(fixture.dependencies),
+    currentVersion: () => server?.streamVersion,
+    lastFinalizedVersion: () => finalizedVersion,
+  };
 }

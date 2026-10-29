@@ -2047,7 +2047,7 @@ var require_fast_deep_equal = __commonJS({
       if (a2 === b2) return true;
       if (a2 && b2 && typeof a2 == "object" && typeof b2 == "object") {
         if (a2.constructor !== b2.constructor) return false;
-        var length, i2, keys4;
+        var length, i2, keys5;
         if (Array.isArray(a2)) {
           length = a2.length;
           if (length != b2.length) return false;
@@ -2058,13 +2058,13 @@ var require_fast_deep_equal = __commonJS({
         if (a2.constructor === RegExp) return a2.source === b2.source && a2.flags === b2.flags;
         if (a2.valueOf !== Object.prototype.valueOf) return a2.valueOf() === b2.valueOf();
         if (a2.toString !== Object.prototype.toString) return a2.toString() === b2.toString();
-        keys4 = Object.keys(a2);
-        length = keys4.length;
+        keys5 = Object.keys(a2);
+        length = keys5.length;
         if (length !== Object.keys(b2).length) return false;
         for (i2 = length; i2-- !== 0; )
-          if (!Object.prototype.hasOwnProperty.call(b2, keys4[i2])) return false;
+          if (!Object.prototype.hasOwnProperty.call(b2, keys5[i2])) return false;
         for (i2 = length; i2-- !== 0; ) {
-          var key = keys4[i2];
+          var key = keys5[i2];
           if (!equal(a2[key], b2[key])) return false;
         }
         return true;
@@ -3260,8 +3260,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path39) {
-      let input = path39;
+    function removeDotSegments(path40) {
+      let input = path40;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3666,8 +3666,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path39 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path39 && path39 !== "/" ? path39 : void 0;
+        const path40 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path40 && path40 !== "/" ? path40 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -8979,15 +8979,15 @@ var require_dist_node9 = __commonJS({
         octokit.log.debug("request", options);
         const start = Date.now();
         const requestOptions = octokit.request.endpoint.parse(options);
-        const path39 = requestOptions.url.replace(options.baseUrl, "");
+        const path40 = requestOptions.url.replace(options.baseUrl, "");
         return request3(options).then((response) => {
           octokit.log.info(
-            `${requestOptions.method} ${path39} - ${response.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path40} - ${response.status} in ${Date.now() - start}ms`
           );
           return response;
         }).catch((error4) => {
           octokit.log.info(
-            `${requestOptions.method} ${path39} - ${error4.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path40} - ${error4.status} in ${Date.now() - start}ms`
           );
           throw error4;
         });
@@ -12030,9 +12030,9 @@ var require_tunnel = __commonJS({
       for (var i2 = 1, len = arguments.length; i2 < len; ++i2) {
         var overrides = arguments[i2];
         if (typeof overrides === "object") {
-          var keys4 = Object.keys(overrides);
-          for (var j2 = 0, keyLen = keys4.length; j2 < keyLen; ++j2) {
-            var k2 = keys4[j2];
+          var keys5 = Object.keys(overrides);
+          for (var j2 = 0, keyLen = keys5.length; j2 < keyLen; ++j2) {
+            var k2 = keys5[j2];
             if (overrides[k2] !== void 0) {
               target[k2] = overrides[k2];
             }
@@ -12869,14 +12869,14 @@ var require_util2 = __commonJS({
         }
         const port = url3.port != null ? url3.port : url3.protocol === "https:" ? 443 : 80;
         let origin = url3.origin != null ? url3.origin : `${url3.protocol || ""}//${url3.hostname || ""}:${port}`;
-        let path39 = url3.path != null ? url3.path : `${url3.pathname || ""}${url3.search || ""}`;
+        let path40 = url3.path != null ? url3.path : `${url3.pathname || ""}${url3.search || ""}`;
         if (origin[origin.length - 1] === "/") {
           origin = origin.slice(0, origin.length - 1);
         }
-        if (path39 && path39[0] !== "/") {
-          path39 = `/${path39}`;
+        if (path40 && path40[0] !== "/") {
+          path40 = `/${path40}`;
         }
-        return new URL(`${origin}${path39}`);
+        return new URL(`${origin}${path40}`);
       }
       if (!isHttpOrHttpsPrefixed(url3.origin || url3.protocol)) {
         throw new InvalidArgumentError("Invalid URL protocol: the URL must start with `http:` or `https:`.");
@@ -13327,39 +13327,39 @@ var require_diagnostics = __commonJS({
       });
       diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
         const {
-          request: { method, path: path39, origin }
+          request: { method, path: path40, origin }
         } = evt;
-        debuglog("sending request to %s %s/%s", method, origin, path39);
+        debuglog("sending request to %s %s/%s", method, origin, path40);
       });
       diagnosticsChannel.channel("undici:request:headers").subscribe((evt) => {
         const {
-          request: { method, path: path39, origin },
+          request: { method, path: path40, origin },
           response: { statusCode }
         } = evt;
         debuglog(
           "received response to %s %s/%s - HTTP %d",
           method,
           origin,
-          path39,
+          path40,
           statusCode
         );
       });
       diagnosticsChannel.channel("undici:request:trailers").subscribe((evt) => {
         const {
-          request: { method, path: path39, origin }
+          request: { method, path: path40, origin }
         } = evt;
-        debuglog("trailers received from %s %s/%s", method, origin, path39);
+        debuglog("trailers received from %s %s/%s", method, origin, path40);
       });
       diagnosticsChannel.channel("undici:request:error").subscribe((evt) => {
         const {
-          request: { method, path: path39, origin },
+          request: { method, path: path40, origin },
           error: error4
         } = evt;
         debuglog(
           "request to %s %s/%s errored - %s",
           method,
           origin,
-          path39,
+          path40,
           error4.message
         );
       });
@@ -13408,9 +13408,9 @@ var require_diagnostics = __commonJS({
         });
         diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
           const {
-            request: { method, path: path39, origin }
+            request: { method, path: path40, origin }
           } = evt;
-          debuglog("sending request to %s %s/%s", method, origin, path39);
+          debuglog("sending request to %s %s/%s", method, origin, path40);
         });
       }
       diagnosticsChannel.channel("undici:websocket:open").subscribe((evt) => {
@@ -13473,7 +13473,7 @@ var require_request = __commonJS({
     var kHandler = Symbol("handler");
     var Request2 = class {
       constructor(origin, {
-        path: path39,
+        path: path40,
         method,
         body: body2,
         headers,
@@ -13488,11 +13488,11 @@ var require_request = __commonJS({
         expectContinue,
         servername
       }, handler2) {
-        if (typeof path39 !== "string") {
+        if (typeof path40 !== "string") {
           throw new InvalidArgumentError("path must be a string");
-        } else if (path39[0] !== "/" && !(path39.startsWith("http://") || path39.startsWith("https://")) && method !== "CONNECT") {
+        } else if (path40[0] !== "/" && !(path40.startsWith("http://") || path40.startsWith("https://")) && method !== "CONNECT") {
           throw new InvalidArgumentError("path must be an absolute URL or start with a slash");
-        } else if (invalidPathRegex.test(path39)) {
+        } else if (invalidPathRegex.test(path40)) {
           throw new InvalidArgumentError("invalid request path");
         }
         if (typeof method !== "string") {
@@ -13558,7 +13558,7 @@ var require_request = __commonJS({
         this.completed = false;
         this.aborted = false;
         this.upgrade = upgrade || null;
-        this.path = query ? buildURL(path39, query) : path39;
+        this.path = query ? buildURL(path40, query) : path40;
         this.origin = origin;
         this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" : idempotent;
         this.blocking = blocking == null ? false : blocking;
@@ -13584,9 +13584,9 @@ var require_request = __commonJS({
               processHeader(this, header[0], header[1]);
             }
           } else {
-            const keys4 = Object.keys(headers);
-            for (let i2 = 0; i2 < keys4.length; ++i2) {
-              processHeader(this, keys4[i2], headers[keys4[i2]]);
+            const keys5 = Object.keys(headers);
+            for (let i2 = 0; i2 < keys5.length; ++i2) {
+              processHeader(this, keys5[i2], headers[keys5[i2]]);
             }
           }
         } else if (headers != null) {
@@ -15174,8 +15174,8 @@ var require_data_url = __commonJS({
       return input.slice(start, position.position);
     }
     function stringPercentDecode(input) {
-      const bytes = encoder2.encode(input);
-      return percentDecode(bytes);
+      const bytes2 = encoder2.encode(input);
+      return percentDecode(bytes2);
     }
     function isHexCharByte(byte) {
       return byte >= 48 && byte <= 57 || byte >= 65 && byte <= 70 || byte >= 97 && byte <= 102;
@@ -15643,16 +15643,16 @@ var require_webidl = __commonJS({
         }
         const result2 = {};
         if (!types3.isProxy(O2)) {
-          const keys5 = [...Object.getOwnPropertyNames(O2), ...Object.getOwnPropertySymbols(O2)];
-          for (const key of keys5) {
+          const keys6 = [...Object.getOwnPropertyNames(O2), ...Object.getOwnPropertySymbols(O2)];
+          for (const key of keys6) {
             const typedKey = keyConverter(key, prefix2, argument);
             const typedValue = valueConverter(O2[key], prefix2, argument);
             result2[typedKey] = typedValue;
           }
           return result2;
         }
-        const keys4 = Reflect.ownKeys(O2);
-        for (const key of keys4) {
+        const keys5 = Reflect.ownKeys(O2);
+        for (const key of keys5) {
           const desc = Reflect.getOwnPropertyDescriptor(O2, key);
           if (desc?.enumerable) {
             const typedKey = keyConverter(key, prefix2, argument);
@@ -16158,7 +16158,7 @@ var require_util3 = __commonJS({
         return false;
       }
     }
-    function bytesMatch(bytes, metadataList) {
+    function bytesMatch(bytes2, metadataList) {
       if (crypto10 === void 0) {
         return true;
       }
@@ -16174,7 +16174,7 @@ var require_util3 = __commonJS({
       for (const item of metadata2) {
         const algorithm = item.algo;
         const expectedValue = item.hash;
-        let actualValue = crypto10.createHash(algorithm).update(bytes).digest("base64");
+        let actualValue = crypto10.createHash(algorithm).update(bytes2).digest("base64");
         if (actualValue[actualValue.length - 1] === "=") {
           if (actualValue[actualValue.length - 2] === "=") {
             actualValue = actualValue.slice(0, -2);
@@ -16366,7 +16366,7 @@ var require_util3 = __commonJS({
           writable: true,
           enumerable: true,
           configurable: true,
-          value: function keys4() {
+          value: function keys5() {
             webidl.brandCheck(this, object5);
             return makeIterator(this, "key");
           }
@@ -16452,17 +16452,17 @@ var require_util3 = __commonJS({
       return input;
     }
     async function readAllBytes(reader) {
-      const bytes = [];
+      const bytes2 = [];
       let byteLength = 0;
       while (true) {
         const { done, value: chunk } = await reader.read();
         if (done) {
-          return Buffer.concat(bytes, byteLength);
+          return Buffer.concat(bytes2, byteLength);
         }
         if (!isUint8Array(chunk)) {
           throw new TypeError("Received non-Uint8Array chunk");
         }
-        bytes.push(chunk);
+        bytes2.push(chunk);
         byteLength += chunk.length;
       }
     }
@@ -17416,19 +17416,19 @@ Content-Type: ${value.type || "application/octet-stream"}\r
     function bodyMixinMethods(instance) {
       const methods = {
         blob() {
-          return consumeBody(this, (bytes) => {
+          return consumeBody(this, (bytes2) => {
             let mimeType = bodyMimeType(this);
             if (mimeType === null) {
               mimeType = "";
             } else if (mimeType) {
               mimeType = serializeAMimeType(mimeType);
             }
-            return new Blob2([bytes], { type: mimeType });
+            return new Blob2([bytes2], { type: mimeType });
           }, instance);
         },
         arrayBuffer() {
-          return consumeBody(this, (bytes) => {
-            return new Uint8Array(bytes).buffer;
+          return consumeBody(this, (bytes2) => {
+            return new Uint8Array(bytes2).buffer;
           }, instance);
         },
         text() {
@@ -17467,8 +17467,8 @@ Content-Type: ${value.type || "application/octet-stream"}\r
           }, instance);
         },
         bytes() {
-          return consumeBody(this, (bytes) => {
-            return new Uint8Array(bytes);
+          return consumeBody(this, (bytes2) => {
+            return new Uint8Array(bytes2);
           }, instance);
         }
       };
@@ -17503,8 +17503,8 @@ Content-Type: ${value.type || "application/octet-stream"}\r
       const body2 = object5[kState].body;
       return body2 != null && (body2.stream.locked || util4.isDisturbed(body2.stream));
     }
-    function parseJSONFromBytes(bytes) {
-      return JSON.parse(utf8DecodeBytes(bytes));
+    function parseJSONFromBytes(bytes2) {
+      return JSON.parse(utf8DecodeBytes(bytes2));
     }
     function bodyMimeType(requestOrResponse) {
       const headers = requestOrResponse[kState].headersList;
@@ -18251,7 +18251,7 @@ var require_client_h1 = __commonJS({
       return method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && method !== "TRACE" && method !== "CONNECT";
     }
     function writeH1(client2, request3) {
-      const { method, path: path39, host, upgrade, blocking, reset } = request3;
+      const { method, path: path40, host, upgrade, blocking, reset } = request3;
       let { body: body2, headers, contentLength: contentLength2 } = request3;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util4.isFormDataLike(body2)) {
@@ -18332,7 +18332,7 @@ var require_client_h1 = __commonJS({
       if (blocking) {
         socket[kBlocking] = true;
       }
-      let header = `${method} ${path39} HTTP/1.1\r
+      let header = `${method} ${path40} HTTP/1.1\r
 `;
       if (typeof host === "string") {
         header += `host: ${host}\r
@@ -18861,7 +18861,7 @@ var require_client_h2 = __commonJS({
     }
     function writeH2(client2, request3) {
       const session = client2[kHTTP2Session];
-      const { method, path: path39, host, upgrade, expectContinue, signal, headers: reqHeaders } = request3;
+      const { method, path: path40, host, upgrade, expectContinue, signal, headers: reqHeaders } = request3;
       let { body: body2 } = request3;
       if (upgrade) {
         util4.errorRequest(client2, request3, new Error("Upgrade not supported for H2"));
@@ -18958,7 +18958,7 @@ var require_client_h2 = __commonJS({
         });
         return true;
       }
-      headers[HTTP2_HEADER_PATH] = path39;
+      headers[HTTP2_HEADER_PATH] = path40;
       headers[HTTP2_HEADER_SCHEME] = "https";
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH";
       if (body2 && typeof body2.read === "function") {
@@ -19311,9 +19311,9 @@ var require_redirect_handler = __commonJS({
           return this.handler.onHeaders(statusCode, headers, resume, statusText);
         }
         const { origin, pathname, search } = util4.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-        const path39 = search ? `${pathname}${search}` : pathname;
+        const path40 = search ? `${pathname}${search}` : pathname;
         this.opts.headers = cleanRequestHeaders(this.opts.headers, statusCode === 303, this.opts.origin !== origin);
-        this.opts.path = path39;
+        this.opts.path = path40;
         this.opts.origin = origin;
         this.opts.maxRedirections = 0;
         this.opts.query = null;
@@ -20552,10 +20552,10 @@ var require_proxy_agent = __commonJS({
         };
         const {
           origin,
-          path: path39 = "/",
+          path: path40 = "/",
           headers = {}
         } = opts;
-        opts.path = origin + path39;
+        opts.path = origin + path40;
         if (!("host" in headers) && !("Host" in headers)) {
           const { host } = new URL2(origin);
           headers.host = host;
@@ -22527,20 +22527,20 @@ var require_mock_utils = __commonJS({
       }
       return true;
     }
-    function safeUrl(path39) {
-      if (typeof path39 !== "string") {
-        return path39;
+    function safeUrl(path40) {
+      if (typeof path40 !== "string") {
+        return path40;
       }
-      const pathSegments = path39.split("?");
+      const pathSegments = path40.split("?");
       if (pathSegments.length !== 2) {
-        return path39;
+        return path40;
       }
       const qp = new URLSearchParams(pathSegments.pop());
       qp.sort();
       return [...pathSegments, qp.toString()].join("?");
     }
-    function matchKey(mockDispatch2, { path: path39, method, body: body2, headers }) {
-      const pathMatch = matchValue(mockDispatch2.path, path39);
+    function matchKey(mockDispatch2, { path: path40, method, body: body2, headers }) {
+      const pathMatch = matchValue(mockDispatch2.path, path40);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body2) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
@@ -22562,7 +22562,7 @@ var require_mock_utils = __commonJS({
     function getMockDispatch(mockDispatches, key) {
       const basePath = key.query ? buildURL(key.path, key.query) : key.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
-      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path39 }) => matchValue(safeUrl(path39), resolvedPath));
+      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path40 }) => matchValue(safeUrl(path40), resolvedPath));
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
       }
@@ -22600,9 +22600,9 @@ var require_mock_utils = __commonJS({
       }
     }
     function buildKey(opts) {
-      const { path: path39, method, body: body2, headers, query } = opts;
+      const { path: path40, method, body: body2, headers, query } = opts;
       return {
-        path: path39,
+        path: path40,
         method,
         body: body2,
         headers,
@@ -22610,10 +22610,10 @@ var require_mock_utils = __commonJS({
       };
     }
     function generateKeyValues(data) {
-      const keys4 = Object.keys(data);
+      const keys5 = Object.keys(data);
       const result2 = [];
-      for (let i2 = 0; i2 < keys4.length; ++i2) {
-        const key = keys4[i2];
+      for (let i2 = 0; i2 < keys5.length; ++i2) {
+        const key = keys5[i2];
         const value = data[key];
         const name = Buffer.from(`${key}`);
         if (Array.isArray(value)) {
@@ -22908,7 +22908,7 @@ var require_mock_interceptor = __commonJS({
 var require_mock_client = __commonJS({
   "node_modules/undici/lib/mock/mock-client.js"(exports2, module2) {
     "use strict";
-    var { promisify: promisify16 } = require("node:util");
+    var { promisify: promisify17 } = require("node:util");
     var Client2 = require_client();
     var { buildMockDispatch } = require_mock_utils();
     var {
@@ -22948,7 +22948,7 @@ var require_mock_client = __commonJS({
         return new MockInterceptor(opts, this[kDispatches]);
       }
       async [kClose]() {
-        await promisify16(this[kOriginalClose])();
+        await promisify17(this[kOriginalClose])();
         this[kConnected] = 0;
         this[kMockAgent][Symbols.kClients].delete(this[kOrigin]);
       }
@@ -22961,7 +22961,7 @@ var require_mock_client = __commonJS({
 var require_mock_pool = __commonJS({
   "node_modules/undici/lib/mock/mock-pool.js"(exports2, module2) {
     "use strict";
-    var { promisify: promisify16 } = require("node:util");
+    var { promisify: promisify17 } = require("node:util");
     var Pool = require_pool();
     var { buildMockDispatch } = require_mock_utils();
     var {
@@ -23001,7 +23001,7 @@ var require_mock_pool = __commonJS({
         return new MockInterceptor(opts, this[kDispatches]);
       }
       async [kClose]() {
-        await promisify16(this[kOriginalClose])();
+        await promisify17(this[kOriginalClose])();
         this[kConnected] = 0;
         this[kMockAgent][Symbols.kClients].delete(this[kOrigin]);
       }
@@ -23033,9 +23033,9 @@ var require_pluralizer = __commonJS({
       }
       pluralize(count2) {
         const one = count2 === 1;
-        const keys4 = one ? singulars : plurals;
+        const keys5 = one ? singulars : plurals;
         const noun = one ? this.singular : this.plural;
-        return { ...keys4, count: count2, noun };
+        return { ...keys5, count: count2, noun };
       }
     };
   }
@@ -23065,10 +23065,10 @@ var require_pending_interceptors_formatter = __commonJS({
       }
       format(pendingInterceptors) {
         const withPrettyHeaders = pendingInterceptors.map(
-          ({ method, path: path39, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
+          ({ method, path: path40, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
             Method: method,
             Origin: origin,
-            Path: path39,
+            Path: path40,
             "Status code": statusCode,
             Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
             Invocations: timesInvoked,
@@ -23589,16 +23589,16 @@ var require_dns = __commonJS({
       setRecords(origin, addresses) {
         const timestamp3 = Date.now();
         const records = { records: { 4: null, 6: null } };
-        for (const record10 of addresses) {
-          record10.timestamp = timestamp3;
-          if (typeof record10.ttl === "number") {
-            record10.ttl = Math.min(record10.ttl, this.#maxTTL);
+        for (const record11 of addresses) {
+          record11.timestamp = timestamp3;
+          if (typeof record11.ttl === "number") {
+            record11.ttl = Math.min(record11.ttl, this.#maxTTL);
           } else {
-            record10.ttl = this.#maxTTL;
+            record11.ttl = this.#maxTTL;
           }
-          const familyRecords = records.records[record10.family] ?? { ips: [] };
-          familyRecords.ips.push(record10);
-          records.records[record10.family] = familyRecords;
+          const familyRecords = records.records[record11.family] ?? { ips: [] };
+          familyRecords.ips.push(record11);
+          records.records[record11.family] = familyRecords;
         }
         this.#records.set(origin.hostname, records);
       }
@@ -23759,9 +23759,9 @@ var require_headers = __commonJS({
           appendHeader(headers, header[0], header[1]);
         }
       } else if (typeof object5 === "object" && object5 !== null) {
-        const keys4 = Object.keys(object5);
-        for (let i2 = 0; i2 < keys4.length; ++i2) {
-          appendHeader(headers, keys4[i2], object5[keys4[i2]]);
+        const keys5 = Object.keys(object5);
+        for (let i2 = 0; i2 < keys5.length; ++i2) {
+          appendHeader(headers, keys5[i2], object5[keys5[i2]]);
         }
       } else {
         throw webidl.errors.conversionFailed({
@@ -24207,10 +24207,10 @@ var require_response = __commonJS({
         if (init !== null) {
           init = webidl.converters.ResponseInit(init);
         }
-        const bytes = textEncoder.encode(
+        const bytes2 = textEncoder.encode(
           serializeJavascriptValueToJSONString(data)
         );
-        const body2 = extractBody(bytes);
+        const body2 = extractBody(bytes2);
         const responseObject = fromInnerResponse(makeResponse({}), "response");
         initializeResponse(responseObject, init, { body: body2[0], type: "application/json" });
         return responseObject;
@@ -25667,12 +25667,12 @@ var require_fetch = __commonJS({
           processBodyError(response.error);
           return;
         }
-        const processBody = (bytes) => {
-          if (!bytesMatch(bytes, request3.integrity)) {
+        const processBody = (bytes2) => {
+          if (!bytesMatch(bytes2, request3.integrity)) {
             processBodyError("integrity mismatch");
             return;
           }
-          response.body = safelyExtractBody(bytes)[0];
+          response.body = safelyExtractBody(bytes2)[0];
           fetchFinale(fetchParams, response);
         };
         await fullyReadBody(response.body, processBody, processBodyError);
@@ -26085,12 +26085,12 @@ var require_fetch = __commonJS({
       if (request3.body == null && fetchParams.processRequestEndOfBody) {
         queueMicrotask(() => fetchParams.processRequestEndOfBody());
       } else if (request3.body != null) {
-        const processBodyChunk = async function* (bytes) {
+        const processBodyChunk = async function* (bytes2) {
           if (isCancelled(fetchParams)) {
             return;
           }
-          yield bytes;
-          fetchParams.processRequestBodyChunkLength?.(bytes.byteLength);
+          yield bytes2;
+          fetchParams.processRequestBodyChunkLength?.(bytes2.byteLength);
         };
         const processEndOfBody = () => {
           if (isCancelled(fetchParams)) {
@@ -26112,8 +26112,8 @@ var require_fetch = __commonJS({
         };
         requestBody = async function* () {
           try {
-            for await (const bytes of request3.body.stream) {
-              yield* processBodyChunk(bytes);
+            for await (const bytes2 of request3.body.stream) {
+              yield* processBodyChunk(bytes2);
             }
             processEndOfBody();
           } catch (err) {
@@ -26165,33 +26165,33 @@ var require_fetch = __commonJS({
       }
       fetchParams.controller.resume = async () => {
         while (true) {
-          let bytes;
+          let bytes2;
           let isFailure;
           try {
             const { done, value } = await fetchParams.controller.next();
             if (isAborted2(fetchParams)) {
               break;
             }
-            bytes = done ? void 0 : value;
+            bytes2 = done ? void 0 : value;
           } catch (err) {
             if (fetchParams.controller.ended && !timingInfo.encodedBodySize) {
-              bytes = void 0;
+              bytes2 = void 0;
             } else {
-              bytes = err;
+              bytes2 = err;
               isFailure = true;
             }
           }
-          if (bytes === void 0) {
+          if (bytes2 === void 0) {
             readableStreamClose(fetchParams.controller.controller);
             finalizeResponse(fetchParams, response);
             return;
           }
-          timingInfo.decodedBodySize += bytes?.byteLength ?? 0;
+          timingInfo.decodedBodySize += bytes2?.byteLength ?? 0;
           if (isFailure) {
-            fetchParams.controller.terminate(bytes);
+            fetchParams.controller.terminate(bytes2);
             return;
           }
-          const buffer2 = new Uint8Array(bytes);
+          const buffer2 = new Uint8Array(bytes2);
           if (buffer2.byteLength) {
             fetchParams.controller.controller.enqueue(buffer2);
           }
@@ -26317,9 +26317,9 @@ var require_fetch = __commonJS({
               if (fetchParams.controller.dump) {
                 return;
               }
-              const bytes = chunk;
-              timingInfo.encodedBodySize += bytes.byteLength;
-              return this.body.push(bytes);
+              const bytes2 = chunk;
+              timingInfo.encodedBodySize += bytes2.byteLength;
+              return this.body.push(bytes2);
             },
             onComplete() {
               if (this.abort) {
@@ -26765,7 +26765,7 @@ var require_util5 = __commonJS({
       fr2[kError] = null;
       const stream4 = blob.stream();
       const reader = stream4.getReader();
-      const bytes = [];
+      const bytes2 = [];
       let chunkPromise = reader.read();
       let isFirstChunk = true;
       (async () => {
@@ -26779,7 +26779,7 @@ var require_util5 = __commonJS({
             }
             isFirstChunk = false;
             if (!done && types3.isUint8Array(value)) {
-              bytes.push(value);
+              bytes2.push(value);
               if ((fr2[kLastProgressEventFired] === void 0 || Date.now() - fr2[kLastProgressEventFired] >= 50) && !fr2[kAborted]) {
                 fr2[kLastProgressEventFired] = Date.now();
                 queueMicrotask(() => {
@@ -26791,7 +26791,7 @@ var require_util5 = __commonJS({
               queueMicrotask(() => {
                 fr2[kState] = "done";
                 try {
-                  const result2 = packageData(bytes, type2, blob.type, encodingName);
+                  const result2 = packageData(bytes2, type2, blob.type, encodingName);
                   if (fr2[kAborted]) {
                     return;
                   }
@@ -26831,7 +26831,7 @@ var require_util5 = __commonJS({
       });
       reader.dispatchEvent(event);
     }
-    function packageData(bytes, type2, mimeType, encodingName) {
+    function packageData(bytes2, type2, mimeType, encodingName) {
       switch (type2) {
         case "DataURL": {
           let dataURL = "data:";
@@ -26841,7 +26841,7 @@ var require_util5 = __commonJS({
           }
           dataURL += ";base64,";
           const decoder2 = new StringDecoder("latin1");
-          for (const chunk of bytes) {
+          for (const chunk of bytes2) {
             dataURL += btoa2(decoder2.write(chunk));
           }
           dataURL += btoa2(decoder2.end());
@@ -26861,16 +26861,16 @@ var require_util5 = __commonJS({
           if (encoding === "failure") {
             encoding = "UTF-8";
           }
-          return decode(bytes, encoding);
+          return decode(bytes2, encoding);
         }
         case "ArrayBuffer": {
-          const sequence = combineByteSequences(bytes);
+          const sequence = combineByteSequences(bytes2);
           return sequence.buffer;
         }
         case "BinaryString": {
           let binaryString = "";
           const decoder2 = new StringDecoder("latin1");
-          for (const chunk of bytes) {
+          for (const chunk of bytes2) {
             binaryString += decoder2.write(chunk);
           }
           binaryString += decoder2.end();
@@ -26879,14 +26879,14 @@ var require_util5 = __commonJS({
       }
     }
     function decode(ioQueue, encoding) {
-      const bytes = combineByteSequences(ioQueue);
-      const BOMEncoding = BOMSniffing(bytes);
+      const bytes2 = combineByteSequences(ioQueue);
+      const BOMEncoding = BOMSniffing(bytes2);
       let slice = 0;
       if (BOMEncoding !== null) {
         encoding = BOMEncoding;
         slice = BOMEncoding === "UTF-8" ? 3 : 2;
       }
-      const sliced = bytes.slice(slice);
+      const sliced = bytes2.slice(slice);
       return new TextDecoder(encoding).decode(sliced);
     }
     function BOMSniffing(ioQueue) {
@@ -27439,9 +27439,9 @@ var require_cache = __commonJS({
           // 16.
         };
         operations.push(operation);
-        const bytes = await bodyReadPromise.promise;
+        const bytes2 = await bodyReadPromise.promise;
         if (clonedResponse.body != null) {
-          clonedResponse.body.source = bytes;
+          clonedResponse.body.source = bytes2;
         }
         const cacheJobPromise = createDeferredPromise();
         let errorData = null;
@@ -27852,8 +27852,8 @@ var require_cachestorage = __commonJS({
        */
       async keys() {
         webidl.brandCheck(this, _CacheStorage);
-        const keys4 = this.#caches.keys();
-        return [...keys4];
+        const keys5 = this.#caches.keys();
+        return [...keys5];
       }
     };
     Object.defineProperties(CacheStorage2.prototype, {
@@ -27947,9 +27947,9 @@ var require_util7 = __commonJS({
         }
       }
     }
-    function validateCookiePath(path39) {
-      for (let i2 = 0; i2 < path39.length; ++i2) {
-        const code = path39.charCodeAt(i2);
+    function validateCookiePath(path40) {
+      for (let i2 = 0; i2 < path40.length; ++i2) {
+        const code = path40.charCodeAt(i2);
         if (code < 32 || // exclude CTLs (0-31)
         code > 126 || // exclude DEL and non-ascii
         code === 59) {
@@ -29021,8 +29021,8 @@ var require_connection = __commonJS({
             return;
           }
           const secWSAccept = response.headersList.get("Sec-WebSocket-Accept");
-          const digest5 = crypto10.createHash("sha1").update(keyValue + uid).digest("base64");
-          if (secWSAccept !== digest5) {
+          const digest6 = crypto10.createHash("sha1").update(keyValue + uid).digest("base64");
+          if (secWSAccept !== digest6) {
             failWebsocketConnection(ws, "Incorrect hash received in Sec-WebSocket-Accept header.");
             return;
           }
@@ -30869,11 +30869,11 @@ var require_undici = __commonJS({
           if (typeof opts.path !== "string") {
             throw new InvalidArgumentError("invalid opts.path");
           }
-          let path39 = opts.path;
+          let path40 = opts.path;
           if (!opts.path.startsWith("/")) {
-            path39 = `/${path39}`;
+            path40 = `/${path40}`;
           }
-          url3 = new URL(util4.parseOrigin(url3).origin + path39);
+          url3 = new URL(util4.parseOrigin(url3).origin + path40);
         } else {
           if (!opts) {
             opts = typeof url3 === "object" ? url3 : {};
@@ -32145,7 +32145,7 @@ var require_base64 = __commonJS({
         es -= 2;
       else if (base64Str[base64Str.length - 1] == "=")
         es -= 1;
-      let bytes = new Uint8Array(es), bytePos = 0, groupPos = 0, b2, p2 = 0;
+      let bytes2 = new Uint8Array(es), bytePos = 0, groupPos = 0, b2, p2 = 0;
       for (let i2 = 0; i2 < base64Str.length; i2++) {
         b2 = decTable[base64Str.charCodeAt(i2)];
         if (b2 === void 0) {
@@ -32169,30 +32169,30 @@ var require_base64 = __commonJS({
             groupPos = 1;
             break;
           case 1:
-            bytes[bytePos++] = p2 << 2 | (b2 & 48) >> 4;
+            bytes2[bytePos++] = p2 << 2 | (b2 & 48) >> 4;
             p2 = b2;
             groupPos = 2;
             break;
           case 2:
-            bytes[bytePos++] = (p2 & 15) << 4 | (b2 & 60) >> 2;
+            bytes2[bytePos++] = (p2 & 15) << 4 | (b2 & 60) >> 2;
             p2 = b2;
             groupPos = 3;
             break;
           case 3:
-            bytes[bytePos++] = (p2 & 3) << 6 | b2;
+            bytes2[bytePos++] = (p2 & 3) << 6 | b2;
             groupPos = 0;
             break;
         }
       }
       if (groupPos == 1)
         throw Error(`invalid base64 string.`);
-      return bytes.subarray(0, bytePos);
+      return bytes2.subarray(0, bytePos);
     }
     exports2.base64decode = base64decode;
-    function base64encode2(bytes) {
+    function base64encode2(bytes2) {
       let base642 = "", groupPos = 0, b2, p2 = 0;
-      for (let i2 = 0; i2 < bytes.length; i2++) {
-        b2 = bytes[i2];
+      for (let i2 = 0; i2 < bytes2.length; i2++) {
+        b2 = bytes2[i2];
         switch (groupPos) {
           case 0:
             base642 += encTable[b2 >> 2];
@@ -32230,23 +32230,23 @@ var require_protobufjs_utf8 = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.utf8read = void 0;
     var fromCharCodes = (chunk) => String.fromCharCode.apply(String, chunk);
-    function utf8read(bytes) {
-      if (bytes.length < 1)
+    function utf8read(bytes2) {
+      if (bytes2.length < 1)
         return "";
       let pos = 0, parts = [], chunk = [], i2 = 0, t2;
-      let len = bytes.length;
+      let len = bytes2.length;
       while (pos < len) {
-        t2 = bytes[pos++];
+        t2 = bytes2[pos++];
         if (t2 < 128)
           chunk[i2++] = t2;
         else if (t2 > 191 && t2 < 224)
-          chunk[i2++] = (t2 & 31) << 6 | bytes[pos++] & 63;
+          chunk[i2++] = (t2 & 31) << 6 | bytes2[pos++] & 63;
         else if (t2 > 239 && t2 < 365) {
-          t2 = ((t2 & 7) << 18 | (bytes[pos++] & 63) << 12 | (bytes[pos++] & 63) << 6 | bytes[pos++] & 63) - 65536;
+          t2 = ((t2 & 7) << 18 | (bytes2[pos++] & 63) << 12 | (bytes2[pos++] & 63) << 6 | bytes2[pos++] & 63) - 65536;
           chunk[i2++] = 55296 + (t2 >> 10);
           chunk[i2++] = 56320 + (t2 & 1023);
         } else
-          chunk[i2++] = (t2 & 15) << 12 | (bytes[pos++] & 63) << 6 | bytes[pos++] & 63;
+          chunk[i2++] = (t2 & 15) << 12 | (bytes2[pos++] & 63) << 6 | bytes2[pos++] & 63;
         if (i2 > 8191) {
           parts.push(fromCharCodes(chunk));
           i2 = 0;
@@ -32341,19 +32341,19 @@ var require_goog_varint = __commonJS({
       throw new Error("invalid varint");
     }
     exports2.varint64read = varint64read;
-    function varint64write(lo, hi, bytes) {
+    function varint64write(lo, hi, bytes2) {
       for (let i2 = 0; i2 < 28; i2 = i2 + 7) {
         const shift = lo >>> i2;
         const hasNext = !(shift >>> 7 == 0 && hi == 0);
         const byte = (hasNext ? shift | 128 : shift) & 255;
-        bytes.push(byte);
+        bytes2.push(byte);
         if (!hasNext) {
           return;
         }
       }
       const splitBits = lo >>> 28 & 15 | (hi & 7) << 4;
       const hasMoreBits = !(hi >> 3 == 0);
-      bytes.push((hasMoreBits ? splitBits | 128 : splitBits) & 255);
+      bytes2.push((hasMoreBits ? splitBits | 128 : splitBits) & 255);
       if (!hasMoreBits) {
         return;
       }
@@ -32361,12 +32361,12 @@ var require_goog_varint = __commonJS({
         const shift = hi >>> i2;
         const hasNext = !(shift >>> 7 == 0);
         const byte = (hasNext ? shift | 128 : shift) & 255;
-        bytes.push(byte);
+        bytes2.push(byte);
         if (!hasNext) {
           return;
         }
       }
-      bytes.push(hi >>> 31 & 1);
+      bytes2.push(hi >>> 31 & 1);
     }
     exports2.varint64write = varint64write;
     var TWO_PWR_32_DBL = (1 << 16) * (1 << 16);
@@ -32436,19 +32436,19 @@ var require_goog_varint = __commonJS({
       );
     }
     exports2.int64toString = int64toString;
-    function varint32write(value, bytes) {
+    function varint32write(value, bytes2) {
       if (value >= 0) {
         while (value > 127) {
-          bytes.push(value & 127 | 128);
+          bytes2.push(value & 127 | 128);
           value = value >>> 7;
         }
-        bytes.push(value);
+        bytes2.push(value);
       } else {
         for (let i2 = 0; i2 < 9; i2++) {
-          bytes.push(value & 127 | 128);
+          bytes2.push(value & 127 | 128);
           value = value >> 7;
         }
-        bytes.push(1);
+        bytes2.push(1);
       }
     }
     exports2.varint32write = varint32write;
@@ -32719,7 +32719,7 @@ var require_binary_reader = __commonJS({
     var goog_varint_1 = require_goog_varint();
     var defaultsRead = {
       readUnknownField: true,
-      readerFactory: (bytes) => new BinaryReader(bytes)
+      readerFactory: (bytes2) => new BinaryReader(bytes2)
     };
     function binaryReadOptions(options) {
       return options ? Object.assign(Object.assign({}, defaultsRead), options) : defaultsRead;
@@ -32964,14 +32964,14 @@ var require_binary_writer = __commonJS({
         let len = 0;
         for (let i2 = 0; i2 < this.chunks.length; i2++)
           len += this.chunks[i2].length;
-        let bytes = new Uint8Array(len);
+        let bytes2 = new Uint8Array(len);
         let offset = 0;
         for (let i2 = 0; i2 < this.chunks.length; i2++) {
-          bytes.set(this.chunks[i2], offset);
+          bytes2.set(this.chunks[i2], offset);
           offset += this.chunks[i2].length;
         }
         this.chunks = [];
-        return bytes;
+        return bytes2;
       }
       /**
        * Start a new fork for length-delimited data like a message
@@ -33441,11 +33441,11 @@ var require_reflection_type_check = __commonJS({
         if (message === null || message === void 0 || typeof message != "object")
           return false;
         this.prepare();
-        let keys4 = Object.keys(message), data = this.data;
-        if (keys4.length < data.req.length || data.req.some((n2) => !keys4.includes(n2)))
+        let keys5 = Object.keys(message), data = this.data;
+        if (keys5.length < data.req.length || data.req.some((n2) => !keys5.includes(n2)))
           return false;
         if (!allowExcessProperties) {
-          if (keys4.some((k2) => !data.known.includes(k2)))
+          if (keys5.some((k2) => !data.known.includes(k2)))
             return false;
         }
         if (depth < 1) {
@@ -33575,18 +33575,18 @@ var require_reflection_type_check = __commonJS({
         return true;
       }
       mapKeys(map2, type2, depth) {
-        let keys4 = Object.keys(map2);
+        let keys5 = Object.keys(map2);
         switch (type2) {
           case reflection_info_1.ScalarType.INT32:
           case reflection_info_1.ScalarType.FIXED32:
           case reflection_info_1.ScalarType.SFIXED32:
           case reflection_info_1.ScalarType.SINT32:
           case reflection_info_1.ScalarType.UINT32:
-            return this.scalars(keys4.slice(0, depth).map((k2) => parseInt(k2)), type2, depth);
+            return this.scalars(keys5.slice(0, depth).map((k2) => parseInt(k2)), type2, depth);
           case reflection_info_1.ScalarType.BOOL:
-            return this.scalars(keys4.slice(0, depth).map((k2) => k2 == "true" ? true : k2 == "false" ? false : k2), type2, depth);
+            return this.scalars(keys5.slice(0, depth).map((k2) => k2 == "true" ? true : k2 == "false" ? false : k2), type2, depth);
           default:
-            return this.scalars(keys4, type2, depth, reflection_info_1.LongType.STRING);
+            return this.scalars(keys5, type2, depth, reflection_info_1.LongType.STRING);
         }
       }
     };
@@ -38029,13 +38029,13 @@ These characters are not allowed in the artifact name due to limitations with ce
   }
   info2(`Artifact name is valid!`);
 }
-function validateFilePath(path39) {
-  if (!path39) {
+function validateFilePath(path40) {
+  if (!path40) {
     throw new Error(`Provided file path input during validation is empty`);
   }
   for (const [invalidCharacterKey, errorMessageForCharacter] of invalidArtifactFilePathCharacters) {
-    if (path39.includes(invalidCharacterKey)) {
-      throw new Error(`The path for one of the files in artifact is not valid: ${path39}. Contains the following character: ${errorMessageForCharacter}
+    if (path40.includes(invalidCharacterKey)) {
+      throw new Error(`The path for one of the files in artifact is not valid: ${path40}. Contains the following character: ${errorMessageForCharacter}
           
 Invalid characters include: ${Array.from(invalidArtifactFilePathCharacters.values()).toString()}
           
@@ -39504,8 +39504,8 @@ var init_restError = __esm({
 });
 
 // node_modules/@typespec/ts-http-runtime/dist/esm/util/bytesEncoding.js
-function uint8ArrayToString(bytes, format) {
-  return Buffer.from(bytes).toString(format);
+function uint8ArrayToString(bytes2, format) {
+  return Buffer.from(bytes2).toString(format);
 }
 function stringToUint8Array(value, format) {
   return Buffer.from(value, format);
@@ -40804,7 +40804,7 @@ var require_has_flag = __commonJS({
 var require_supports_color = __commonJS({
   "node_modules/supports-color/index.js"(exports2, module2) {
     "use strict";
-    var os20 = require("os");
+    var os21 = require("os");
     var tty = require("tty");
     var hasFlag = require_has_flag();
     var { env } = process;
@@ -40852,7 +40852,7 @@ var require_supports_color = __commonJS({
         return min;
       }
       if (process.platform === "win32") {
-        const osRelease = os20.release().split(".");
+        const osRelease = os21.release().split(".");
         if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
           return Number(osRelease[2]) >= 14931 ? 3 : 2;
         }
@@ -41058,9 +41058,9 @@ var require_node = __commonJS({
     }
     function init(debug3) {
       debug3.inspectOpts = {};
-      const keys4 = Object.keys(exports2.inspectOpts);
-      for (let i2 = 0; i2 < keys4.length; i2++) {
-        debug3.inspectOpts[keys4[i2]] = exports2.inspectOpts[keys4[i2]];
+      const keys5 = Object.keys(exports2.inspectOpts);
+      for (let i2 = 0; i2 < keys5.length; i2++) {
+        debug3.inspectOpts[keys5[i2]] = exports2.inspectOpts[keys5[i2]];
       }
     }
     module2.exports = require_common()(exports2);
@@ -41546,11 +41546,11 @@ var require_dist2 = __commonJS({
     function resume(socket) {
       socket.resume();
     }
-    function omit3(obj, ...keys4) {
+    function omit3(obj, ...keys5) {
       const ret = {};
       let key;
       for (key in obj) {
-        if (!keys4.includes(key)) {
+        if (!keys5.includes(key)) {
           ret[key] = obj[key];
         }
       }
@@ -41676,11 +41676,11 @@ var require_dist3 = __commonJS({
     };
     HttpProxyAgent2.protocols = ["http", "https"];
     exports2.HttpProxyAgent = HttpProxyAgent2;
-    function omit3(obj, ...keys4) {
+    function omit3(obj, ...keys5) {
       const ret = {};
       let key;
       for (key in obj) {
-        if (!keys4.includes(key)) {
+        if (!keys5.includes(key)) {
           ret[key] = obj[key];
         }
       }
@@ -42657,8 +42657,8 @@ function isError3(e) {
 function randomUUID5() {
   return randomUUID4();
 }
-function uint8ArrayToString2(bytes, format) {
-  return uint8ArrayToString(bytes, format);
+function uint8ArrayToString2(bytes2, format) {
+  return uint8ArrayToString(bytes2, format);
 }
 function stringToUint8Array2(value, format) {
   return stringToUint8Array(value, format);
@@ -44979,15 +44979,15 @@ function getRequestUrl(baseUri, operationSpec, operationArguments, fallbackObjec
   let isAbsolutePath = false;
   let requestUrl = replaceAll(baseUri, urlReplacements);
   if (operationSpec.path) {
-    let path39 = replaceAll(operationSpec.path, urlReplacements);
-    if (operationSpec.path === "/{nextLink}" && path39.startsWith("/")) {
-      path39 = path39.substring(1);
+    let path40 = replaceAll(operationSpec.path, urlReplacements);
+    if (operationSpec.path === "/{nextLink}" && path40.startsWith("/")) {
+      path40 = path40.substring(1);
     }
-    if (isAbsoluteUrl(path39)) {
-      requestUrl = path39;
+    if (isAbsoluteUrl(path40)) {
+      requestUrl = path40;
       isAbsolutePath = true;
     } else {
-      requestUrl = appendPath(requestUrl, path39);
+      requestUrl = appendPath(requestUrl, path40);
     }
   }
   const { queryParams, sequenceParams } = calculateQueryParameters(operationSpec, operationArguments, fallbackObject);
@@ -45033,9 +45033,9 @@ function appendPath(url3, pathToAppend) {
   }
   const searchStart = pathToAppend.indexOf("?");
   if (searchStart !== -1) {
-    const path39 = pathToAppend.substring(0, searchStart);
+    const path40 = pathToAppend.substring(0, searchStart);
     const search = pathToAppend.substring(searchStart + 1);
-    newPath = newPath + path39;
+    newPath = newPath + path40;
     if (search) {
       parsedUrl.search = parsedUrl.search ? `${parsedUrl.search}&${search}` : search;
     }
@@ -48107,16 +48107,16 @@ var init_Matcher = __esm({
        * @returns {string|undefined}
        */
       getCurrentTag() {
-        const path39 = this._matcher.path;
-        return path39.length > 0 ? path39[path39.length - 1].tag : void 0;
+        const path40 = this._matcher.path;
+        return path40.length > 0 ? path40[path40.length - 1].tag : void 0;
       }
       /**
        * Get current namespace.
        * @returns {string|undefined}
        */
       getCurrentNamespace() {
-        const path39 = this._matcher.path;
-        return path39.length > 0 ? path39[path39.length - 1].namespace : void 0;
+        const path40 = this._matcher.path;
+        return path40.length > 0 ? path40[path40.length - 1].namespace : void 0;
       }
       /**
        * Get current node's attribute value.
@@ -48124,9 +48124,9 @@ var init_Matcher = __esm({
        * @returns {*}
        */
       getAttrValue(attrName) {
-        const path39 = this._matcher.path;
-        if (path39.length === 0) return void 0;
-        return path39[path39.length - 1].values?.[attrName];
+        const path40 = this._matcher.path;
+        if (path40.length === 0) return void 0;
+        return path40[path40.length - 1].values?.[attrName];
       }
       /**
        * Check if current node has an attribute.
@@ -48134,9 +48134,9 @@ var init_Matcher = __esm({
        * @returns {boolean}
        */
       hasAttr(attrName) {
-        const path39 = this._matcher.path;
-        if (path39.length === 0) return false;
-        const current = path39[path39.length - 1];
+        const path40 = this._matcher.path;
+        if (path40.length === 0) return false;
+        const current = path40[path40.length - 1];
         return current.values !== void 0 && attrName in current.values;
       }
       /**
@@ -48162,18 +48162,18 @@ var init_Matcher = __esm({
        * @returns {number}
        */
       getPosition() {
-        const path39 = this._matcher.path;
-        if (path39.length === 0) return -1;
-        return path39[path39.length - 1].position ?? 0;
+        const path40 = this._matcher.path;
+        if (path40.length === 0) return -1;
+        return path40[path40.length - 1].position ?? 0;
       }
       /**
        * Get current node's repeat counter (occurrence count of this tag name).
        * @returns {number}
        */
       getCounter() {
-        const path39 = this._matcher.path;
-        if (path39.length === 0) return -1;
-        return path39[path39.length - 1].counter ?? 0;
+        const path40 = this._matcher.path;
+        if (path40.length === 0) return -1;
+        return path40[path40.length - 1].counter ?? 0;
       }
       /**
        * Get current node's sibling index (alias for getPosition).
@@ -50095,18 +50095,18 @@ function compress(arr, options, matcher, readonlyMatcher) {
   return compressedObj;
 }
 function propName(obj) {
-  const keys4 = Object.keys(obj);
-  for (let i2 = 0; i2 < keys4.length; i2++) {
-    const key = keys4[i2];
+  const keys5 = Object.keys(obj);
+  for (let i2 = 0; i2 < keys5.length; i2++) {
+    const key = keys5[i2];
     if (key !== ":@") return key;
   }
 }
 function assignAttributes(obj, attrMap, readonlyMatcher, options) {
   if (attrMap) {
-    const keys4 = Object.keys(attrMap);
-    const len = keys4.length;
+    const keys5 = Object.keys(attrMap);
+    const len = keys5.length;
     for (let i2 = 0; i2 < len; i2++) {
-      const atrrName = keys4[i2];
+      const atrrName = keys5[i2];
       const rawAttrName = atrrName.startsWith(options.attributeNamePrefix) ? atrrName.substring(options.attributeNamePrefix.length) : atrrName;
       const jPathOrMatcher = options.jPath ? readonlyMatcher.toString() + "." + rawAttrName : readonlyMatcher;
       if (options.isArray(atrrName, jPathOrMatcher, true, true)) {
@@ -50423,9 +50423,9 @@ function attr_to_str_raw(attrMap, options) {
   return attrStr;
 }
 function propName2(obj) {
-  const keys4 = Object.keys(obj);
-  for (let i2 = 0; i2 < keys4.length; i2++) {
-    const key = keys4[i2];
+  const keys5 = Object.keys(obj);
+  for (let i2 = 0; i2 < keys5.length; i2++) {
+    const key = keys5[i2];
     if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
     if (key !== ":@") return key;
   }
@@ -51557,11 +51557,11 @@ var init_crc64 = __esm({
           throw new Error("Module.ENVIRONMENT has been deprecated. To force the environment, use the ENVIRONMENT compile-time option (for example, -sENVIRONMENT=web or -sENVIRONMENT=node)");
         }
         var scriptDirectory = "";
-        function locateFile(path39) {
+        function locateFile(path40) {
           if (Module["locateFile"]) {
-            return Module["locateFile"](path39, scriptDirectory);
+            return Module["locateFile"](path40, scriptDirectory);
           }
-          return scriptDirectory + path39;
+          return scriptDirectory + path40;
         }
         var read_, readAsync, readBinary, setWindowTitle;
         function logExceptionOnExit(e) {
@@ -52716,11 +52716,11 @@ var init_crc64 = __esm({
         function _base64ToArrayBuffer(base642) {
           var binary_string = window.atob(base642);
           var len = binary_string.length;
-          var bytes = new Uint8Array(len);
+          var bytes2 = new Uint8Array(len);
           for (var i2 = 0; i2 < len; i2++) {
-            bytes[i2] = binary_string.charCodeAt(i2);
+            bytes2[i2] = binary_string.charCodeAt(i2);
           }
-          return bytes;
+          return bytes2;
         }
         function getBinary(file) {
           if (typeof Buffer == "function") {
@@ -53547,8 +53547,8 @@ var init_crc64 = __esm({
           },
           alloc: function(array2, view) {
             assert2(ensureCache.buffer);
-            var bytes = view.BYTES_PER_ELEMENT;
-            var len = array2.length * bytes;
+            var bytes2 = view.BYTES_PER_ELEMENT;
+            var len = array2.length * bytes2;
             len = len + 7 & -8;
             var ret;
             if (ensureCache.pos + len >= ensureCache.size) {
@@ -53564,8 +53564,8 @@ var init_crc64 = __esm({
           },
           copy: function(array2, view, offset) {
             offset >>>= 0;
-            var bytes = view.BYTES_PER_ELEMENT;
-            switch (bytes) {
+            var bytes2 = view.BYTES_PER_ELEMENT;
+            switch (bytes2) {
               case 2:
                 offset >>>= 1;
                 break;
@@ -55153,9 +55153,9 @@ var init_StorageSharedKeyCredentialPolicy = __esm({
        * @param request -
        */
       getCanonicalizedResourceString(request3) {
-        const path39 = getURLPath(request3.url) || "/";
+        const path40 = getURLPath(request3.url) || "/";
         let canonicalizedResourceString = "";
-        canonicalizedResourceString += `/${this.factory.accountName}${path39}`;
+        canonicalizedResourceString += `/${this.factory.accountName}${path40}`;
         const queries = getURLQueries(request3.url);
         const lowercaseQueries = {};
         if (queries) {
@@ -55696,9 +55696,9 @@ function storageSharedKeyCredentialPolicy(options) {
     return canonicalizedHeadersStringToSign;
   }
   function getCanonicalizedResourceString(request3) {
-    const path39 = getURLPath(request3.url) || "/";
+    const path40 = getURLPath(request3.url) || "/";
     let canonicalizedResourceString = "";
-    canonicalizedResourceString += `/${options.accountName}${path39}`;
+    canonicalizedResourceString += `/${options.accountName}${path40}`;
     const queries = getURLQueries(request3.url);
     const lowercaseQueries = {};
     if (queries) {
@@ -70340,10 +70340,10 @@ var init_StorageContextClient = __esm({
 // node_modules/@azure/storage-blob/dist/esm/utils/utils.common.js
 function escapeURLPath(url3) {
   const urlParsed = new URL(url3);
-  let path39 = urlParsed.pathname;
-  path39 = path39 || "/";
-  path39 = escape3(path39);
-  urlParsed.pathname = path39;
+  let path40 = urlParsed.pathname;
+  path40 = path40 || "/";
+  path40 = escape3(path40);
+  urlParsed.pathname = path40;
   return urlParsed.toString();
 }
 function getProxyUriFromDevConnString(connectionString) {
@@ -70428,9 +70428,9 @@ function escape3(text3) {
 }
 function appendToURLPath(url3, name) {
   const urlParsed = new URL(url3);
-  let path39 = urlParsed.pathname;
-  path39 = path39 ? path39.endsWith("/") ? `${path39}${name}` : `${path39}/${name}` : name;
-  urlParsed.pathname = path39;
+  let path40 = urlParsed.pathname;
+  path40 = path40 ? path40.endsWith("/") ? `${path40}${name}` : `${path40}/${name}` : name;
+  urlParsed.pathname = path40;
   return urlParsed.toString();
 }
 function setURLParameter2(url3, name, value) {
@@ -73123,11 +73123,11 @@ var init_AvroParser = __esm({
        * @param options -
        */
       static async readFixedBytes(stream4, length, options = {}) {
-        const bytes = await stream4.read(length, { abortSignal: options.abortSignal });
-        if (bytes.length !== length) {
+        const bytes2 = await stream4.read(length, { abortSignal: options.abortSignal });
+        if (bytes2.length !== length) {
           throw new Error("Hit stream end.");
         }
-        return bytes;
+        return bytes2;
       }
       /**
        * Reads a single byte from the stream.
@@ -73411,14 +73411,14 @@ var init_AvroParser = __esm({
       }
       // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
       async read(stream4, options = {}) {
-        const record10 = {};
-        record10["$schema"] = this._name;
+        const record11 = {};
+        record11["$schema"] = this._name;
         for (const key in this._fields) {
           if (Object.prototype.hasOwnProperty.call(this._fields, key)) {
-            record10[key] = await this._fields[key].read(stream4, options);
+            record11[key] = await this._fields[key].read(stream4, options);
           }
         }
-        return record10;
+        return record11;
       }
     };
   }
@@ -78236,8 +78236,8 @@ var require_minimatch = __commonJS({
       return new Minimatch2(pattern, options).match(p2);
     };
     module2.exports = minimatch2;
-    var path39 = require_path();
-    minimatch2.sep = path39.sep;
+    var path40 = require_path();
+    minimatch2.sep = path40.sep;
     var GLOBSTAR2 = Symbol("globstar **");
     minimatch2.GLOBSTAR = GLOBSTAR2;
     var expand3 = require_brace_expansion();
@@ -78843,8 +78843,8 @@ var require_minimatch = __commonJS({
         if (this.empty) return f2 === "";
         if (f2 === "/" && partial2) return true;
         const options = this.options;
-        if (path39.sep !== "/") {
-          f2 = f2.split(path39.sep).join("/");
+        if (path40.sep !== "/") {
+          f2 = f2.split(path40.sep).join("/");
         }
         f2 = f2.split(slashSplit);
         this.debug(this.pattern, "split", f2);
@@ -78882,13 +78882,13 @@ var require_minimatch = __commonJS({
 var require_readdir_glob = __commonJS({
   "node_modules/readdir-glob/index.js"(exports2, module2) {
     module2.exports = readdirGlob;
-    var fs36 = require("fs");
+    var fs37 = require("fs");
     var { EventEmitter: EventEmitter3 } = require("events");
     var { Minimatch: Minimatch2 } = require_minimatch();
     var { resolve: resolve6 } = require("path");
     function readdir6(dir, strict) {
       return new Promise((resolve7, reject) => {
-        fs36.readdir(dir, { withFileTypes: true }, (err, files) => {
+        fs37.readdir(dir, { withFileTypes: true }, (err, files) => {
           if (err) {
             switch (err.code) {
               case "ENOTDIR":
@@ -78921,7 +78921,7 @@ var require_readdir_glob = __commonJS({
     }
     function stat5(file, followSymlinks) {
       return new Promise((resolve7, reject) => {
-        const statFunc = followSymlinks ? fs36.stat : fs36.lstat;
+        const statFunc = followSymlinks ? fs37.stat : fs37.lstat;
         statFunc(file, (err, stats) => {
           if (err) {
             switch (err.code) {
@@ -78942,8 +78942,8 @@ var require_readdir_glob = __commonJS({
         });
       });
     }
-    async function* exploreWalkAsync(dir, path39, followSymlinks, useStat, shouldSkip, strict) {
-      let files = await readdir6(path39 + dir, strict);
+    async function* exploreWalkAsync(dir, path40, followSymlinks, useStat, shouldSkip, strict) {
+      let files = await readdir6(path40 + dir, strict);
       for (const file of files) {
         let name = file.name;
         if (name === void 0) {
@@ -78952,7 +78952,7 @@ var require_readdir_glob = __commonJS({
         }
         const filename = dir + "/" + name;
         const relative4 = filename.slice(1);
-        const absolute = path39 + "/" + relative4;
+        const absolute = path40 + "/" + relative4;
         let stats = null;
         if (useStat || followSymlinks) {
           stats = await stat5(absolute, followSymlinks);
@@ -78966,15 +78966,15 @@ var require_readdir_glob = __commonJS({
         if (stats.isDirectory()) {
           if (!shouldSkip(relative4)) {
             yield { relative: relative4, absolute, stats };
-            yield* exploreWalkAsync(filename, path39, followSymlinks, useStat, shouldSkip, false);
+            yield* exploreWalkAsync(filename, path40, followSymlinks, useStat, shouldSkip, false);
           }
         } else {
           yield { relative: relative4, absolute, stats };
         }
       }
     }
-    async function* explore(path39, followSymlinks, useStat, shouldSkip) {
-      yield* exploreWalkAsync("", path39, followSymlinks, useStat, shouldSkip, true);
+    async function* explore(path40, followSymlinks, useStat, shouldSkip) {
+      yield* exploreWalkAsync("", path40, followSymlinks, useStat, shouldSkip, true);
     }
     function readOptions(options) {
       return {
@@ -79481,17 +79481,17 @@ var require_async = __commonJS({
             readyToCheck.push(key);
             return;
           }
-          var dependencies = task.slice(0, task.length - 1);
-          var remainingDependencies = dependencies.length;
+          var dependencies2 = task.slice(0, task.length - 1);
+          var remainingDependencies = dependencies2.length;
           if (remainingDependencies === 0) {
             enqueueTask(key, task);
             readyToCheck.push(key);
             return;
           }
           uncheckedDependencies[key] = remainingDependencies;
-          dependencies.forEach((dependencyName) => {
+          dependencies2.forEach((dependencyName) => {
             if (!tasks[dependencyName]) {
-              throw new Error("async.auto task `" + key + "` has a non-existent dependency `" + dependencyName + "` in " + dependencies.join(", "));
+              throw new Error("async.auto task `" + key + "` has a non-existent dependency `" + dependencyName + "` in " + dependencies2.join(", "));
             }
             addListener(dependencyName, () => {
               remainingDependencies--;
@@ -80986,54 +80986,54 @@ var require_polyfills = __commonJS({
     }
     var chdir;
     module2.exports = patch;
-    function patch(fs36) {
+    function patch(fs37) {
       if (constants4.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
-        patchLchmod(fs36);
+        patchLchmod(fs37);
       }
-      if (!fs36.lutimes) {
-        patchLutimes(fs36);
+      if (!fs37.lutimes) {
+        patchLutimes(fs37);
       }
-      fs36.chown = chownFix(fs36.chown);
-      fs36.fchown = chownFix(fs36.fchown);
-      fs36.lchown = chownFix(fs36.lchown);
-      fs36.chmod = chmodFix(fs36.chmod);
-      fs36.fchmod = chmodFix(fs36.fchmod);
-      fs36.lchmod = chmodFix(fs36.lchmod);
-      fs36.chownSync = chownFixSync(fs36.chownSync);
-      fs36.fchownSync = chownFixSync(fs36.fchownSync);
-      fs36.lchownSync = chownFixSync(fs36.lchownSync);
-      fs36.chmodSync = chmodFixSync(fs36.chmodSync);
-      fs36.fchmodSync = chmodFixSync(fs36.fchmodSync);
-      fs36.lchmodSync = chmodFixSync(fs36.lchmodSync);
-      fs36.stat = statFix(fs36.stat);
-      fs36.fstat = statFix(fs36.fstat);
-      fs36.lstat = statFix(fs36.lstat);
-      fs36.statSync = statFixSync(fs36.statSync);
-      fs36.fstatSync = statFixSync(fs36.fstatSync);
-      fs36.lstatSync = statFixSync(fs36.lstatSync);
-      if (fs36.chmod && !fs36.lchmod) {
-        fs36.lchmod = function(path39, mode, cb) {
+      fs37.chown = chownFix(fs37.chown);
+      fs37.fchown = chownFix(fs37.fchown);
+      fs37.lchown = chownFix(fs37.lchown);
+      fs37.chmod = chmodFix(fs37.chmod);
+      fs37.fchmod = chmodFix(fs37.fchmod);
+      fs37.lchmod = chmodFix(fs37.lchmod);
+      fs37.chownSync = chownFixSync(fs37.chownSync);
+      fs37.fchownSync = chownFixSync(fs37.fchownSync);
+      fs37.lchownSync = chownFixSync(fs37.lchownSync);
+      fs37.chmodSync = chmodFixSync(fs37.chmodSync);
+      fs37.fchmodSync = chmodFixSync(fs37.fchmodSync);
+      fs37.lchmodSync = chmodFixSync(fs37.lchmodSync);
+      fs37.stat = statFix(fs37.stat);
+      fs37.fstat = statFix(fs37.fstat);
+      fs37.lstat = statFix(fs37.lstat);
+      fs37.statSync = statFixSync(fs37.statSync);
+      fs37.fstatSync = statFixSync(fs37.fstatSync);
+      fs37.lstatSync = statFixSync(fs37.lstatSync);
+      if (fs37.chmod && !fs37.lchmod) {
+        fs37.lchmod = function(path40, mode, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs36.lchmodSync = function() {
+        fs37.lchmodSync = function() {
         };
       }
-      if (fs36.chown && !fs36.lchown) {
-        fs36.lchown = function(path39, uid, gid, cb) {
+      if (fs37.chown && !fs37.lchown) {
+        fs37.lchown = function(path40, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs36.lchownSync = function() {
+        fs37.lchownSync = function() {
         };
       }
       if (platform2 === "win32") {
-        fs36.rename = typeof fs36.rename !== "function" ? fs36.rename : function(fs$rename) {
+        fs37.rename = typeof fs37.rename !== "function" ? fs37.rename : function(fs$rename) {
           function rename7(from, to, cb) {
             var start = Date.now();
             var backoff = 0;
             fs$rename(from, to, function CB(er2) {
               if (er2 && (er2.code === "EACCES" || er2.code === "EPERM" || er2.code === "EBUSY") && Date.now() - start < 6e4) {
                 setTimeout(function() {
-                  fs36.stat(to, function(stater, st2) {
+                  fs37.stat(to, function(stater, st2) {
                     if (stater && stater.code === "ENOENT")
                       fs$rename(from, to, CB);
                     else
@@ -81049,9 +81049,9 @@ var require_polyfills = __commonJS({
           }
           if (Object.setPrototypeOf) Object.setPrototypeOf(rename7, fs$rename);
           return rename7;
-        }(fs36.rename);
+        }(fs37.rename);
       }
-      fs36.read = typeof fs36.read !== "function" ? fs36.read : function(fs$read) {
+      fs37.read = typeof fs37.read !== "function" ? fs37.read : function(fs$read) {
         function read(fd, buffer2, offset, length, position, callback_) {
           var callback;
           if (callback_ && typeof callback_ === "function") {
@@ -81059,22 +81059,22 @@ var require_polyfills = __commonJS({
             callback = function(er2, _3, __2) {
               if (er2 && er2.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
-                return fs$read.call(fs36, fd, buffer2, offset, length, position, callback);
+                return fs$read.call(fs37, fd, buffer2, offset, length, position, callback);
               }
               callback_.apply(this, arguments);
             };
           }
-          return fs$read.call(fs36, fd, buffer2, offset, length, position, callback);
+          return fs$read.call(fs37, fd, buffer2, offset, length, position, callback);
         }
         if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
         return read;
-      }(fs36.read);
-      fs36.readSync = typeof fs36.readSync !== "function" ? fs36.readSync : /* @__PURE__ */ function(fs$readSync) {
+      }(fs37.read);
+      fs37.readSync = typeof fs37.readSync !== "function" ? fs37.readSync : /* @__PURE__ */ function(fs$readSync) {
         return function(fd, buffer2, offset, length, position) {
           var eagCounter = 0;
           while (true) {
             try {
-              return fs$readSync.call(fs36, fd, buffer2, offset, length, position);
+              return fs$readSync.call(fs37, fd, buffer2, offset, length, position);
             } catch (er2) {
               if (er2.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
@@ -81084,11 +81084,11 @@ var require_polyfills = __commonJS({
             }
           }
         };
-      }(fs36.readSync);
-      function patchLchmod(fs37) {
-        fs37.lchmod = function(path39, mode, callback) {
-          fs37.open(
-            path39,
+      }(fs37.readSync);
+      function patchLchmod(fs38) {
+        fs38.lchmod = function(path40, mode, callback) {
+          fs38.open(
+            path40,
             constants4.O_WRONLY | constants4.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -81096,80 +81096,80 @@ var require_polyfills = __commonJS({
                 if (callback) callback(err);
                 return;
               }
-              fs37.fchmod(fd, mode, function(err2) {
-                fs37.close(fd, function(err22) {
+              fs38.fchmod(fd, mode, function(err2) {
+                fs38.close(fd, function(err22) {
                   if (callback) callback(err2 || err22);
                 });
               });
             }
           );
         };
-        fs37.lchmodSync = function(path39, mode) {
-          var fd = fs37.openSync(path39, constants4.O_WRONLY | constants4.O_SYMLINK, mode);
+        fs38.lchmodSync = function(path40, mode) {
+          var fd = fs38.openSync(path40, constants4.O_WRONLY | constants4.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
-            ret = fs37.fchmodSync(fd, mode);
+            ret = fs38.fchmodSync(fd, mode);
             threw = false;
           } finally {
             if (threw) {
               try {
-                fs37.closeSync(fd);
+                fs38.closeSync(fd);
               } catch (er2) {
               }
             } else {
-              fs37.closeSync(fd);
+              fs38.closeSync(fd);
             }
           }
           return ret;
         };
       }
-      function patchLutimes(fs37) {
-        if (constants4.hasOwnProperty("O_SYMLINK") && fs37.futimes) {
-          fs37.lutimes = function(path39, at2, mt2, cb) {
-            fs37.open(path39, constants4.O_SYMLINK, function(er2, fd) {
+      function patchLutimes(fs38) {
+        if (constants4.hasOwnProperty("O_SYMLINK") && fs38.futimes) {
+          fs38.lutimes = function(path40, at2, mt2, cb) {
+            fs38.open(path40, constants4.O_SYMLINK, function(er2, fd) {
               if (er2) {
                 if (cb) cb(er2);
                 return;
               }
-              fs37.futimes(fd, at2, mt2, function(er3) {
-                fs37.close(fd, function(er22) {
+              fs38.futimes(fd, at2, mt2, function(er3) {
+                fs38.close(fd, function(er22) {
                   if (cb) cb(er3 || er22);
                 });
               });
             });
           };
-          fs37.lutimesSync = function(path39, at2, mt2) {
-            var fd = fs37.openSync(path39, constants4.O_SYMLINK);
+          fs38.lutimesSync = function(path40, at2, mt2) {
+            var fd = fs38.openSync(path40, constants4.O_SYMLINK);
             var ret;
             var threw = true;
             try {
-              ret = fs37.futimesSync(fd, at2, mt2);
+              ret = fs38.futimesSync(fd, at2, mt2);
               threw = false;
             } finally {
               if (threw) {
                 try {
-                  fs37.closeSync(fd);
+                  fs38.closeSync(fd);
                 } catch (er2) {
                 }
               } else {
-                fs37.closeSync(fd);
+                fs38.closeSync(fd);
               }
             }
             return ret;
           };
-        } else if (fs37.futimes) {
-          fs37.lutimes = function(_a3, _b, _c, cb) {
+        } else if (fs38.futimes) {
+          fs38.lutimes = function(_a3, _b, _c, cb) {
             if (cb) process.nextTick(cb);
           };
-          fs37.lutimesSync = function() {
+          fs38.lutimesSync = function() {
           };
         }
       }
       function chmodFix(orig) {
         if (!orig) return orig;
         return function(target, mode, cb) {
-          return orig.call(fs36, target, mode, function(er2) {
+          return orig.call(fs37, target, mode, function(er2) {
             if (chownErOk(er2)) er2 = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -81179,7 +81179,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, mode) {
           try {
-            return orig.call(fs36, target, mode);
+            return orig.call(fs37, target, mode);
           } catch (er2) {
             if (!chownErOk(er2)) throw er2;
           }
@@ -81188,7 +81188,7 @@ var require_polyfills = __commonJS({
       function chownFix(orig) {
         if (!orig) return orig;
         return function(target, uid, gid, cb) {
-          return orig.call(fs36, target, uid, gid, function(er2) {
+          return orig.call(fs37, target, uid, gid, function(er2) {
             if (chownErOk(er2)) er2 = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -81198,7 +81198,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, uid, gid) {
           try {
-            return orig.call(fs36, target, uid, gid);
+            return orig.call(fs37, target, uid, gid);
           } catch (er2) {
             if (!chownErOk(er2)) throw er2;
           }
@@ -81218,13 +81218,13 @@ var require_polyfills = __commonJS({
             }
             if (cb) cb.apply(this, arguments);
           }
-          return options ? orig.call(fs36, target, options, callback) : orig.call(fs36, target, callback);
+          return options ? orig.call(fs37, target, options, callback) : orig.call(fs37, target, callback);
         };
       }
       function statFixSync(orig) {
         if (!orig) return orig;
         return function(target, options) {
-          var stats = options ? orig.call(fs36, target, options) : orig.call(fs36, target);
+          var stats = options ? orig.call(fs37, target, options) : orig.call(fs37, target);
           if (stats) {
             if (stats.uid < 0) stats.uid += 4294967296;
             if (stats.gid < 0) stats.gid += 4294967296;
@@ -81253,16 +81253,16 @@ var require_legacy_streams = __commonJS({
   "node_modules/graceful-fs/legacy-streams.js"(exports2, module2) {
     var Stream2 = require("stream").Stream;
     module2.exports = legacy;
-    function legacy(fs36) {
+    function legacy(fs37) {
       return {
         ReadStream,
         WriteStream
       };
-      function ReadStream(path39, options) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path39, options);
+      function ReadStream(path40, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path40, options);
         Stream2.call(this);
         var self2 = this;
-        this.path = path39;
+        this.path = path40;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -81270,9 +81270,9 @@ var require_legacy_streams = __commonJS({
         this.mode = 438;
         this.bufferSize = 64 * 1024;
         options = options || {};
-        var keys4 = Object.keys(options);
-        for (var index = 0, length = keys4.length; index < length; index++) {
-          var key = keys4[index];
+        var keys5 = Object.keys(options);
+        for (var index = 0, length = keys5.length; index < length; index++) {
+          var key = keys5[index];
           this[key] = options[key];
         }
         if (this.encoding) this.setEncoding(this.encoding);
@@ -81296,7 +81296,7 @@ var require_legacy_streams = __commonJS({
           });
           return;
         }
-        fs36.open(this.path, this.flags, this.mode, function(err, fd) {
+        fs37.open(this.path, this.flags, this.mode, function(err, fd) {
           if (err) {
             self2.emit("error", err);
             self2.readable = false;
@@ -81307,10 +81307,10 @@ var require_legacy_streams = __commonJS({
           self2._read();
         });
       }
-      function WriteStream(path39, options) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path39, options);
+      function WriteStream(path40, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path40, options);
         Stream2.call(this);
-        this.path = path39;
+        this.path = path40;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -81318,9 +81318,9 @@ var require_legacy_streams = __commonJS({
         this.mode = 438;
         this.bytesWritten = 0;
         options = options || {};
-        var keys4 = Object.keys(options);
-        for (var index = 0, length = keys4.length; index < length; index++) {
-          var key = keys4[index];
+        var keys5 = Object.keys(options);
+        for (var index = 0, length = keys5.length; index < length; index++) {
+          var key = keys5[index];
           this[key] = options[key];
         }
         if (this.start !== void 0) {
@@ -81335,7 +81335,7 @@ var require_legacy_streams = __commonJS({
         this.busy = false;
         this._queue = [];
         if (this.fd === null) {
-          this._open = fs36.open;
+          this._open = fs37.open;
           this._queue.push([this._open, this.path, this.flags, this.mode, void 0]);
           this.flush();
         }
@@ -81370,7 +81370,7 @@ var require_clone = __commonJS({
 // node_modules/graceful-fs/graceful-fs.js
 var require_graceful_fs = __commonJS({
   "node_modules/graceful-fs/graceful-fs.js"(exports2, module2) {
-    var fs36 = require("fs");
+    var fs37 = require("fs");
     var polyfills = require_polyfills();
     var legacy = require_legacy_streams();
     var clone2 = require_clone();
@@ -81402,12 +81402,12 @@ var require_graceful_fs = __commonJS({
         m2 = "GFS4: " + m2.split(/\n/).join("\nGFS4: ");
         console.error(m2);
       };
-    if (!fs36[gracefulQueue]) {
+    if (!fs37[gracefulQueue]) {
       queue = global[gracefulQueue] || [];
-      publishQueue(fs36, queue);
-      fs36.close = function(fs$close) {
+      publishQueue(fs37, queue);
+      fs37.close = function(fs$close) {
         function close(fd, cb) {
-          return fs$close.call(fs36, fd, function(err) {
+          return fs$close.call(fs37, fd, function(err) {
             if (!err) {
               resetQueue();
             }
@@ -81419,48 +81419,48 @@ var require_graceful_fs = __commonJS({
           value: fs$close
         });
         return close;
-      }(fs36.close);
-      fs36.closeSync = function(fs$closeSync) {
+      }(fs37.close);
+      fs37.closeSync = function(fs$closeSync) {
         function closeSync2(fd) {
-          fs$closeSync.apply(fs36, arguments);
+          fs$closeSync.apply(fs37, arguments);
           resetQueue();
         }
         Object.defineProperty(closeSync2, previousSymbol, {
           value: fs$closeSync
         });
         return closeSync2;
-      }(fs36.closeSync);
+      }(fs37.closeSync);
       if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) {
         process.on("exit", function() {
-          debug3(fs36[gracefulQueue]);
-          require("assert").equal(fs36[gracefulQueue].length, 0);
+          debug3(fs37[gracefulQueue]);
+          require("assert").equal(fs37[gracefulQueue].length, 0);
         });
       }
     }
     var queue;
     if (!global[gracefulQueue]) {
-      publishQueue(global, fs36[gracefulQueue]);
+      publishQueue(global, fs37[gracefulQueue]);
     }
-    module2.exports = patch(clone2(fs36));
-    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs36.__patched) {
-      module2.exports = patch(fs36);
-      fs36.__patched = true;
+    module2.exports = patch(clone2(fs37));
+    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs37.__patched) {
+      module2.exports = patch(fs37);
+      fs37.__patched = true;
     }
-    function patch(fs37) {
-      polyfills(fs37);
-      fs37.gracefulify = patch;
-      fs37.createReadStream = createReadStream2;
-      fs37.createWriteStream = createWriteStream2;
-      var fs$readFile = fs37.readFile;
-      fs37.readFile = readFile16;
-      function readFile16(path39, options, cb) {
+    function patch(fs38) {
+      polyfills(fs38);
+      fs38.gracefulify = patch;
+      fs38.createReadStream = createReadStream2;
+      fs38.createWriteStream = createWriteStream2;
+      var fs$readFile = fs38.readFile;
+      fs38.readFile = readFile16;
+      function readFile16(path40, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$readFile(path39, options, cb);
-        function go$readFile(path40, options2, cb2, startTime) {
-          return fs$readFile(path40, options2, function(err) {
+        return go$readFile(path40, options, cb);
+        function go$readFile(path41, options2, cb2, startTime) {
+          return fs$readFile(path41, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path40, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path41, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -81468,16 +81468,16 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$writeFile = fs37.writeFile;
-      fs37.writeFile = writeFile23;
-      function writeFile23(path39, data, options, cb) {
+      var fs$writeFile = fs38.writeFile;
+      fs38.writeFile = writeFile24;
+      function writeFile24(path40, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$writeFile(path39, data, options, cb);
-        function go$writeFile(path40, data2, options2, cb2, startTime) {
-          return fs$writeFile(path40, data2, options2, function(err) {
+        return go$writeFile(path40, data, options, cb);
+        function go$writeFile(path41, data2, options2, cb2, startTime) {
+          return fs$writeFile(path41, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path40, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path41, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -81485,17 +81485,17 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$appendFile = fs37.appendFile;
+      var fs$appendFile = fs38.appendFile;
       if (fs$appendFile)
-        fs37.appendFile = appendFile2;
-      function appendFile2(path39, data, options, cb) {
+        fs38.appendFile = appendFile2;
+      function appendFile2(path40, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$appendFile(path39, data, options, cb);
-        function go$appendFile(path40, data2, options2, cb2, startTime) {
-          return fs$appendFile(path40, data2, options2, function(err) {
+        return go$appendFile(path40, data, options, cb);
+        function go$appendFile(path41, data2, options2, cb2, startTime) {
+          return fs$appendFile(path41, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path40, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path41, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -81503,9 +81503,9 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$copyFile = fs37.copyFile;
+      var fs$copyFile = fs38.copyFile;
       if (fs$copyFile)
-        fs37.copyFile = copyFile2;
+        fs38.copyFile = copyFile2;
       function copyFile2(src, dest, flags, cb) {
         if (typeof flags === "function") {
           cb = flags;
@@ -81523,34 +81523,34 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$readdir = fs37.readdir;
-      fs37.readdir = readdir6;
+      var fs$readdir = fs38.readdir;
+      fs38.readdir = readdir6;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir6(path39, options, cb) {
+      function readdir6(path40, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path40, options2, cb2, startTime) {
-          return fs$readdir(path40, fs$readdirCallback(
-            path40,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path41, options2, cb2, startTime) {
+          return fs$readdir(path41, fs$readdirCallback(
+            path41,
             options2,
             cb2,
             startTime
           ));
-        } : function go$readdir2(path40, options2, cb2, startTime) {
-          return fs$readdir(path40, options2, fs$readdirCallback(
-            path40,
+        } : function go$readdir2(path41, options2, cb2, startTime) {
+          return fs$readdir(path41, options2, fs$readdirCallback(
+            path41,
             options2,
             cb2,
             startTime
           ));
         };
-        return go$readdir(path39, options, cb);
-        function fs$readdirCallback(path40, options2, cb2, startTime) {
+        return go$readdir(path40, options, cb);
+        function fs$readdirCallback(path41, options2, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path40, options2, cb2],
+                [path41, options2, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -81565,21 +81565,21 @@ var require_graceful_fs = __commonJS({
         }
       }
       if (process.version.substr(0, 4) === "v0.8") {
-        var legStreams = legacy(fs37);
+        var legStreams = legacy(fs38);
         ReadStream = legStreams.ReadStream;
         WriteStream = legStreams.WriteStream;
       }
-      var fs$ReadStream = fs37.ReadStream;
+      var fs$ReadStream = fs38.ReadStream;
       if (fs$ReadStream) {
         ReadStream.prototype = Object.create(fs$ReadStream.prototype);
         ReadStream.prototype.open = ReadStream$open;
       }
-      var fs$WriteStream = fs37.WriteStream;
+      var fs$WriteStream = fs38.WriteStream;
       if (fs$WriteStream) {
         WriteStream.prototype = Object.create(fs$WriteStream.prototype);
         WriteStream.prototype.open = WriteStream$open;
       }
-      Object.defineProperty(fs37, "ReadStream", {
+      Object.defineProperty(fs38, "ReadStream", {
         get: function() {
           return ReadStream;
         },
@@ -81589,7 +81589,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      Object.defineProperty(fs37, "WriteStream", {
+      Object.defineProperty(fs38, "WriteStream", {
         get: function() {
           return WriteStream;
         },
@@ -81600,7 +81600,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileReadStream = ReadStream;
-      Object.defineProperty(fs37, "FileReadStream", {
+      Object.defineProperty(fs38, "FileReadStream", {
         get: function() {
           return FileReadStream;
         },
@@ -81611,7 +81611,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileWriteStream = WriteStream;
-      Object.defineProperty(fs37, "FileWriteStream", {
+      Object.defineProperty(fs38, "FileWriteStream", {
         get: function() {
           return FileWriteStream;
         },
@@ -81621,7 +81621,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path39, options) {
+      function ReadStream(path40, options) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -81641,7 +81641,7 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function WriteStream(path39, options) {
+      function WriteStream(path40, options) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -81659,22 +81659,22 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function createReadStream2(path39, options) {
-        return new fs37.ReadStream(path39, options);
+      function createReadStream2(path40, options) {
+        return new fs38.ReadStream(path40, options);
       }
-      function createWriteStream2(path39, options) {
-        return new fs37.WriteStream(path39, options);
+      function createWriteStream2(path40, options) {
+        return new fs38.WriteStream(path40, options);
       }
-      var fs$open = fs37.open;
-      fs37.open = open5;
-      function open5(path39, flags, mode, cb) {
+      var fs$open = fs38.open;
+      fs38.open = open5;
+      function open5(path40, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path39, flags, mode, cb);
-        function go$open(path40, flags2, mode2, cb2, startTime) {
-          return fs$open(path40, flags2, mode2, function(err, fd) {
+        return go$open(path40, flags, mode, cb);
+        function go$open(path41, flags2, mode2, cb2, startTime) {
+          return fs$open(path41, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path40, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path41, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -81682,20 +81682,20 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      return fs37;
+      return fs38;
     }
     function enqueue(elem) {
       debug3("ENQUEUE", elem[0].name, elem[1]);
-      fs36[gracefulQueue].push(elem);
+      fs37[gracefulQueue].push(elem);
       retry3();
     }
     var retryTimer;
     function resetQueue() {
       var now = Date.now();
-      for (var i2 = 0; i2 < fs36[gracefulQueue].length; ++i2) {
-        if (fs36[gracefulQueue][i2].length > 2) {
-          fs36[gracefulQueue][i2][3] = now;
-          fs36[gracefulQueue][i2][4] = now;
+      for (var i2 = 0; i2 < fs37[gracefulQueue].length; ++i2) {
+        if (fs37[gracefulQueue][i2].length > 2) {
+          fs37[gracefulQueue][i2][3] = now;
+          fs37[gracefulQueue][i2][4] = now;
         }
       }
       retry3();
@@ -81703,9 +81703,9 @@ var require_graceful_fs = __commonJS({
     function retry3() {
       clearTimeout(retryTimer);
       retryTimer = void 0;
-      if (fs36[gracefulQueue].length === 0)
+      if (fs37[gracefulQueue].length === 0)
         return;
-      var elem = fs36[gracefulQueue].shift();
+      var elem = fs37[gracefulQueue].shift();
       var fn = elem[0];
       var args = elem[1];
       var err = elem[2];
@@ -81727,7 +81727,7 @@ var require_graceful_fs = __commonJS({
           debug3("RETRY", fn.name, args);
           fn.apply(null, args.concat([startTime]));
         } else {
-          fs36[gracefulQueue].push(elem);
+          fs37[gracefulQueue].push(elem);
         }
       }
       if (retryTimer === void 0) {
@@ -82031,7 +82031,7 @@ var require_BufferList = __commonJS({
         this.head = this.tail = null;
         this.length = 0;
       };
-      BufferList.prototype.join = function join28(s2) {
+      BufferList.prototype.join = function join29(s2) {
         if (this.length === 0) return "";
         var p2 = this.head;
         var ret = "" + p2.data;
@@ -82585,11 +82585,11 @@ var require_stream_duplex = __commonJS({
     "use strict";
     var pna = require_process_nextick_args();
     var objectKeys = Object.keys || function(obj) {
-      var keys5 = [];
+      var keys6 = [];
       for (var key in obj) {
-        keys5.push(key);
+        keys6.push(key);
       }
-      return keys5;
+      return keys6;
     };
     module2.exports = Duplex;
     var util4 = Object.create(require_util10());
@@ -82598,13 +82598,13 @@ var require_stream_duplex = __commonJS({
     var Writable = require_stream_writable();
     util4.inherits(Duplex, Readable9);
     {
-      keys4 = objectKeys(Writable.prototype);
-      for (v2 = 0; v2 < keys4.length; v2++) {
-        method = keys4[v2];
+      keys5 = objectKeys(Writable.prototype);
+      for (v2 = 0; v2 < keys5.length; v2++) {
+        method = keys5[v2];
         if (!Duplex.prototype[method]) Duplex.prototype[method] = Writable.prototype[method];
       }
     }
-    var keys4;
+    var keys5;
     var method;
     var v2;
     function Duplex(options) {
@@ -83779,22 +83779,22 @@ var require_lazystream = __commonJS({
 // node_modules/normalize-path/index.js
 var require_normalize_path = __commonJS({
   "node_modules/normalize-path/index.js"(exports2, module2) {
-    module2.exports = function(path39, stripTrailing) {
-      if (typeof path39 !== "string") {
+    module2.exports = function(path40, stripTrailing) {
+      if (typeof path40 !== "string") {
         throw new TypeError("expected path to be a string");
       }
-      if (path39 === "\\" || path39 === "/") return "/";
-      var len = path39.length;
-      if (len <= 1) return path39;
+      if (path40 === "\\" || path40 === "/") return "/";
+      var len = path40.length;
+      if (len <= 1) return path40;
       var prefix2 = "";
-      if (len > 4 && path39[3] === "\\") {
-        var ch = path39[2];
-        if ((ch === "?" || ch === ".") && path39.slice(0, 2) === "\\\\") {
-          path39 = path39.slice(2);
+      if (len > 4 && path40[3] === "\\") {
+        var ch = path40[2];
+        if ((ch === "?" || ch === ".") && path40.slice(0, 2) === "\\\\") {
+          path40 = path40.slice(2);
           prefix2 = "//";
         }
       }
-      var segs = path39.split(/[/\\]+/);
+      var segs = path40.split(/[/\\]+/);
       if (stripTrailing !== false && segs[segs.length - 1] === "") {
         segs.pop();
       }
@@ -85073,9 +85073,9 @@ var require_event_target_shim = __commonJS({
         timeStamp: event.timeStamp || Date.now()
       });
       Object.defineProperty(this, "isTrusted", { value: false, enumerable: true });
-      const keys4 = Object.keys(event);
-      for (let i2 = 0; i2 < keys4.length; ++i2) {
-        const key = keys4[i2];
+      const keys5 = Object.keys(event);
+      for (let i2 = 0; i2 < keys5.length; ++i2) {
+        const key = keys5[i2];
         if (!(key in this)) {
           Object.defineProperty(this, key, defineRedirectDescriptor(key));
         }
@@ -85294,8 +85294,8 @@ var require_event_target_shim = __commonJS({
       };
     }
     function defineWrapper(BaseEvent, proto) {
-      const keys4 = Object.keys(proto);
-      if (keys4.length === 0) {
+      const keys5 = Object.keys(proto);
+      if (keys5.length === 0) {
         return BaseEvent;
       }
       function CustomEvent(eventTarget, event) {
@@ -85304,8 +85304,8 @@ var require_event_target_shim = __commonJS({
       CustomEvent.prototype = Object.create(BaseEvent.prototype, {
         constructor: { value: CustomEvent, configurable: true, writable: true }
       });
-      for (let i2 = 0; i2 < keys4.length; ++i2) {
-        const key = keys4[i2];
+      for (let i2 = 0; i2 < keys5.length; ++i2) {
+        const key = keys5[i2];
         if (!(key in BaseEvent.prototype)) {
           const descriptor = Object.getOwnPropertyDescriptor(proto, key);
           const isFunc = typeof descriptor.value === "function";
@@ -86108,10 +86108,10 @@ var require_process = __commonJS({
 var require_process2 = __commonJS({
   "node_modules/readable-stream/lib/internal/shims/process.js"(exports2, module2) {
     "use strict";
-    var process5 = ((base, esmKey, keys4, isValid2) => {
+    var process5 = ((base, esmKey, keys5, isValid2) => {
       if (esmKey in base && base[esmKey] === true) {
         let candidate;
-        for (const key of keys4) {
+        for (const key of keys5) {
           if (!(key in base)) {
             continue;
           }
@@ -89521,9 +89521,9 @@ var require_duplex = __commonJS({
     ObjectSetPrototypeOf(Duplex.prototype, Readable9.prototype);
     ObjectSetPrototypeOf(Duplex, Readable9);
     {
-      const keys4 = ObjectKeys(Writable.prototype);
-      for (let i2 = 0; i2 < keys4.length; i2++) {
-        const method = keys4[i2];
+      const keys5 = ObjectKeys(Writable.prototype);
+      for (let i2 = 0; i2 < keys5.length; i2++) {
+        const method = keys5[i2];
         if (!Duplex.prototype[method]) Duplex.prototype[method] = Writable.prototype[method];
       }
     }
@@ -92894,11 +92894,11 @@ var require_commonjs3 = __commonJS({
       return (f2) => f2.length === len && f2 !== "." && f2 !== "..";
     };
     var defaultPlatform2 = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-    var path39 = {
+    var path40 = {
       win32: { sep: "\\" },
       posix: { sep: "/" }
     };
-    exports2.sep = defaultPlatform2 === "win32" ? path39.win32.sep : path39.posix.sep;
+    exports2.sep = defaultPlatform2 === "win32" ? path40.win32.sep : path40.posix.sep;
     exports2.minimatch.sep = exports2.sep;
     exports2.GLOBSTAR = Symbol("globstar **");
     exports2.minimatch.GLOBSTAR = exports2.GLOBSTAR;
@@ -96220,12 +96220,12 @@ var require_commonjs6 = __commonJS({
       /**
        * Get the Path object referenced by the string path, resolved from this Path
        */
-      resolve(path39) {
-        if (!path39) {
+      resolve(path40) {
+        if (!path40) {
           return this;
         }
-        const rootPath = this.getRootString(path39);
-        const dir = path39.substring(rootPath.length);
+        const rootPath = this.getRootString(path40);
+        const dir = path40.substring(rootPath.length);
         const dirParts = dir.split(this.splitSep);
         const result2 = rootPath ? this.getRoot(rootPath).#resolveParts(dirParts) : this.#resolveParts(dirParts);
         return result2;
@@ -96978,8 +96978,8 @@ var require_commonjs6 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path39) {
-        return node_path_1.win32.parse(path39).root;
+      getRootString(path40) {
+        return node_path_1.win32.parse(path40).root;
       }
       /**
        * @internal
@@ -97026,8 +97026,8 @@ var require_commonjs6 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path39) {
-        return path39.startsWith("/") ? "/" : "";
+      getRootString(path40) {
+        return path40.startsWith("/") ? "/" : "";
       }
       /**
        * @internal
@@ -97077,8 +97077,8 @@ var require_commonjs6 = __commonJS({
        *
        * @internal
        */
-      constructor(cwd = process.cwd(), pathImpl, sep7, { nocase, childrenCacheSize = 16 * 1024, fs: fs36 = defaultFS } = {}) {
-        this.#fs = fsFromOption(fs36);
+      constructor(cwd = process.cwd(), pathImpl, sep7, { nocase, childrenCacheSize = 16 * 1024, fs: fs37 = defaultFS } = {}) {
+        this.#fs = fsFromOption(fs37);
         if (cwd instanceof URL || cwd.startsWith("file://")) {
           cwd = (0, node_url_1.fileURLToPath)(cwd);
         }
@@ -97117,11 +97117,11 @@ var require_commonjs6 = __commonJS({
       /**
        * Get the depth of a provided path, string, or the cwd
        */
-      depth(path39 = this.cwd) {
-        if (typeof path39 === "string") {
-          path39 = this.cwd.resolve(path39);
+      depth(path40 = this.cwd) {
+        if (typeof path40 === "string") {
+          path40 = this.cwd.resolve(path40);
         }
-        return path39.depth();
+        return path40.depth();
       }
       /**
        * Return the cache of child entries.  Exposed so subclasses can create
@@ -97608,9 +97608,9 @@ var require_commonjs6 = __commonJS({
         process5();
         return results;
       }
-      chdir(path39 = this.cwd) {
+      chdir(path40 = this.cwd) {
         const oldCwd = this.cwd;
-        this.cwd = typeof path39 === "string" ? this.cwd.resolve(path39) : path39;
+        this.cwd = typeof path40 === "string" ? this.cwd.resolve(path40) : path40;
         this.cwd[setAsCwd](oldCwd);
       }
     };
@@ -97637,8 +97637,8 @@ var require_commonjs6 = __commonJS({
       /**
        * @internal
        */
-      newRoot(fs36) {
-        return new PathWin32(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs36 });
+      newRoot(fs37) {
+        return new PathWin32(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs37 });
       }
       /**
        * Return true if the provided path string is an absolute path
@@ -97667,8 +97667,8 @@ var require_commonjs6 = __commonJS({
       /**
        * @internal
        */
-      newRoot(fs36) {
-        return new PathPosix(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs36 });
+      newRoot(fs37) {
+        return new PathPosix(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs37 });
       }
       /**
        * Return true if the provided path string is an absolute path
@@ -97998,8 +97998,8 @@ var require_processor = __commonJS({
       }
       // match, absolute, ifdir
       entries() {
-        return [...this.store.entries()].map(([path39, n2]) => [
-          path39,
+        return [...this.store.entries()].map(([path40, n2]) => [
+          path40,
           !!(n2 & 2),
           !!(n2 & 1)
         ]);
@@ -98217,9 +98217,9 @@ var require_walker = __commonJS({
       signal;
       maxDepth;
       includeChildMatches;
-      constructor(patterns2, path39, opts) {
+      constructor(patterns2, path40, opts) {
         this.patterns = patterns2;
-        this.path = path39;
+        this.path = path40;
         this.opts = opts;
         this.#sep = !opts.posix && opts.platform === "win32" ? "\\" : "/";
         this.includeChildMatches = opts.includeChildMatches !== false;
@@ -98238,11 +98238,11 @@ var require_walker = __commonJS({
           });
         }
       }
-      #ignored(path39) {
-        return this.seen.has(path39) || !!this.#ignore?.ignored?.(path39);
+      #ignored(path40) {
+        return this.seen.has(path40) || !!this.#ignore?.ignored?.(path40);
       }
-      #childrenIgnored(path39) {
-        return !!this.#ignore?.childrenIgnored?.(path39);
+      #childrenIgnored(path40) {
+        return !!this.#ignore?.childrenIgnored?.(path40);
       }
       // backpressure mechanism
       pause() {
@@ -98458,8 +98458,8 @@ var require_walker = __commonJS({
     exports2.GlobUtil = GlobUtil;
     var GlobWalker = class extends GlobUtil {
       matches = /* @__PURE__ */ new Set();
-      constructor(patterns2, path39, opts) {
-        super(patterns2, path39, opts);
+      constructor(patterns2, path40, opts) {
+        super(patterns2, path40, opts);
       }
       matchEmit(e) {
         this.matches.add(e);
@@ -98497,8 +98497,8 @@ var require_walker = __commonJS({
     exports2.GlobWalker = GlobWalker;
     var GlobStream = class extends GlobUtil {
       results;
-      constructor(patterns2, path39, opts) {
-        super(patterns2, path39, opts);
+      constructor(patterns2, path40, opts) {
+        super(patterns2, path40, opts);
         this.results = new minipass_1.Minipass({
           signal: this.signal,
           objectMode: true
@@ -98853,8 +98853,8 @@ var require_commonjs7 = __commonJS({
 // node_modules/archiver-utils/file.js
 var require_file2 = __commonJS({
   "node_modules/archiver-utils/file.js"(exports2, module2) {
-    var fs36 = require_graceful_fs();
-    var path39 = require("path");
+    var fs37 = require_graceful_fs();
+    var path40 = require("path");
     var flatten = require_flatten();
     var difference = require_difference();
     var union2 = require_union();
@@ -98879,8 +98879,8 @@ var require_file2 = __commonJS({
       return result2;
     };
     file.exists = function() {
-      var filepath = path39.join.apply(path39, arguments);
-      return fs36.existsSync(filepath);
+      var filepath = path40.join.apply(path40, arguments);
+      return fs37.existsSync(filepath);
     };
     file.expand = function(...args) {
       var options = isPlainObject6(args[0]) ? args.shift() : {};
@@ -98893,12 +98893,12 @@ var require_file2 = __commonJS({
       });
       if (options.filter) {
         matches = matches.filter(function(filepath) {
-          filepath = path39.join(options.cwd || "", filepath);
+          filepath = path40.join(options.cwd || "", filepath);
           try {
             if (typeof options.filter === "function") {
               return options.filter(filepath);
             } else {
-              return fs36.statSync(filepath)[options.filter]();
+              return fs37.statSync(filepath)[options.filter]();
             }
           } catch (e) {
             return false;
@@ -98910,7 +98910,7 @@ var require_file2 = __commonJS({
     file.expandMapping = function(patterns2, destBase, options) {
       options = Object.assign({
         rename: function(destBase2, destPath) {
-          return path39.join(destBase2 || "", destPath);
+          return path40.join(destBase2 || "", destPath);
         }
       }, options);
       var files = [];
@@ -98918,14 +98918,14 @@ var require_file2 = __commonJS({
       file.expand(options, patterns2).forEach(function(src) {
         var destPath = src;
         if (options.flatten) {
-          destPath = path39.basename(destPath);
+          destPath = path40.basename(destPath);
         }
         if (options.ext) {
           destPath = destPath.replace(/(\.[^\/]*)?$/, options.ext);
         }
         var dest = options.rename(destBase, destPath, options);
         if (options.cwd) {
-          src = path39.join(options.cwd, src);
+          src = path40.join(options.cwd, src);
         }
         dest = dest.replace(pathSeparatorRe, "/");
         src = src.replace(pathSeparatorRe, "/");
@@ -99006,8 +99006,8 @@ var require_file2 = __commonJS({
 // node_modules/archiver-utils/index.js
 var require_archiver_utils = __commonJS({
   "node_modules/archiver-utils/index.js"(exports2, module2) {
-    var fs36 = require_graceful_fs();
-    var path39 = require("path");
+    var fs37 = require_graceful_fs();
+    var path40 = require("path");
     var isStream = require_is_stream();
     var lazystream = require_lazystream();
     var normalizePath4 = require_normalize_path();
@@ -99055,7 +99055,7 @@ var require_archiver_utils = __commonJS({
     };
     utils.lazyReadStream = function(filepath) {
       return new lazystream.Readable(function() {
-        return fs36.createReadStream(filepath);
+        return fs37.createReadStream(filepath);
       });
     };
     utils.normalizeInputSource = function(source) {
@@ -99083,7 +99083,7 @@ var require_archiver_utils = __commonJS({
         callback = base;
         base = dirpath;
       }
-      fs36.readdir(dirpath, function(err, list) {
+      fs37.readdir(dirpath, function(err, list) {
         var i2 = 0;
         var file;
         var filepath;
@@ -99095,11 +99095,11 @@ var require_archiver_utils = __commonJS({
           if (!file) {
             return callback(null, results);
           }
-          filepath = path39.join(dirpath, file);
-          fs36.stat(filepath, function(err2, stats) {
+          filepath = path40.join(dirpath, file);
+          fs37.stat(filepath, function(err2, stats) {
             results.push({
               path: filepath,
-              relative: path39.relative(base, filepath).replace(/\\/g, "/"),
+              relative: path40.relative(base, filepath).replace(/\\/g, "/"),
               stats
             });
             if (stats && stats.isDirectory()) {
@@ -99158,10 +99158,10 @@ var require_error = __commonJS({
 // node_modules/archiver/lib/core.js
 var require_core4 = __commonJS({
   "node_modules/archiver/lib/core.js"(exports2, module2) {
-    var fs36 = require("fs");
+    var fs37 = require("fs");
     var glob = require_readdir_glob();
     var async = require_async();
-    var path39 = require("path");
+    var path40 = require("path");
     var util4 = require_archiver_utils();
     var inherits = require("util").inherits;
     var ArchiverError = require_error();
@@ -99222,7 +99222,7 @@ var require_core4 = __commonJS({
       data.sourcePath = filepath;
       task.data = data;
       this._entriesCount++;
-      if (data.stats && data.stats instanceof fs36.Stats) {
+      if (data.stats && data.stats instanceof fs37.Stats) {
         task = this._updateQueueTaskWithStats(task, data.stats);
         if (task) {
           if (data.stats.size) {
@@ -99393,7 +99393,7 @@ var require_core4 = __commonJS({
         callback();
         return;
       }
-      fs36.lstat(task.filepath, function(err, stats) {
+      fs37.lstat(task.filepath, function(err, stats) {
         if (this._state.aborted) {
           setImmediate(callback);
           return;
@@ -99436,10 +99436,10 @@ var require_core4 = __commonJS({
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else if (stats.isSymbolicLink() && this._moduleSupports("symlink")) {
-        var linkPath = fs36.readlinkSync(task.filepath);
-        var dirName = path39.dirname(task.filepath);
+        var linkPath = fs37.readlinkSync(task.filepath);
+        var dirName = path40.dirname(task.filepath);
         task.data.type = "symlink";
-        task.data.linkname = path39.relative(dirName, path39.resolve(dirName, linkPath));
+        task.data.linkname = path40.relative(dirName, path40.resolve(dirName, linkPath));
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else {
@@ -100575,8 +100575,8 @@ var require_zip_archive_output_stream = __commonJS({
       var process5 = deflate ? new DeflateCRC32Stream(this.options.zlib) : new CRC32Stream();
       var error4 = null;
       function handleStuff() {
-        var digest5 = process5.digest().readUInt32BE(0);
-        ae2.setCrc(digest5);
+        var digest6 = process5.digest().readUInt32BE(0);
+        ae2.setCrc(digest6);
         ae2.setSize(process5.size());
         ae2.setCompressedSize(process5.size(true));
         this._afterAppend(ae2);
@@ -104171,8 +104171,8 @@ var init_context = __esm({
           if ((0, import_fs3.existsSync)(process.env.GITHUB_EVENT_PATH)) {
             this.payload = JSON.parse((0, import_fs3.readFileSync)(process.env.GITHUB_EVENT_PATH, { encoding: "utf8" }));
           } else {
-            const path39 = process.env.GITHUB_EVENT_PATH;
-            process.stdout.write(`GITHUB_EVENT_PATH ${path39} does not exist${import_os4.EOL}`);
+            const path40 = process.env.GITHUB_EVENT_PATH;
+            process.stdout.write(`GITHUB_EVENT_PATH ${path40} does not exist${import_os4.EOL}`);
           }
         }
         this.eventName = process.env.GITHUB_EVENT_NAME;
@@ -105978,9 +105978,9 @@ var init_json_with_bigint = __esm({
           const value = node.parent[node.key];
           const isComplexObject = value !== null && typeof value === "object";
           if (isComplexObject) {
-            const keys4 = Object.keys(value);
-            for (let i2 = keys4.length - 1; i2 >= 0; i2--) {
-              stack.push({ parent: value, key: keys4[i2], visited: false });
+            const keys5 = Object.keys(value);
+            for (let i2 = keys5.length - 1; i2 >= 0; i2--) {
+              stack.push({ parent: value, key: keys5[i2], visited: false });
             }
           }
         } else {
@@ -110665,7 +110665,7 @@ var require_implementation2 = __commonJS({
           return false;
         }
       };
-      keysShim = function keys4(object5) {
+      keysShim = function keys5(object5) {
         var isObject3 = object5 !== null && typeof object5 === "object";
         var isFunction = toStr.call(object5) === "[object Function]";
         var isArguments = isArgs(object5);
@@ -110724,7 +110724,7 @@ var require_object_keys = __commonJS({
     var slice = Array.prototype.slice;
     var isArgs = require_isArguments2();
     var origKeys = Object.keys;
-    var keysShim = origKeys ? function keys4(o2) {
+    var keysShim = origKeys ? function keys5(o2) {
       return origKeys(o2);
     } : require_implementation2();
     var originalKeys = Object.keys;
@@ -110735,7 +110735,7 @@ var require_object_keys = __commonJS({
           return args && args.length === arguments.length;
         }(1, 2);
         if (!keysWorksWithArguments) {
-          Object.keys = function keys4(object5) {
+          Object.keys = function keys5(object5) {
             if (isArgs(object5)) {
               return originalKeys(slice.call(object5));
             }
@@ -110755,7 +110755,7 @@ var require_object_keys = __commonJS({
 var require_define_properties = __commonJS({
   "node_modules/define-properties/index.js"(exports2, module2) {
     "use strict";
-    var keys4 = require_object_keys();
+    var keys5 = require_object_keys();
     var hasSymbols = typeof Symbol === "function" && typeof Symbol("foo") === "symbol";
     var toStr = Object.prototype.toString;
     var concat2 = Array.prototype.concat;
@@ -110782,7 +110782,7 @@ var require_define_properties = __commonJS({
     };
     var defineProperties = function(object5, map2) {
       var predicates = arguments.length > 2 ? arguments[2] : {};
-      var props = keys4(map2);
+      var props = keys5(map2);
       if (hasSymbols) {
         props = concat2.call(props, Object.getOwnPropertySymbols(map2));
       }
@@ -110942,8 +110942,8 @@ var require_object_inspect = __commonJS({
       }
       if (typeof obj === "function" && !isRegExp(obj)) {
         var name = nameOf(obj);
-        var keys4 = arrObjKeys(obj, inspect2);
-        return "[Function" + (name ? ": " + name : " (anonymous)") + "]" + (keys4.length > 0 ? " { " + $join.call(keys4, ", ") + " }" : "");
+        var keys5 = arrObjKeys(obj, inspect2);
+        return "[Function" + (name ? ": " + name : " (anonymous)") + "]" + (keys5.length > 0 ? " { " + $join.call(keys5, ", ") + " }" : "");
       }
       if (isSymbol(obj)) {
         var symString = hasShammedSymbols ? $replace.call(String(obj), /^(Symbol\(.*\))_[^)]*$/, "$1") : symToString.call(obj);
@@ -111936,8 +111936,8 @@ var require_GetValueFromBuffer = __commonJS({
         rawValue = $slice(new $Uint8Array(arrayBuffer, byteIndex), 0, elementSize);
       }
       var isLittleEndian = arguments.length > 5 ? arguments[5] : defaultEndianness === "little";
-      var bytes = isLittleEndian ? $slice(safeConcat([0, 0, 0, 0, 0, 0, 0, 0], rawValue), -elementSize) : $slice(safeConcat(rawValue, [0, 0, 0, 0, 0, 0, 0, 0]), 0, elementSize);
-      return RawBytesToNumeric(type2, bytes, isLittleEndian);
+      var bytes2 = isLittleEndian ? $slice(safeConcat([0, 0, 0, 0, 0, 0, 0, 0], rawValue), -elementSize) : $slice(safeConcat(rawValue, [0, 0, 0, 0, 0, 0, 0, 0]), 0, elementSize);
+      return RawBytesToNumeric(type2, bytes2, isLittleEndian);
     };
   }
 });
@@ -115161,7 +115161,7 @@ var require_traverse = __commonJS({
       }
       return void 0;
     }
-    var objectKeys = Object.keys || function keys4(obj) {
+    var objectKeys = Object.keys || function keys5(obj) {
       var res = [];
       for (var key in obj) {
         res[res.length] = key;
@@ -115329,7 +115329,7 @@ var require_traverse = __commonJS({
       return options == null ? emptyNull : options;
     }
     function walk(root, cb) {
-      var path39 = [];
+      var path40 = [];
       var parents = [];
       var alive = true;
       var options = arguments.length > 2 ? arguments[2] : emptyNull;
@@ -115342,13 +115342,13 @@ var require_traverse = __commonJS({
         var state3 = {
           node,
           node_,
-          path: [].concat(path39),
+          path: [].concat(path40),
           parent: parents[parents.length - 1],
           parents,
-          key: path39[path39.length - 1],
+          key: path40[path40.length - 1],
           removedKeys: { __proto__: null },
-          isRoot: path39.length === 0,
-          level: path39.length,
+          isRoot: path40.length === 0,
+          level: path40.length,
           circular: null,
           update: function(x2, stopHere) {
             if (!state3.isRoot && !wasSpliced(originalKey, splicedSiblings)) {
@@ -115451,7 +115451,7 @@ var require_traverse = __commonJS({
               return;
             }
             var key = shiftedKey(listedKey, splicedChildren);
-            path39[path39.length] = key;
+            path40[path40.length] = key;
             if (modifiers.pre) {
               modifiers.pre.call(state3, state3.node[key], key);
             }
@@ -115467,7 +115467,7 @@ var require_traverse = __commonJS({
             if (modifiers.post) {
               modifiers.post.call(state3, child);
             }
-            path39.pop();
+            path40.pop();
           });
           parents.pop();
         }
@@ -115841,7 +115841,7 @@ var require_buffers = __commonJS({
         this.length += reps[i2].length;
       }
       var removed = new Buffers();
-      var bytes = 0;
+      var bytes2 = 0;
       var startBytes = 0;
       for (var ii = 0; ii < buffers.length && startBytes + buffers[ii].length < index; ii++) {
         startBytes += buffers[ii].length;
@@ -116002,12 +116002,12 @@ var require_vars = __commonJS({
     module2.exports = function(store) {
       function getset(name, value) {
         var node = vars.store;
-        var keys4 = name.split(".");
-        keys4.slice(0, -1).forEach(function(k2) {
+        var keys5 = name.split(".");
+        keys5.slice(0, -1).forEach(function(k2) {
           if (node[k2] === void 0) node[k2] = {};
           node = node[k2];
         });
-        var key = keys4[keys4.length - 1];
+        var key = keys5[keys5.length - 1];
         if (arguments.length == 1) {
           return node[key];
         } else {
@@ -116056,9 +116056,9 @@ var require_binary = __commonJS({
     exports2.stream = function(input) {
       if (input) return exports2.apply(null, arguments);
       var pending = null;
-      function getBytes(bytes, cb, skip) {
+      function getBytes(bytes2, cb, skip) {
         pending = {
-          bytes,
+          bytes: bytes2,
           skip,
           cb: function(buf) {
             pending = null;
@@ -116076,19 +116076,19 @@ var require_binary = __commonJS({
         if (typeof pending === "function") {
           pending();
         } else {
-          var bytes = offset + pending.bytes;
-          if (buffers.length >= bytes) {
+          var bytes2 = offset + pending.bytes;
+          if (buffers.length >= bytes2) {
             var buf;
             if (offset == null) {
-              buf = buffers.splice(0, bytes);
+              buf = buffers.splice(0, bytes2);
               if (!pending.skip) {
                 buf = buf.slice();
               }
             } else {
               if (!pending.skip) {
-                buf = buffers.slice(offset, bytes);
+                buf = buffers.slice(offset, bytes2);
               }
-              offset = bytes;
+              offset = bytes2;
             }
             if (pending.skip) {
               pending.cb();
@@ -116102,9 +116102,9 @@ var require_binary = __commonJS({
         function next() {
           if (!done) saw.next();
         }
-        var self2 = words(function(bytes, cb) {
+        var self2 = words(function(bytes2, cb) {
           return function(name) {
-            getBytes(bytes, function(buf) {
+            getBytes(bytes2, function(buf) {
               vars.set(name, cb(buf));
               next();
             });
@@ -116142,20 +116142,20 @@ var require_binary = __commonJS({
             }.bind(this));
           }, vars.store);
         };
-        self2.buffer = function(name, bytes) {
-          if (typeof bytes === "string") {
-            bytes = vars.get(bytes);
+        self2.buffer = function(name, bytes2) {
+          if (typeof bytes2 === "string") {
+            bytes2 = vars.get(bytes2);
           }
-          getBytes(bytes, function(buf) {
+          getBytes(bytes2, function(buf) {
             vars.set(name, buf);
             next();
           });
         };
-        self2.skip = function(bytes) {
-          if (typeof bytes === "string") {
-            bytes = vars.get(bytes);
+        self2.skip = function(bytes2) {
+          if (typeof bytes2 === "string") {
+            bytes2 = vars.get(bytes2);
           }
-          getBytes(bytes, function() {
+          getBytes(bytes2, function() {
             next();
           });
         };
@@ -116224,11 +116224,11 @@ var require_binary = __commonJS({
       return stream4;
     };
     exports2.parse = function parse6(buffer2) {
-      var self2 = words(function(bytes, cb) {
+      var self2 = words(function(bytes2, cb) {
         return function(name) {
-          if (offset + bytes <= buffer2.length) {
-            var buf = buffer2.slice(offset, offset + bytes);
-            offset += bytes;
+          if (offset + bytes2 <= buffer2.length) {
+            var buf = buffer2.slice(offset, offset + bytes2);
+            offset += bytes2;
             vars.set(name, cb(buf));
           } else {
             vars.set(name, null);
@@ -116272,11 +116272,11 @@ var require_binary = __commonJS({
         vars.set(name, buf);
         return self2;
       };
-      self2.skip = function(bytes) {
-        if (typeof bytes === "string") {
-          bytes = vars.get(bytes);
+      self2.skip = function(bytes2) {
+        if (typeof bytes2 === "string") {
+          bytes2 = vars.get(bytes2);
         }
-        offset += bytes;
+        offset += bytes2;
         return self2;
       };
       self2.scan = function(name, search) {
@@ -116309,42 +116309,42 @@ var require_binary = __commonJS({
       };
       return self2;
     };
-    function decodeLEu(bytes) {
+    function decodeLEu(bytes2) {
       var acc = 0;
-      for (var i2 = 0; i2 < bytes.length; i2++) {
-        acc += Math.pow(256, i2) * bytes[i2];
+      for (var i2 = 0; i2 < bytes2.length; i2++) {
+        acc += Math.pow(256, i2) * bytes2[i2];
       }
       return acc;
     }
-    function decodeBEu(bytes) {
+    function decodeBEu(bytes2) {
       var acc = 0;
-      for (var i2 = 0; i2 < bytes.length; i2++) {
-        acc += Math.pow(256, bytes.length - i2 - 1) * bytes[i2];
+      for (var i2 = 0; i2 < bytes2.length; i2++) {
+        acc += Math.pow(256, bytes2.length - i2 - 1) * bytes2[i2];
       }
       return acc;
     }
-    function decodeBEs(bytes) {
-      var val = decodeBEu(bytes);
-      if ((bytes[0] & 128) == 128) {
-        val -= Math.pow(256, bytes.length);
+    function decodeBEs(bytes2) {
+      var val = decodeBEu(bytes2);
+      if ((bytes2[0] & 128) == 128) {
+        val -= Math.pow(256, bytes2.length);
       }
       return val;
     }
-    function decodeLEs(bytes) {
-      var val = decodeLEu(bytes);
-      if ((bytes[bytes.length - 1] & 128) == 128) {
-        val -= Math.pow(256, bytes.length);
+    function decodeLEs(bytes2) {
+      var val = decodeLEu(bytes2);
+      if ((bytes2[bytes2.length - 1] & 128) == 128) {
+        val -= Math.pow(256, bytes2.length);
       }
       return val;
     }
     function words(decode) {
       var self2 = {};
-      [1, 2, 4, 8].forEach(function(bytes) {
-        var bits = bytes * 8;
-        self2["word" + bits + "le"] = self2["word" + bits + "lu"] = decode(bytes, decodeLEu);
-        self2["word" + bits + "ls"] = decode(bytes, decodeLEs);
-        self2["word" + bits + "be"] = self2["word" + bits + "bu"] = decode(bytes, decodeBEu);
-        self2["word" + bits + "bs"] = decode(bytes, decodeBEs);
+      [1, 2, 4, 8].forEach(function(bytes2) {
+        var bits = bytes2 * 8;
+        self2["word" + bits + "le"] = self2["word" + bits + "lu"] = decode(bytes2, decodeLEu);
+        self2["word" + bits + "ls"] = decode(bytes2, decodeLEs);
+        self2["word" + bits + "be"] = self2["word" + bits + "bu"] = decode(bytes2, decodeBEu);
+        self2["word" + bits + "bs"] = decode(bytes2, decodeBEs);
       });
       self2.word8 = self2.word8u = self2.word8be;
       self2.word8s = self2.word8bs;
@@ -116649,11 +116649,11 @@ var require_unzip_stream = __commonJS({
           return requiredLength;
         case states.CENTRAL_DIRECTORY_FILE_HEADER_SUFFIX:
           var isUtf8 = (this.parsedEntity.flags & 2048) !== 0;
-          var path39 = this._decodeString(chunk.slice(0, this.parsedEntity.fileNameLength), isUtf8);
+          var path40 = this._decodeString(chunk.slice(0, this.parsedEntity.fileNameLength), isUtf8);
           var extraDataBuffer = chunk.slice(this.parsedEntity.fileNameLength, this.parsedEntity.fileNameLength + this.parsedEntity.extraFieldLength);
           var extra = this._readExtraFields(extraDataBuffer);
           if (extra && extra.parsed && extra.parsed.path && !isUtf8) {
-            path39 = extra.parsed.path;
+            path40 = extra.parsed.path;
           }
           this.parsedEntity.extra = extra.parsed;
           var isUnix = (this.parsedEntity.versionMadeBy & 65280) >> 8 === 3;
@@ -116665,7 +116665,7 @@ var require_unzip_stream = __commonJS({
           }
           if (this.options.debug) {
             const debugObj2 = Object.assign({}, this.parsedEntity, {
-              path: path39,
+              path: path40,
               flags: "0x" + this.parsedEntity.flags.toString(16),
               unixAttrs: unixAttrs && "0" + unixAttrs.toString(8),
               isSymlink,
@@ -117102,8 +117102,8 @@ var require_parser_stream = __commonJS({
 // node_modules/mkdirp/index.js
 var require_mkdirp = __commonJS({
   "node_modules/mkdirp/index.js"(exports2, module2) {
-    var path39 = require("path");
-    var fs36 = require("fs");
+    var path40 = require("path");
+    var fs37 = require("fs");
     var _0777 = parseInt("0777", 8);
     module2.exports = mkdirP.mkdirp = mkdirP.mkdirP = mkdirP;
     function mkdirP(p2, opts, f2, made) {
@@ -117114,7 +117114,7 @@ var require_mkdirp = __commonJS({
         opts = { mode: opts };
       }
       var mode = opts.mode;
-      var xfs = opts.fs || fs36;
+      var xfs = opts.fs || fs37;
       if (mode === void 0) {
         mode = _0777;
       }
@@ -117122,7 +117122,7 @@ var require_mkdirp = __commonJS({
       var cb = f2 || /* istanbul ignore next */
       function() {
       };
-      p2 = path39.resolve(p2);
+      p2 = path40.resolve(p2);
       xfs.mkdir(p2, mode, function(er2) {
         if (!er2) {
           made = made || p2;
@@ -117130,8 +117130,8 @@ var require_mkdirp = __commonJS({
         }
         switch (er2.code) {
           case "ENOENT":
-            if (path39.dirname(p2) === p2) return cb(er2);
-            mkdirP(path39.dirname(p2), opts, function(er3, made2) {
+            if (path40.dirname(p2) === p2) return cb(er2);
+            mkdirP(path40.dirname(p2), opts, function(er3, made2) {
               if (er3) cb(er3, made2);
               else mkdirP(p2, opts, cb, made2);
             });
@@ -117153,19 +117153,19 @@ var require_mkdirp = __commonJS({
         opts = { mode: opts };
       }
       var mode = opts.mode;
-      var xfs = opts.fs || fs36;
+      var xfs = opts.fs || fs37;
       if (mode === void 0) {
         mode = _0777;
       }
       if (!made) made = null;
-      p2 = path39.resolve(p2);
+      p2 = path40.resolve(p2);
       try {
         xfs.mkdirSync(p2, mode);
         made = made || p2;
       } catch (err0) {
         switch (err0.code) {
           case "ENOENT":
-            made = sync(path39.dirname(p2), opts, made);
+            made = sync(path40.dirname(p2), opts, made);
             sync(p2, opts, made);
             break;
           // In the case of any other error, just see if there's a dir
@@ -117190,8 +117190,8 @@ var require_mkdirp = __commonJS({
 // node_modules/unzip-stream/lib/extract.js
 var require_extract2 = __commonJS({
   "node_modules/unzip-stream/lib/extract.js"(exports2, module2) {
-    var fs36 = require("fs");
-    var path39 = require("path");
+    var fs37 = require("fs");
+    var path40 = require("path");
     var util4 = require("util");
     var mkdirp = require_mkdirp();
     var Transform4 = require("stream").Transform;
@@ -117233,11 +117233,11 @@ var require_extract2 = __commonJS({
     };
     Extract.prototype._processEntry = function(entry) {
       var self2 = this;
-      var destPath = path39.join(this.opts.path, entry.path);
-      var directory = entry.isDirectory ? destPath : path39.dirname(destPath);
+      var destPath = path40.join(this.opts.path, entry.path);
+      var directory = entry.isDirectory ? destPath : path40.dirname(destPath);
       this.unfinishedEntries++;
       var writeFileFn = function() {
-        var pipedStream = fs36.createWriteStream(destPath);
+        var pipedStream = fs37.createWriteStream(destPath);
         pipedStream.on("close", function() {
           self2.unfinishedEntries--;
           self2._notifyAwaiter();
@@ -117281,10 +117281,10 @@ var require_unzip = __commonJS({
 });
 
 // node_modules/@actions/artifact/lib/internal/download/download-artifact.js
-function exists2(path39) {
+function exists2(path40) {
   return __awaiter10(this, void 0, void 0, function* () {
     try {
-      yield import_promises5.default.access(path39);
+      yield import_promises5.default.access(path40);
       return true;
     } catch (error4) {
       if (error4.code === "ENOENT") {
@@ -117558,17 +117558,17 @@ function requestLog(octokit) {
     octokit.log.debug("request", options);
     const start = Date.now();
     const requestOptions = octokit.request.endpoint.parse(options);
-    const path39 = requestOptions.url.replace(options.baseUrl, "");
+    const path40 = requestOptions.url.replace(options.baseUrl, "");
     return request3(options).then((response) => {
       const requestId2 = response.headers["x-github-request-id"];
       octokit.log.info(
-        `${requestOptions.method} ${path39} - ${response.status} with id ${requestId2} in ${Date.now() - start}ms`
+        `${requestOptions.method} ${path40} - ${response.status} with id ${requestId2} in ${Date.now() - start}ms`
       );
       return response;
     }).catch((error4) => {
       const requestId2 = error4.response?.headers["x-github-request-id"] || "UNKNOWN";
       octokit.log.error(
-        `${requestOptions.method} ${path39} - ${error4.status} with id ${requestId2} in ${Date.now() - start}ms`
+        `${requestOptions.method} ${path40} - ${error4.status} with id ${requestId2} in ${Date.now() - start}ms`
       );
       throw error4;
     });
@@ -118359,11 +118359,11 @@ var require_light = __commonJS({
             return Object.keys(this.instances);
           }
           async clusterKeys() {
-            var cursor, end, found, i2, k2, keys4, len, next, start;
+            var cursor, end, found, i2, k2, keys5, len, next, start;
             if (this.connection == null) {
               return this.Promise.resolve(this.keys());
             }
-            keys4 = [];
+            keys5 = [];
             cursor = null;
             start = `b_${this.id}-`.length;
             end = "_settings".length;
@@ -118372,10 +118372,10 @@ var require_light = __commonJS({
               cursor = ~~next;
               for (i2 = 0, len = found.length; i2 < len; i2++) {
                 k2 = found[i2];
-                keys4.push(k2.slice(start, -end));
+                keys5.push(k2.slice(start, -end));
               }
             }
-            return keys4;
+            return keys5;
           }
           _startAutoCleanup() {
             var base;
@@ -120137,12 +120137,12 @@ var require_dist5 = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f2;
     };
-    function addFormats2(ajv, list, fs36, exportName) {
+    function addFormats2(ajv, list, fs37, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f2 of list)
-        ajv.addFormat(f2, fs36[f2]);
+        ajv.addFormat(f2, fs37[f2]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -120234,7 +120234,7 @@ function escapeProperty(value) {
 }
 
 // src/main.ts
-var fs35 = __toESM(require("fs"));
+var fs36 = __toESM(require("fs"));
 
 // src/config/loader.ts
 var fs2 = __toESM(require("fs"));
@@ -121144,9 +121144,9 @@ function requirePairs() {
     for (let index = 0, length = object5.length; index < length; index += 1) {
       const pair = object5[index];
       if (_toString.call(pair) !== "[object Object]") return false;
-      const keys4 = Object.keys(pair);
-      if (keys4.length !== 1) return false;
-      result2[index] = [keys4[0], pair[keys4[0]]];
+      const keys5 = Object.keys(pair);
+      if (keys5.length !== 1) return false;
+      result2[index] = [keys5[0], pair[keys5[0]]];
     }
     return true;
   }
@@ -121156,8 +121156,8 @@ function requirePairs() {
     const result2 = new Array(object5.length);
     for (let index = 0, length = object5.length; index < length; index += 1) {
       const pair = object5[index];
-      const keys4 = Object.keys(pair);
-      result2[index] = [keys4[0], pair[keys4[0]]];
+      const keys5 = Object.keys(pair);
+      result2[index] = [keys5[0], pair[keys5[0]]];
     }
     return result2;
   }
@@ -122666,9 +122666,9 @@ function requireDumper() {
   function compileStyleMap(schema2, map2) {
     if (map2 === null) return {};
     const result2 = {};
-    const keys4 = Object.keys(map2);
-    for (let index = 0, length = keys4.length; index < length; index += 1) {
-      let tag = keys4[index];
+    const keys5 = Object.keys(map2);
+    for (let index = 0, length = keys5.length; index < length; index += 1) {
+      let tag = keys5[index];
       let style = String(map2[tag]);
       if (tag.slice(0, 2) === "!!") {
         tag = "tag:yaml.org,2002:" + tag.slice(2);
@@ -123388,8 +123388,8 @@ async function getBestFreeModels(count2 = 4, _timeoutMs = 5e3) {
   logger.debug(`Selecting ${count2} preferred OpenRouter free model instances`);
   const models = [];
   for (let i2 = 0; models.length < count2; i2 += 1) {
-    const model = PREFERRED_OPENROUTER_FREE_MODELS[i2 % PREFERRED_OPENROUTER_FREE_MODELS.length];
-    models.push(`${model}#${i2 + 1}`);
+    const model2 = PREFERRED_OPENROUTER_FREE_MODELS[i2 % PREFERRED_OPENROUTER_FREE_MODELS.length];
+    models.push(`${model2}#${i2 + 1}`);
   }
   return models;
 }
@@ -123696,13 +123696,13 @@ var util;
     });
   };
   util4.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object5) => {
-    const keys4 = [];
+    const keys5 = [];
     for (const key in object5) {
       if (Object.prototype.hasOwnProperty.call(object5, key)) {
-        keys4.push(key);
+        keys5.push(key);
       }
     }
-    return keys4;
+    return keys5;
   };
   util4.find = (arr, checker) => {
     for (const item of arr) {
@@ -124029,8 +124029,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path39, errorMaps, issueData } = params;
-  const fullPath = [...path39, ...issueData.path || []];
+  const { data, path: path40, errorMaps, issueData } = params;
+  const fullPath = [...path40, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -124146,11 +124146,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path39, key) {
+  constructor(parent, value, path40, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path39;
+    this._path = path40;
     this._key = key;
   }
   get path() {
@@ -125930,8 +125930,8 @@ var ZodObject = class _ZodObject extends ZodType {
     if (this._cached !== null)
       return this._cached;
     const shape = this._def.shape();
-    const keys4 = util.objectKeys(shape);
-    this._cached = { shape, keys: keys4 };
+    const keys5 = util.objectKeys(shape);
+    this._cached = { shape, keys: keys5 };
     return this._cached;
   }
   _parse(input) {
@@ -128287,14 +128287,14 @@ var ConfigLoader = class {
     return cleaned.length > 0 ? cleaned : void 0;
   }
   static codexProviderFromModel(value) {
-    const model = value?.trim();
-    if (!model) return void 0;
-    return model.startsWith("codex/") ? model : `codex/${model}`;
+    const model2 = value?.trim();
+    if (!model2) return void 0;
+    return model2.startsWith("codex/") ? model2 : `codex/${model2}`;
   }
   static claudeProviderFromModel(value) {
-    const model = value?.trim();
-    if (!model) return void 0;
-    return model.startsWith("claude/") ? model : `claude/${model}`;
+    const model2 = value?.trim();
+    if (!model2) return void 0;
+    return model2.startsWith("claude/") ? model2 : `claude/${model2}`;
   }
   static inferredProviderFromAuthMode(authMode, claudeProvider, codexProvider) {
     switch ((authMode || "").trim()) {
@@ -129195,14 +129195,14 @@ async function startCodexUsageRelay(input) {
   let closed = false;
   const server = (0, import_node_http.createServer)((request3, response) => {
     const flight = (async () => {
-      const path39 = request3.url?.split("?")[0] ?? "";
+      const path40 = request3.url?.split("?")[0] ?? "";
       const prefix2 = `/${capability}`;
-      const supplied = Buffer.from(path39.slice(1, 1 + capability.length));
-      if (closed || supplied.length !== auth3.length || !(0, import_node_crypto.timingSafeEqual)(supplied, auth3) || !path39.startsWith(prefix2 + "/") || request3.method !== "POST" || request3.url?.includes("?")) {
+      const supplied = Buffer.from(path40.slice(1, 1 + capability.length));
+      if (closed || supplied.length !== auth3.length || !(0, import_node_crypto.timingSafeEqual)(supplied, auth3) || !path40.startsWith(prefix2 + "/") || request3.method !== "POST" || request3.url?.includes("?")) {
         response.writeHead(404).end();
         return;
       }
-      const suffix = path39.slice(prefix2.length);
+      const suffix = path40.slice(prefix2.length);
       if (![
         "/responses",
         "/chat/completions",
@@ -129232,13 +129232,13 @@ async function startCodexUsageRelay(input) {
       try {
         const chunks = [];
         let size = 0;
-        for await (const bytes of request3) {
-          size += bytes.length;
+        for await (const bytes2 of request3) {
+          size += bytes2.length;
           if (size > (input.maxRequestBytes ?? 16 * 1024 * 1024)) {
             response.writeHead(413).end();
             return;
           }
-          chunks.push(Buffer.from(bytes));
+          chunks.push(Buffer.from(bytes2));
         }
         const body2 = Buffer.concat(chunks);
         const parsed = JSON.parse(body2.toString("utf8"));
@@ -129305,12 +129305,12 @@ async function startCodexUsageRelay(input) {
           } catch {
           }
         };
-        for await (const bytes of upstream.body) {
-          observedBytes += bytes.length;
+        for await (const bytes2 of upstream.body) {
+          observedBytes += bytes2.length;
           if (observedBytes > (input.maxResponseBytes ?? 64 * 1024 * 1024))
             throw new Error("usage_relay_response_limit");
           if (parseEnabled) {
-            pending += decoder2.decode(bytes, { stream: true });
+            pending += decoder2.decode(bytes2, { stream: true });
             if (sse) {
               for (; ; ) {
                 const delimiter5 = /\r\n\r\n|\n\n|\r\r/.exec(pending);
@@ -129326,7 +129326,7 @@ async function startCodexUsageRelay(input) {
               parseEnabled = false;
             }
           }
-          if (!response.write(bytes)) {
+          if (!response.write(bytes2)) {
             const drainAbort = new AbortController();
             try {
               await Promise.race([
@@ -129383,10 +129383,10 @@ async function startCodexUsageRelay(input) {
 }
 
 // src/provider-usage/anthropic-relay.ts
-function startAnthropicUsageRelay(delivery, model, timeoutMs) {
+function startAnthropicUsageRelay(delivery, model2, timeoutMs) {
   return startCodexUsageRelay({
     upstreamBaseUrl: "https://api.anthropic.com",
-    model,
+    model: model2,
     provider: "claude",
     delivery,
     timeoutMs
@@ -129705,9 +129705,9 @@ function compactDiffForPrompt(diff, files, options = {}) {
     }
     const file = fileByName.get(chunk.bPath) || fileByName.get(chunk.aPath);
     const filename = file?.filename || chunk.bPath;
-    const bytes = Buffer.byteLength(chunk.text, "utf8");
+    const bytes2 = Buffer.byteLength(chunk.text, "utf8");
     const changes = file?.changes ?? 0;
-    const reason = getSummaryOnlyDiffReason(filename, bytes, changes, {
+    const reason = getSummaryOnlyDiffReason(filename, bytes2, changes, {
       maxFullFileBytes,
       maxFullFileChanges
     });
@@ -129721,7 +129721,7 @@ function compactDiffForPrompt(diff, files, options = {}) {
       additions: file?.additions ?? 0,
       deletions: file?.deletions ?? 0,
       changes,
-      bytes
+      bytes: bytes2
     };
     summaryOnlyFiles.push(metadata2);
     output.push(formatSummaryOnlyChunk(chunk, metadata2));
@@ -129762,13 +129762,13 @@ function splitDiffIntoChunks(diff) {
   push();
   return chunks;
 }
-function getSummaryOnlyDiffReason(filename, bytes, changes, options = {}) {
+function getSummaryOnlyDiffReason(filename, bytes2, changes, options = {}) {
   const maxFullFileBytes = options.maxFullFileBytes ?? 4e4;
   const maxFullFileChanges = options.maxFullFileChanges ?? 800;
   const lower = filename.toLowerCase();
   if (isDependencyLockPath(lower)) return "dependency lock file";
   if (isGeneratedPath(filename)) return "generated file";
-  if (bytes > maxFullFileBytes)
+  if (bytes2 > maxFullFileBytes)
     return `large diff over ${maxFullFileBytes} bytes`;
   if (changes > maxFullFileChanges)
     return `large diff over ${maxFullFileChanges} changed lines`;
@@ -129796,12 +129796,12 @@ function formatSummaryOnlyChunk(chunk, file) {
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
-function unquoteGitPath(path39) {
-  if (path39.startsWith('"') && path39.endsWith('"')) {
-    path39 = path39.slice(1, -1);
+function unquoteGitPath(path40) {
+  if (path40.startsWith('"') && path40.endsWith('"')) {
+    path40 = path40.slice(1, -1);
   }
   try {
-    path39 = path39.replace(/\\([\\"tnr])/g, (_m, ch) => {
+    path40 = path40.replace(/\\([\\"tnr])/g, (_m, ch) => {
       switch (ch) {
         case "\\":
           return "\\";
@@ -129819,13 +129819,13 @@ function unquoteGitPath(path39) {
     });
   } catch {
   }
-  return path39;
+  return path40;
 }
 
 // src/utils/token-estimation.ts
 function estimateTokensSimple(text3) {
   const characters = text3.length;
-  const bytes = Buffer.byteLength(text3, "utf8");
+  const bytes2 = Buffer.byteLength(text3, "utf8");
   let tokens = Math.ceil(characters / 4);
   const codeIndicators = (text3.match(/[{}()[\];]/g) || []).length;
   const isCodeHeavy = codeIndicators > characters * 0.05;
@@ -129834,7 +129834,7 @@ function estimateTokensSimple(text3) {
   }
   return {
     tokens,
-    bytes,
+    bytes: bytes2,
     characters,
     method: "simple"
   };
@@ -129990,9 +129990,9 @@ var CLAUDE_STDIN_LIMIT_BYTES = 10 * 1024 * 1024;
 var CLAUDE_CODE_OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN";
 var CLAUDE_SETTINGS_FILE_PLACEHOLDER = "{reviewrouter_settings_file}";
 var ClaudeCodeProvider = class extends Provider {
-  constructor(model, options = {}) {
-    super(`claude/${model}`);
-    this.model = model;
+  constructor(model2, options = {}) {
+    super(`claude/${model2}`);
+    this.model = model2;
     this.options = options;
   }
   // Lightweight health check: verify CLI is available
@@ -130680,15 +130680,15 @@ function bundledReviewAgentForTransport(transport) {
     throw new Error("review_agent_profile_unavailable");
   return candidates[0];
 }
-function readApprovedReviewAgent(json3, digest5) {
-  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest5) || (0, import_node_crypto2.createHash)("sha256").update(json3).digest("hex") !== digest5)
+function readApprovedReviewAgent(json3, digest6) {
+  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest6) || (0, import_node_crypto2.createHash)("sha256").update(json3).digest("hex") !== digest6)
     throw new Error("review_agent_profile_digest_mismatch");
   const profile = parseReviewAgentProfiles([JSON.parse(json3)])[0];
   if (!profile) throw new Error("review_agent_profile_invalid");
   return profile;
 }
-function assertApprovedReviewAgentBinary(profile, bytes) {
-  if ((0, import_node_crypto2.createHash)("sha256").update(bytes).digest("hex") !== profile.binarySha256)
+function assertApprovedReviewAgentBinary(profile, bytes2) {
+  if ((0, import_node_crypto2.createHash)("sha256").update(bytes2).digest("hex") !== profile.binarySha256)
     throw new Error("review_agent_binary_drift");
 }
 function assertApprovedReviewAgentVersion(profile, observedVersion) {
@@ -131084,13 +131084,13 @@ var mimoModel = {
   auto_review_model_override: null,
   model_specialty: null
 };
-function isAccountGatewayMiMoModel(model) {
-  return model === mimoModel.slug;
+function isAccountGatewayMiMoModel(model2) {
+  return model2 === mimoModel.slug;
 }
-async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration, settings, providerApi = false) {
-  if (settings && (settings.model !== model || isAccountGatewayMiMoModel(model)))
+async function prepareAccountGatewayModelCatalog(model2, codexHome, gatewayConfiguration, settings, providerApi = false) {
+  if (settings && (settings.model !== model2 || isAccountGatewayMiMoModel(model2)))
     throw new Error("account_gateway_codex_model_settings_invalid");
-  const catalogModel = settings ? managedCodexModel(settings) : model === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model) ? mimoModel : providerApi && model === "k3-256k" ? {
+  const catalogModel = settings ? managedCodexModel(settings) : model2 === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model2) ? mimoModel : providerApi && model2 === "k3-256k" ? {
     ...gpt_5_6_sol_model_0_147_0_default,
     slug: "k3-256k",
     display_name: "Kimi Code K3",
@@ -131142,7 +131142,7 @@ function managedCodexModel(settings) {
     base_instructions: "",
     default_reasoning_level: settings.reasoning?.default ?? null,
     supported_reasoning_levels: (settings.reasoning?.allowed ?? []).map(
-      (effort2) => ({ effort: effort2, description: effort2 })
+      (effort3) => ({ effort: effort3, description: effort3 })
     ),
     supports_reasoning_summary_parameter: false,
     default_reasoning_summary: "none",
@@ -131202,13 +131202,13 @@ function readAdmittedGatewayCodexModelSettings(runtime, selectedModel) {
     return Object.freeze({ model: value.model, reasoning: null });
   if (!hasKeys(value.reasoning, ["allowed", "default"])) throw invalid6();
   const { allowed, default: defaultEffort } = value.reasoning;
-  if (!Array.isArray(allowed) || allowed.length === 0 || allowed.length > 7 || allowed.some((effort2) => !isCanonicalEffort(effort2)) || new Set(allowed).size !== allowed.length || !isCanonicalEffort(defaultEffort) || !allowed.includes(defaultEffort))
+  if (!Array.isArray(allowed) || allowed.length === 0 || allowed.length > 7 || allowed.some((effort3) => !isCanonicalEffort(effort3)) || new Set(allowed).size !== allowed.length || !isCanonicalEffort(defaultEffort) || !allowed.includes(defaultEffort))
     throw invalid6();
   return Object.freeze({
     model: value.model,
     reasoning: Object.freeze({
       allowed: Object.freeze(
-        canonicalEfforts.filter((effort2) => allowed.includes(effort2))
+        canonicalEfforts.filter((effort3) => allowed.includes(effort3))
       ),
       default: defaultEffort
     })
@@ -131244,8 +131244,8 @@ function resolveAdmittedGatewayOcrReasoningEffort(runtime, selectedModel, savedE
 function isCanonicalEffort(value) {
   return typeof value === "string" && canonicalEfforts.includes(value);
 }
-function hasKeys(value, keys4) {
-  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(",") === [...keys4].sort().join(",");
+function hasKeys(value, keys5) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(",") === [...keys5].sort().join(",");
 }
 
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
@@ -131441,8 +131441,8 @@ function canonicalJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
   }
-  const record10 = value;
-  return `{${Object.keys(record10).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record10[key])}`).join(",")}}`;
+  const record11 = value;
+  return `{${Object.keys(record11).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record11[key])}`).join(",")}}`;
 }
 function sha256(value) {
   return (0, import_crypto2.createHash)("sha256").update(value, "utf8").digest("hex");
@@ -131648,6 +131648,7 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   streamOutputBytes: 8388608,
   streamFrameBytes: 1048576,
   jsonBytes: 65536,
+  checkoutV4JsonBytes: 131072,
   headerBytes: 16384,
   bufferBytes: 65536,
   requestMs: 36e5,
@@ -131701,13 +131702,14 @@ function createAccountGatewayRunFetch(fetchImpl, signal) {
   };
 }
 var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
-  constructor(apiUrl, authorization, observe, directProvider, auxiliaryDescription = false, completedDescriptionResponse, companionDispatch, codexRoute) {
+  constructor(apiUrl, authorization, observe, directProvider, auxiliaryDescription = false, completedDescriptionResponse, companionDispatch, reviewerId, codexRoute) {
     this.authorization = authorization;
     this.observe = observe;
     this.directProvider = directProvider;
     this.auxiliaryDescription = auxiliaryDescription;
     this.completedDescriptionResponse = completedDescriptionResponse;
     this.companionDispatch = companionDispatch;
+    this.reviewerId = reviewerId;
     this.codexRoute = codexRoute;
     this.origin = trustedGatewayOrigin(apiUrl);
     if (directProvider && this.origin.origin !== new URL(
@@ -131784,11 +131786,11 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       throw new Error("pr_description_native_route_unavailable");
     if (this.terminal || this.inferenceDenied || this.held.size > 0)
       throw new Error("pr_description_connection_unavailable");
-    const bytes = Buffer.from(input.requestBody);
-    if (bytes.length > prDescriptionContract.maxPromptBytes)
+    const bytes2 = Buffer.from(input.requestBody);
+    if (bytes2.length > prDescriptionContract.maxPromptBytes)
       throw new Error("pr_description_input_bound");
     const envelope = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
     );
     if (!envelope || typeof envelope !== "object" || Array.isArray(envelope))
       throw new Error("pr_description_request_invalid");
@@ -131817,7 +131819,8 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       (response) => {
         markdown = completedPrDescriptionText(response);
       },
-      input.dispatch
+      input.dispatch,
+      this.reviewerId
     );
     if (this.modelDispatch) auxiliary.setModelDispatch(this.modelDispatch);
     const abort = new AbortController();
@@ -131828,7 +131831,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       prDescriptionContract.deadlineMs
     );
     try {
-      const response = await auxiliary.responses(bytes, signal);
+      const response = await auxiliary.responses(bytes2, signal);
       if (response.httpStatus !== 200) {
         response.cancel();
         throw new Error("pr_description_http_unavailable");
@@ -131841,7 +131844,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       return Object.freeze({
         generatedMarkdown: markdown,
         actualModel: auxiliary.actualModel,
-        providerRequestEnvelopeHash: (0, import_crypto4.createHash)("sha256").update(bytes).digest("hex")
+        providerRequestEnvelopeHash: (0, import_crypto4.createHash)("sha256").update(bytes2).digest("hex")
       });
     } finally {
       clearTimeout(timer);
@@ -131857,8 +131860,8 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       throw new Error("lifecycle_verification_connection_unavailable");
     if (!Number.isSafeInteger(input.maxOutputTokens) || input.maxOutputTokens < 1 || !Number.isSafeInteger(input.maxResponseBytes) || input.maxResponseBytes < 1 || !Number.isSafeInteger(input.deadlineMs) || input.deadlineMs < 1 || this.modelDispatch && input.maxOutputTokens > this.modelDispatch.capability.maxOutputTokens)
       throw new Error("lifecycle_verification_output_bound");
-    const bytes = Buffer.from(input.requestBody);
-    if (bytes.length > lifecycleVerificationContract.maxPromptBytes)
+    const bytes2 = Buffer.from(input.requestBody);
+    if (bytes2.length > lifecycleVerificationContract.maxPromptBytes)
       throw new Error("lifecycle_verification_input_bound");
     let text3;
     const auxiliary = new _AccountGatewayModelTransport(
@@ -131883,6 +131886,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         );
       },
       input.dispatch,
+      this.reviewerId,
       this.codexRoute
     );
     if (this.modelDispatch) auxiliary.setModelDispatch(this.modelDispatch);
@@ -131896,7 +131900,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     );
     try {
       const response = await auxiliary.responses(
-        bytes,
+        bytes2,
         signal,
         input.maxOutputTokens
       );
@@ -131910,7 +131914,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       return Object.freeze({
         body: Buffer.from(text3, "utf8"),
         actualModel: auxiliary.actualModel,
-        providerRequestEnvelopeHash: response.providerRequestEnvelopeHash ?? (0, import_crypto4.createHash)("sha256").update(bytes).digest("hex")
+        providerRequestEnvelopeHash: response.providerRequestEnvelopeHash ?? (0, import_crypto4.createHash)("sha256").update(bytes2).digest("hex")
       });
     } finally {
       clearTimeout(timer);
@@ -131920,7 +131924,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       await auxiliary.drainSettlements();
     }
   }
-  async responses(bytes, signal, explicitOutputCap) {
+  async responses(bytes2, signal, explicitOutputCap) {
     if (this.terminal || this.inferenceDenied || this.held.size >= ACCOUNT_GATEWAY_BOUNDS.inFlight) {
       const error4 = new Error("account_gateway_inference_denied");
       observeTransport(this.observe, "upstream_request", false, null, error4);
@@ -131928,11 +131932,11 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     }
     this.codexRoute?.signal?.throwIfAborted();
     this.contextToolsGuard?.();
-    const captured = this.modelDispatch && bytes instanceof import_stream.Readable ? await boundedBytes(
-      bytes,
+    const captured = this.modelDispatch && bytes2 instanceof import_stream.Readable ? await boundedBytes(
+      bytes2,
       this.modelDispatch.capability.maxRequestBytes,
       signal
-    ) : bytes;
+    ) : bytes2;
     const cap = this.modelDispatch?.capability;
     const nativeRequest = this.codexRoute && cap ? normalizeCodexSubscriptionResponsesRequest({
       requestBytes: captured,
@@ -132091,10 +132095,10 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       const terminalChunks = [];
       const diagnostic = [];
       const audit = isStream ? responsesStreamAudit(
-        (model) => {
-          if (!model || this.observedModel !== void 0 && this.observedModel !== model)
+        (model2) => {
+          if (!model2 || this.observedModel !== void 0 && this.observedModel !== model2)
             this.modelUncertain = true;
-          else this.observedModel = model;
+          else this.observedModel = model2;
         },
         this.auxiliaryDescription ? ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes : this.directProvider?.streamFrameBytes,
         usage?.observe,
@@ -132175,7 +132179,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         });
       let terminalCancellation = false;
       let streamFailureObserved = false;
-      const fail2 = (error4) => {
+      const fail3 = (error4) => {
         if ((!ticket || ticket.isCompleted()) && audit?.hasCompleted() && controller.signal.aborted && signal?.aborted && error4 instanceof Error && error4.name === "AbortError" && "code" in error4 && error4.code === "ABORT_ERR" && error4.cause === controller.signal.reason) {
           terminalCancellation = true;
           return;
@@ -132206,7 +132210,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         };
         controller.abort();
       };
-      bounded3.once("error", fail2);
+      bounded3.once("error", fail3);
       bounded3.once("end", dispose);
       bounded3.once("close", dispose);
       this.trackSettlement(
@@ -132232,7 +132236,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
             if (terminalCancellation && audit?.hasCompleted() && controller.signal.aborted && signal?.aborted && error4 instanceof Error && "code" in error4 && error4.code === "ECONNRESET")
               return;
             usage?.finish(true, controller.signal.aborted);
-            fail2(error4);
+            fail3(error4);
           }
         )
       );
@@ -132304,7 +132308,13 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
   /** Required companion endpoint: current authorized run -> scoped SCM read only.
    * This is deliberately a product adapter request, not a new gateway protocol. */
   checkoutCapability(request3, signal) {
-    return this.json("POST", `${BASE}/checkout`, request3, signal);
+    return this.json(
+      "POST",
+      `${BASE}/checkout`,
+      request3,
+      signal,
+      ACCOUNT_GATEWAY_BOUNDS.checkoutV4JsonBytes
+    );
   }
   providerApiCheckoutCapability(signal, mode = providerApiCheckoutCompanionContract.providerApiAuthMode) {
     return this.json(
@@ -132317,7 +132327,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       signal
     );
   }
-  async json(method, route, payload, signal) {
+  async json(method, route, payload, signal, maximumBytes = ACCOUNT_GATEWAY_BOUNDS.jsonBytes) {
     const controller = new AbortController();
     const abort = () => controller.abort(signal?.reason);
     signal?.addEventListener("abort", abort, { once: true });
@@ -132337,16 +132347,13 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         response.headers["content-type"] ?? ""
       ))
         throw new Error();
-      const bytes = await boundedBytes(
-        response,
-        ACCOUNT_GATEWAY_BOUNDS.jsonBytes
+      const bytes2 = await boundedBytes(response, maximumBytes);
+      const value = JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
       );
-      return {
-        httpStatus: response.statusCode ?? 0,
-        value: JSON.parse(
-          new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-        )
-      };
+      if (bytes2.length > ACCOUNT_GATEWAY_BOUNDS.jsonBytes && !hasReviewerPlan(value))
+        throw new Error("account_gateway_legacy_checkout_too_large");
+      return { httpStatus: response.statusCode ?? 0, value };
     } catch {
       throw new Error("account_gateway_readback_unknown");
     } finally {
@@ -132384,6 +132391,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
           headers: {
             ...nativeHeaders ?? { authorization: `Bearer ${token}` },
             ...grant !== void 0 ? { "x-reviewrouter-hosted-grant": grant } : {},
+            ...this.reviewerId ? { "x-reviewrouter-reviewer-id": this.reviewerId } : {},
             ...this.directProvider ? {
               "user-agent": "ReviewRouter/1.0 provider-api",
               "x-title": "ReviewRouter"
@@ -132413,8 +132421,8 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     });
   }
 };
-function normalizeCodexGatewayServiceTier(bytes) {
-  const original = Buffer.from(bytes);
+function normalizeCodexGatewayServiceTier(bytes2) {
+  const original = Buffer.from(bytes2);
   if (original.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
     throw new Error("account_gateway_request_bound");
   let parsed;
@@ -132695,6 +132703,7 @@ async function startPreparedCodexModelTransport(input) {
       false,
       void 0,
       void 0,
+      void 0,
       input.route
     );
     bridge = await startLocalGatewayModelTransport(transport);
@@ -132776,22 +132785,22 @@ async function boundedBytes(body2, maximum, signal) {
 function safeReference(value) {
   return typeof value === "string" && /^[A-Za-z0-9._~-]{1,200}$/.test(value) ? value : void 0;
 }
-function saturationDenial(bytes, codes) {
+function saturationDenial(bytes2, codes) {
   try {
     const space = "[ \\t\\r\\n]*";
     const code = `"code"${space}:${space}"(?:${codes.join("|")})"`;
     const effect = `"effect"${space}:${space}"not_dispatched"`;
     return new RegExp(
       `^${space}\\{${space}"error"${space}:${space}\\{${space}(?:${code}${space},${space}${effect}|${effect}${space},${space}${code})${space}\\}${space}\\}${space}$`
-    ).test(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    ).test(new TextDecoder("utf-8", { fatal: true }).decode(bytes2));
   } catch {
     return false;
   }
 }
-function failureFact(bytes, ref) {
+function failureFact(bytes2, ref) {
   try {
     const raw = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
     );
     if (!raw || typeof raw !== "object" || !("error" in raw)) return void 0;
     const error4 = raw.error;
@@ -132800,7 +132809,15 @@ function failureFact(bytes, ref) {
     const code = safeReference(error4.code);
     const effect = safeReference(error4.effect);
     const requestRef = "requestRef" in error4 ? safeReference(error4.requestRef) : ref;
-    return code && effect ? { code, effect, ...requestRef ? { requestRef } : {} } : void 0;
+    return code && effect ? {
+      code,
+      effect,
+      ...requestRef ? { requestRef } : {},
+      ..."failureScope" in error4 && ["reviewer", "allocation", "run"].includes(String(error4.failureScope)) ? {
+        failureScope: error4.failureScope
+      } : {},
+      ..."concurrencyGroupId" in error4 && safeReference(error4.concurrencyGroupId) ? { concurrencyGroupId: safeReference(error4.concurrencyGroupId) } : {}
+    } : void 0;
   } catch {
     return void 0;
   }
@@ -132831,8 +132848,8 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
               throw new Error();
             completed = true;
             const response = raw.response;
-            const model = "model" in response && typeof response.model === "string" && /^[A-Za-z0-9._:/@+-]{1,200}$/.test(response.model) ? response.model : void 0;
-            observe(model);
+            const model2 = "model" in response && typeof response.model === "string" && /^[A-Za-z0-9._:/@+-]{1,200}$/.test(response.model) ? response.model : void 0;
+            observe(model2);
             observeCompleted?.(response);
           } else if (raw.type === "response.failed" || raw.type === "response.incomplete" || raw.type === "error")
             throw new Error();
@@ -132860,8 +132877,8 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
   }
   return {
     hasCompleted: () => completed,
-    accept(bytes) {
-      for (const byte of bytes) {
+    accept(bytes2) {
+      for (const byte of bytes2) {
         frameBytes++;
         if (frameBytes > maximumFrameBytes)
           throw new Error("account_gateway_stream_frame_bound");
@@ -132874,7 +132891,7 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
           rawLineLastByte = byte;
         }
       }
-      consume(decoder2.decode(bytes, { stream: true }));
+      consume(decoder2.decode(bytes2, { stream: true }));
     },
     finish() {
       consume(decoder2.decode());
@@ -132884,13 +132901,13 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
 }
 function terminalUsage(value) {
   const usage = value?.usage;
-  const integer2 = (raw) => typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0 ? raw : null;
-  const inputTokens = integer2(usage?.input_tokens);
-  const outputTokens = integer2(usage?.output_tokens);
+  const integer3 = (raw) => typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0 ? raw : null;
+  const inputTokens = integer3(usage?.input_tokens);
+  const outputTokens = integer3(usage?.output_tokens);
   return {
     inputTokens,
     outputTokens,
-    totalTokens: integer2(usage?.total_tokens) ?? (inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null)
+    totalTokens: integer3(usage?.total_tokens) ?? (inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null)
   };
 }
 function completedPrDescriptionText(raw, maxBytes = prDescriptionContract.maxGeneratedMarkdownBytes, rejectReservedMarker = true) {
@@ -132898,7 +132915,7 @@ function completedPrDescriptionText(raw, maxBytes = prDescriptionContract.maxGen
   if (response?.status !== "completed" || !Array.isArray(response.output))
     throw new Error("pr_description_output_invalid");
   const parts = [];
-  let bytes = 0;
+  let bytes2 = 0;
   for (const item of response.output) {
     if (!item || typeof item !== "object")
       throw new Error("pr_description_output_invalid");
@@ -132908,8 +132925,8 @@ function completedPrDescriptionText(raw, maxBytes = prDescriptionContract.maxGen
     for (const content of item.content) {
       if (content?.type !== "output_text" || typeof content.text !== "string")
         throw new Error("pr_description_output_invalid");
-      bytes += Buffer.byteLength(content.text, "utf8");
-      if (bytes > maxBytes) throw new Error("pr_description_output_bound");
+      bytes2 += Buffer.byteLength(content.text, "utf8");
+      if (bytes2 > maxBytes) throw new Error("pr_description_output_bound");
       parts.push(content.text);
     }
   }
@@ -132926,6 +132943,15 @@ function isPrDescriptionMessageInput(value) {
     return false;
   const content = message.content[0];
   return !!content && typeof content === "object" && !Array.isArray(content) && Object.keys(content).sort().join(",") === "text,type" && content.type === "input_text" && typeof content.text === "string";
+}
+function hasReviewerPlan(value) {
+  if (!value || typeof value !== "object" || !("runtimeConfig" in value))
+    return false;
+  const runtimeConfig = value.runtimeConfig;
+  if (!runtimeConfig || typeof runtimeConfig !== "object" || !("runtimeEnv" in runtimeConfig))
+    return false;
+  const env = runtimeConfig.runtimeEnv;
+  return !!env && typeof env === "object" && "REVIEW_ROUTER_REVIEWER_PLAN_JSON" in env && typeof env.REVIEW_ROUTER_REVIEWER_PLAN_JSON === "string";
 }
 
 // src/context-gateway/context-gateway-contract.ts
@@ -133033,8 +133059,8 @@ function canonicalJson2(value) {
     return `[${value.map(canonicalJson2).join(",")}]`;
   }
   if (typeof value === "object") {
-    const record10 = value;
-    return `{${Object.keys(record10).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson2(record10[key])}`).join(",")}}`;
+    const record11 = value;
+    return `{${Object.keys(record11).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson2(record11[key])}`).join(",")}}`;
   }
   throw new Error("context_gateway_canonical_value_invalid");
 }
@@ -133295,11 +133321,11 @@ var CodexCliExitError = class extends Error {
   }
 };
 var CodexProvider = class _CodexProvider extends Provider {
-  constructor(model, options = {}) {
+  constructor(model2, options = {}) {
     super(
-      `${options.providerNamePrefix || "codex"}/${options.providerNameModel || model}`
+      `${options.providerNamePrefix || "codex"}/${options.providerNameModel || model2}`
     );
-    this.model = model;
+    this.model = model2;
     this.options = options;
   }
   static preparedBinaryPath;
@@ -133905,7 +133931,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           clearTimeout(timer);
           options.signal?.removeEventListener("abort", onAbort);
         };
-        const fail2 = (error4) => {
+        const fail3 = (error4) => {
           if (settled) return;
           if (waitForProcessClose) {
             if (!failed) {
@@ -133921,14 +133947,14 @@ ${JSON.stringify(outputSchema)}` : prompt;
         };
         const onAbort = () => {
           terminate();
-          fail2(abortError());
+          fail3(abortError());
         };
         const timer = setTimeout(() => {
           logger.warn(
             `Codex CLI timeout (${timeoutMs}ms), killing process and all children`
           );
           terminate();
-          fail2(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
+          fail3(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
         }, timeoutMs);
         options.signal?.addEventListener("abort", onAbort, { once: true });
         if (options.signal?.aborted) onAbort();
@@ -133937,7 +133963,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           outputBytes += Buffer.byteLength(chunk);
           if (this.options.accountGateway && outputBytes > ACCOUNT_GATEWAY_BOUNDS.cliOutputBytes) {
             terminate();
-            fail2(new Error("account_gateway_cli_output_bound"));
+            fail3(new Error("account_gateway_cli_output_bound"));
             return false;
           }
           return true;
@@ -133952,7 +133978,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         });
         proc.on("error", (err) => {
           if (waitForProcessClose && proc.pid) terminate();
-          fail2(err);
+          fail3(err);
         });
         proc.on("close", (code) => {
           if (settled) return;
@@ -134309,7 +134335,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
   }
   resolveReasoningEffort(healthCheck) {
     if (this.options.modelProvider === "kimi") return void 0;
-    return healthCheck ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || "low" : process.env.CODEX_REASONING_EFFORT;
+    return healthCheck ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || "low" : this.options.reasoningEffort !== void 0 ? this.options.reasoningEffort ?? void 0 : process.env.CODEX_REASONING_EFFORT;
   }
   async buildRepositoryContextSeed(prompt) {
     const changedFiles = this.extractChangedFiles(prompt).filter((file) => this.isContextReadableFile(file)).slice(0, 5);
@@ -134857,8 +134883,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const event = value;
     const type2 = event.type ?? event.event ?? event.kind;
     if (type2 === "session_configured") {
-      const model = this.findConfiguredModel(event);
-      if (model) models.add(model);
+      const model2 = this.findConfiguredModel(event);
+      if (model2) models.add(model2);
     }
     for (const nested of Object.values(event)) {
       if (nested && typeof nested === "object") {
@@ -135119,7 +135145,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         return;
       }
       if (typeof value === "object") {
-        const record10 = value;
+        const record11 = value;
         for (const key of [
           "message",
           "error",
@@ -135128,7 +135154,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           "code",
           "status"
         ]) {
-          if (key in record10) visit(record10[key], depth + 1);
+          if (key in record11) visit(record11[key], depth + 1);
         }
       }
     };
@@ -135192,6 +135218,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     return message.includes(hint) ? message : this.truncateCliError(`${message} ${hint}`);
   }
   async resolveBinary() {
+    if (this.options.binaryPath) return this.options.binaryPath;
     if (_CodexProvider.preparedBinaryPath && await this.canRun(_CodexProvider.preparedBinaryPath, ["--version"])) {
       return _CodexProvider.preparedBinaryPath;
     }
@@ -135311,9 +135338,9 @@ var path7 = __toESM(require("path"));
 var crypto5 = __toESM(require("crypto"));
 var GEMINI_PROMPT_FILE_PLACEHOLDER = "{reviewrouter_prompt_file}";
 var GeminiProvider = class extends Provider {
-  constructor(model) {
-    super(`gemini/${model}`);
-    this.model = model;
+  constructor(model2) {
+    super(`gemini/${model2}`);
+    this.model = model2;
   }
   // Lightweight health check: verify CLI is available
   async healthCheck(_timeoutMs = 5e3) {
@@ -135672,12 +135699,12 @@ async function fetchOpenCodeModels(timeoutMs = 1e4) {
     return [];
   }
 }
-function rankOpenCodeModel(model) {
+function rankOpenCodeModel(model2) {
   let score = 0;
-  if (model.isFree) {
+  if (model2.isFree) {
     score += 100;
   }
-  const modelLower = model.id.toLowerCase();
+  const modelLower = model2.id.toLowerCase();
   if (modelLower.includes("claude")) {
     score += 50;
   } else if (modelLower.includes("gpt-4")) {
@@ -135703,9 +135730,9 @@ async function getBestFreeOpenCodeModels(count2 = 4, timeoutMs = 1e4) {
     return [];
   }
   logger.info(`Found ${models.length} free OpenCode models (cost.input === 0)`);
-  const ranked = models.map((model) => ({
-    modelId: model.id,
-    score: rankOpenCodeModel(model)
+  const ranked = models.map((model2) => ({
+    modelId: model2.id,
+    score: rankOpenCodeModel(model2)
   }));
   ranked.sort((a2, b2) => b2.score - a2.score);
   const selected = ranked.slice(0, count2).map((r2) => r2.modelId);
@@ -135741,9 +135768,9 @@ var ProviderRegistry = class {
   rotationIndex = 0;
   usageOptions(name) {
     const slash = name.indexOf("/");
-    const family = name.slice(0, slash), model = name.slice(slash + 1).replace(/#\d+$/, "");
+    const family = name.slice(0, slash), model2 = name.slice(slash + 1).replace(/#\d+$/, "");
     const provider = family === "codex-mimo" ? "mimo" : family === "codex-openrouter" ? "openrouter" : family === "codex" ? this.usage?.authMode === "openai-api" ? "openai" : "codex" : family;
-    const requestedModel = provider === "openrouter" && model === "free" ? "openrouter/free" : model;
+    const requestedModel = provider === "openrouter" && model2 === "free" ? "openrouter/free" : model2;
     const matches = this.usage?.deliveries.filter(
       (d2) => d2.scope.provider === provider && d2.scope.requestedModel === requestedModel
     ) ?? [];
@@ -135978,14 +136005,14 @@ var ProviderRegistry = class {
         continue;
       }
       if (name.startsWith("openrouter/")) {
-        const model = name.replace("openrouter/", "");
+        const model2 = name.replace("openrouter/", "");
         if (!process.env.OPENROUTER_API_KEY) {
           logger.warn(
             `OPENROUTER_API_KEY not set; skipping OpenRouter provider ${name}`
           );
           continue;
         }
-        const baseModel = model.replace(/#\d+$/, "");
+        const baseModel = model2.replace(/#\d+$/, "");
         const codexModel = baseModel === "free" ? "openrouter/free" : baseModel;
         list.push(
           new CodexProvider(codexModel, {
@@ -135994,20 +136021,20 @@ var ProviderRegistry = class {
             eventAudit: config2.codexEventAudit,
             modelProvider: "openrouter",
             providerNamePrefix: "openrouter",
-            providerNameModel: model
+            providerNameModel: model2
           })
         );
         continue;
       }
       if (name.startsWith("opencode/")) {
-        const model = name.replace("opencode/", "");
-        list.push(new OpenCodeProvider(model));
+        const model2 = name.replace("opencode/", "");
+        list.push(new OpenCodeProvider(model2));
         continue;
       }
       if (name.startsWith("claude/")) {
-        const model = name.replace("claude/", "");
+        const model2 = name.replace("claude/", "");
         list.push(
-          new ClaudeCodeProvider(model, {
+          new ClaudeCodeProvider(model2, {
             ...this.usageOptions(name),
             agenticContext: config2.claudeAgenticContext
           })
@@ -136015,9 +136042,9 @@ var ProviderRegistry = class {
         continue;
       }
       if (name.startsWith("codex/")) {
-        const model = name.replace("codex/", "");
+        const model2 = name.replace("codex/", "");
         list.push(
-          new CodexProvider(model, {
+          new CodexProvider(model2, {
             ...this.usageOptions(name),
             agenticContext: config2.codexAgenticContext,
             eventAudit: config2.codexEventAudit
@@ -136026,9 +136053,9 @@ var ProviderRegistry = class {
         continue;
       }
       if (name.startsWith("codex-openrouter/")) {
-        const model = name.replace("codex-openrouter/", "");
+        const model2 = name.replace("codex-openrouter/", "");
         list.push(
-          new CodexProvider(model, {
+          new CodexProvider(model2, {
             ...this.usageOptions(name),
             agenticContext: config2.codexAgenticContext,
             eventAudit: config2.codexEventAudit,
@@ -136039,9 +136066,9 @@ var ProviderRegistry = class {
         continue;
       }
       if (name.startsWith("codex-mimo/")) {
-        const model = name.replace("codex-mimo/", "");
+        const model2 = name.replace("codex-mimo/", "");
         list.push(
-          new CodexProvider(model, {
+          new CodexProvider(model2, {
             ...this.usageOptions(name),
             agenticContext: config2.codexAgenticContext,
             eventAudit: config2.codexEventAudit,
@@ -136052,8 +136079,8 @@ var ProviderRegistry = class {
         continue;
       }
       if (name.startsWith("gemini/")) {
-        const model = name.replace("gemini/", "");
-        list.push(new GeminiProvider(model));
+        const model2 = name.replace("gemini/", "");
+        list.push(new GeminiProvider(model2));
         continue;
       }
     }
@@ -136146,14 +136173,14 @@ var ProviderRegistry = class {
    */
   filterUniqueFamilies(providers) {
     const seenFamilies = /* @__PURE__ */ new Set();
-    const unique3 = [];
+    const unique4 = [];
     for (const p2 of providers) {
       const family = this.getModelFamily(p2.name);
       if (seenFamilies.has(family)) continue;
       seenFamilies.add(family);
-      unique3.push(p2);
+      unique4.push(p2);
     }
-    return unique3;
+    return unique4;
   }
   getModelFamily(name) {
     const parts = name.split("/");
@@ -138288,8 +138315,8 @@ function createCapturedReviewSkills(value) {
     schemaVersion: reviewSkillsCompanionContract.schemaVersion,
     ...value
   });
-  const digest5 = `sha256:${(0, import_node_crypto3.createHash)("sha256").update(canonicalReviewSkillsJson(payload), "utf8").digest("hex")}`;
-  const result2 = Object.freeze({ ...payload, digest: digest5 });
+  const digest6 = `sha256:${(0, import_node_crypto3.createHash)("sha256").update(canonicalReviewSkillsJson(payload), "utf8").digest("hex")}`;
+  const result2 = Object.freeze({ ...payload, digest: digest6 });
   if (encoder.encode(canonicalReviewSkillsJson(result2)).length > reviewSkillsLimits.bundleBytes)
     fail("capture_too_large");
   return result2;
@@ -138305,10 +138332,10 @@ function parseCapturedReviewSkills(value) {
   ]);
   if (typeof value.digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.digest))
     fail("digest_invalid");
-  const { digest: digest5, ...payload } = value;
+  const { digest: digest6, ...payload } = value;
   const normalized = normalizePayload(payload);
   const expected = createCapturedReviewSkills(normalized);
-  if (expected.digest !== digest5) fail("digest_mismatch");
+  if (expected.digest !== digest6) fail("digest_mismatch");
   return expected;
 }
 
@@ -138363,7 +138390,7 @@ function assertReviewSkillsExecutionInput(input, profile, baseSha) {
   if (executionDigest !== reviewSkillsDigest(preimage))
     throw new Error("review_skills_bundle_digest_mismatch");
 }
-function reviewSkillMatchesPath(scope, path39) {
+function reviewSkillMatchesPath(scope, path40) {
   const parsed = parseReviewSkillScope({
     includePaths: scope.includePaths,
     excludePaths: scope.excludePaths
@@ -138376,14 +138403,14 @@ function reviewSkillMatchesPath(scope, path39) {
     noext: true,
     nobrace: true
   };
-  return parsed.includePaths.some((pattern) => minimatch(path39, pattern, options)) && !parsed.excludePaths.some((pattern) => minimatch(path39, pattern, options));
+  return parsed.includePaths.some((pattern) => minimatch(path40, pattern, options)) && !parsed.excludePaths.some((pattern) => minimatch(path40, pattern, options));
 }
 function projectReviewSkillsForPaths(input, paths) {
   if (input.kind === "legacy") return Object.freeze([]);
   return deepFreeze(
-    [...new Set(paths)].sort(compare2).map((path39) => ({
-      path: path39,
-      instructions: input.bundle.skills.filter((skill) => reviewSkillMatchesPath(skill, path39)).map(renderReviewSkill).join("\n\n")
+    [...new Set(paths)].sort(compare2).map((path40) => ({
+      path: path40,
+      instructions: input.bundle.skills.filter((skill) => reviewSkillMatchesPath(skill, path40)).map(renderReviewSkill).join("\n\n")
     }))
   );
 }
@@ -138392,7 +138419,7 @@ function renderReviewSkillsForPaths(input, paths) {
   const reviewedPaths = [...new Set(paths)].sort(compare2);
   const applicable = input.bundle.skills.flatMap((skill) => {
     const matchingPaths = reviewedPaths.filter(
-      (path39) => reviewSkillMatchesPath(skill, path39)
+      (path40) => reviewSkillMatchesPath(skill, path40)
     );
     return matchingPaths.length > 0 ? [
       `Reviewed paths: ${JSON.stringify(matchingPaths)}
@@ -139229,8 +139256,8 @@ var HIGH_RISK_PATH_TOKENS = /* @__PURE__ */ new Set([
   "workflow",
   "workflows"
 ]);
-function changedPathSemanticRiskPriority(path39) {
-  const normalized = path39.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+function changedPathSemanticRiskPriority(path40) {
+  const normalized = path40.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   if (normalized.length === 0) {
     throw new Error("review_investigation_changed_path_missing");
   }
@@ -139466,8 +139493,8 @@ function parseReviewAgentTurnOutput(value) {
   return Object.freeze({
     outputVersion: REVIEW_TURN_OUTPUT_VERSION,
     findings: requireArray(root.findings, "findings").map((item) => {
-      const record10 = requireRecord(item, "finding");
-      requireExactKeys(record10, [
+      const record11 = requireRecord(item, "finding");
+      requireExactKeys(record11, [
         "severity",
         "title",
         "body",
@@ -139477,16 +139504,16 @@ function parseReviewAgentTurnOutput(value) {
       ]);
       return Object.freeze({
         severity: requireEnum(
-          record10.severity,
+          record11.severity,
           ReviewTurnFindingSeverity,
           "finding_severity"
         ),
-        title: requireString(record10.title, "finding_title", 240),
-        body: requireString(record10.body, "finding_body", 16e3),
-        path: requireString(record10.path, "finding_path", 2e3),
-        line: requireNullablePositiveInteger(record10.line, "finding_line"),
+        title: requireString(record11.title, "finding_title", 240),
+        body: requireString(record11.body, "finding_body", 16e3),
+        path: requireString(record11.path, "finding_path", 2e3),
+        line: requireNullablePositiveInteger(record11.line, "finding_line"),
         evidenceOperationReceiptIds: requireDigestArray(
-          record10.evidenceOperationReceiptIds,
+          record11.evidenceOperationReceiptIds,
           "finding_receipts"
         )
       });
@@ -139496,17 +139523,17 @@ function parseReviewAgentTurnOutput(value) {
     ),
     closureClaims: requireArray(root.closureClaims, "closure_claims").map(
       (item) => {
-        const record10 = requireRecord(item, "closure_claim");
-        requireExactKeys(record10, ["obligationId", "operationReceiptIds"]);
+        const record11 = requireRecord(item, "closure_claim");
+        requireExactKeys(record11, ["obligationId", "operationReceiptIds"]);
         const operationReceiptIds = requireDigestArray(
-          record10.operationReceiptIds,
+          record11.operationReceiptIds,
           "closure_receipts"
         );
         if (operationReceiptIds.length === 0) {
           throw new Error("review_agent_closure_receipts_required");
         }
         return Object.freeze({
-          obligationId: requireDigest(record10.obligationId, "obligation_id"),
+          obligationId: requireDigest(record11.obligationId, "obligation_id"),
           operationReceiptIds
         });
       }
@@ -139515,14 +139542,14 @@ function parseReviewAgentTurnOutput(value) {
       root.operationBackedDiscoveryClaims,
       "operation_backed_discovery_claims"
     ).map((item) => {
-      const record10 = requireRecord(item, "operation_backed_discovery_claim");
-      requireExactKeys(record10, [
+      const record11 = requireRecord(item, "operation_backed_discovery_claim");
+      requireExactKeys(record11, [
         "sourceObligationId",
         "query",
         "operationReceiptIds"
       ]);
       const operationReceiptIds = requireDigestArray(
-        record10.operationReceiptIds,
+        record11.operationReceiptIds,
         "operation_backed_discovery_receipts"
       );
       if (operationReceiptIds.length === 0) {
@@ -139532,11 +139559,11 @@ function parseReviewAgentTurnOutput(value) {
       }
       return Object.freeze({
         sourceObligationId: requireDigest(
-          record10.sourceObligationId,
+          record11.sourceObligationId,
           "source_obligation_id"
         ),
         query: requireStrictString(
-          record10.query,
+          record11.query,
           "operation_backed_discovery_query",
           1024
         ),
@@ -139547,17 +139574,17 @@ function parseReviewAgentTurnOutput(value) {
       root.unresolvableClaims,
       "unresolvable_claims"
     ).map((item) => {
-      const record10 = requireRecord(item, "unresolvable_claim");
-      requireExactKeys(record10, [
+      const record11 = requireRecord(item, "unresolvable_claim");
+      requireExactKeys(record11, [
         "obligationId",
         "reason",
         "evidenceOperationReceiptIds"
       ]);
       return Object.freeze({
-        obligationId: requireDigest(record10.obligationId, "obligation_id"),
-        reason: requireString(record10.reason, "unresolvable_reason", 2e3),
+        obligationId: requireDigest(record11.obligationId, "obligation_id"),
+        reason: requireString(record11.reason, "unresolvable_reason", 2e3),
         evidenceOperationReceiptIds: requireDigestArray(
-          record10.evidenceOperationReceiptIds,
+          record11.evidenceOperationReceiptIds,
           "unresolvable_receipts"
         )
       });
@@ -139591,19 +139618,19 @@ function parseReviewTurnObligationProposals(value) {
   return Object.freeze(proposals);
 }
 function parseReviewTurnObligationProposal(value) {
-  const record10 = requireRecord(value, "obligation_proposal");
-  if (!Object.prototype.hasOwnProperty.call(record10, "canonicalSubject") && !Object.prototype.hasOwnProperty.call(record10, "canonicalRequirement")) {
-    return normalizeProviderObligationProposal(record10);
+  const record11 = requireRecord(value, "obligation_proposal");
+  if (!Object.prototype.hasOwnProperty.call(record11, "canonicalSubject") && !Object.prototype.hasOwnProperty.call(record11, "canonicalRequirement")) {
+    return normalizeProviderObligationProposal(record11);
   }
-  requireExactKeys(record10, [
+  requireExactKeys(record11, [
     "kind",
     "canonicalSubject",
     "canonicalRequirement",
     "riskPriority"
   ]);
-  const kind = requireProviderProposableObligationKind(record10.kind);
+  const kind = requireProviderProposableObligationKind(record11.kind);
   const canonicalRequirement = requireCanonicalText(
-    record10.canonicalRequirement,
+    record11.canonicalRequirement,
     "obligation_requirement",
     MAX_CANONICAL_REQUIREMENT_LENGTH
   );
@@ -139615,7 +139642,7 @@ function parseReviewTurnObligationProposal(value) {
     subjectVersion: FILE_READ_SUBJECT_VERSION
   });
   const canonicalSubject = requireCanonicalText(
-    record10.canonicalSubject,
+    record11.canonicalSubject,
     "obligation_subject",
     MAX_CANONICAL_SUBJECT_LENGTH
   );
@@ -139627,31 +139654,31 @@ function parseReviewTurnObligationProposal(value) {
     canonicalSubject: expectedSubject,
     canonicalRequirement,
     riskPriority: requireBoundedInteger(
-      record10.riskPriority,
+      record11.riskPriority,
       "risk_priority",
       0,
       MAX_RISK_PRIORITY
     )
   });
 }
-function normalizeProviderObligationProposal(record10) {
+function normalizeProviderObligationProposal(record11) {
   requireExactKeysForField(
-    record10,
+    record11,
     ["kind", "path", "revision", "riskPriority"],
     "obligation_proposal"
   );
-  const kind = requireProviderProposableObligationKind(record10.kind);
-  const path39 = requireRepositoryRelativePath(
-    record10.path,
+  const kind = requireProviderProposableObligationKind(record11.kind);
+  const path40 = requireRepositoryRelativePath(
+    record11.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
   );
   const revision = requireEnum(
-    record10.revision,
+    record11.revision,
     ReviewTurnProposalRevision,
     "obligation_requirement_revision"
   );
-  const pathHash = sha256(path39);
+  const pathHash = sha256(path40);
   return Object.freeze({
     kind,
     canonicalSubject: canonicalJson({
@@ -139662,13 +139689,13 @@ function normalizeProviderObligationProposal(record10) {
     }),
     canonicalRequirement: canonicalJson({
       kind: COMPLETE_FILE_REQUIREMENT_KIND,
-      path: path39,
+      path: path40,
       pathHash,
       requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
       revision
     }),
     riskPriority: requireBoundedInteger(
-      record10.riskPriority,
+      record11.riskPriority,
       "risk_priority",
       0,
       MAX_RISK_PRIORITY
@@ -139676,14 +139703,14 @@ function normalizeProviderObligationProposal(record10) {
   });
 }
 function requireRepositoryRelativePath(value, field, maxLength) {
-  const path39 = requireString(value, field, maxLength);
-  const segments = path39.split("/");
-  if (path39.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path39) || path39.includes("\\") || segments.some(
+  const path40 = requireString(value, field, maxLength);
+  const segments = path40.split("/");
+  if (path40.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path40) || path40.includes("\\") || segments.some(
     (segment) => segment === "" || segment === "." || segment === ".."
   )) {
     throw new Error(`review_agent_${field}_invalid`);
   }
-  return path39;
+  return path40;
 }
 function parseCanonicalCompleteFileRequirement(value) {
   let parsed;
@@ -139701,7 +139728,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   if (requirement.kind !== COMPLETE_FILE_REQUIREMENT_KIND || requirement.requirementVersion !== COMPLETE_FILE_REQUIREMENT_VERSION) {
     throw new Error("review_agent_obligation_requirement_unsupported");
   }
-  const path39 = requireString(
+  const path40 = requireString(
     requirement.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
@@ -139710,7 +139737,7 @@ function parseCanonicalCompleteFileRequirement(value) {
     requirement.pathHash,
     "obligation_requirement_path_hash"
   );
-  if (pathHash !== sha256(path39)) {
+  if (pathHash !== sha256(path40)) {
     throw new Error("review_agent_obligation_requirement_path_hash_mismatch");
   }
   const revision = requireEnum(
@@ -139721,7 +139748,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   const normalized = Object.freeze({
     requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
     kind: COMPLETE_FILE_REQUIREMENT_KIND,
-    path: path39,
+    path: path40,
     pathHash,
     revision
   });
@@ -139744,16 +139771,16 @@ function requireRecord(value, field) {
   }
   return value;
 }
-function requireExactKeys(record10, keys4) {
-  const actual = Object.keys(record10).sort();
-  const expected = [...keys4].sort();
+function requireExactKeys(record11, keys5) {
+  const actual = Object.keys(record11).sort();
+  const expected = [...keys5].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     throw new Error("review_agent_output_fields_invalid");
   }
 }
-function requireExactKeysForField(record10, keys4, field) {
-  const actual = Object.keys(record10).sort();
-  const expected = [...keys4].sort();
+function requireExactKeysForField(record11, keys5, field) {
+  const actual = Object.keys(record11).sort();
+  const expected = [...keys5].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     throw new Error(`review_agent_${field}_invalid`);
   }
@@ -140068,13 +140095,13 @@ function reviewInvestigationSearchOperationInputHash(query) {
     })
   );
 }
-function reviewInvestigationBasenameFallbackQuery(path39) {
-  assertPath(path39, "review_investigation_probe_path_invalid");
-  const basename6 = basenameWithoutExtension(path39);
+function reviewInvestigationBasenameFallbackQuery(path40) {
+  assertPath(path40, "review_investigation_probe_path_invalid");
+  const basename6 = basenameWithoutExtension(path40);
   return isSpecificProbeQuery(
     "basename_fallback" /* BasenameFallback */,
     basename6
-  ) ? basename6 : path39;
+  ) ? basename6 : path40;
 }
 function createProbe(candidate) {
   const obligationKind = obligationKindFor(candidate);
@@ -140163,8 +140190,8 @@ function extractImportExportRelations(line2, add) {
     }
   }
 }
-function extractStructuredRelations(path39, line2, add) {
-  const dartSource = /\.dart$/iu.test(path39);
+function extractStructuredRelations(path40, line2, add) {
+  const dartSource = /\.dart$/iu.test(path40);
   const keyPatterns = [
     // Dart's unquoted labels and assignments are arguments/variables, not
     // external keys. Quoted map/JSON keys still provide contract evidence.
@@ -140181,7 +140208,7 @@ function extractStructuredRelations(path39, line2, add) {
       add("structured_key" /* StructuredKey */, match2[1]);
     }
   }
-  if (STRUCTURED_PATH_PATTERN.test(path39)) {
+  if (STRUCTURED_PATH_PATTERN.test(path40)) {
     for (const literal2 of quotedLiterals(line2)) {
       if (isContractLiteral(literal2)) {
         add("structured_key" /* StructuredKey */, literal2);
@@ -140283,24 +140310,24 @@ function splitDiffByDestinationPath(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match2 = matches[index];
     if (match2.index === void 0) continue;
-    const path39 = unquoteGitPath2(match2[2].trim());
+    const path40 = unquoteGitPath2(match2[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (path39.length === 0 || chunks.has(path39)) continue;
-    chunks.set(path39, diff.slice(match2.index, end));
+    if (path40.length === 0 || chunks.has(path40)) continue;
+    chunks.set(path40, diff.slice(match2.index, end));
   }
   return chunks;
 }
 function unquoteGitPath2(value) {
-  const path39 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path39.replace(/\\([\\"tnr])/gu, (_match, char) => {
+  const path40 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path40.replace(/\\([\\"tnr])/gu, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
     return char;
   });
 }
-function basenameWithoutExtension(path39) {
-  const fileName = path39.split("/").at(-1) ?? path39;
+function basenameWithoutExtension(path40) {
+  const fileName = path40.split("/").at(-1) ?? path40;
   const extension = fileName.lastIndexOf(".");
   return extension > 0 ? fileName.slice(0, extension) : fileName;
 }
@@ -140917,16 +140944,16 @@ function splitDiffByDestinationPath2(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match2 = matches[index];
     if (match2.index === void 0) continue;
-    const path39 = unquoteGitPath3(match2[2].trim());
+    const path40 = unquoteGitPath3(match2[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (!path39 || chunks.has(path39)) continue;
-    chunks.set(path39, diff.slice(match2.index, end).replace(/\n+$/, ""));
+    if (!path40 || chunks.has(path40)) continue;
+    chunks.set(path40, diff.slice(match2.index, end).replace(/\n+$/, ""));
   }
   return chunks;
 }
 function unquoteGitPath3(value) {
-  const path39 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path39.replace(/\\([\\"tnr])/g, (_match, char) => {
+  const path40 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path40.replace(/\\([\\"tnr])/g, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
@@ -141562,45 +141589,45 @@ function normalizeProviderVoteKey(provider, actualModel) {
   return normalizedProvider;
 }
 function getProviderVoteKeys(finding) {
-  const keys4 = /* @__PURE__ */ new Set();
+  const keys5 = /* @__PURE__ */ new Set();
   for (const key of finding.providerVoteKeys || []) {
     const normalized = normalizeProviderVoteKey(key);
-    if (normalized) keys4.add(normalized);
+    if (normalized) keys5.add(normalized);
   }
-  if (keys4.size > 0) return Array.from(keys4);
+  if (keys5.size > 0) return Array.from(keys5);
   const attributedProviders = new Set(
     (finding.providerModels || []).map((item) => item.provider)
   );
   for (const item of finding.providerModels || []) {
     const key = normalizeProviderVoteKey(item.provider, item.actualModel);
-    if (key) keys4.add(key);
+    if (key) keys5.add(key);
   }
   for (const provider of finding.providers || []) {
     if (attributedProviders.has(provider)) continue;
     const key = normalizeProviderVoteKey(provider);
-    if (key) keys4.add(key);
+    if (key) keys5.add(key);
   }
   if (!finding.provider || !attributedProviders.has(finding.provider)) {
     const primaryKey = normalizeProviderVoteKey(
       finding.provider,
       finding.actualModel
     );
-    if (primaryKey) keys4.add(primaryKey);
+    if (primaryKey) keys5.add(primaryKey);
   }
-  if (keys4.size === 0) keys4.add("static");
-  return Array.from(keys4);
+  if (keys5.size === 0) keys5.add("static");
+  return Array.from(keys5);
 }
 function getProviderVoteCount(finding) {
   return getProviderVoteKeys(finding).length;
 }
 function countProviderVotePool(providers) {
-  const keys4 = /* @__PURE__ */ new Set();
+  const keys5 = /* @__PURE__ */ new Set();
   for (const provider of providers) {
     const name = typeof provider === "string" ? provider : provider.name;
     const key = normalizeProviderVoteKey(name);
-    if (key) keys4.add(key);
+    if (key) keys5.add(key);
   }
-  return keys4.size;
+  return keys5.size;
 }
 function mergeProviderModels(left, right) {
   const merged = /* @__PURE__ */ new Map();
@@ -141676,10 +141703,12 @@ function mergeFindings(existing, incoming) {
   return {
     ...existing,
     ...existing.sourceFindingIds || incoming.sourceFindingIds ? {
-      sourceFindingIds: Array.from(/* @__PURE__ */ new Set([
-        ...existing.sourceFindingIds ?? [],
-        ...incoming.sourceFindingIds ?? []
-      ])).sort()
+      sourceFindingIds: Array.from(
+        /* @__PURE__ */ new Set([
+          ...existing.sourceFindingIds ?? [],
+          ...incoming.sourceFindingIds ?? []
+        ])
+      ).sort()
     } : {},
     startLine: mergeStartLine(existing, incoming),
     line: Math.max(existing.line, incoming.line),
@@ -142386,13 +142415,13 @@ function normalizeFile2(file) {
 }
 function uniqueSuggestionsByVoteKey(suggestions) {
   const seen = /* @__PURE__ */ new Set();
-  const unique3 = [];
+  const unique4 = [];
   for (const suggestion of suggestions) {
     if (seen.has(suggestion.voteKey)) continue;
     seen.add(suggestion.voteKey);
-    unique3.push(suggestion);
+    unique4.push(suggestion);
   }
-  return unique3;
+  return unique4;
 }
 
 // src/finding-revalidation/domain/resolve-confidence-policy.ts
@@ -142468,12 +142497,12 @@ function collectMarkerMatches(body2, pattern) {
 var INLINE_MARKER_RE = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
 var INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
 var MAX_NEARBY_LINE_DISTANCE = 12;
-function signatureFromInlineComment(path39, line2, body2) {
+function signatureFromInlineComment(path40, line2, body2) {
   const cleanBody = stripInlineFingerprintMarkers(body2);
   const severity = extractSeverity(cleanBody);
   if (severity) {
     return [
-      (path39 || "unknown").toLowerCase(),
+      (path40 || "unknown").toLowerCase(),
       String(line2 ?? 0),
       severity
     ].join(":");
@@ -142481,13 +142510,13 @@ function signatureFromInlineComment(path39, line2, body2) {
   const titleMatch = cleanBody.match(/\*\*(.+?)\*\*/);
   const title = titleMatch ? titleMatch[1] : cleanBody.split("\n")[0] || "unknown";
   return [
-    (path39 || "unknown").toLowerCase(),
+    (path40 || "unknown").toLowerCase(),
     String(line2 ?? 0),
     normalizeForSignature(title)
   ].join(":");
 }
-function fingerprintFromInlineComment(path39, line2, body2) {
-  return (0, import_crypto8.createHash)("sha256").update(signatureFromInlineComment(path39, line2, body2)).digest("hex").slice(0, 16);
+function fingerprintFromInlineComment(path40, line2, body2) {
+  return (0, import_crypto8.createHash)("sha256").update(signatureFromInlineComment(path40, line2, body2)).digest("hex").slice(0, 16);
 }
 function inlineFingerprintMarker(fingerprint) {
   return `<!-- review-router-inline:${fingerprint} -->`;
@@ -142503,19 +142532,19 @@ function extractFindingFingerprint(body2) {
   const parsed = parseFindingMarker(body2);
   return parsed.kind === "valid" /* Valid */ ? parsed.fingerprint : null;
 }
-function appendInlineFingerprintMarker(body2, path39, line2) {
+function appendInlineFingerprintMarker(body2, path40, line2) {
   const sanitizedBody = stripReservedFindingMarkerSyntax(body2);
   const parts = [sanitizedBody.trimEnd()];
   if (!extractInlineFingerprint(sanitizedBody)) {
     parts.push(
       inlineFingerprintMarker(
-        fingerprintFromInlineComment(path39, line2, sanitizedBody)
+        fingerprintFromInlineComment(path40, line2, sanitizedBody)
       )
     );
   }
   parts.push(
     findingFingerprintMarker(
-      findingFingerprintFromInlineComment(path39, line2, sanitizedBody)
+      findingFingerprintFromInlineComment(path40, line2, sanitizedBody)
     )
   );
   return parts.join("\n\n");
@@ -142539,12 +142568,12 @@ function findingFingerprintFromFinding(finding) {
     message: finding.message
   });
 }
-function findingFingerprintFromInlineComment(path39, _line, body2) {
+function findingFingerprintFromInlineComment(path40, _line, body2) {
   const marker2 = extractFindingFingerprint(body2);
   if (marker2) return marker2;
   const cleanBody = stripInlineFingerprintMarkers(body2);
   return stableFindingFingerprint({
-    path: path39,
+    path: path40,
     severity: extractSeverity(cleanBody) || "unknown",
     title: extractNormalizedTitle(cleanBody),
     message: extractCoreMessage(cleanBody)
@@ -142750,10 +142779,10 @@ var ThreadLifecycleAggregator = class {
     );
     const votes = this.collectVotes(input, thresholds);
     const assignmentByTarget = new Map(
-      (input.assignmentRecords ?? []).map((record10) => [record10.targetId, record10])
+      (input.assignmentRecords ?? []).map((record11) => [record11.targetId, record11])
     );
     const commandDismissedTargetIds = new Set(
-      (input.skipped ?? []).filter((record10) => record10.reasonCodes.includes("command_dismissed")).map((record10) => record10.target.targetId)
+      (input.skipped ?? []).filter((record11) => record11.reasonCodes.includes("command_dismissed")).map((record11) => record11.target.targetId)
     );
     const result2 = {
       mode: input.mode,
@@ -142764,7 +142793,7 @@ var ThreadLifecycleAggregator = class {
       previousStillValid: [],
       previousUncertain: [],
       manualAttention: (input.initialManualAttention ?? []).filter(
-        (record10) => !commandDismissedTargetIds.has(record10.target.targetId)
+        (record11) => !commandDismissedTargetIds.has(record11.target.targetId)
       ),
       mutationSkipped: [],
       mutationFailed: [],
@@ -142789,7 +142818,7 @@ var ThreadLifecycleAggregator = class {
       const targetVotes = Array.from(
         votes.get(target.targetId)?.values() ?? []
       );
-      const record10 = (reasonCodes) => ({
+      const record11 = (reasonCodes) => ({
         target,
         reasonCodes: unique([
           ...target.reasonCodes ?? [],
@@ -142801,20 +142830,20 @@ var ThreadLifecycleAggregator = class {
         const reasonCodes = [];
         if (target.hasHumanReply) reasonCodes.push("human_reply");
         if (!target.trustedAuthor) reasonCodes.push("untrusted_author");
-        result2.manualAttention.push(record10(reasonCodes));
+        result2.manualAttention.push(record11(reasonCodes));
         continue;
       }
       if (currentFingerprints.has(target.fingerprint) || input.currentFindings.some(
         (finding) => currentFindingMatchesTarget(finding, target)
       )) {
-        result2.previousStillValid.push(record10(["current_finding_present"]));
+        result2.previousStillValid.push(record11(["current_finding_present"]));
         continue;
       }
       if (providerCurrentFindings.some(
         (finding) => currentFindingMatchesTarget(finding, target)
       )) {
         result2.previousStillValid.push(
-          record10(["provider_current_finding_present"])
+          record11(["provider_current_finding_present"])
         );
         continue;
       }
@@ -142823,7 +142852,7 @@ var ThreadLifecycleAggregator = class {
       const missingProviderReasons = plannedProviders.filter((provider) => !assignedProviders.includes(provider)).map(() => "outside_review_scope");
       if (assignment && (assignment.scopeStatus !== "in_scope" || assignedProviders.length === 0)) {
         result2.previousUncertain.push(
-          record10(
+          record11(
             unique([
               ...missingProviderReasons,
               "outside_review_scope",
@@ -142837,7 +142866,7 @@ var ThreadLifecycleAggregator = class {
         (vote) => vote.valid && vote.verdict === "still_valid"
       );
       if (stillValidVotes.length > 0) {
-        result2.previousStillValid.push(record10(["still_valid_vote"]));
+        result2.previousStillValid.push(record11(["still_valid_vote"]));
         continue;
       }
       const expectedProviders = plannedProviders.filter(
@@ -142868,14 +142897,14 @@ var ThreadLifecycleAggregator = class {
       const hasResolvedQuorum = quorumMode === "single-provider" ? resolvedVotes.length === 1 && plannedProviders.length === 1 : resolvedVotes.length >= 2;
       if (hasResolvedQuorum) {
         if (input.mode === "report") {
-          result2.mutationSkipped.push(record10(["report_mode"]));
+          result2.mutationSkipped.push(record11(["report_mode"]));
         } else {
-          result2.resolvedCandidates.push(record10([]));
+          result2.resolvedCandidates.push(record11([]));
         }
         continue;
       }
       result2.previousUncertain.push(
-        record10(
+        record11(
           unique([
             ...missingOrFailedReasons,
             ...invalidVoteReasons,
@@ -142986,17 +143015,17 @@ function countPreviousStillValidBySeverity(lifecycle) {
     major: 0,
     minor: 0
   };
-  for (const record10 of lifecycle?.previousStillValid ?? []) {
-    if (isLinkedCurrentFinding(record10)) continue;
-    const severity = record10.target.severity;
+  for (const record11 of lifecycle?.previousStillValid ?? []) {
+    if (isLinkedCurrentFinding(record11)) continue;
+    const severity = record11.target.severity;
     if (severity === "critical" || severity === "major" || severity === "minor") {
       counts[severity] += 1;
     }
   }
   return counts;
 }
-function isLinkedCurrentFinding(record10) {
-  return record10.reasonCodes.includes("current_finding_present");
+function isLinkedCurrentFinding(record11) {
+  return record11.reasonCodes.includes("current_finding_present");
 }
 function reconcileCarriedFindingsWithLifecycle(input) {
   if (input.carriedFindings.length === 0 || input.lifecycle.inventoryFailed) {
@@ -143004,9 +143033,9 @@ function reconcileCarriedFindingsWithLifecycle(input) {
   }
   const carried = new Set(input.carriedFindings);
   const projectionInactiveTargets = [
-    ...input.lifecycle.resolvedByLifecycle.map((record10) => record10.target),
-    ...input.lifecycle.mutationFailed.filter((record10) => hasTrustedResolutionFallback(record10, input.lifecycle)).map((record10) => record10.target),
-    ...allLifecycleRecords(input.lifecycle).filter((record10) => hasTrustedRecordedResolution(record10.target)).map((record10) => record10.target)
+    ...input.lifecycle.resolvedByLifecycle.map((record11) => record11.target),
+    ...input.lifecycle.mutationFailed.filter((record11) => hasTrustedResolutionFallback(record11, input.lifecycle)).map((record11) => record11.target),
+    ...allLifecycleRecords(input.lifecycle).filter((record11) => hasTrustedRecordedResolution(record11.target)).map((record11) => record11.target)
   ];
   if (projectionInactiveTargets.length === 0) {
     return { findings: [...input.mergedFindings], removed: [] };
@@ -143040,15 +143069,15 @@ function hasTrustedRecordedResolution(target) {
     marker2 && target.trustedAuthor && !target.hasHumanReply && marker2.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker2.targetId === target.targetId && marker2.fingerprint === target.fingerprint
   );
 }
-function hasTrustedResolutionFallback(record10, lifecycle) {
-  const reasonCodes = new Set(record10.reasonCodes);
-  if (lifecycle.mode !== "resolve" || !record10.target.trustedAuthor || record10.target.hasHumanReply || !reasonCodes.has("mutation_permission_denied") || !reasonCodes.has("resolution_comment_posted") || Array.from(reasonCodes).some(
+function hasTrustedResolutionFallback(record11, lifecycle) {
+  const reasonCodes = new Set(record11.reasonCodes);
+  if (lifecycle.mode !== "resolve" || !record11.target.trustedAuthor || record11.target.hasHumanReply || !reasonCodes.has("mutation_permission_denied") || !reasonCodes.has("resolution_comment_posted") || Array.from(reasonCodes).some(
     (reason) => reason !== "mutation_permission_denied" && reason !== "resolution_comment_posted"
   )) {
     return false;
   }
   const resolvedProviders = new Set(
-    (record10.providerVotes ?? []).filter((vote) => vote.valid && vote.verdict === "resolved").map((vote) => vote.providerId)
+    (record11.providerVotes ?? []).filter((vote) => vote.valid && vote.verdict === "resolved").map((vote) => vote.providerId)
   );
   return lifecycle.quorumMode === "single-provider" ? resolvedProviders.size >= 1 : resolvedProviders.size >= 2;
 }
@@ -143128,8 +143157,8 @@ var import_crypto9 = require("crypto");
 function canonicalizeReviewProjection(envelope) {
   return JSON.stringify(toCanonicalValue(envelope));
 }
-function hashReviewProjectionCanonicalJson(canonicalJson19) {
-  return (0, import_crypto9.createHash)("sha256").update(canonicalJson19, "utf8").digest("hex");
+function hashReviewProjectionCanonicalJson(canonicalJson20) {
+  return (0, import_crypto9.createHash)("sha256").update(canonicalJson20, "utf8").digest("hex");
 }
 function hashProjectionFact(value) {
   return (0, import_crypto9.createHash)("sha256").update(JSON.stringify(toCanonicalValue(value)), "utf8").digest("hex");
@@ -143308,11 +143337,11 @@ function hasValidTrustedResolutionMarker(target) {
     marker2 && marker2.trust === "trusted" /* Trusted */ && marker2.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker2.targetId === target.targetId && marker2.fingerprint === target.trustedMarker
   );
 }
-function summaryPlacement(lineageId, path39, reason) {
+function summaryPlacement(lineageId, path40, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path39,
+    path: path40,
     reason
   };
 }
@@ -143335,8 +143364,8 @@ function sortOccurrences(occurrences) {
     (left, right) => stateOrder[left.state] - stateOrder[right.state] || severityOrder2[left.severity] - severityOrder2[right.severity] || left.filePath.localeCompare(right.filePath) || (left.line ?? 0) - (right.line ?? 0) || left.lineageId.localeCompare(right.lineageId)
   );
 }
-function normalizePath(path39) {
-  return path39.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath(path40) {
+  return path40.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique(values) {
   return Array.from(new Set(values)).sort(
@@ -144219,36 +144248,36 @@ function renderReviewSummary(review, language, options = {}) {
   );
   const lifecycle = review.threadLifecycle?.mode === "off" ? void 0 : review.threadLifecycle;
   const stillValid = lifecycle?.previousStillValid.filter(
-    (record10) => !isLinkedCurrentFinding(record10)
+    (record11) => !isLinkedCurrentFinding(record11)
   ) ?? [];
   const appliedResolutions = new Set(
-    lifecycle?.resolvedByLifecycle.map((record10) => record10.target.targetId)
+    lifecycle?.resolvedByLifecycle.map((record11) => record11.target.targetId)
   );
   const attention = lifecycle ? [
     ...lifecycle.resolvedCandidates.filter(
-      (record10) => !appliedResolutions.has(record10.target.targetId)
+      (record11) => !appliedResolutions.has(record11.target.targetId)
     ),
     ...lifecycle.previousUncertain,
     ...lifecycle.manualAttention,
     ...lifecycle.mutationSkipped,
     ...lifecycle.mutationFailed,
     ...lifecycle.skipped.filter(
-      (record10) => !record10.reasonCodes.every(
+      (record11) => !record11.reasonCodes.every(
         (reason) => reason === "command_dismissed"
       )
     )
   ] : [];
   const lifecycleLines = [];
   const add = (records, kind) => {
-    for (const record10 of records)
+    for (const record11 of records)
       lifecycleLines.push({
         kind,
-        title: record10.target.title,
+        title: record11.target.title,
         message: [
-          record10.target.message,
-          ...record10.reasonCodes.map((reason) => reason.replaceAll("_", " "))
+          record11.target.message,
+          ...record11.reasonCodes.map((reason) => reason.replaceAll("_", " "))
         ].join("\n\n"),
-        locationLabel: `${record10.target.currentPath ?? record10.target.originalPath}:${record10.target.currentLine ?? record10.target.originalLine ?? 1}`
+        locationLabel: `${record11.target.currentPath ?? record11.target.originalPath}:${record11.target.currentLine ?? record11.target.originalLine ?? 1}`
       });
   };
   add(stillValid, "active");
@@ -144290,10 +144319,10 @@ function renderReviewSummary(review, language, options = {}) {
     lifecycleAttention: attention.length > 0 || lifecycle?.inventoryFailed === true || (lifecycle?.warnings.length ?? 0) > 0,
     previousCounts: {
       critical: stillValid.filter(
-        (record10) => record10.target.severity === "critical"
+        (record11) => record11.target.severity === "critical"
       ).length,
-      major: stillValid.filter((record10) => record10.target.severity === "major").length,
-      minor: stillValid.filter((record10) => record10.target.severity === "minor").length
+      major: stillValid.filter((record11) => record11.target.severity === "major").length,
+      minor: stillValid.filter((record11) => record11.target.severity === "minor").length
     },
     ...review.metrics.dismissedFindings ? { dismissedFindings: review.metrics.dismissedFindings } : {},
     ...measured ? {
@@ -144323,7 +144352,7 @@ function toReviewerSummaryFinding(finding) {
     ...finding.evidence ? { evidence: finding.evidence } : {},
     attribution: Array.from(
       /* @__PURE__ */ new Set([
-        ...finding.providerModels?.map((model) => model.provider) ?? [],
+        ...finding.providerModels?.map((model2) => model2.provider) ?? [],
         ...finding.providers ?? [],
         ...finding.provider ? [finding.provider] : []
       ])
@@ -144381,7 +144410,7 @@ function findingSourceUrl(finding, source) {
       return void 0;
     if (!finding.file || finding.file.includes("\\") || hasControlCharacters(finding.file) || finding.file.split("/").some((part) => !part || part === "." || part === ".."))
       return void 0;
-    const path39 = finding.file.split("/").map(
+    const path40 = finding.file.split("/").map(
       (part) => encodeURIComponent(part).replace(
         /[!'()*]/g,
         (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
@@ -144391,7 +144420,7 @@ function findingSourceUrl(finding, source) {
     const start = hasRange && finding.line > 0 ? finding.startLine : finding.line;
     const end = hasRange ? finding.endLine : start;
     const anchor = Number.isSafeInteger(start) && start > 0 ? `#L${start}${Number.isSafeInteger(end) && end > start ? `-L${end}` : ""}` : "";
-    return `${repo.origin}${repo.pathname.replace(/\/$/, "")}/blob/${source.headSha}/${path39}${anchor}`;
+    return `${repo.origin}${repo.pathname.replace(/\/$/, "")}/blob/${source.headSha}/${path40}${anchor}`;
   } catch {
     return void 0;
   }
@@ -147120,13 +147149,13 @@ var PricingService = class _PricingService {
         return;
       }
       const data = await response.json();
-      for (const model of data.data || []) {
-        const pricing = model.pricing || {};
-        this.cache.set(model.id, {
-          modelId: model.id,
+      for (const model2 of data.data || []) {
+        const pricing = model2.pricing || {};
+        this.cache.set(model2.id, {
+          modelId: model2.id,
           promptPrice: parseFloat(pricing.prompt || "0") * 1e6,
           completionPrice: parseFloat(pricing.completion || "0") * 1e6,
-          isFree: model.id.includes(":free")
+          isFree: model2.id.includes(":free")
         });
       }
       this.cacheExpiry = Date.now() + _PricingService.CACHE_TTL;
@@ -148523,7 +148552,7 @@ ${content.substring(0, 500)}...`
     return body2.includes(_CommentPoster.BOT_COMMENT_MARKER) && (body2.includes("# ReviewRouter") || body2.includes(REVIEW_SUMMARY_STATUS_COMPLETE_MARKER) || body2.includes(REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER)) && !body2.includes(_CommentPoster.INLINE_FALLBACK_MARKER) && !body2.includes(_CommentPoster.INLINE_SKIP_HELP_MARKER);
   }
   async loadActiveInlineComments(prNumber) {
-    const keys4 = /* @__PURE__ */ new Set();
+    const keys5 = /* @__PURE__ */ new Set();
     const activeComments = [];
     const { octokit, owner, repo } = this.client;
     try {
@@ -148545,10 +148574,10 @@ ${content.substring(0, 500)}...`
           line: activeLine,
           body: body2
         });
-        keys4.add(signatureFromInlineComment(comment.path, activeLine, body2));
-        keys4.add(fingerprintFromInlineComment(comment.path, activeLine, body2));
+        keys5.add(signatureFromInlineComment(comment.path, activeLine, body2));
+        keys5.add(fingerprintFromInlineComment(comment.path, activeLine, body2));
         const marker2 = extractInlineFingerprint(body2);
-        if (marker2) keys4.add(marker2);
+        if (marker2) keys5.add(marker2);
       }
     } catch (error4) {
       logger.warn(
@@ -148556,12 +148585,12 @@ ${content.substring(0, 500)}...`
         error4
       );
     }
-    return { keys: keys4, comments: activeComments };
+    return { keys: keys5, comments: activeComments };
   }
-  hasInlineDuplicate(activeComments, path39, line2, body2) {
+  hasInlineDuplicate(activeComments, path40, line2, body2) {
     const marker2 = extractInlineFingerprint(body2);
-    return activeComments.keys.has(signatureFromInlineComment(path39, line2, body2)) || activeComments.keys.has(fingerprintFromInlineComment(path39, line2, body2)) || (marker2 ? activeComments.keys.has(marker2) : false) || activeComments.comments.some(
-      (comment) => isLikelySameInlineFinding(comment, { path: path39, line: line2, body: body2 })
+    return activeComments.keys.has(signatureFromInlineComment(path40, line2, body2)) || activeComments.keys.has(fingerprintFromInlineComment(path40, line2, body2)) || (marker2 ? activeComments.keys.has(marker2) : false) || activeComments.comments.some(
+      (comment) => isLikelySameInlineFinding(comment, { path: path40, line: line2, body: body2 })
     );
   }
   /**
@@ -148918,17 +148947,17 @@ ${comment.body.substring(0, 200)}...`
     }
   }
   static activeInlineCommentsFromReferences(references) {
-    const keys4 = /* @__PURE__ */ new Set();
+    const keys5 = /* @__PURE__ */ new Set();
     const comments = [];
     for (const comment of references) {
       const body2 = comment.body || "";
       comments.push(comment);
-      keys4.add(signatureFromInlineComment(comment.path, comment.line, body2));
-      keys4.add(fingerprintFromInlineComment(comment.path, comment.line, body2));
+      keys5.add(signatureFromInlineComment(comment.path, comment.line, body2));
+      keys5.add(fingerprintFromInlineComment(comment.path, comment.line, body2));
       const marker2 = extractInlineFingerprint(body2);
-      if (marker2) keys4.add(marker2);
+      if (marker2) keys5.add(marker2);
     }
-    return { keys: keys4, comments };
+    return { keys: keys5, comments };
   }
   async postIndividualInlineComments(prNumber, comments, headSha, originalError) {
     const { octokit, owner, repo } = this.client;
@@ -149681,15 +149710,15 @@ ${deleted}`;
     ].includes(symbol.toLowerCase());
   }
   extractConfigKeys(lines) {
-    const keys4 = [];
+    const keys5 = [];
     for (const line2 of lines) {
       const trimmed = line2.trim();
       const match2 = trimmed.match(/^["']?([A-Za-z0-9_.-]+)["']?\s*[:=]/);
       if (match2?.[1] && !match2[1].match(/^\d+$/)) {
-        keys4.push(this.truncate(match2[1], 48));
+        keys5.push(this.truncate(match2[1], 48));
       }
     }
-    return this.unique(keys4);
+    return this.unique(keys5);
   }
   sentenceFromParts(parts) {
     if (parts.length === 0) return "Updates pull request automation.";
@@ -150230,11 +150259,11 @@ var ContextRetriever = class {
     if (!this.graph) {
       return [];
     }
-    const dependencies = this.graph.getDependencies(filename);
+    const dependencies2 = this.graph.getDependencies(filename);
     logger.debug(
-      `Graph-based import extraction for ${filename}: ${dependencies.length} imports`
+      `Graph-based import extraction for ${filename}: ${dependencies2.length} imports`
     );
-    return dependencies;
+    return dependencies2;
   }
   /**
    * Find all files that depend on the given file
@@ -150267,7 +150296,7 @@ var ContextRetriever = class {
 var ImpactAnalyzer = class {
   analyze(files, contexts, hasFindings = true) {
     const consumers = this.collectByRelationship(contexts, "consumer");
-    const dependencies = this.collectByRelationship(contexts, "dependency");
+    const dependencies2 = this.collectByRelationship(contexts, "dependency");
     const callers = this.collectByRelationship(contexts, "caller");
     const derived = this.collectByRelationship(contexts, "derived");
     const totalAffected = files.length + contexts.length;
@@ -150278,7 +150307,7 @@ var ImpactAnalyzer = class {
       callers,
       consumers,
       derived,
-      dependencies,
+      dependencies: dependencies2,
       impactLevel,
       summary: `Touched ${files.length} files with ${contexts.length} related contexts; impact is ${impactLevel}.`
     };
@@ -150433,7 +150462,7 @@ var FeedbackFilter = class {
             if (location) commandDismissedLocations.add(location);
             if (skip.path) {
               const body2 = skippedFindingBody(skip);
-              const reference = {
+              const reference2 = {
                 path: skip.path,
                 line: skip.line,
                 body: body2,
@@ -150442,8 +150471,8 @@ var FeedbackFilter = class {
                 severity: skip.severity,
                 title: skip.title
               };
-              commandDismissedComments.push(reference);
-              commandDismissedFindings.push(reference);
+              commandDismissedComments.push(reference2);
+              commandDismissedFindings.push(reference2);
             }
           }
         }
@@ -150533,8 +150562,8 @@ var FeedbackFilter = class {
       (existing) => isLikelySameDismissedFinding(existing, comment)
     );
   }
-  signatureFromComment(path39, line2, body2) {
-    return signatureFromInlineComment(path39, line2, body2);
+  signatureFromComment(path40, line2, body2) {
+    return signatureFromInlineComment(path40, line2, body2);
   }
 };
 function skippedFindingBody(skip) {
@@ -150654,9 +150683,9 @@ var TOKEN_STOPWORDS = /* @__PURE__ */ new Set([
   "when",
   "with"
 ]);
-function locationKey(path39, line2) {
-  if (!path39 || line2 == null) return null;
-  return `${path39.toLowerCase()}:${line2}`;
+function locationKey(path40, line2) {
+  if (!path40 || line2 == null) return null;
+  return `${path40.toLowerCase()}:${line2}`;
 }
 
 // src/github/ledger.ts
@@ -150875,8 +150904,8 @@ function canonicalJson3(value) {
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalJson3(item)).join(",")}]`;
   }
-  const record10 = value;
-  return `{${Object.keys(record10).sort().filter((key) => record10[key] !== void 0).map((key) => `${JSON.stringify(key)}:${canonicalJson3(record10[key])}`).join(",")}}`;
+  const record11 = value;
+  return `{${Object.keys(record11).sort().filter((key) => record11[key] !== void 0).map((key) => `${JSON.stringify(key)}:${canonicalJson3(record11[key])}`).join(",")}}`;
 }
 function safeEqualHex(a2, b2) {
   if (!/^[a-f0-9]{64}$/i.test(a2) || !/^[a-f0-9]{64}$/i.test(b2)) {
@@ -150923,7 +150952,7 @@ var FeedbackTracker = class _FeedbackTracker {
    */
   async recordReaction(findingId, category, severity, reaction, prNumber) {
     const data = await this.loadData();
-    const record10 = {
+    const record11 = {
       findingId,
       category,
       severity,
@@ -150931,7 +150960,7 @@ var FeedbackTracker = class _FeedbackTracker {
       timestamp: Date.now(),
       prNumber
     };
-    data.records.push(record10);
+    data.records.push(record11);
     const timeSinceAggregation = Date.now() - data.lastAggregation;
     if (timeSinceAggregation > _FeedbackTracker.AGGREGATION_INTERVAL_MS) {
       await this.aggregateAndAdjust(data);
@@ -151044,10 +151073,10 @@ var FeedbackTracker = class _FeedbackTracker {
   async aggregateAndAdjust(data) {
     logger.info("Aggregating feedback and adjusting confidence thresholds");
     const categoryGroups = /* @__PURE__ */ new Map();
-    for (const record10 of data.records) {
-      const group = categoryGroups.get(record10.category) || [];
-      group.push(record10);
-      categoryGroups.set(record10.category, group);
+    for (const record11 of data.records) {
+      const group = categoryGroups.get(record11.category) || [];
+      group.push(record11);
+      categoryGroups.set(record11.category, group);
     }
     for (const [category, records] of categoryGroups) {
       const positiveCount = records.filter((r2) => r2.reaction === "\u{1F44D}").length;
@@ -151349,8 +151378,8 @@ var CodeGraph = class _CodeGraph {
   /**
    * Normalize a file path for comparison (strips extensions, converts to posix)
    */
-  normalizePathForComparison(path39) {
-    let normalized = path39.replace(/\\/g, "/");
+  normalizePathForComparison(path40) {
+    let normalized = path40.replace(/\\/g, "/");
     normalized = normalized.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "");
     return normalized;
   }
@@ -152144,9 +152173,9 @@ var PromptGenerator = class {
    * Save prompts to a file (for CLI usage)
    */
   async saveToFile(prompts, filepath, format = this.defaultFormat) {
-    const fs36 = await import("fs/promises");
+    const fs37 = await import("fs/promises");
     const content = this.formatForIDE(prompts, format);
-    await fs36.writeFile(filepath, content, "utf8");
+    await fs37.writeFile(filepath, content, "utf8");
     logger.info(`Saved ${prompts.length} fix prompts to ${filepath}`);
   }
   /**
@@ -154047,8 +154076,8 @@ function canonicalRevalidationJson(value) {
 function revalidationHash(domain, value) {
   return (0, import_crypto17.createHash)("sha256").update(`${REVALIDATION_POLICY_VERSION}:${domain}\0`).update(canonicalRevalidationJson(value)).digest("hex");
 }
-function byteHash(bytes) {
-  return (0, import_crypto17.createHash)("sha256").update(bytes).digest("hex");
+function byteHash(bytes2) {
+  return (0, import_crypto17.createHash)("sha256").update(bytes2).digest("hex");
 }
 function makeVerifyPacket(input) {
   const unsigned = {
@@ -155006,11 +155035,11 @@ var ReviewThreadResolver = class {
     }
     return { kind: "ready" };
   }
-  withReason(record10, reasonCodes) {
+  withReason(record11, reasonCodes) {
     return {
-      ...record10,
+      ...record11,
       reasonCodes: unique2([
-        ...record10.reasonCodes,
+        ...record11.reasonCodes,
         ...reasonCodes
       ])
     };
@@ -155249,8 +155278,8 @@ async function readSafeErrorCode(response) {
   }
   return void 0;
 }
-function joinApiPath(apiUrl, path39) {
-  return `${apiUrl.replace(/\/+$/, "")}${path39}`;
+function joinApiPath(apiUrl, path40) {
+  return `${apiUrl.replace(/\/+$/, "")}${path40}`;
 }
 function safeReason(message) {
   return message.replace(/[^a-zA-Z0-9:_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
@@ -155365,9 +155394,9 @@ var ReviewMemorySession = class _ReviewMemorySession {
       this.admission = void 0;
     }
   }
-  post(path39, body2, timeoutMs) {
+  post(path40, body2, timeoutMs) {
     return postBoundedMemoryJson({
-      url: new URL(path39, this.options.apiUrl),
+      url: new URL(path40, this.options.apiUrl),
       token: this.options.authorizationToken,
       body: body2,
       signal: this.options.signal,
@@ -155609,13 +155638,13 @@ async function postBoundedMemoryJson(input) {
     }
     reader = response.body.getReader();
     const chunks = [];
-    let bytes = 0;
+    let bytes2 = 0;
     for (; ; ) {
       controller.signal.throwIfAborted();
       const next = await reader.read();
       if (next.done) break;
-      bytes += next.value.byteLength;
-      if (bytes > input.maxBytes)
+      bytes2 += next.value.byteLength;
+      if (bytes2 > input.maxBytes)
         throw new Error("review_memory_response_invalid");
       chunks.push(next.value);
     }
@@ -155727,13 +155756,13 @@ var ControlPlaneMemoryClient = class {
     }
     return results.map(parseMutationResponse);
   }
-  async postJson(path39, body2) {
+  async postJson(path40, body2) {
     if (!this.isAvailable()) {
       throw new Error("memory_runtime_unavailable");
     }
     const runtimeConfig = this.runtimeConfig;
     return postBoundedMemoryJson({
-      url: new URL(path39, runtimeConfig.apiUrl),
+      url: new URL(path40, runtimeConfig.apiUrl),
       token: runtimeConfig.sessionToken,
       body: body2,
       timeoutMs: 5e3,
@@ -155805,10 +155834,10 @@ function memoryCommandId(value) {
   const sort = (item) => Array.isArray(item) ? item.map(sort) : item && typeof item === "object" ? Object.fromEntries(
     Object.entries(item).sort(([a2], [b2]) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0).map(([key, child]) => [key, sort(child)])
   ) : item;
-  const bytes = (0, import_crypto20.createHash)("sha256").update("review-router-memory-command-v2\n").update(JSON.stringify(sort(value))).digest().subarray(0, 16);
-  bytes[6] = bytes[6] & 15 | 80;
-  bytes[8] = bytes[8] & 63 | 128;
-  const hex = bytes.toString("hex");
+  const bytes2 = (0, import_crypto20.createHash)("sha256").update("review-router-memory-command-v2\n").update(JSON.stringify(sort(value))).digest().subarray(0, 16);
+  bytes2[6] = bytes2[6] & 15 | 80;
+  bytes2[8] = bytes2[8] & 63 | 128;
+  const hex = bytes2.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 function parseMutationResponse(value) {
@@ -156067,22 +156096,22 @@ function createReviewCheckpointPlanIdentity(input) {
   });
 }
 function normalizeReviewCheckpointBatchPayload(input) {
-  const record10 = asRecord(input);
-  const rawProviderResults = Array.isArray(input) ? input : Array.isArray(record10?.providerResults) ? record10.providerResults : [];
+  const record11 = asRecord(input);
+  const rawProviderResults = Array.isArray(input) ? input : Array.isArray(record11?.providerResults) ? record11.providerResults : [];
   assertCollectionWithinLimit(
     rawProviderResults,
     MAX_PROVIDER_RESULTS,
     "providerResults"
   );
   const providerResults = rawProviderResults.map(normalizeProviderResult).map((result2) => requireNormalized(result2, "providerResult"));
-  const rawFindings = Array.isArray(record10?.findings) ? record10.findings : rawProviderResults.flatMap((providerResult) => {
+  const rawFindings = Array.isArray(record11?.findings) ? record11.findings : rawProviderResults.flatMap((providerResult) => {
     const provider = asRecord(providerResult);
     const result2 = asRecord(provider?.result);
     return Array.isArray(result2?.findings) ? result2.findings : [];
   });
   assertCollectionWithinLimit(rawFindings, MAX_FINDINGS, "findings");
   return reviewCheckpointBatchPayloadSchema.parse({
-    filePaths: normalizeFilePaths(record10),
+    filePaths: normalizeFilePaths(record11),
     findings: rawFindings.map(normalizeFinding2).map((finding) => requireNormalized(finding, "finding")),
     providerResults
   });
@@ -156097,9 +156126,9 @@ function checkpointPlansMatch(left, right) {
 function checkpointPayloadsMatch(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
-function normalizeFilePaths(record10) {
-  const explicitPaths = Array.isArray(record10?.filePaths) ? record10.filePaths : [];
-  const fileObjects = Array.isArray(record10?.files) ? record10.files : [];
+function normalizeFilePaths(record11) {
+  const explicitPaths = Array.isArray(record11?.filePaths) ? record11.filePaths : [];
+  const fileObjects = Array.isArray(record11?.files) ? record11.files : [];
   const values = [
     ...explicitPaths,
     ...fileObjects.map((file) => asRecord(file)?.filename)
@@ -156108,10 +156137,10 @@ function normalizeFilePaths(record10) {
   const seen = /* @__PURE__ */ new Set();
   for (const value of values) {
     if (typeof value !== "string") continue;
-    const path39 = normalizeText2(value, 4096);
-    if (!path39 || seen.has(path39)) continue;
-    seen.add(path39);
-    paths.push(path39);
+    const path40 = normalizeText2(value, 4096);
+    if (!path40 || seen.has(path40)) continue;
+    seen.add(path40);
+    paths.push(path40);
     if (paths.length > MAX_FILE_PATHS) {
       throw new Error("review_checkpoint_filePaths_limit_exceeded");
     }
@@ -156277,8 +156306,8 @@ function requireNormalized(value, field) {
 function messageFromUnknown(value) {
   if (typeof value === "string") return value;
   if (value instanceof Error) return value.message;
-  const record10 = asRecord(value);
-  return typeof record10?.message === "string" ? record10.message : void 0;
+  const record11 = asRecord(value);
+  return typeof record11?.message === "string" ? record11.message : void 0;
 }
 function isProbability(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
@@ -156875,7 +156904,7 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
       ...body2
     };
   }
-  async post(path39, body2, schema2) {
+  async post(path40, body2, schema2) {
     const serialized = JSON.stringify(body2);
     if (Buffer.byteLength(serialized, "utf8") > REVIEW_CHECKPOINT_MAX_REQUEST_BYTES) {
       throw new ReviewCheckpointHttpError(
@@ -156899,7 +156928,7 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
       let response;
       try {
         response = await Promise.race([
-          this.fetchImpl(`${this.apiUrl}${CHECKPOINT_PATH}${path39}`, {
+          this.fetchImpl(`${this.apiUrl}${CHECKPOINT_PATH}${path40}`, {
             method: "POST",
             redirect: "error",
             headers: {
@@ -157016,12 +157045,12 @@ function isAllowedCheckpointApiUrl(input) {
   }
 }
 var FileReviewCheckpointFinalizationMarkerWriter = class _FileReviewCheckpointFinalizationMarkerWriter {
-  constructor(path39) {
-    this.path = path39;
+  constructor(path40) {
+    this.path = path40;
   }
   static fromEnvironment(env = process.env) {
-    const path39 = env[REVIEW_CHECKPOINT_FINALIZATION_PATH_ENV]?.trim();
-    return path39 ? new _FileReviewCheckpointFinalizationMarkerWriter(path39) : null;
+    const path40 = env[REVIEW_CHECKPOINT_FINALIZATION_PATH_ENV]?.trim();
+    return path40 ? new _FileReviewCheckpointFinalizationMarkerWriter(path40) : null;
   }
   static parse(input) {
     return parseReviewCheckpointFinalizationMarker(input);
@@ -158668,11 +158697,11 @@ function extractDiffDestinationPaths(diff) {
   }
   return paths;
 }
-function unquoteGitPath4(path39) {
-  if (path39.startsWith('"') && path39.endsWith('"')) {
-    path39 = path39.slice(1, -1);
+function unquoteGitPath4(path40) {
+  if (path40.startsWith('"') && path40.endsWith('"')) {
+    path40 = path40.slice(1, -1);
   }
-  return path39.replace(/\\([\\"tnr])/g, (_match, char) => {
+  return path40.replace(/\\([\\"tnr])/g, (_match, char) => {
     switch (char) {
       case "\\":
         return "\\";
@@ -158698,10 +158727,10 @@ function messageFromError(error4) {
   if (typeof error4 === "string") return error4;
   if (typeof error4 === "object" && error4 !== null) {
     try {
-      const record10 = error4;
+      const record11 = error4;
       const serialized = JSON.stringify({
-        ...record10,
-        ..."message" in record10 && typeof record10.message === "string" ? { message: record10.message } : error4 instanceof Error ? { message: error4.message } : {}
+        ...record11,
+        ..."message" in record11 && typeof record11.message === "string" ? { message: record11.message } : error4 instanceof Error ? { message: error4.message } : {}
       });
       if (serialized !== "{}") return serialized;
     } catch {
@@ -158742,11 +158771,11 @@ function collectKnownCapacityFields(value, depth = 0) {
       { values: [], definitive: false }
     );
   }
-  const record10 = value;
+  const record11 = value;
   const fields = [];
   let definitive = false;
   for (const key of ["error", "status", "message", "code"]) {
-    const field = record10[key];
+    const field = record11[key];
     if (typeof field === "string" || typeof field === "number") {
       const normalized = String(field);
       fields.push(normalized);
@@ -161115,10 +161144,10 @@ var ReviewOrchestrator = class {
             }
           } else {
             lifecycle.mutationSkipped.push(
-              ...lifecycle.resolvedCandidates.map((record10) => ({
-                ...record10,
+              ...lifecycle.resolvedCandidates.map((record11) => ({
+                ...record11,
                 reasonCodes: [
-                  ...record10.reasonCodes,
+                  ...record11.reasonCodes,
                   "mutation_failed"
                 ]
               }))
@@ -161410,7 +161439,7 @@ var ReviewOrchestrator = class {
   filterCommandDismissedLifecycleTargets(targets, reviewCommentState, skipped) {
     const active = [];
     const alreadySkipped = new Set(
-      skipped.map((record10) => record10.target.targetId)
+      skipped.map((record11) => record11.target.targetId)
     );
     for (const target of targets) {
       if (this.isLifecycleTargetCommandDismissed(target, reviewCommentState)) {
@@ -161427,25 +161456,25 @@ var ReviewOrchestrator = class {
   filterCommandDismissedLifecycleRecords(records, reviewCommentState, skipped) {
     const active = [];
     const alreadySkipped = new Set(
-      skipped.map((record10) => record10.target.targetId)
+      skipped.map((record11) => record11.target.targetId)
     );
-    for (const record10 of records) {
+    for (const record11 of records) {
       if (this.isLifecycleTargetCommandDismissed(
-        record10.target,
+        record11.target,
         reviewCommentState
       )) {
-        if (!alreadySkipped.has(record10.target.targetId)) {
+        if (!alreadySkipped.has(record11.target.targetId)) {
           skipped.push(
-            this.lifecycleRecord(record10.target, [
-              ...record10.reasonCodes,
+            this.lifecycleRecord(record11.target, [
+              ...record11.reasonCodes,
               "command_dismissed"
             ])
           );
-          alreadySkipped.add(record10.target.targetId);
+          alreadySkipped.add(record11.target.targetId);
         }
         continue;
       }
-      active.push(record10);
+      active.push(record11);
     }
     return active;
   }
@@ -161453,17 +161482,17 @@ var ReviewOrchestrator = class {
     if (reviewCommentState.commandDismissed?.has(target.fingerprint)) {
       return true;
     }
-    const path39 = target.currentPath || target.originalPath;
+    const path40 = target.currentPath || target.originalPath;
     const line2 = target.currentLine ?? target.originalLine;
-    if (path39 && line2 != null && reviewCommentState.commandDismissedLocations?.has(
-      `${path39.toLowerCase()}:${line2}`
+    if (path40 && line2 != null && reviewCommentState.commandDismissedLocations?.has(
+      `${path40.toLowerCase()}:${line2}`
     )) {
       return true;
     }
     const severity = target.severity === "critical" || target.severity === "major" || target.severity === "minor" ? target.severity : "minor";
     return this.components.feedbackFilter.isInlineCommandDismissed(
       {
-        path: path39,
+        path: path40,
         line: line2 ?? 0,
         side: "RIGHT",
         body: target.message,
@@ -161490,7 +161519,7 @@ var ReviewOrchestrator = class {
   }
   removeResolvedLifecycleDedupeRefs(dedupeComments, resolvedRecords) {
     const resolvedFingerprints = new Set(
-      resolvedRecords.map((record10) => record10.target.fingerprint)
+      resolvedRecords.map((record11) => record11.target.fingerprint)
     );
     if (resolvedFingerprints.size === 0) return dedupeComments;
     return dedupeComments.filter((comment) => {
@@ -161537,17 +161566,17 @@ var ReviewOrchestrator = class {
     }
   }
   applyLifecycleBatchProviderFailures(records, failuresByTarget) {
-    for (const record10 of records) {
-      const failures = failuresByTarget.get(record10.targetId);
+    for (const record11 of records) {
+      const failures = failuresByTarget.get(record11.targetId);
       if (failures && failures.size > 0) {
-        record10.failedProviderIds = Array.from(failures);
+        record11.failedProviderIds = Array.from(failures);
       }
     }
   }
   applyLifecycleMutationResult(lifecycle, mutationResult) {
     const handled = /* @__PURE__ */ new Set();
     const mark = (records) => {
-      records.forEach((record10) => handled.add(record10.target.targetId));
+      records.forEach((record11) => handled.add(record11.target.targetId));
     };
     lifecycle.resolvedByLifecycle.push(...mutationResult.resolved);
     lifecycle.manualAttention.push(...mutationResult.manualAttention);
@@ -161559,7 +161588,7 @@ var ReviewOrchestrator = class {
     mark(mutationResult.skipped);
     mark(mutationResult.failed);
     lifecycle.resolvedCandidates = lifecycle.resolvedCandidates.filter(
-      (record10) => !handled.has(record10.target.targetId)
+      (record11) => !handled.has(record11.target.targetId)
     );
   }
   async buildUnreviewedLifecycleForSkippedReview(pr2, configuredLifecycleMode, reason, currentFindings = [], loadedReviewCommentState) {
@@ -161699,11 +161728,11 @@ var ReviewOrchestrator = class {
   failUnconfirmedLifecycleCandidates(lifecycle) {
     if (lifecycle.resolvedCandidates.length === 0) return;
     lifecycle.mutationFailed.push(
-      ...lifecycle.resolvedCandidates.map((record10) => ({
-        ...record10,
+      ...lifecycle.resolvedCandidates.map((record11) => ({
+        ...record11,
         reasonCodes: Array.from(
           /* @__PURE__ */ new Set([
-            ...record10.reasonCodes,
+            ...record11.reasonCodes,
             "mutation_failed"
           ])
         ),
@@ -162129,7 +162158,7 @@ ${markdown}`;
     const lifecycle = review.threadLifecycle;
     if (!lifecycle) return false;
     return lifecycle.inventoryFailed === true || lifecycle.previousStillValid.some(
-      (record10) => !isLinkedCurrentFinding(record10)
+      (record11) => !isLinkedCurrentFinding(record11)
     ) || lifecycle.previousUncertain.length > 0 || lifecycle.manualAttention.length > 0 || lifecycle.mutationSkipped.length > 0 || lifecycle.mutationFailed.length > 0 || lifecycle.skipped.length > 0 || lifecycle.warnings.length > 0;
   }
   async ensureBudget(config2) {
@@ -162905,8 +162934,8 @@ function isExplicitlyUnsupported(value) {
   const code = errorCode(value);
   if (code === "review_request_intent_disabled") return true;
   if (!value || typeof value !== "object") return false;
-  const record10 = value;
-  return record10.error === "Not Found" && typeof record10.message === "string" && record10.message.includes("/api/action/v1/review-requests/manual") && record10.message.includes("not found");
+  const record11 = value;
+  return record11.error === "Not Found" && typeof record11.message === "string" && record11.message.includes("/api/action/v1/review-requests/manual") && record11.message.includes("not found");
 }
 function errorCode(value) {
   if (!value || typeof value !== "object") return null;
@@ -163461,14 +163490,14 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     }
   }
   matchesReviewWorkflowRun(candidate, workflowFile, prNumber, headSha) {
-    const path39 = String(candidate.path || "");
+    const path40 = String(candidate.path || "");
     const knownWorkflowFiles = [
       workflowFile,
       "reviewrouter.yml",
       "ai-robot-review.yml"
     ];
     const matchesWorkflow = knownWorkflowFiles.some(
-      (file) => path39.endsWith(`/${file}`) || path39 === file
+      (file) => path40.endsWith(`/${file}`) || path40 === file
     );
     const matchesSha = candidate.head_sha === headSha;
     const matchesPr = (candidate.pull_requests || []).some(
@@ -164068,8 +164097,8 @@ function resolveDiscussionCodexConfiguration(env) {
   };
 }
 var CodexDiscussionResponder = class {
-  constructor(model, timeoutMs, providerOptions = {}) {
-    this.model = model;
+  constructor(model2, timeoutMs, providerOptions = {}) {
+    this.model = model2;
     this.timeoutMs = timeoutMs;
     this.providerOptions = providerOptions;
   }
@@ -164228,6 +164257,261 @@ async function initializeEmptyGitRepository(cwd) {
   }
 }
 
+// src/control-plane/generated/review-action-v2/review-reviewer-plan.ts
+var reviewerPlanContract = Object.freeze({
+  planVersion: 1,
+  maxReviewers: 16,
+  maxPlanBytes: 65536,
+  runtimeEnvKey: "REVIEW_ROUTER_REVIEWER_PLAN_JSON",
+  reviewerIdHeader: "x-reviewrouter-reviewer-id",
+  transport: "account_gateway",
+  investigationDescriptorVersion: 3,
+  reviewerAvailability: 1
+});
+var efforts = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra"
+];
+var dependencies = {
+  context_critic: ["shadow"],
+  cross_revision_replay: ["shadow"],
+  production_effects: ["context_critic", "shadow"],
+  recording: [],
+  shadow: ["recording"],
+  verified_clean: ["context_critic", "production_effects"]
+};
+function parseReviewReviewerPlan(value) {
+  if (typeof value === "string") {
+    if (bytes(value) > reviewerPlanContract.maxPlanBytes) fail2();
+    value = JSON.parse(value);
+  }
+  if (!record4(value) || bytes(JSON.stringify(value)) > reviewerPlanContract.maxPlanBytes || !keys2(value, [
+    "planVersion",
+    "primaryReviewerId",
+    "maxParallelReviewers",
+    "inlineMinAgreement",
+    "reviewers",
+    "concurrencyGroups"
+  ]) || value.planVersion !== 1 || !Array.isArray(value.reviewers) || value.reviewers.length < 1 || value.reviewers.length > 16 || !integer(value.maxParallelReviewers, 1, value.reviewers.length) || !integer(value.inlineMinAgreement, 1, value.reviewers.length) || !Array.isArray(value.concurrencyGroups) || value.concurrencyGroups.length < 1 || value.concurrencyGroups.length > value.reviewers.length)
+    fail2();
+  const reviewers = value.reviewers.map(parseReviewer);
+  if (value.primaryReviewerId !== reviewers[0].reviewerId || !unique3(reviewers.map((row) => row.reviewerId)) || !unique3(reviewers.map((row) => row.providerVoteIdentityHash)) || !unique3(reviewers.map((row) => row.providerIndex)) || reviewers.some(
+    (row, index) => index > 0 && row.providerIndex <= reviewers[index - 1].providerIndex
+  ))
+    fail2();
+  const groups = value.concurrencyGroups.map((candidate) => {
+    if (!record4(candidate) || !keys2(candidate, ["concurrencyGroupId", "maxParallel"]) || !reference(candidate.concurrencyGroupId))
+      fail2();
+    const count2 = reviewers.filter(
+      (row) => row.concurrencyGroupId === candidate.concurrencyGroupId
+    ).length;
+    if (!integer(candidate.maxParallel, 1, count2)) fail2();
+    return Object.freeze({
+      concurrencyGroupId: candidate.concurrencyGroupId,
+      maxParallel: candidate.maxParallel
+    });
+  });
+  if (!unique3(groups.map((row) => row.concurrencyGroupId)) || reviewers.some(
+    (row) => !groups.some(
+      (group) => group.concurrencyGroupId === row.concurrencyGroupId
+    )
+  ))
+    fail2();
+  return Object.freeze({
+    planVersion: 1,
+    primaryReviewerId: String(value.primaryReviewerId),
+    maxParallelReviewers: value.maxParallelReviewers,
+    inlineMinAgreement: value.inlineMinAgreement,
+    reviewers: Object.freeze(reviewers),
+    concurrencyGroups: Object.freeze(groups)
+  });
+}
+function parseReviewer(value) {
+  if (!record4(value) || !keys2(value, [
+    "reviewerId",
+    "providerIndex",
+    "providerVoteIdentityHash",
+    "required",
+    "transport",
+    "requestedModel",
+    "agenticContext",
+    "fastMode",
+    "agentProfile",
+    "agentProfileDigest",
+    "concurrencyGroupId",
+    "investigationGrant",
+    ...Object.hasOwn(value, "reasoningEffort") ? ["reasoningEffort"] : [],
+    ...Object.hasOwn(value, "modelSettings") ? ["modelSettings"] : [],
+    ...Object.hasOwn(value, "unavailableReason") ? ["unavailableReason"] : []
+  ]) || !reference(value.reviewerId) || !integer(value.providerIndex, 0, 15) || !digest2(value.providerVoteIdentityHash) || typeof value.required !== "boolean" || value.transport !== "account_gateway" || !model(value.requestedModel) || typeof value.agenticContext !== "boolean" || typeof value.fastMode !== "boolean" || !digest2(value.agentProfileDigest) || !reference(value.concurrencyGroupId) || Object.hasOwn(value, "reasoningEffort") && !effort2(value.reasoningEffort))
+    fail2();
+  if (Object.hasOwn(value, "unavailableReason") && value.unavailableReason !== "allocation_unavailable" && value.unavailableReason !== "model_settings_unavailable")
+    fail2();
+  const agentProfile = parseReviewAgentProfiles([value.agentProfile])[0];
+  if (!agentProfile.modelTransports.includes("account_gateway") || agentProfile.agentKind === "ocr" && !value.agenticContext)
+    fail2();
+  const modelSettings = Object.hasOwn(value, "modelSettings") ? parseReviewReviewerModelSettings(
+    value.modelSettings,
+    value.requestedModel
+  ) : void 0;
+  const investigationGrant = value.investigationGrant === null ? null : parseReviewReviewerInvestigationGrant(value.investigationGrant, {
+    reviewerId: value.reviewerId,
+    providerVoteIdentityHash: value.providerVoteIdentityHash,
+    requestedModel: value.requestedModel,
+    agentProfileDigest: value.agentProfileDigest,
+    agentKind: agentProfile.agentKind,
+    agenticContext: value.agenticContext
+  });
+  return Object.freeze({
+    reviewerId: value.reviewerId,
+    ...value.unavailableReason === void 0 ? {} : {
+      unavailableReason: value.unavailableReason
+    },
+    providerIndex: value.providerIndex,
+    providerVoteIdentityHash: value.providerVoteIdentityHash,
+    required: value.required,
+    transport: "account_gateway",
+    requestedModel: value.requestedModel,
+    ...effort2(value.reasoningEffort) ? { reasoningEffort: value.reasoningEffort } : {},
+    agenticContext: value.agenticContext,
+    fastMode: value.fastMode,
+    ...modelSettings ? { modelSettings } : {},
+    agentProfile,
+    agentProfileDigest: value.agentProfileDigest,
+    concurrencyGroupId: value.concurrencyGroupId,
+    investigationGrant
+  });
+}
+function parseReviewReviewerModelSettings(value, requestedModel) {
+  if (!record4(value) || !keys2(value, ["model", "reasoning"]) || value.model !== requestedModel || bytes(JSON.stringify(value)) > 2048)
+    fail2();
+  if (value.reasoning === null)
+    return Object.freeze({ model: requestedModel, reasoning: null });
+  const reasoning = value.reasoning;
+  if (!record4(reasoning) || !keys2(reasoning, ["allowed", "default"]) || !Array.isArray(reasoning.allowed) || reasoning.allowed.length < 1 || reasoning.allowed.length > efforts.length || reasoning.allowed.some((value2) => !effort2(value2)) || !unique3(reasoning.allowed) || !effort2(reasoning.default) || !reasoning.allowed.includes(reasoning.default))
+    fail2();
+  const allowed = reasoning.allowed;
+  if (allowed.some(
+    (value2, index) => index > 0 && efforts.indexOf(value2) <= efforts.indexOf(allowed[index - 1])
+  ))
+    fail2();
+  return Object.freeze({
+    model: requestedModel,
+    reasoning: Object.freeze({
+      allowed: Object.freeze([...allowed]),
+      default: reasoning.default
+    })
+  });
+}
+function parseReviewReviewerInvestigationGrant(value, reviewer) {
+  if (!record4(value) || !keys2(value, [
+    "reviewerId",
+    "providerVoteIdentityHash",
+    "requestedModel",
+    "agentProfileDigest",
+    "descriptor"
+  ]) || value.reviewerId !== reviewer.reviewerId || value.providerVoteIdentityHash !== reviewer.providerVoteIdentityHash || value.requestedModel !== reviewer.requestedModel || value.agentProfileDigest !== reviewer.agentProfileDigest || reviewer.agentKind === "ocr" || !reviewer.agenticContext)
+    fail2();
+  const descriptor = parseReviewReviewerInvestigationDescriptorV3(
+    value.descriptor
+  );
+  const providerKind = reviewer.agentKind === "claude" ? "claude_code" : "codex";
+  if (descriptor.providerCapabilities.length !== 1 || descriptor.providerCapabilities[0].providerKind !== providerKind)
+    fail2();
+  return Object.freeze({
+    reviewerId: reviewer.reviewerId,
+    providerVoteIdentityHash: reviewer.providerVoteIdentityHash,
+    requestedModel: reviewer.requestedModel,
+    agentProfileDigest: reviewer.agentProfileDigest,
+    descriptor
+  });
+}
+function parseReviewReviewerInvestigationDescriptorV3(value) {
+  if (!record4(value) || !keys2(value, [
+    "authorizationDescriptorVersion",
+    "capability",
+    "coverageProfileHash",
+    "extensionCanonicalizerDigest",
+    "extensionId",
+    "extensionSchemaDigest",
+    "policyHash",
+    "providerCapabilities"
+  ]) || value.authorizationDescriptorVersion !== 3 || value.capability !== "review_investigation_v1" || value.extensionId !== "review-investigation-shadow.v1" || !digest2(value.coverageProfileHash) || !digest2(value.extensionCanonicalizerDigest) || !digest2(value.extensionSchemaDigest) || !digest2(value.policyHash) || !Array.isArray(value.providerCapabilities) || value.providerCapabilities.length < 1 || value.providerCapabilities.length > 2)
+    fail2();
+  const providerCapabilities = value.providerCapabilities.map(
+    (row) => {
+      if (!record4(row) || !keys2(row, ["providerKind", "capabilities"]) || row.providerKind !== "codex" && row.providerKind !== "claude_code" || !Array.isArray(row.capabilities) || row.capabilities.length < 1 || row.capabilities.length > 6 || row.capabilities.some(
+        (capability) => typeof capability !== "string" || !Object.hasOwn(dependencies, capability)
+      ) || !unique3(row.capabilities) || !row.capabilities.includes("recording"))
+        fail2();
+      const capabilities = row.capabilities;
+      if (capabilities.some(
+        (capability, index) => index > 0 && capability <= capabilities[index - 1]
+      ))
+        fail2();
+      if (capabilities.some(
+        (capability) => dependencies[capability].some(
+          (dependency) => !capabilities.includes(dependency)
+        )
+      ))
+        fail2();
+      return Object.freeze({
+        providerKind: row.providerKind,
+        capabilities: Object.freeze([...capabilities])
+      });
+    }
+  );
+  if (!unique3(providerCapabilities.map((row) => row.providerKind)) || providerCapabilities.some(
+    (row, index) => index > 0 && row.providerKind <= providerCapabilities[index - 1].providerKind
+  ))
+    fail2();
+  return Object.freeze({
+    authorizationDescriptorVersion: 3,
+    capability: "review_investigation_v1",
+    coverageProfileHash: value.coverageProfileHash,
+    extensionCanonicalizerDigest: value.extensionCanonicalizerDigest,
+    extensionId: "review-investigation-shadow.v1",
+    extensionSchemaDigest: value.extensionSchemaDigest,
+    policyHash: value.policyHash,
+    providerCapabilities: Object.freeze(providerCapabilities)
+  });
+}
+function record4(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function keys2(value, expected) {
+  return Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
+}
+function reference(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(value);
+}
+function model(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/.test(value);
+}
+function digest2(value) {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+function integer(value, min, max) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
+}
+function effort2(value) {
+  return typeof value === "string" && efforts.includes(value);
+}
+function unique3(values) {
+  return new Set(values).size === values.length;
+}
+function bytes(value) {
+  return new TextEncoder().encode(value).byteLength;
+}
+function fail2() {
+  throw new Error("review_reviewer_plan_invalid");
+}
+
 // src/control-plane/runtime-config.ts
 var import_os5 = require("os");
 
@@ -164285,9 +164569,9 @@ var UsageError = class extends Error {
 var invalid2 = () => {
   throw new UsageError("usage_invalid_fact");
 };
-function exact(value, keys4, optionalKeys2 = []) {
-  if (!value || typeof value !== "object" || Array.isArray(value) || keys4.some((k2) => !Object.hasOwn(value, k2)) || Object.keys(value).some(
-    (k2) => !keys4.includes(k2) && !optionalKeys2.includes(k2)
+function exact(value, keys5, optionalKeys2 = []) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || keys5.some((k2) => !Object.hasOwn(value, k2)) || Object.keys(value).some(
+    (k2) => !keys5.includes(k2) && !optionalKeys2.includes(k2)
   ))
     invalid2();
 }
@@ -164459,7 +164743,7 @@ function canonicalJson5(value) {
 }
 
 // src/control-plane/generated/review-action-v2/usage-producer-v1.ts
-var digest2 = (value) => (0, import_crypto24.createHash)("sha256").update(canonicalJson5(value)).digest("hex");
+var digest3 = (value) => (0, import_crypto24.createHash)("sha256").update(canonicalJson5(value)).digest("hex");
 var UsageDelivery = class _UsageDelivery {
   constructor(options, grant, privateKey, directory) {
     this.options = options;
@@ -164480,16 +164764,16 @@ var UsageDelivery = class _UsageDelivery {
   coverageAckRevision = 0;
   /** Pre-register the public key under current OIDC authorization, never expose custody. */
   static prepareRegistration() {
-    const keys4 = (0, import_crypto24.generateKeyPairSync)("ed25519");
+    const keys5 = (0, import_crypto24.generateKeyPairSync)("ed25519");
     return {
-      publicKey: keys4.publicKey.export({ type: "spki", format: "pem" }).toString(),
-      acceptGrant: (options, grant) => _UsageDelivery.fromGrant(options, grant, keys4.privateKey)
+      publicKey: keys5.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      acceptGrant: (options, grant) => _UsageDelivery.fromGrant(options, grant, keys5.privateKey)
     };
   }
   static async create(options) {
     const url3 = new URL("/api/provider-usage/grants", options.apiUrl);
     if (url3.protocol !== "https:") throw new Error("usage_https_required");
-    const keys4 = (0, import_crypto24.generateKeyPairSync)("ed25519");
+    const keys5 = (0, import_crypto24.generateKeyPairSync)("ed25519");
     const response = await (options.fetchImpl ?? fetch)(url3, {
       method: "POST",
       redirect: "error",
@@ -164500,12 +164784,12 @@ var UsageDelivery = class _UsageDelivery {
       },
       body: JSON.stringify({
         invocationId: options.invocationId,
-        publicKey: keys4.publicKey.export({ type: "spki", format: "pem" })
+        publicKey: keys5.publicKey.export({ type: "spki", format: "pem" })
       })
     });
     if (!response.ok) throw new Error("usage_grant_unavailable");
     const grant = await response.json();
-    return _UsageDelivery.fromGrant(options, grant, keys4.privateKey);
+    return _UsageDelivery.fromGrant(options, grant, keys5.privateKey);
   }
   static fromGrant(options, grant, privateKey) {
     if (!grant.grantId || !grant.grantToken || !grant.scope || typeof grant.scope.sourceInstance !== "string" || typeof grant.scope.callIdPrefix !== "string" || !grant.scope.callIdPrefix || typeof grant.scope.provider !== "string" || typeof grant.scope.runtimeType !== "string" || !["direct", "gateway"].includes(grant.scope.route) || grant.scope.invocationId !== options.invocationId || !Number.isSafeInteger(grant.scope.runAttempt) || grant.scope.runAttempt < 1 || !Number.isFinite(Date.parse(grant.expiresAt)) || Date.parse(grant.expiresAt) <= Date.now() || !/^[A-Za-z0-9_-]{1,256}$/.test(grant.scope.invocationId) || ![
@@ -164550,7 +164834,7 @@ var UsageDelivery = class _UsageDelivery {
         snapshot2.eventId,
         snapshot2.revision
       ]);
-      const hash6 = digest2(snapshot2);
+      const hash6 = digest3(snapshot2);
       const existing = this.pending.get(key);
       if (existing) {
         if (existing.hash !== hash6) throw new Error("usage_hash_conflict");
@@ -164684,16 +164968,16 @@ var UsageDelivery = class _UsageDelivery {
       Buffer.from(canonicalJson5(envelope)),
       this.privateKey
     ).toString("base64");
-    const bytes = canonicalJson5({ ...envelope, signature });
+    const bytes2 = canonicalJson5({ ...envelope, signature });
     const factEnvelope = { ...envelope };
     delete factEnvelope.producerCoverage;
     const factBytes = canonicalJson5({ ...factEnvelope, signature });
-    if (Buffer.byteLength(factBytes) > (this.options.maxSpoolBytes ?? 4 * 1024 * 1024) || Buffer.byteLength(bytes) > (this.options.maxSpoolBytes ?? 4 * 1024 * 1024) + 2048)
+    if (Buffer.byteLength(factBytes) > (this.options.maxSpoolBytes ?? 4 * 1024 * 1024) || Buffer.byteLength(bytes2) > (this.options.maxSpoolBytes ?? 4 * 1024 * 1024) + 2048)
       throw new Error("usage_spool_overflow");
     const temporary = `${this.artifactPath}.new`;
     const fd = (0, import_fs.openSync)(temporary, "wx", 384);
     try {
-      (0, import_fs.writeFileSync)(fd, bytes);
+      (0, import_fs.writeFileSync)(fd, bytes2);
       (0, import_fs.fsyncSync)(fd);
     } catch (error4) {
       try {
@@ -165036,6 +165320,8 @@ function parseAdmittedRuntimeConfig(value) {
   if (!profileJson || !profileDigest)
     throw new Error("runtime_config_agent_profile_required");
   readApprovedReviewAgent(profileJson, profileDigest);
+  const reviewerPlan = parsed.runtimeEnv[reviewerPlanContract.runtimeEnvKey];
+  if (reviewerPlan !== void 0) parseReviewReviewerPlan(reviewerPlan);
   return Object.freeze({
     protocolVersion: 1,
     configVersion: parsed.configVersion,
@@ -165267,8 +165553,8 @@ async function readSafeErrorCode2(response) {
   }
   return void 0;
 }
-function joinApiPath2(apiUrl, path39) {
-  return new URL(path39, ensureTrailingSlash2(apiUrl)).toString();
+function joinApiPath2(apiUrl, path40) {
+  return new URL(path40, ensureTrailingSlash2(apiUrl)).toString();
 }
 function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -165358,8 +165644,8 @@ function fallback(input, reason) {
   );
   return { status: "fallback", token: input.fallbackToken, reason };
 }
-function joinApiPath3(apiUrl, path39) {
-  return `${apiUrl.replace(/\/+$/, "")}${path39}`;
+function joinApiPath3(apiUrl, path40) {
+  return `${apiUrl.replace(/\/+$/, "")}${path40}`;
 }
 async function readSafeErrorCode3(response) {
   try {
@@ -165666,8 +165952,8 @@ function safeErrorSummaryForCategory(category) {
       return void 0;
   }
 }
-function joinApiPath4(apiUrl, path39) {
-  return new URL(path39, ensureTrailingSlash3(apiUrl)).toString();
+function joinApiPath4(apiUrl, path40) {
+  return new URL(path40, ensureTrailingSlash3(apiUrl)).toString();
 }
 function ensureTrailingSlash3(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -165706,9 +165992,9 @@ var ControlPlaneConversationClient = class {
   async publication(receipt) {
     await this.post("publication", receipt, 1e4);
   }
-  post(path39, body2, timeoutMs) {
+  post(path40, body2, timeoutMs) {
     return postBoundedMemoryJson({
-      url: new URL(`/api/action/v2/conversations/${path39}`, this.runtime.apiUrl),
+      url: new URL(`/api/action/v2/conversations/${path40}`, this.runtime.apiUrl),
       token: this.runtime.sessionToken,
       body: body2,
       timeoutMs,
@@ -165896,8 +166182,12 @@ function resolveRuntimePreflightPlan(runtimeConfig, env = process.env) {
 function resolveProviderCliPlan(env = process.env) {
   const authMode = (env.REVIEW_AUTH_MODE || "").trim();
   if (authMode === gatewayAuthMode) {
+    const planJson = env[reviewerPlanContract.runtimeEnvKey];
+    const reviewerPlan = planJson === void 0 ? void 0 : parseReviewReviewerPlan(planJson);
     return {
-      codexCliNeeded: true,
+      codexCliNeeded: reviewerPlan ? reviewerPlan.reviewers.some(
+        (reviewer) => reviewer.agentProfile.agentKind === "codex"
+      ) : true,
       codexOauthNeeded: false,
       claudeCliNeeded: false
     };
@@ -165929,11 +166219,11 @@ function parseProviderList(value) {
   return value.split(",").map((part) => part.trim()).filter(Boolean);
 }
 function providerFromModel(providerPrefix, value) {
-  const model = value?.trim();
-  if (!model) {
+  const model2 = value?.trim();
+  if (!model2) {
     return void 0;
   }
-  return model.startsWith(`${providerPrefix}/`) ? model : `${providerPrefix}/${model}`;
+  return model2.startsWith(`${providerPrefix}/`) ? model2 : `${providerPrefix}/${model2}`;
 }
 function inferredProviderFromEnv(authMode, env) {
   const claudeProvider = providerFromModel("claude", env.CLAUDE_MODEL);
@@ -165983,9 +166273,9 @@ function getBlockingFindingBreakdown(review, threshold) {
     attributedCarriedForward
   );
   const unclassifiedCurrent = current - fromCurrentReview - carriedForward;
-  const previousStillValid = (review.threadLifecycle?.previousStillValid ?? []).filter((record10) => {
-    if (isLinkedCurrentFinding(record10)) return false;
-    const severity = record10.target.severity;
+  const previousStillValid = (review.threadLifecycle?.previousStillValid ?? []).filter((record11) => {
+    if (isLinkedCurrentFinding(record11)) return false;
+    const severity = record11.target.severity;
     return (severity === "critical" || severity === "major" || severity === "minor") && severityRank[severity] >= minRank;
   }).length;
   return {
@@ -166052,7 +166342,7 @@ function pluralize(word, count2) {
 }
 
 // src/codex-oauth/action.ts
-var fs34 = __toESM(require("fs"));
+var fs35 = __toESM(require("fs"));
 
 // src/review-skills/review-skills-error.ts
 var remedies = {
@@ -166170,7 +166460,7 @@ function parseReviewModelDispatchLimitsV2(value) {
     "maxResponseBytes",
     "maxOutputTokens"
   ];
-  if (!record4(value) || !keys2(value, names)) invalid3();
+  if (!record5(value) || !keys3(value, names)) invalid3();
   for (const name of names)
     if (!positive2(value[name]) || value[name] > reviewModelDispatchContract[name])
       invalid3();
@@ -166178,7 +166468,7 @@ function parseReviewModelDispatchLimitsV2(value) {
   return Object.freeze({ ...value });
 }
 function parseReviewModelDispatchCapabilityV2(value) {
-  if (!record4(value) || !keys2(value, [
+  if (!record5(value) || !keys3(value, [
     "extensionId",
     "version",
     "routeIdentityHash",
@@ -166241,10 +166531,10 @@ function reviewModelWireProtocolMatchesTransport(transport, protocol) {
 function reviewModelDispatchOutputUsageIsWithinLimit(usage, maxOutputTokens) {
   return typeof usage.outputTokens === "number" && Number.isSafeInteger(usage.outputTokens) && usage.outputTokens >= 0 && Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 && usage.outputTokens <= maxOutputTokens;
 }
-function record4(value) {
+function record5(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function keys2(value, names) {
+function keys3(value, names) {
   return Object.keys(value).length === names.length && names.every((name) => Object.hasOwn(value, name));
 }
 function positive2(value) {
@@ -166338,7 +166628,7 @@ var PreparedModelDispatch = class {
       throw new Error("model_dispatch_request_bound");
     return normalized;
   }
-  async reserve(bytes, signal, explicitScope, outputAcceptanceCap) {
+  async reserve(bytes2, signal, explicitScope, outputAcceptanceCap) {
     signal.throwIfAborted();
     const cap = this.capability;
     if (this.fenced || this.active || Date.now() >= Date.parse(cap.deadline))
@@ -166347,13 +166637,13 @@ var PreparedModelDispatch = class {
     if (!scope || scope.attemptOrdinal !== 1)
       throw new Error("model_dispatch_scope_unavailable");
     const raw = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
     );
     if (!raw || typeof raw !== "object" || Array.isArray(raw))
       throw new Error("model_dispatch_request_invalid");
     const wire = raw;
     const output = cap.wireProtocol === "codex-responses" ? outputAcceptanceCap : wire[cap.wireProtocol === "anthropic-messages" ? "max_tokens" : "max_output_tokens"];
-    if (wire.model !== cap.model || !Number.isSafeInteger(output) || Number(output) < 1 || Number(output) > cap.maxOutputTokens || bytes.byteLength > cap.maxRequestBytes || cap.wireProtocol === "codex-responses" && Object.hasOwn(wire, "max_output_tokens") || outputAcceptanceCap !== void 0 && outputAcceptanceCap !== output)
+    if (wire.model !== cap.model || !Number.isSafeInteger(output) || Number(output) < 1 || Number(output) > cap.maxOutputTokens || bytes2.byteLength > cap.maxRequestBytes || cap.wireProtocol === "codex-responses" && Object.hasOwn(wire, "max_output_tokens") || outputAcceptanceCap !== void 0 && outputAcceptanceCap !== output)
       throw new Error("model_dispatch_route_mismatch");
     const authorization = this.input.authorization();
     const requestOrdinal = (this.ordinals.get(scope.workSlotId) ?? 0) + 1;
@@ -166375,8 +166665,8 @@ var PreparedModelDispatch = class {
       attemptOrdinal: 1,
       requestOrdinal,
       routeIdentityHash: cap.routeIdentityHash,
-      providerRequestEnvelopeHash: hash2(bytes),
-      requestBytes: bytes.byteLength,
+      providerRequestEnvelopeHash: hash2(bytes2),
+      requestBytes: bytes2.byteLength,
       maxOutputTokens: Number(output)
     };
     let result2;
@@ -166403,7 +166693,7 @@ var PreparedModelDispatch = class {
     const settle = async (settlement) => {
       if (settling) return;
       settling = true;
-      const path39 = `${reviewModelDispatchContract.basePath}/${encodeURIComponent(claim.dispatchId)}`;
+      const path40 = `${reviewModelDispatchContract.basePath}/${encodeURIComponent(claim.dispatchId)}`;
       const headers = { [reviewModelDispatchContract.receiptHeader]: result2.receiptToken };
       const agrees = (value) => {
         const dispatch = value?.dispatch;
@@ -166413,13 +166703,13 @@ var PreparedModelDispatch = class {
         let response;
         try {
           response = await this.json(
-            `${path39}/settle`,
+            `${path40}/settle`,
             "POST",
             settlement,
             headers
           );
         } catch {
-          response = await this.json(path39, "GET", void 0, headers);
+          response = await this.json(path40, "GET", void 0, headers);
         }
         if (!agrees(response))
           throw new Error("model_dispatch_settlement_unconfirmed");
@@ -166472,9 +166762,9 @@ var PreparedModelDispatch = class {
       }
     });
   }
-  async json(path39, method, body2, headers, signal) {
+  async json(path40, method, body2, headers, signal) {
     const response = await (this.input.fetchImpl ?? fetch)(
-      new URL(path39, this.origin),
+      new URL(path40, this.origin),
       {
         method,
         redirect: "error",
@@ -166502,8 +166792,8 @@ var PreparedModelDispatch = class {
     );
   }
 };
-function hash2(bytes) {
-  return (0, import_crypto27.createHash)("sha256").update(bytes).digest("hex");
+function hash2(bytes2) {
+  return (0, import_crypto27.createHash)("sha256").update(bytes2).digest("hex");
 }
 function matchesClaim(value, claim, authorizationId) {
   return !!value && value.authorizationId === authorizationId && Object.entries(claim).every(
@@ -166572,7 +166862,10 @@ function parseOcrReviewOutcome(value) {
     throw new OcrManagedContractViolation(issues);
   };
   if (!isRecord2(value)) {
-    issues.push({ code: "outcome_not_an_object", detail: "reviewrouter_outcome" });
+    issues.push({
+      code: "outcome_not_an_object",
+      detail: "reviewrouter_outcome"
+    });
     return violation();
   }
   if (value.schema_version !== OCR_OUTCOME_SCHEMA_VERSION) {
@@ -166608,7 +166901,10 @@ function parseOcrReviewOutcome(value) {
   };
   const runStopCause = parseStopCause(value.run_stop_cause, "run_stop_cause");
   if (value.run_stop_cause === void 0) {
-    issues.push({ code: "outcome_stop_cause_missing", detail: "run_stop_cause" });
+    issues.push({
+      code: "outcome_stop_cause_missing",
+      detail: "run_stop_cause"
+    });
     return violation();
   }
   if (value.run_stop_cause !== null && value.run_stop_cause !== void 0 && runStopCause === null) {
@@ -166637,19 +166933,25 @@ function parseOcrReviewOutcome(value) {
     const pathsRaw = groupRaw.paths;
     const paths = [];
     if (!Array.isArray(pathsRaw) || pathsRaw.length === 0) {
-      issues.push({ code: "outcome_group_paths_invalid", detail: field("paths") });
+      issues.push({
+        code: "outcome_group_paths_invalid",
+        detail: field("paths")
+      });
     } else {
-      for (const path39 of pathsRaw) {
-        if (typeof path39 !== "string" || path39.length === 0) {
-          issues.push({ code: "outcome_group_paths_invalid", detail: field("paths") });
+      for (const path40 of pathsRaw) {
+        if (typeof path40 !== "string" || path40.length === 0) {
+          issues.push({
+            code: "outcome_group_paths_invalid",
+            detail: field("paths")
+          });
           continue;
         }
-        if (paths.includes(path39) || seenPaths.has(path39)) {
-          issues.push({ code: "outcome_group_paths_duplicate", detail: path39 });
+        if (paths.includes(path40) || seenPaths.has(path40)) {
+          issues.push({ code: "outcome_group_paths_duplicate", detail: path40 });
           continue;
         }
-        paths.push(path39);
-        seenPaths.add(path39);
+        paths.push(path40);
+        seenPaths.add(path40);
       }
     }
     const mainCompleted = groupRaw.main_completed;
@@ -166699,7 +167001,10 @@ function parseOcrReviewOutcome(value) {
     const parsePhase = (name) => {
       const raw = phasesRaw[name];
       if (!isRecord2(raw)) {
-        issues.push({ code: "outcome_phase_invalid", detail: field(`phases.${name}`) });
+        issues.push({
+          code: "outcome_phase_invalid",
+          detail: field(`phases.${name}`)
+        });
         return null;
       }
       const state3 = parseState(raw.state, field(`phases.${name}.state`));
@@ -166878,7 +167183,10 @@ function parseOcrNativeReviewResult(raw, admission) {
   }
   const manifestInput = isRecord2(manifestRaw.input) ? manifestRaw.input : null;
   if (manifestInput === null) {
-    issues.push({ code: "native_manifest_input_missing", detail: "manifest.input" });
+    issues.push({
+      code: "native_manifest_input_missing",
+      detail: "manifest.input"
+    });
     return violation();
   }
   const manifest = Object.freeze({
@@ -166892,23 +167200,38 @@ function parseOcrNativeReviewResult(raw, admission) {
     })
   });
   if (manifest.schemaVersion !== "ocr.run-manifest/v1") {
-    issues.push({ code: "native_manifest_schema_version", detail: manifest.schemaVersion });
+    issues.push({
+      code: "native_manifest_schema_version",
+      detail: manifest.schemaVersion
+    });
   }
   if (manifest.operation !== "review") {
-    issues.push({ code: "native_manifest_operation", detail: manifest.operation });
+    issues.push({
+      code: "native_manifest_operation",
+      detail: manifest.operation
+    });
   }
   if (manifest.input.mode !== "range") {
     issues.push({ code: "native_manifest_mode", detail: manifest.input.mode });
   }
   if (!sameSha(manifest.input.resolvedBase, admission.mergeBaseSha)) {
-    issues.push({ code: "native_manifest_refs_mismatch", detail: "resolved_base" });
+    issues.push({
+      code: "native_manifest_refs_mismatch",
+      detail: "resolved_base"
+    });
   }
   if (!sameSha(manifest.input.resolvedHead, admission.headSha)) {
-    issues.push({ code: "native_manifest_refs_mismatch", detail: "resolved_head" });
+    issues.push({
+      code: "native_manifest_refs_mismatch",
+      detail: "resolved_head"
+    });
   }
   const outcomeRaw = raw.reviewrouter_outcome;
   if (outcomeRaw === void 0 || outcomeRaw === null) {
-    issues.push({ code: "managed_outcome_missing", detail: "reviewrouter_outcome" });
+    issues.push({
+      code: "managed_outcome_missing",
+      detail: "reviewrouter_outcome"
+    });
     return violation();
   }
   let outcome;
@@ -167054,11 +167377,11 @@ var SEVERITY_MAP = {
   low: "minor"
 };
 function normalizeOcrRepoPath(raw) {
-  const path39 = raw.replace(/^\.\//u, "");
-  if (path39.length === 0 || path39.length > OCR_NORMALIZATION_LIMITS.maxPathChars || path39.includes("\\") || path39.includes("\0") || path39.startsWith("/") || path39.split("/").some((segment) => segment === ".." || segment === "")) {
+  const path40 = raw.replace(/^\.\//u, "");
+  if (path40.length === 0 || path40.length > OCR_NORMALIZATION_LIMITS.maxPathChars || path40.includes("\\") || path40.includes("\0") || path40.startsWith("/") || path40.split("/").some((segment) => segment === ".." || segment === "")) {
     return null;
   }
-  return path39;
+  return path40;
 }
 function plainTitleLine(content) {
   const firstLine = content.split(/\r\n|\r|\n/u).map((line2) => {
@@ -167076,9 +167399,9 @@ function normalizeOcrFindings(input) {
   const reasons = /* @__PURE__ */ new Set();
   const assignedPaths = input.assignedPaths ? new Set(input.assignedPaths) : void 0;
   input.comments.forEach((comment, index) => {
-    const path39 = normalizeOcrRepoPath(comment.path);
+    const path40 = normalizeOcrRepoPath(comment.path);
     const content = comment.content.trim();
-    if (path39 === null || content.length === 0 || assignedPaths && !assignedPaths.has(path39)) {
+    if (path40 === null || content.length === 0 || assignedPaths && !assignedPaths.has(path40)) {
       skipped.push({ index, reason: "invalid_native_finding" });
       return;
     }
@@ -167094,11 +167417,11 @@ function normalizeOcrFindings(input) {
     if (category.length > OCR_NORMALIZATION_LIMITS.maxCategoryChars) {
       throw new OcrOutputTooLargeError("category");
     }
-    const headContent = input.headFiles.get(path39);
+    const headContent = input.headFiles.get(path40);
     const span = headContent !== void 0 ? verifyOcrSpan({
       comment,
       headContent,
-      ...input.diffPositions ? { diffPositions: input.diffPositions.get(path39) } : {}
+      ...input.diffPositions ? { diffPositions: input.diffPositions.get(path40) } : {}
     }) : { verified: false, reason: "content_mismatch" };
     if (!span.verified && (span.reason === "content_mismatch" || span.reason === "ambiguous_match")) {
       reasons.add("unverified_native_span");
@@ -167112,7 +167435,7 @@ function normalizeOcrFindings(input) {
       throw new OcrOutputTooLargeError("suggestion");
     }
     findings.push({
-      file: path39,
+      file: path40,
       ...span.verified ? {
         startLine: span.startLine,
         line: span.startLine,
@@ -167197,11 +167520,11 @@ function decodeAnthropicMessagesResponse(input) {
   } catch {
     throw new Error("anthropic_response_malformed");
   }
-  if (!record5(message) || message.type !== "message" || message.role !== "assistant" || typeof message.id !== "string" || !message.id || message.model !== input.expectedModel)
+  if (!record6(message) || message.type !== "message" || message.role !== "assistant" || typeof message.id !== "string" || !message.id || message.model !== input.expectedModel)
     throw new Error("anthropic_response_identity_mismatch");
   if (message.stop_reason !== "end_turn" && message.stop_reason !== "tool_use")
     throw new Error("anthropic_response_incomplete");
-  if (!record5(message.usage)) throw new Error("anthropic_usage_unavailable");
+  if (!record6(message.usage)) throw new Error("anthropic_usage_unavailable");
   const usage = message.usage;
   const inputTokens = counter2(usage.input_tokens);
   const completionTokens = counter2(usage.output_tokens);
@@ -167217,7 +167540,7 @@ function decodeAnthropicMessagesResponse(input) {
   const tools = new Set(input.allowedToolNames ?? []);
   const texts = [];
   for (const block of message.content) {
-    if (!record5(block)) throw new Error("anthropic_response_content_invalid");
+    if (!record6(block)) throw new Error("anthropic_response_content_invalid");
     switch (block.type) {
       case "text":
         if (typeof block.text !== "string")
@@ -167228,7 +167551,7 @@ function decodeAnthropicMessagesResponse(input) {
       case "redacted_thinking":
         break;
       case "tool_use":
-        if (typeof block.id !== "string" || !block.id || toolIds.has(block.id) || typeof block.name !== "string" || !tools.has(block.name) || !record5(block.input))
+        if (typeof block.id !== "string" || !block.id || toolIds.has(block.id) || typeof block.name !== "string" || !tools.has(block.name) || !record6(block.input))
           throw new Error("anthropic_response_tool_invalid");
         toolIds.add(block.id);
         break;
@@ -167254,7 +167577,7 @@ function counter2(value) {
     throw new Error("anthropic_usage_invalid");
   return value;
 }
-function record5(value) {
+function record6(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -167405,16 +167728,16 @@ async function readOcrOutputFileAfterClose(readFile16, statSize, outputPath) {
   if (size > OCR_RESULT_FILE_LIMIT_BYTES) {
     throw new OcrOutputTooLargeError("result_file");
   }
-  const bytes = await readFile16(outputPath);
-  if (bytes.length > OCR_RESULT_FILE_LIMIT_BYTES) {
+  const bytes2 = await readFile16(outputPath);
+  if (bytes2.length > OCR_RESULT_FILE_LIMIT_BYTES) {
     throw new OcrOutputTooLargeError("result_file");
   }
-  return bytes;
+  return bytes2;
 }
 function truncateDiagnosticTail(value) {
-  const bytes = Buffer.from(value, "utf8");
-  if (bytes.length <= OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES) return value;
-  return bytes.subarray(0, OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES).toString("utf8");
+  const bytes2 = Buffer.from(value, "utf8");
+  if (bytes2.length <= OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES) return value;
+  return bytes2.subarray(0, OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES).toString("utf8");
 }
 var OcrReviewAcceptanceError = class extends Error {
   constructor(code, detail) {
@@ -167469,15 +167792,15 @@ function acceptOcrManagedReviewResult(input) {
   const expected = new Set(input.expectedPaths);
   const observed = /* @__PURE__ */ new Set();
   for (const group of native.outcome.groups) {
-    for (const path39 of group.paths) {
-      if (!expected.has(path39) || observed.has(path39)) {
-        throw new OcrReviewAcceptanceError("coverage_mismatch", path39);
+    for (const path40 of group.paths) {
+      if (!expected.has(path40) || observed.has(path40)) {
+        throw new OcrReviewAcceptanceError("coverage_mismatch", path40);
       }
-      observed.add(path39);
+      observed.add(path40);
     }
   }
   const uncoveredPaths = Object.freeze(
-    [...expected].filter((path39) => !observed.has(path39)).sort()
+    [...expected].filter((path40) => !observed.has(path40)).sort()
   );
   let normalized;
   try {
@@ -167522,8 +167845,8 @@ function acceptOcrManagedReviewResult(input) {
 }
 
 // src/codex-oauth/ocr-managed-bootstrap.ts
-function readApprovedReviewAgentKind(json3, digest5) {
-  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest5) || (0, import_node_crypto8.createHash)("sha256").update(json3).digest("hex") !== digest5) {
+function readApprovedReviewAgentKind(json3, digest6) {
+  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest6) || (0, import_node_crypto8.createHash)("sha256").update(json3).digest("hex") !== digest6) {
     throw new Error("review_agent_profile_digest_mismatch");
   }
   const row = JSON.parse(json3);
@@ -167533,12 +167856,12 @@ function readApprovedReviewAgentKind(json3, digest5) {
   }
   return kind;
 }
-function readApprovedOcrReviewAgent(json3, digest5) {
-  if (readApprovedReviewAgentKind(json3, digest5) !== "ocr") {
+function readApprovedOcrReviewAgent(json3, digest6) {
+  if (readApprovedReviewAgentKind(json3, digest6) !== "ocr") {
     throw new Error("review_agent_profile_invalid");
   }
   try {
-    const profile = readApprovedReviewAgent(json3, digest5);
+    const profile = readApprovedReviewAgent(json3, digest6);
     if (profile.agentKind !== "ocr") throw new Error();
     return profile;
   } catch {
@@ -167660,11 +167983,11 @@ async function writeOcrAsset(response, binaryPath, signal) {
       throw new Error("review_action_v2_ocr_asset_too_large");
     }
     file = await fs25.open(binaryPath, "wx", 384);
-    let bytes = 0;
+    let bytes2 = 0;
     for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
       signal.throwIfAborted();
-      bytes += chunk.value.byteLength;
-      if (bytes > OCR_BINARY_ASSET_LIMIT_BYTES) {
+      bytes2 += chunk.value.byteLength;
+      if (bytes2 > OCR_BINARY_ASSET_LIMIT_BYTES) {
         throw new Error("review_action_v2_ocr_asset_too_large");
       }
       await file.writeFile(chunk.value);
@@ -167742,9 +168065,9 @@ async function prepareOcrManagedRun(input) {
 
 // src/codex-oauth/provider-api-runtime.ts
 var import_node_child_process4 = require("node:child_process");
-var fs29 = __toESM(require("node:fs/promises"));
-var os17 = __toESM(require("node:os"));
-var path33 = __toESM(require("node:path"));
+var fs30 = __toESM(require("node:fs/promises"));
+var os18 = __toESM(require("node:os"));
+var path34 = __toESM(require("node:path"));
 var import_node_util7 = require("node:util");
 
 // src/review-investigation/application/review-agent-port.ts
@@ -168800,8 +169123,8 @@ var CodexAppServerProtocolClient = class {
     requireRequestId(params.requestId);
     this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
   }
-  assertActiveTurnMetadata(params, keys4) {
-    if (!this.threadStarted || this.turnCompleted || !hasOnlyKeys(params, keys4)) {
+  assertActiveTurnMetadata(params, keys5) {
+    if (!this.threadStarted || this.turnCompleted || !hasOnlyKeys(params, keys5)) {
       throw streamFailure();
     }
     this.assertTurnFence(params);
@@ -169053,9 +169376,9 @@ function canonicalProtocolValue(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalProtocolValue).join(",")}]`;
   }
-  const record10 = value;
-  return `{${Object.keys(record10).sort().map(
-    (key) => `${JSON.stringify(key)}:${canonicalProtocolValue(record10[key])}`
+  const record11 = value;
+  return `{${Object.keys(record11).sort().map(
+    (key) => `${JSON.stringify(key)}:${canonicalProtocolValue(record11[key])}`
   ).join(",")}}`;
 }
 function normalizeProtocolFailure(error4) {
@@ -169121,11 +169444,11 @@ function requireIdentifier2(value, field) {
   return result2;
 }
 function requireModel(value) {
-  const model = requireNonEmptyString(value, "model");
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:/+#-]{0,199}$/u.test(model)) {
+  const model2 = requireNonEmptyString(value, "model");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/+#-]{0,199}$/u.test(model2)) {
     throw modelFailure();
   }
-  return model;
+  return model2;
 }
 function requireModelProvider(value) {
   const provider = requireNonEmptyString(value, "model_provider");
@@ -169215,9 +169538,9 @@ function requireTokenCount(value) {
   return value;
 }
 function hasOnlyKeys(value, allowed) {
-  const keys4 = Object.keys(value).sort();
+  const keys5 = Object.keys(value).sort();
   const expected = [...allowed].sort();
-  return keys4.length === expected.length && keys4.every((key, index) => key === expected[index]);
+  return keys5.length === expected.length && keys5.every((key, index) => key === expected[index]);
 }
 function hasRequiredAndOptionalKeys(value, required2, optional2) {
   const allowed = /* @__PURE__ */ new Set([...required2, ...optional2]);
@@ -169690,15 +170013,15 @@ var CodexAppServerChildTurn = class {
       ]);
     }
   }
-  collectEventStreamBytes(bytes) {
-    this.eventStreamBytes += bytes;
+  collectEventStreamBytes(bytes2) {
+    this.eventStreamBytes += bytes2;
     if (this.eventStreamBytes <= this.input.request.maxEventStreamBytes) {
       return true;
     }
     return this.exceedOutputLimit();
   }
-  acceptEvent(bytes) {
-    if (bytes <= this.input.request.maxEventBytes) return true;
+  acceptEvent(bytes2) {
+    if (bytes2 <= this.input.request.maxEventBytes) return true;
     return this.exceedOutputLimit();
   }
   exceedOutputLimit() {
@@ -206005,6 +206328,10 @@ var manifest_default = {
   contextToolsProfile: {
     extensionId: "context-tools.v1",
     descriptorDigest: "sha256:c188ad0a29581317f23b6aec3f103a7419f67576bea6fb3dc9910cf9ca3a3f7a"
+  },
+  reviewerPlanProfile: {
+    planVersion: 1,
+    descriptorDigest: "sha256:f6a45d7039129a813690f5f769052d3ba078418eb123b0c0c710ef790d2919d6"
   }
 };
 
@@ -209552,9 +209879,9 @@ async function readBoundedJson(response, maxBytes, operationId) {
       reader.releaseLock();
     }
   }
-  const bytes = Buffer.concat(chunks, byteCount);
+  const bytes2 = Buffer.concat(chunks, byteCount);
   try {
-    return JSON.parse(bytes.toString("utf8"));
+    return JSON.parse(bytes2.toString("utf8"));
   } catch (error4) {
     throw new ReviewActionV2ClientError(
       "invalid_response" /* InvalidResponse */,
@@ -209887,10 +210214,10 @@ function createReviewPromptCoverageManifest(input) {
     }
     byPath.set(fact.path, fact);
   }
-  if (byPath.size !== assigned.length || assigned.some((path39) => !byPath.has(path39))) {
+  if (byPath.size !== assigned.length || assigned.some((path40) => !byPath.has(path40))) {
     throw new Error("review_prompt_coverage_path_set_mismatch");
   }
-  const paths = Object.freeze(assigned.map((path39) => byPath.get(path39)));
+  const paths = Object.freeze(assigned.map((path40) => byPath.get(path40)));
   const canonicalFacts = canonicalJson7({
     paths,
     reviewRevisionHash: input.reviewRevisionHash,
@@ -209907,7 +210234,7 @@ function createReviewPromptCoverageManifest(input) {
 }
 function isReviewPromptCoverageComplete(manifest) {
   return manifest.paths.length > 0 && manifest.paths.every(
-    (path39) => path39.kind === "full_patch" /* FullPatch */ || path39.kind === "policy_excluded" /* PolicyExcluded */
+    (path40) => path40.kind === "full_patch" /* FullPatch */ || path40.kind === "policy_excluded" /* PolicyExcluded */
   );
 }
 function createProviderVisibleReviewCoverage(manifest) {
@@ -210134,16 +210461,16 @@ function createStableReviewAssignmentManifest(input) {
   const uncoveredPaths = canonicalPaths(input.uncoveredPaths);
   const excludedPaths = canonicalPaths(input.excludedPaths);
   const eligible = new Set(eligiblePaths);
-  for (const path39 of uncoveredPaths) {
-    if (!eligible.has(path39)) {
+  for (const path40 of uncoveredPaths) {
+    if (!eligible.has(path40)) {
       throw new Error("review_assignment_manifest_uncovered_not_eligible");
     }
   }
   const assignments = input.assignments.map((assignment) => {
     requireIdentity2(assignment.workSlotId, "work_slot_id");
     const paths = canonicalPaths(assignment.paths);
-    for (const path39 of paths) {
-      if (!eligible.has(path39)) {
+    for (const path40 of paths) {
+      if (!eligible.has(path40)) {
         throw new Error("review_assignment_manifest_assignment_not_eligible");
       }
     }
@@ -210158,19 +210485,19 @@ function createStableReviewAssignmentManifest(input) {
   const assignedPaths = new Set(
     assignments.flatMap((assignment) => assignment.paths)
   );
-  for (const path39 of uncoveredPaths) {
-    if (assignedPaths.has(path39)) {
+  for (const path40 of uncoveredPaths) {
+    if (assignedPaths.has(path40)) {
       throw new Error("review_assignment_manifest_uncovered_assigned_overlap");
     }
   }
   const uncovered = new Set(uncoveredPaths);
-  for (const path39 of eligiblePaths) {
-    if (!assignedPaths.has(path39) && !uncovered.has(path39)) {
+  for (const path40 of eligiblePaths) {
+    if (!assignedPaths.has(path40) && !uncovered.has(path40)) {
       throw new Error("review_assignment_manifest_eligible_unaccounted");
     }
   }
-  for (const path39 of excludedPaths) {
-    if (eligible.has(path39)) {
+  for (const path40 of excludedPaths) {
+    if (eligible.has(path40)) {
       throw new Error("review_assignment_manifest_excluded_eligible_overlap");
     }
   }
@@ -210202,11 +210529,11 @@ function createStableReviewAssignmentManifest(input) {
   });
 }
 function canonicalPaths(paths) {
-  for (const path39 of paths) requireNormalizedRepoPath(path39);
+  for (const path40 of paths) requireNormalizedRepoPath(path40);
   return Object.freeze([...new Set(paths)].sort(compareCodePoints5));
 }
-function requireNormalizedRepoPath(path39) {
-  if (path39.length === 0 || path39.length > assignmentManifestMaxPathLength || path39.includes("\0") || path39.includes("\\") || path39.startsWith("/") || path39.endsWith("/") || path39.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+function requireNormalizedRepoPath(path40) {
+  if (path40.length === 0 || path40.length > assignmentManifestMaxPathLength || path40.includes("\0") || path40.includes("\\") || path40.startsWith("/") || path40.endsWith("/") || path40.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
     throw new Error("review_assignment_manifest_path_invalid");
   }
 }
@@ -210273,8 +210600,8 @@ var ReviewInvestigationGatewayConfigurationError = class extends Error {
 // src/review-investigation/application/run-investigation-turn.ts
 var MAX_SAFE_RETRY_AFTER_MS2 = 7 * 24 * 60 * 60 * 1e3;
 var RunInvestigationTurn = class {
-  constructor(dependencies) {
-    this.dependencies = dependencies;
+  constructor(dependencies2) {
+    this.dependencies = dependencies2;
   }
   async execute(input) {
     const turn = requireActiveTurn(input.snapshot);
@@ -210675,8 +211002,8 @@ var ReviewInvestigationDeferredSignal = class extends Error {
   }
 };
 var RunInvestigationWorkSlot = class {
-  constructor(dependencies) {
-    this.dependencies = dependencies;
+  constructor(dependencies2) {
+    this.dependencies = dependencies2;
   }
   async execute(input) {
     throwIfAborted(input.signal);
@@ -211007,8 +211334,8 @@ var MIN_PUBLICATION_POLL_DELAY_MS = 1e3;
 var ReviewMemoryAdmissionChangedSignal = class extends Error {
 };
 var RunT0ReviewOrchestration = class {
-  constructor(dependencies, maxPublicationPolls = null, maxBusyPollsPerProviderLane = 24, revisionPollIntervalMs = 5e3) {
-    this.dependencies = dependencies;
+  constructor(dependencies2, maxPublicationPolls = null, maxBusyPollsPerProviderLane = 24, revisionPollIntervalMs = 5e3) {
+    this.dependencies = dependencies2;
     this.maxPublicationPolls = maxPublicationPolls;
     this.maxBusyPollsPerProviderLane = maxBusyPollsPerProviderLane;
     this.revisionPollIntervalMs = revisionPollIntervalMs;
@@ -211021,6 +211348,50 @@ var RunT0ReviewOrchestration = class {
     if (!Number.isSafeInteger(revisionPollIntervalMs) || revisionPollIntervalMs < 10 || revisionPollIntervalMs > 6e4) {
       throw new Error("review_orchestration_revision_poll_interval_invalid");
     }
+  }
+  parentCommandTail = Promise.resolve();
+  coordinatedExecution;
+  runAbort;
+  laneSignals = /* @__PURE__ */ new Map();
+  failureContext(workSlot, invocation) {
+    const reviewer = this.dependencies.reviewerScheduling?.reviewers.find(
+      (item) => item.providerVoteIdentityHash === workSlot.providerVoteIdentityHash
+    );
+    return {
+      workSlot,
+      ...invocation ? { invocation } : {},
+      ...reviewer ?? {}
+    };
+  }
+  parentLeaseCommand(operation) {
+    if (!this.dependencies.reviewerScheduling) return operation();
+    const command = this.parentCommandTail.then(operation);
+    this.parentCommandTail = command.catch(() => void 0);
+    return command;
+  }
+  /** Only parent commands observe and advance the current stream version. */
+  async parentCommand(input, operation) {
+    if (!this.dependencies.reviewerScheduling)
+      return operation(input.execution);
+    return this.parentLeaseCommand(async () => {
+      const restored = await this.dependencies.controlPlane.restoreExecution({
+        authorization: input.authorization,
+        reviewRevisionHash: input.revision.reviewRevisionHash
+      });
+      const latest = refreshExecutionAdmission(
+        this.coordinatedExecution ?? input.execution,
+        restored
+      );
+      this.coordinatedExecution = latest;
+      const result2 = await operation(latest);
+      if (result2 && typeof result2 === "object" && "streamVersion" in result2 && typeof result2.streamVersion === "string") {
+        this.coordinatedExecution = {
+          ...latest,
+          streamVersion: maxVersion(latest.streamVersion, result2.streamVersion)
+        };
+      }
+      return result2;
+    });
   }
   async execute(command) {
     return this.executeInternal(command);
@@ -211157,9 +211528,8 @@ var RunT0ReviewOrchestration = class {
         (slot) => slot.required || slot.attemptBudget !== 1
       ))
         throw new Error("review_orchestration_description_plan_invalid");
-      for (const workSlot of command.workSlots.filter(
-        (slot) => slot.taskKind !== "pr_description" /* PrDescription */
-      )) {
+      this.coordinatedExecution = execution;
+      const runWorkSlot = async (workSlot) => {
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
           throw new Error("review_orchestration_restored_work_slot_missing");
@@ -211182,7 +211552,7 @@ var RunT0ReviewOrchestration = class {
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: workSlot.workSlotId
           });
-          continue;
+          return;
         }
         if (restoredSlot.state !== "satisfied" /* Satisfied */ && !this.canStartBatch()) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
@@ -211194,7 +211564,7 @@ var RunT0ReviewOrchestration = class {
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: workSlot.workSlotId
           });
-          continue;
+          return;
         }
         if (restoredSlot.state !== "satisfied" /* Satisfied */ && this.providerLaneBusyBudgetExhausted(
           busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0
@@ -211208,7 +211578,7 @@ var RunT0ReviewOrchestration = class {
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: workSlot.workSlotId
           });
-          continue;
+          return;
         }
         await this.assertRevisionCurrent(command);
         const outcome = await this.satisfyWorkSlot({
@@ -211221,12 +211591,18 @@ var RunT0ReviewOrchestration = class {
           restoredSlot,
           restoreOnly: command.restoreOnly === true,
           busyPollsByProviderLane,
-          admissionLimited,
+          admissionLimited: this.dependencies.reviewerScheduling ? false : admissionLimited,
           onEvent: (event) => {
             state3 = evolveReviewOrchestration(state3, event);
           }
         });
-        execution = { ...execution, streamVersion: outcome.streamVersion };
+        execution = {
+          ...execution,
+          streamVersion: maxVersion(
+            execution.streamVersion,
+            outcome.streamVersion
+          )
+        };
         if (outcome.observation) {
           if (!outcome.coverageManifest) {
             throw new Error("review_orchestration_coverage_manifest_missing");
@@ -211258,36 +211634,204 @@ var RunT0ReviewOrchestration = class {
           });
           const terminal = terminalizeCommand(outcome.exhaustionReason);
           if (terminal) {
-            const latestExecution2 = await this.dependencies.controlPlane.restoreExecution({
+            const terminalizedResult = await this.parentCommand(
+              {
+                authorization,
+                execution,
+                revision: command
+              },
+              async (parentExecution) => {
+                let execution2 = parentExecution;
+                const latestExecution2 = await this.dependencies.controlPlane.restoreExecution({
+                  authorization,
+                  reviewRevisionHash: command.reviewRevisionHash
+                });
+                execution2 = refreshExecutionAdmission(
+                  execution2,
+                  latestExecution2
+                );
+                const latestSlot = execution2.restoredExecution.workSlots.find(
+                  (slot) => slot.workSlotId === workSlot.workSlotId
+                );
+                const alreadyExhausted = execution2.restoredExecution.state === "running" /* Running */ && latestSlot?.state === "exhausted" /* Exhausted */ && latestSlot.activeLeaseId === null;
+                if (!alreadyExhausted) {
+                  const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
+                    authorization,
+                    idempotencyKey: this.idempotencyKey("slot-terminalize", [
+                      execution2.executionId,
+                      execution2.generation,
+                      workSlot.workSlotId,
+                      terminal.terminalState,
+                      terminal.reasonCode
+                    ]),
+                    execution: execution2,
+                    reviewRevisionHash: command.reviewRevisionHash,
+                    workSlotId: workSlot.workSlotId,
+                    terminal
+                  });
+                  execution2 = {
+                    ...execution2,
+                    streamVersion: terminalized.streamVersion
+                  };
+                }
+                return { streamVersion: execution2.streamVersion };
+              }
+            );
+            execution = {
+              ...execution,
+              streamVersion: maxVersion(
+                execution.streamVersion,
+                terminalizedResult.streamVersion
+              )
+            };
+          }
+          if (this.dependencies.reviewerScheduling && [
+            "attempt_budget_exhausted" /* AttemptBudgetExhausted */,
+            "admission_limited" /* AdmissionLimited */,
+            "investigation_deferred" /* InvestigationDeferred */
+          ].includes(outcome.exhaustionReason))
+            throw new ReviewScopedInvocationFailure(
+              "reviewer",
+              new Error("review_reviewer_work_exhausted")
+            );
+        }
+      };
+      if (!this.dependencies.reviewerScheduling) {
+        for (const slot of command.workSlots.filter(
+          (slot2) => slot2.taskKind !== "pr_description" /* PrDescription */
+        ))
+          await runWorkSlot(slot);
+      } else {
+        const scheduling = this.dependencies.reviewerScheduling;
+        const lanes = scheduling.reviewers.map((reviewer) => ({
+          ...reviewer,
+          slots: command.workSlots.filter(
+            (slot) => slot.taskKind !== "pr_description" /* PrDescription */ && slot.providerVoteIdentityHash === reviewer.providerVoteIdentityHash
+          ),
+          abort: new AbortController()
+        }));
+        if (!Number.isSafeInteger(scheduling.maxParallelReviewers) || scheduling.maxParallelReviewers < 1 || scheduling.maxParallelReviewers > 16 || lanes.length > 16 || new Set(lanes.map((lane) => lane.providerVoteIdentityHash)).size !== lanes.length || command.workSlots.some(
+          (slot) => !lanes.some(
+            (lane) => lane.providerVoteIdentityHash === slot.providerVoteIdentityHash
+          )
+        ))
+          throw new Error("review_reviewer_scheduling_invalid");
+        const groups = new Map(
+          scheduling.concurrencyGroups.map((group) => [
+            group.id,
+            group.maxParallel
+          ])
+        );
+        if (lanes.some(
+          (lane) => !Number.isSafeInteger(groups.get(lane.concurrencyGroupId)) || groups.get(lane.concurrencyGroupId) < 1
+        ))
+          throw new Error("review_reviewer_scheduling_group_invalid");
+        const busyGroups = /* @__PURE__ */ new Map();
+        const stoppedVotes = /* @__PURE__ */ new Set();
+        const pending = [...lanes];
+        const active = /* @__PURE__ */ new Set();
+        let parentFailure;
+        this.runAbort = new AbortController();
+        const stopRun = () => this.runAbort.abort(this.dependencies.signal?.reason);
+        this.dependencies.signal?.addEventListener("abort", stopRun, {
+          once: true
+        });
+        if (this.dependencies.signal?.aborted) stopRun();
+        const markExhausted = (slot) => {
+          if (acceptedEvidence.some(
+            (item) => item.workSlotId === slot.workSlotId
+          ) || exhaustedWorkSlotIds.includes(slot.workSlotId))
+            return;
+          exhaustedWorkSlotIds.push(slot.workSlotId);
+          exhaustedWorkSlotReasons.set(
+            slot.workSlotId,
+            "admission_limited" /* AdmissionLimited */
+          );
+          state3 = evolveReviewOrchestration(state3, {
+            type: "slot_exhausted" /* SlotExhausted */,
+            workSlotId: slot.workSlotId
+          });
+          this.dependencies.progress?.report({
+            type: "exhausted",
+            workSlotId: slot.workSlotId
+          });
+        };
+        try {
+          while (pending.length || active.size) {
+            while (!parentFailure && !this.runAbort.signal.aborted && active.size < scheduling.maxParallelReviewers) {
+              const index = pending.findIndex(
+                (lane2) => stoppedVotes.has(lane2.providerVoteIdentityHash) || (busyGroups.get(lane2.concurrencyGroupId) ?? 0) < groups.get(lane2.concurrencyGroupId)
+              );
+              if (index < 0) break;
+              const lane = pending.splice(index, 1)[0];
+              if (stoppedVotes.has(lane.providerVoteIdentityHash)) {
+                lane.slots.forEach(markExhausted);
+                continue;
+              }
+              busyGroups.set(
+                lane.concurrencyGroupId,
+                (busyGroups.get(lane.concurrencyGroupId) ?? 0) + 1
+              );
+              this.laneSignals.set(
+                lane.providerVoteIdentityHash,
+                AbortSignal.any([this.runAbort.signal, lane.abort.signal])
+              );
+              const worker = (async () => {
+                for (const slot of lane.slots) {
+                  if (stoppedVotes.has(lane.providerVoteIdentityHash)) {
+                    markExhausted(slot);
+                    continue;
+                  }
+                  this.runAbort.signal.throwIfAborted();
+                  try {
+                    await runWorkSlot(slot);
+                  } catch (error4) {
+                    const scopedFailure = error4 instanceof ReviewScopedInvocationFailure ? error4 : error4 instanceof ReviewInvocationConfigurationMismatchError ? new ReviewScopedInvocationFailure("reviewer", error4) : void 0;
+                    if (!scopedFailure && !stoppedVotes.has(lane.providerVoteIdentityHash))
+                      throw error4;
+                    const scope = scopedFailure?.scope ?? "reviewer";
+                    if (scope === "run") throw error4;
+                    const affected = scope === "allocation" ? lanes.filter(
+                      (candidate) => candidate.concurrencyGroupId === lane.concurrencyGroupId
+                    ) : [lane];
+                    for (const sibling of affected) {
+                      stoppedVotes.add(sibling.providerVoteIdentityHash);
+                      sibling.abort.abort(error4);
+                    }
+                    markExhausted(slot);
+                  }
+                }
+              })().catch((error4) => {
+                parentFailure ??= error4;
+                this.runAbort.abort(error4);
+              }).finally(() => {
+                busyGroups.set(
+                  lane.concurrencyGroupId,
+                  busyGroups.get(lane.concurrencyGroupId) - 1
+                );
+                active.delete(worker);
+                this.laneSignals.delete(lane.providerVoteIdentityHash);
+              });
+              active.add(worker);
+            }
+            if (!active.size) break;
+            await Promise.race(active);
+          }
+          await Promise.allSettled(active);
+          await this.parentCommandTail;
+          this.dependencies.signal?.throwIfAborted();
+          execution = refreshExecutionAdmission(
+            this.coordinatedExecution ?? execution,
+            await this.dependencies.controlPlane.restoreExecution({
               authorization,
               reviewRevisionHash: command.reviewRevisionHash
-            });
-            execution = refreshExecutionAdmission(execution, latestExecution2);
-            const latestSlot = execution.restoredExecution.workSlots.find(
-              (slot) => slot.workSlotId === workSlot.workSlotId
-            );
-            const alreadyExhausted = execution.restoredExecution.state === "running" /* Running */ && latestSlot?.state === "exhausted" /* Exhausted */ && latestSlot.activeLeaseId === null;
-            if (!alreadyExhausted) {
-              const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
-                authorization,
-                idempotencyKey: this.idempotencyKey("slot-terminalize", [
-                  execution.executionId,
-                  execution.generation,
-                  workSlot.workSlotId,
-                  terminal.terminalState,
-                  terminal.reasonCode
-                ]),
-                execution,
-                reviewRevisionHash: command.reviewRevisionHash,
-                workSlotId: workSlot.workSlotId,
-                terminal
-              });
-              execution = {
-                ...execution,
-                streamVersion: terminalized.streamVersion
-              };
-            }
-          }
+            })
+          );
+          this.coordinatedExecution = execution;
+          if (parentFailure) throw parentFailure;
+        } finally {
+          this.dependencies.signal?.removeEventListener("abort", stopRun);
+          this.laneSignals.clear();
         }
       }
       const requiredWorkSlotIds = new Set(
@@ -211669,11 +212213,16 @@ var RunT0ReviewOrchestration = class {
     return renewal;
   }
   async satisfyWorkSlot(input) {
+    const reviewerSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest = null;
     let handledInvestigationOrdinal = null;
     for (let attemptOrdinal = 1; attemptOrdinal <= input.workSlot.attemptBudget; attemptOrdinal += 1) {
       try {
+        reviewerSignal?.throwIfAborted();
         this.dependencies.progress?.report({
           type: "running",
           workSlotId: input.workSlot.workSlotId,
@@ -211686,8 +212235,10 @@ var RunT0ReviewOrchestration = class {
         });
         const authoritativeInvocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
-          attemptOrdinal
+          attemptOrdinal,
+          ...reviewerSignal ? { signal: reviewerSignal } : {}
         });
+        reviewerSignal?.throwIfAborted();
         const authoritativeManifest = await this.dependencies.invocationManifestAssembler.assemble(
           authoritativeInvocation
         );
@@ -211768,8 +212319,14 @@ var RunT0ReviewOrchestration = class {
                 exhaustionReason: "deadline_reached" /* DeadlineReached */
               };
             }
-            if (!(error4 instanceof ReviewInvestigationDeferredSignal))
+            if (!(error4 instanceof ReviewInvestigationDeferredSignal)) {
+              const scope = this.dependencies.reviewerScheduling ? this.dependencies.invocationFailureClassifier.scope?.(
+                error4,
+                this.failureContext(input.workSlot)
+              ) : void 0;
+              if (scope) throw new ReviewScopedInvocationFailure(scope, error4);
               throw error4;
+            }
             this.recordInvestigationDiagnostic({
               outcome: "authoritative_deferred" /* AuthoritativeDeferred */,
               workSlot: input.workSlot,
@@ -211786,11 +212343,12 @@ var RunT0ReviewOrchestration = class {
             };
           }
         }
-        const selectedInvestigationCandidate = investigationCandidate !== null && this.dependencies.investigationRecording?.mode === "authoritative" /* Authoritative */ && !authoritativeInvocation.manifestFacts.taskKindSet.includes(
+        const recording = this.dependencies.resolveInvestigationRecording ? this.dependencies.resolveInvestigationRecording(input.workSlot) : this.dependencies.investigationRecording;
+        const selectedInvestigationCandidate = investigationCandidate !== null && recording?.mode === "authoritative" /* Authoritative */ && !authoritativeInvocation.manifestFacts.taskKindSet.includes(
           "lifecycle_revalidation" /* LifecycleRevalidation */
         ) && (investigationCandidate.observation.findingCount > 0 || investigationCandidate.observation.qualityFlags.includes(
           "investigation_verified_clean"
-        ) && this.dependencies.investigationRecording.verifiedCleanEffectsEnabled === true) ? investigationCandidate : null;
+        ) && recording.verifiedCleanEffectsEnabled === true) ? investigationCandidate : null;
         const invocation = selectedInvestigationCandidate ? selectedInvestigationCandidate.invocation : authoritativeInvocation;
         const manifest = selectedInvestigationCandidate ? selectedInvestigationCandidate.manifest : authoritativeManifest;
         const precomputedObservation = selectedInvestigationCandidate ? selectedInvestigationCandidate.observation : null;
@@ -211829,7 +212387,9 @@ var RunT0ReviewOrchestration = class {
         let lease = null;
         let localBusyPollCount = 0;
         while (lease === null) {
+          reviewerSignal?.throwIfAborted();
           await this.assertMemoryEligible(invocation);
+          reviewerSignal?.throwIfAborted();
           if (!this.canStartInvocation(attemptOrdinal)) {
             input.onEvent({
               type: "slot_exhausted" /* SlotExhausted */,
@@ -211867,14 +212427,12 @@ var RunT0ReviewOrchestration = class {
                 exhaustionReason: "deadline_reached" /* DeadlineReached */
               };
             }
-            if (this.dependencies.signal) {
-              await this.dependencies.delay.sleep(
-                delayMs,
-                this.dependencies.signal
-              );
+            if (waitSignal) {
+              await this.dependencies.delay.sleep(delayMs, waitSignal);
             } else {
               await this.dependencies.delay.sleep(delayMs);
             }
+            reviewerSignal?.throwIfAborted();
             await this.assertRevisionCurrent(input.revision);
             const joined = await this.trySatisfyFromLookup({
               ...input,
@@ -211890,18 +212448,21 @@ var RunT0ReviewOrchestration = class {
               };
             }
           }
-          const acquire = await this.dependencies.controlPlane.acquireInvocationLease({
-            authorization: input.authorization,
-            idempotencyKey: this.idempotencyKey("lease-acquire", [
-              input.execution.executionId,
-              input.workSlot.workSlotId,
-              acquireRequestId
-            ]),
-            execution: { ...input.execution, streamVersion },
-            workSlot: input.workSlot,
-            manifest,
-            acquireRequestId,
-            ownerIdHash: input.ownerIdHash
+          const acquire = await this.parentLeaseCommand(() => {
+            reviewerSignal?.throwIfAborted();
+            return this.dependencies.controlPlane.acquireInvocationLease({
+              authorization: input.authorization,
+              idempotencyKey: this.idempotencyKey("lease-acquire", [
+                input.execution.executionId,
+                input.workSlot.workSlotId,
+                acquireRequestId
+              ]),
+              execution: { ...input.execution, streamVersion },
+              workSlot: input.workSlot,
+              manifest,
+              acquireRequestId,
+              ownerIdHash: input.ownerIdHash
+            });
           });
           if (acquire.status === "acquired" /* Acquired */) {
             input.busyPollsByProviderLane.delete(
@@ -211954,11 +212515,13 @@ var RunT0ReviewOrchestration = class {
           }
         }
         try {
+          reviewerSignal?.throwIfAborted();
           input.onEvent({
             type: "slot_lease_acquired" /* SlotLeaseAcquired */,
             workSlotId: input.workSlot.workSlotId
           });
           await this.assertRevisionCurrent(input.revision);
+          reviewerSignal?.throwIfAborted();
         } catch (error4) {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
           throw error4;
@@ -211990,7 +212553,14 @@ var RunT0ReviewOrchestration = class {
                 manifest,
                 currentLease,
                 sourceExecutionId: input.execution.executionId,
-                signal,
+                signal: this.laneSignals.has(
+                  input.workSlot.providerVoteIdentityHash
+                ) ? AbortSignal.any([
+                  signal,
+                  this.laneSignals.get(
+                    input.workSlot.providerVoteIdentityHash
+                  )
+                ]) : signal,
                 revision: input.revision
               }) : Promise.resolve(precomputedObservation);
               return activeInvocation;
@@ -212029,7 +212599,11 @@ var RunT0ReviewOrchestration = class {
             observationPayload = error4.currentRevisionObservation;
           } else {
             await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
-            const failureClass = this.dependencies.invocationFailureClassifier.classify(error4);
+            reviewerSignal?.throwIfAborted();
+            const failureClass = this.dependencies.invocationFailureClassifier.classify(
+              error4,
+              this.failureContext(input.workSlot, invocation)
+            );
             try {
               this.dependencies.invocationDiagnostics?.recordFailure({
                 invocation,
@@ -212038,6 +212612,15 @@ var RunT0ReviewOrchestration = class {
                 error: error4
               });
             } catch {
+            }
+            if (this.dependencies.reviewerScheduling) {
+              const context5 = this.failureContext(input.workSlot, invocation);
+              const scope = this.dependencies.invocationFailureClassifier.scope?.(
+                error4,
+                context5
+              ) ?? "reviewer";
+              if (scope !== "reviewer" || failureClass !== "retryable" /* Retryable */)
+                throw new ReviewScopedInvocationFailure(scope, error4);
             }
             if (failureClass === "capacity_unavailable" /* CapacityUnavailable */) {
               throw new ReviewProviderUnavailableSignal(
@@ -212064,11 +212647,8 @@ var RunT0ReviewOrchestration = class {
             }
             const retryDelayMs2 = attemptOrdinal < input.workSlot.attemptBudget ? this.clampProviderDelay(3e4) : 0;
             if (retryDelayMs2 > 0) {
-              if (this.dependencies.signal) {
-                await this.dependencies.delay.sleep(
-                  retryDelayMs2,
-                  this.dependencies.signal
-                );
+              if (waitSignal) {
+                await this.dependencies.delay.sleep(retryDelayMs2, waitSignal);
               } else {
                 await this.dependencies.delay.sleep(retryDelayMs2);
               }
@@ -212085,17 +212665,18 @@ var RunT0ReviewOrchestration = class {
             invocation.manifestFacts.executionProfile,
             observationPayload
           );
-          const committed = await this.dependencies.controlPlane.commitEvidence(
-            {
+          const completedLease = lease;
+          const committed = await this.parentLeaseCommand(
+            () => this.dependencies.controlPlane.commitEvidence({
               authorization: input.authorization,
               idempotencyKey: this.idempotencyKey("evidence-commit", [
-                lease.attemptId,
+                completedLease.attemptId,
                 observationPayload.payloadHash
               ]),
-              lease,
+              lease: completedLease,
               ownerIdHash: input.ownerIdHash,
               observation: observationPayload
-            }
+            })
           );
           await this.assertRevisionCurrent(input.revision);
           const observation = {
@@ -212106,18 +212687,21 @@ var RunT0ReviewOrchestration = class {
             providerInvocationKey: manifest.providerInvocationKey,
             providerVoteIdentityHash: manifest.providerVoteIdentityHash
           };
-          const attached = await this.dependencies.controlPlane.attachObservation({
-            authorization: input.authorization,
-            idempotencyKey: this.idempotencyKey("attach", [
-              input.execution.executionId,
-              input.workSlot.workSlotId,
-              observation.observationId
-            ]),
-            execution: { ...input.execution, streamVersion },
-            workSlot: input.workSlot,
-            observation,
-            attachmentCapability: lease.leaseCapability
-          });
+          const attached = await this.parentCommand(
+            input,
+            (execution) => this.dependencies.controlPlane.attachObservation({
+              authorization: input.authorization,
+              idempotencyKey: this.idempotencyKey("attach", [
+                input.execution.executionId,
+                input.workSlot.workSlotId,
+                observation.observationId
+              ]),
+              execution,
+              workSlot: input.workSlot,
+              observation,
+              attachmentCapability: lease.leaseCapability
+            })
+          );
           streamVersion = attached.streamVersion;
           input.onEvent({
             type: "slot_satisfied" /* SlotSatisfied */,
@@ -212158,29 +212742,38 @@ var RunT0ReviewOrchestration = class {
     };
   }
   async reconcileProviderAttemptExhaustion(input) {
+    const reviewerSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let manifest = input.manifest;
     const busyPollBudget = this.providerLaneBusyPollBudget();
     for (let busyPollCount = 0; busyPollCount < busyPollBudget; busyPollCount += 1) {
+      reviewerSignal?.throwIfAborted();
       await this.assertRevisionCurrent(input.revision);
       const acquireRequestId = this.identity("acquire-request-exhaustion", [
         input.execution.executionId,
         input.workSlot.workSlotId,
         manifest.providerInvocationKey
       ]);
-      const acquire = await this.dependencies.controlPlane.acquireInvocationLease({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey("lease-acquire-exhaustion", [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          acquireRequestId
-        ]),
-        execution: input.execution,
-        workSlot: input.workSlot,
-        manifest,
-        acquireRequestId,
-        ownerIdHash: input.ownerIdHash
+      const acquire = await this.parentLeaseCommand(() => {
+        reviewerSignal?.throwIfAborted();
+        return this.dependencies.controlPlane.acquireInvocationLease({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey("lease-acquire-exhaustion", [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            acquireRequestId
+          ]),
+          execution: input.execution,
+          workSlot: input.workSlot,
+          manifest,
+          acquireRequestId,
+          ownerIdHash: input.ownerIdHash
+        });
       });
       if (acquire.status === "input_stale" /* InputStale */) {
+        reviewerSignal?.throwIfAborted();
         const staleManifest = JSON.parse(manifest.manifestCanonicalJson);
         if (typeof staleManifest.memoryBundleHash !== "string" || !this.dependencies.memoryAdmission) {
           throw new Error("review_memory_stale_without_snapshot");
@@ -212188,7 +212781,8 @@ var RunT0ReviewOrchestration = class {
         this.dependencies.memoryAdmission.discard();
         const invocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
-          attemptOrdinal: input.workSlot.attemptBudget + 1
+          attemptOrdinal: input.workSlot.attemptBudget + 1,
+          ...reviewerSignal ? { signal: reviewerSignal } : {}
         });
         manifest = await this.dependencies.invocationManifestAssembler.assemble(
           invocation
@@ -212214,11 +212808,8 @@ var RunT0ReviewOrchestration = class {
           Math.min(5e3, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        if (this.dependencies.signal) {
-          await this.dependencies.delay.sleep(
-            delayMs,
-            this.dependencies.signal
-          );
+        if (waitSignal) {
+          await this.dependencies.delay.sleep(delayMs, waitSignal);
         } else {
           await this.dependencies.delay.sleep(delayMs);
         }
@@ -212297,20 +212888,23 @@ var RunT0ReviewOrchestration = class {
       await this.assertRevisionCurrent(input.revision);
       if (!isOriginalAcceptedManifest(input, input.manifest))
         await this.assertMemoryEligible(input.invocation);
-      const attached = await this.dependencies.controlPlane.attachObservation({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey("attach-replayed", [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          lookup2.observation.observationId,
-          lookup2.attestationId,
-          input.revision.reviewRevisionHash
-        ]),
-        execution: input.execution,
-        workSlot: input.workSlot,
-        observation: lookup2.observation,
-        attachmentCapability: replayed.attachmentCapability
-      });
+      const attached = await this.parentCommand(
+        input,
+        (execution) => this.dependencies.controlPlane.attachObservation({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey("attach-replayed", [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            lookup2.observation.observationId,
+            lookup2.attestationId,
+            input.revision.reviewRevisionHash
+          ]),
+          execution,
+          workSlot: input.workSlot,
+          observation: lookup2.observation,
+          attachmentCapability: replayed.attachmentCapability
+        })
+      );
       streamVersion = attached.streamVersion;
     } else if (input.restoredSlot.state === "satisfied" /* Satisfied */) {
       if (input.restoredSlot.acceptedObservationRefId !== observationRefId(
@@ -212323,44 +212917,51 @@ var RunT0ReviewOrchestration = class {
         );
       }
     } else if (lookup2.attachment.kind === "exact_revision_reuse") {
-      const attached = await this.dependencies.controlPlane.attachObservation({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey("attach", [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          lookup2.observation.observationId
-        ]),
-        execution: input.execution,
-        workSlot: input.workSlot,
-        observation: lookup2.observation,
-        attachmentCapability: lookup2.attachment.capability
-      });
+      const attachment = lookup2.attachment;
+      const attached = await this.parentCommand(
+        input,
+        (execution) => this.dependencies.controlPlane.attachObservation({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey("attach", [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            lookup2.observation.observationId
+          ]),
+          execution,
+          workSlot: input.workSlot,
+          observation: lookup2.observation,
+          attachmentCapability: attachment.capability
+        })
+      );
       streamVersion = attached.streamVersion;
     } else {
-      const latestExecution = await this.dependencies.controlPlane.restoreExecution({
-        authorization: input.authorization,
-        reviewRevisionHash: input.revision.reviewRevisionHash
-      });
-      const adoptionExecution = refreshExecutionAdmission(
+      const attachment = lookup2.attachment;
+      const adoptionExecution = this.dependencies.reviewerScheduling ? input.execution : refreshExecutionAdmission(
         input.execution,
-        latestExecution
+        await this.dependencies.controlPlane.restoreExecution({
+          authorization: input.authorization,
+          reviewRevisionHash: input.revision.reviewRevisionHash
+        })
       );
-      const adopted = await this.dependencies.controlPlane.adoptObservation({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey("adopt", [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          lookup2.observation.observationId,
-          lookup2.attachment.sourceLeaseId,
-          lookup2.attachment.sourceFencingToken
-        ]),
-        execution: adoptionExecution,
-        workSlot: input.workSlot,
-        planHash: input.planHash,
-        manifest: input.manifest,
-        observation: lookup2.observation,
-        source: lookup2.attachment
-      });
+      const adopted = await this.parentCommand(
+        { ...input, execution: adoptionExecution },
+        (execution) => this.dependencies.controlPlane.adoptObservation({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey("adopt", [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            lookup2.observation.observationId,
+            attachment.sourceLeaseId,
+            attachment.sourceFencingToken
+          ]),
+          execution,
+          workSlot: input.workSlot,
+          planHash: input.planHash,
+          manifest: input.manifest,
+          observation: lookup2.observation,
+          source: attachment
+        })
+      );
       streamVersion = adopted.streamVersion;
     }
     input.onEvent({
@@ -212380,13 +212981,16 @@ var RunT0ReviewOrchestration = class {
       });
       if (!replay) return null;
       await this.assertRevisionCurrent(input.revision);
-      return this.dependencies.contextAttestations.commitContextReplay({
-        authorization: input.authorization,
-        execution: input.execution,
-        workSlot: input.workSlot,
-        candidate: input.candidate,
-        result: replay
-      });
+      return this.parentCommand(
+        input,
+        (execution) => this.dependencies.contextAttestations.commitContextReplay({
+          authorization: input.authorization,
+          execution,
+          workSlot: input.workSlot,
+          candidate: input.candidate,
+          result: replay
+        })
+      );
     } catch {
       return null;
     }
@@ -212407,16 +213011,18 @@ var RunT0ReviewOrchestration = class {
       lease.fencingToken,
       lease.expiresAt
     ]);
-    const renewed = await this.dependencies.controlPlane.renewInvocationLease({
-      idempotencyKey: this.idempotencyKey("lease-renew", [
-        lease.leaseId,
-        lease.fencingToken,
+    const renewed = await this.parentLeaseCommand(
+      () => this.dependencies.controlPlane.renewInvocationLease({
+        idempotencyKey: this.idempotencyKey("lease-renew", [
+          lease.leaseId,
+          lease.fencingToken,
+          renewRequestId
+        ]),
+        lease,
+        ownerIdHash,
         renewRequestId
-      ]),
-      lease,
-      ownerIdHash,
-      renewRequestId
-    });
+      })
+    );
     if (renewed.leaseId !== lease.leaseId || renewed.attemptId !== lease.attemptId || renewed.resultReportUntil !== lease.resultReportUntil || renewed.fencingToken !== lease.fencingToken || (renewed.renewalCeilingReached ? renewed.expiresAt !== lease.expiresAt : Date.parse(renewed.expiresAt) <= Date.parse(lease.expiresAt))) {
       throw new Error("review_orchestration_lease_renewal_drift");
     }
@@ -212508,13 +213114,19 @@ var RunT0ReviewOrchestration = class {
     }
   }
   async prepareInvestigationCandidate(input) {
-    const recording = this.dependencies.investigationRecording;
+    const laneSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const scopedSignal = laneSignal && this.dependencies.signal ? AbortSignal.any([laneSignal, this.dependencies.signal]) : laneSignal ?? this.dependencies.signal;
+    const recording = this.dependencies.resolveInvestigationRecording ? this.dependencies.resolveInvestigationRecording(input.workSlot) : this.dependencies.investigationRecording;
     const invocations = this.dependencies.investigationInvocations;
     if (!recording || !invocations) return null;
     try {
+      laneSignal?.throwIfAborted();
       const invocation = await invocations.prepare({
         workSlot: input.workSlot,
-        attemptOrdinal: input.attemptOrdinal
+        attemptOrdinal: input.attemptOrdinal,
+        ...laneSignal ? { signal: laneSignal } : {}
       });
       const manifest = await this.dependencies.invocationManifestAssembler.assemble(
         invocation
@@ -212527,15 +213139,15 @@ var RunT0ReviewOrchestration = class {
       if (!recording.supports({ workSlot: input.workSlot, invocation })) {
         return null;
       }
-      this.dependencies.signal?.throwIfAborted();
+      scopedSignal?.throwIfAborted();
       const abort = new AbortController();
       const monitorStop = new AbortController();
       const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
-      const cancel3 = () => abort.abort(this.dependencies.signal?.reason);
-      this.dependencies.signal?.addEventListener("abort", cancel3, {
+      const cancel3 = () => abort.abort(scopedSignal?.reason);
+      scopedSignal?.addEventListener("abort", cancel3, {
         once: true
       });
-      if (this.dependencies.signal?.aborted) cancel3();
+      if (scopedSignal?.aborted) cancel3();
       let stopped = false;
       const monitor = async () => {
         while (!stopped && !abort.signal.aborted) {
@@ -212575,7 +213187,7 @@ var RunT0ReviewOrchestration = class {
           sourceReviewRevisionHash: input.revision.reviewRevisionHash,
           signal: abort.signal
         });
-        this.dependencies.signal?.throwIfAborted();
+        scopedSignal?.throwIfAborted();
         if (abort.signal.reason instanceof ReviewExecutionDeadlineReachedSignal) {
           throw abort.signal.reason;
         }
@@ -212589,10 +213201,10 @@ var RunT0ReviewOrchestration = class {
         stopped = true;
         monitorStop.abort();
         await monitorPromise;
-        this.dependencies.signal?.removeEventListener("abort", cancel3);
+        scopedSignal?.removeEventListener("abort", cancel3);
       }
     } catch (error4) {
-      this.dependencies.signal?.throwIfAborted();
+      scopedSignal?.throwIfAborted();
       if (error4 instanceof ReviewExecutionSupersededSignal || error4 instanceof ReviewExecutionCancelledSignal || error4 instanceof ReviewExecutionDeadlineReachedSignal) {
         throw error4;
       }
@@ -212697,17 +213309,19 @@ var RunT0ReviewOrchestration = class {
             return void 0;
           }
         }
-        const acquired = await this.dependencies.controlPlane.acquireInvocationLease({
-          authorization: input.authorization,
-          idempotencyKey: this.idempotencyKey("description-lease-acquire", [
-            acquireRequestId
-          ]),
-          execution: input.execution,
-          workSlot: input.workSlot,
-          manifest,
-          acquireRequestId,
-          ownerIdHash: input.command.ownerIdHash
-        });
+        const acquired = await this.parentLeaseCommand(
+          () => this.dependencies.controlPlane.acquireInvocationLease({
+            authorization: input.authorization,
+            idempotencyKey: this.idempotencyKey("description-lease-acquire", [
+              acquireRequestId
+            ]),
+            execution: input.execution,
+            workSlot: input.workSlot,
+            manifest,
+            acquireRequestId,
+            ownerIdHash: input.command.ownerIdHash
+          })
+        );
         if (acquired.status === "busy" /* Busy */) {
           busyPollCount += 1;
           continue;
@@ -212812,16 +213426,18 @@ var RunT0ReviewOrchestration = class {
       String(attemptOrdinal)
     ]);
     try {
-      await this.dependencies.controlPlane.releaseInvocationLease({
-        idempotencyKey: this.idempotencyKey("lease-release", [
-          lease.leaseId,
-          lease.fencingToken,
+      await this.parentLeaseCommand(
+        () => this.dependencies.controlPlane.releaseInvocationLease({
+          idempotencyKey: this.idempotencyKey("lease-release", [
+            lease.leaseId,
+            lease.fencingToken,
+            releaseRequestId
+          ]),
+          lease,
+          ownerIdHash,
           releaseRequestId
-        ]),
-        lease,
-        ownerIdHash,
-        releaseRequestId
-      });
+        })
+      );
       return true;
     } catch {
       return false;
@@ -212916,14 +213532,14 @@ function validateCommand(command) {
       throw new Error("review_orchestration_commit_sha_invalid");
     }
   }
-  for (const digest5 of [
+  for (const digest6 of [
     command.reviewRevisionHash,
     command.compatibilityKey,
     command.planHash,
     command.assignmentManifestHash,
     command.ownerIdHash
   ]) {
-    if (!/^[a-f0-9]{64}$/.test(digest5)) {
+    if (!/^[a-f0-9]{64}$/.test(digest6)) {
       throw new Error("review_orchestration_digest_invalid");
     }
   }
@@ -213039,7 +213655,7 @@ function validateManifest(manifest) {
     manifest.manifestKey,
     manifest.providerInvocationKey,
     manifest.providerVoteIdentityHash
-  ].every((digest5) => /^[a-f0-9]{64}$/.test(digest5))) {
+  ].every((digest6) => /^[a-f0-9]{64}$/.test(digest6))) {
     throw new Error("review_orchestration_manifest_invalid");
   }
 }
@@ -213149,6 +213765,15 @@ function isOriginalAcceptedManifest(input, manifest) {
   );
   return original !== void 0 && original.manifestCanonicalJson === manifest.manifestCanonicalJson && original.manifestKey === manifest.manifestKey && original.providerInvocationKey === manifest.providerInvocationKey && original.providerVoteIdentityHash === manifest.providerVoteIdentityHash;
 }
+function maxVersion(left, right) {
+  return BigInt(left) >= BigInt(right) ? left : right;
+}
+var ReviewScopedInvocationFailure = class extends Error {
+  constructor(scope, cause) {
+    super("review_invocation_scoped_failure", { cause });
+    this.scope = scope;
+  }
+};
 
 // src/review-orchestration/infrastructure/review-investigation-telemetry.ts
 function emitReviewInvestigationTelemetry(message) {
@@ -213161,8 +213786,8 @@ function emitReviewInvestigationTelemetry(message) {
 // src/review-orchestration/infrastructure/context-gateway-failed-seal.ts
 var import_crypto34 = require("crypto");
 var emptyCanonicalJson = "{}";
-var emptyCanonicalJsonHash = digest3(emptyCanonicalJson);
-var failedTerminalOutcomeHash = digest3(
+var emptyCanonicalJsonHash = digest4(emptyCanonicalJson);
+var failedTerminalOutcomeHash = digest4(
   "reviewrouter:context-gateway-provider-failed:v1"
 );
 function createFailedContextGatewaySealPayload(input) {
@@ -213183,7 +213808,7 @@ function createFailedContextGatewaySealPayload(input) {
     replayMaterialHash: emptyCanonicalJsonHash
   });
 }
-function digest3(value) {
+function digest4(value) {
   return (0, import_crypto34.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 
@@ -213679,7 +214304,7 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
         result2.contextReplayPlanHash,
         "context_replay_plan_hash"
       );
-      if (digest4(replayPlanCanonicalJson) !== replayPlanHash || observation.contextDependencyAttestationId !== attestationId || observation.contextDependencyAttestationHash !== attestationHash) {
+      if (digest5(replayPlanCanonicalJson) !== replayPlanHash || observation.contextDependencyAttestationId !== attestationId || observation.contextDependencyAttestationHash !== attestationHash) {
         throw new Error("review_action_v2_context_replay_identity_mismatch");
       }
       return {
@@ -214191,7 +214816,7 @@ function parseLookupObservation(result2, input) {
   );
   const payloadHash = requireDigest3(result2.payloadHash, "payload_hash");
   const byteCount = requireNonNegativeInteger3(result2.byteCount, "byte_count");
-  if (payloadHash !== digest4(payloadCanonicalJson) || byteCount !== Buffer.byteLength(payloadCanonicalJson, "utf8")) {
+  if (payloadHash !== digest5(payloadCanonicalJson) || byteCount !== Buffer.byteLength(payloadCanonicalJson, "utf8")) {
     throw new Error("review_action_v2_lookup_payload_identity_mismatch");
   }
   const contextAttestationId = result2.contextDependencyAttestationId ?? null;
@@ -214377,7 +215002,7 @@ function parsePersistedReviewPlan(value, expected) {
     } catch {
       throw new Error("review_action_v2_persisted_manifest_invalid");
     }
-    if (![1, 2].includes(manifest.manifestVersion) || manifest.manifestVersion !== value.assignmentManifestVersion || digest4(
+    if (![1, 2].includes(manifest.manifestVersion) || manifest.manifestVersion !== value.assignmentManifestVersion || digest5(
       `rr.review-assignment-manifest.v${manifest.manifestVersion}\0${json3}`
     ) !== manifestHash)
       throw new Error("review_action_v2_persisted_manifest_invalid");
@@ -214756,9 +215381,9 @@ function parseRolloutCapability(value) {
 }
 function isDependencyClosed(capabilities) {
   const granted = new Set(capabilities);
-  const dependencies = reviewInvestigationRolloutAuthorizationV3Contract.dependencies;
+  const dependencies2 = reviewInvestigationRolloutAuthorizationV3Contract.dependencies;
   return capabilities.every(
-    (capability) => dependencies[capability].every((dependency) => granted.has(dependency))
+    (capability) => dependencies2[capability].every((dependency) => granted.has(dependency))
   );
 }
 function providersAreLaneAuthorized(providerKinds, providerVoteLanes) {
@@ -214804,7 +215429,7 @@ function leaseAcquireRejectedOutcome(reason) {
 }
 function parseProtocolLimits(value) {
   const parsed = parseCanonicalObject(value);
-  const keys4 = [
+  const keys5 = [
     "maxAttemptsPerSlot",
     "maxLeaseDurationMs",
     "maxObservationBytes",
@@ -214819,11 +215444,11 @@ function parseProtocolLimits(value) {
     "maxResultReportDurationMs",
     "maxWorkSlots"
   ];
-  if (Object.keys(parsed).sort().join(",") !== [...keys4].sort().join(",")) {
+  if (Object.keys(parsed).sort().join(",") !== [...keys5].sort().join(",")) {
     throw new Error("review_action_v2_protocol_limits_fields_invalid");
   }
   return Object.fromEntries(
-    keys4.map((key) => [key, requirePositiveInteger3(parsed[key], key)])
+    keys5.map((key) => [key, requirePositiveInteger3(parsed[key], key)])
   );
 }
 function parsePublicationOutcome(value) {
@@ -215016,11 +215641,11 @@ function requireNonNegativeInteger3(value, field) {
 function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function digest4(value) {
+function digest5(value) {
   return (0, import_crypto35.createHash)("sha256").update(value).digest("hex");
 }
 function deterministicIdempotencyKey(purpose, parts) {
-  return `rr:${purpose}:${digest4(
+  return `rr:${purpose}:${digest5(
     JSON.stringify({
       parts,
       purpose
@@ -215050,6 +215675,7 @@ async function fetchCapturedReviewSkills(input) {
         method: "POST",
         headers: {
           authorization: `Bearer ${input.authorizationToken}`,
+          ...input.reviewerId ? { "x-reviewrouter-reviewer-id": input.reviewerId } : {},
           "content-type": "application/json",
           accept: "application/json"
         },
@@ -215109,34 +215735,34 @@ var run = (0, import_node_util4.promisify)(import_node_child_process.execFile);
 var TREE_BYTES = reviewSkillsLimits.treeBytes;
 var decoder = new TextDecoder("utf-8", { fatal: true });
 async function materializeReviewSkillsWithDiagnostics(input) {
-  const fail2 = (code, context5 = {}) => {
+  const fail3 = (code, context5 = {}) => {
     throw new ReviewSkillsMaterializationError(code, {
       baseSha: input.baseSha,
       ...context5
     });
   };
-  const decode = (bytes, context5) => {
+  const decode = (bytes2, context5) => {
     try {
-      return decoder.decode(bytes);
+      return decoder.decode(bytes2);
     } catch {
-      return fail2("review_skills_git_text_invalid", context5);
+      return fail3("review_skills_git_text_invalid", context5);
     }
   };
   const gitRoots = [];
   const capture = structuredClone(input.capture);
   if (!/^[a-f0-9]{40}$/.test(input.baseSha) || capture.baseSha !== input.baseSha)
-    fail2("review_skills_capture_mismatch");
+    fail3("review_skills_capture_mismatch");
   const trees = /* @__PURE__ */ new Map();
-  const charge = (bytes, entries, path39, budget) => {
-    if (!budget || !(path39 === budget.root || path39.startsWith(`${budget.root}/`)) || budget.paths.has(path39))
+  const charge = (bytes2, entries, path40, budget) => {
+    if (!budget || !(path40 === budget.root || path40.startsWith(`${budget.root}/`)) || budget.paths.has(path40))
       return;
-    if (budget.bytes + bytes > TREE_BYTES || budget.entries + entries > reviewSkillsLimits.treeEntries)
-      fail2("review_skills_git_tree_too_large", { path: path39, field: "root" });
-    budget.bytes += bytes;
+    if (budget.bytes + bytes2 > TREE_BYTES || budget.entries + entries > reviewSkillsLimits.treeEntries)
+      fail3("review_skills_git_tree_too_large", { path: path40, field: "root" });
+    budget.bytes += bytes2;
     budget.entries += entries;
-    budget.paths.add(path39);
+    budget.paths.add(path40);
   };
-  const git = async (args, maxBuffer, path39) => {
+  const git = async (args, maxBuffer, path40) => {
     input.signal?.throwIfAborted();
     try {
       const result2 = await run(
@@ -215159,27 +215785,27 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       return result2.stdout;
     } catch {
       input.signal?.throwIfAborted();
-      fail2("review_skills_git_read_failed", { path: path39 });
+      fail3("review_skills_git_read_failed", { path: path40 });
     }
   };
-  const tree = async (oid, path39, budget) => {
+  const tree = async (oid, path40, budget) => {
     const previous = trees.get(oid);
     if (previous) {
-      charge(previous.bytes, previous.entries.length, path39, budget);
+      charge(previous.bytes, previous.entries.length, path40, budget);
       return previous.entries;
     }
-    const bytes = await git(["ls-tree", "-z", oid], TREE_BYTES, path39);
+    const bytes2 = await git(["ls-tree", "-z", oid], TREE_BYTES, path40);
     let count2 = 0;
-    for (const byte of bytes) if (byte === 0) count2++;
+    for (const byte of bytes2) if (byte === 0) count2++;
     if (count2 > reviewSkillsLimits.treeEntries)
-      fail2("review_skills_git_tree_too_large", { path: path39, field: "root" });
-    charge(bytes.byteLength, count2, path39, budget);
-    const entries = decode(bytes, { path: path39, field: "root" }).split("\0").filter(Boolean).map((row) => {
+      fail3("review_skills_git_tree_too_large", { path: path40, field: "root" });
+    charge(bytes2.byteLength, count2, path40, budget);
+    const entries = decode(bytes2, { path: path40, field: "root" }).split("\0").filter(Boolean).map((row) => {
       const matched = /^(\d{6}) (blob|tree|commit) ([a-f0-9]{40})\t([^\0]+)$/u.exec(row);
       if (!matched || [...matched[4]].some(
         (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 || character === "/" || character === "\\"
       ))
-        fail2("review_skills_git_path_invalid", { path: path39, field: "root" });
+        fail3("review_skills_git_path_invalid", { path: path40, field: "root" });
       return {
         mode: matched[1],
         type: matched[2],
@@ -215188,14 +215814,14 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       };
     });
     if (entries.length > reviewSkillsLimits.treeEntries)
-      fail2("review_skills_git_tree_too_large", { path: path39, field: "root" });
-    trees.set(oid, { entries, bytes: bytes.byteLength });
+      fail3("review_skills_git_tree_too_large", { path: path40, field: "root" });
+    trees.set(oid, { entries, bytes: bytes2.byteLength });
     return entries;
   };
-  const find = async (path39, budget) => {
+  const find = async (path40, budget) => {
     let oid = input.baseSha;
     let directory = "";
-    const parts = path39.split("/");
+    const parts = path40.split("/");
     for (let i2 = 0; i2 < parts.length; i2++) {
       const entry = (await tree(oid, directory, budget)).find(
         (item) => item.name === parts[i2]
@@ -215203,37 +215829,37 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       if (!entry) return null;
       if (i2 === parts.length - 1) return entry;
       if (entry.mode !== "040000" || entry.type !== "tree")
-        fail2("review_skills_git_nonregular", { path: path39 });
+        fail3("review_skills_git_nonregular", { path: path40 });
       oid = entry.oid;
       directory = directory ? `${directory}/${parts[i2]}` : parts[i2];
     }
     return null;
   };
-  const read = async (path39, limit, budget) => {
-    const entry = await find(path39, budget);
+  const read = async (path40, limit, budget) => {
+    const entry = await find(path40, budget);
     if (!entry)
-      fail2("review_skills_reference_missing", { path: path39, field: "reference" });
+      fail3("review_skills_reference_missing", { path: path40, field: "reference" });
     if (!/^100(?:644|755)$/.test(entry.mode) || entry.type !== "blob")
-      fail2("review_skills_git_nonregular", { path: path39 });
+      fail3("review_skills_git_nonregular", { path: path40 });
     const size = Number(
-      decode(await git(["cat-file", "-s", entry.oid], 128, path39), {
-        path: path39
+      decode(await git(["cat-file", "-s", entry.oid], 128, path40), {
+        path: path40
       }).trim()
     );
     if (!Number.isSafeInteger(size) || size > limit)
-      fail2("review_skills_git_blob_too_large", { path: path39 });
+      fail3("review_skills_git_blob_too_large", { path: path40 });
     const content = decode(
-      await git(["cat-file", "blob", entry.oid], limit + 1, path39),
-      { path: path39 }
+      await git(["cat-file", "blob", entry.oid], limit + 1, path40),
+      { path: path40 }
     );
     if (content.includes("\0"))
-      fail2("review_skills_git_text_invalid", { path: path39 });
+      fail3("review_skills_git_text_invalid", { path: path40 });
     return content;
   };
   const sources = [];
   for (const source of capture.gitSources) {
     if (source.root !== ".reviewrouter/skills" && source.root !== ".agents/skills")
-      fail2("review_skills_git_root_invalid", { field: "root" });
+      fail3("review_skills_git_root_invalid", { field: "root" });
     const budget = {
       root: source.root,
       bytes: 0,
@@ -215246,27 +215872,27 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       continue;
     }
     if (root.mode !== "040000" || root.type !== "tree")
-      fail2("review_skills_git_nonregular", {
+      fail3("review_skills_git_nonregular", {
         path: source.root,
         field: "root"
       });
     const before = sources.length;
     for (const child of await tree(root.oid, source.root, budget)) {
       if (child.mode === "120000" || child.mode === "160000")
-        fail2("review_skills_git_nonregular", {
+        fail3("review_skills_git_nonregular", {
           path: `${source.root}/${child.name}`
         });
       if (child.type !== "tree") continue;
       const skill = (await tree(child.oid, `${source.root}/${child.name}`, budget)).find((entry) => entry.name === "SKILL.md");
       if (!skill) continue;
       if (!/^100(?:644|755)$/.test(skill.mode) || skill.type !== "blob")
-        fail2("review_skills_git_nonregular", {
+        fail3("review_skills_git_nonregular", {
           path: `${source.root}/${child.name}/SKILL.md`
         });
       const directory = `${source.root}/${child.name}`;
       sources.push({ directory, path: `${directory}/SKILL.md`, budget });
       if (sources.length + capture.webSkills.length > reviewSkillsLimits.skillsPerRun)
-        fail2("review_skills_count_invalid", {
+        fail3("review_skills_count_invalid", {
           path: source.root,
           field: "root"
         });
@@ -215303,7 +215929,7 @@ async function materializeReviewSkillsWithDiagnostics(input) {
     const visit = async (current, text3, depth) => {
       totalBytes += Buffer.byteLength(text3);
       if (totalBytes > reviewSkillsLimits.bundleBytes)
-        fail2("review_skills_bundle_too_large", { path: current });
+        fail3("review_skills_bundle_too_large", { path: current });
       let references;
       try {
         references = markdownReferences(text3);
@@ -215316,7 +215942,7 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       }
       for (const target of references) {
         if (depth >= reviewSkillsLimits.referenceDepth)
-          fail2("review_skills_reference_depth", {
+          fail3("review_skills_reference_depth", {
             path: current,
             field: "reference",
             reference: target
@@ -215325,27 +215951,27 @@ async function materializeReviewSkillsWithDiagnostics(input) {
           import_node_path.posix.join(import_node_path.posix.dirname(current), target)
         );
         if (!resolved.startsWith(`${source.directory}/`) || resolved === source.directory)
-          fail2("review_skills_reference_traversal", {
+          fail3("review_skills_reference_traversal", {
             path: current,
             field: "reference",
             reference: target
           });
         if (visiting.has(resolved))
-          fail2("review_skills_reference_cycle", {
+          fail3("review_skills_reference_cycle", {
             path: current,
             field: "reference",
             reference: target
           });
         if (resources.has(resolved)) continue;
         if (resources.size >= reviewSkillsLimits.referencesPerSkill)
-          fail2("review_skills_reference_count", {
+          fail3("review_skills_reference_count", {
             path: current,
             field: "reference",
             reference: target
           });
-        let reference;
+        let reference2;
         try {
-          reference = await read(
+          reference2 = await read(
             resolved,
             reviewSkillsLimits.referenceBytes,
             source.budget
@@ -215362,9 +215988,9 @@ async function materializeReviewSkillsWithDiagnostics(input) {
             reference: target
           });
         }
-        resources.set(resolved, reference);
+        resources.set(resolved, reference2);
         visiting.add(resolved);
-        await visit(resolved, reference, depth + 1);
+        await visit(resolved, reference2, depth + 1);
         visiting.delete(resolved);
       }
     };
@@ -215376,7 +216002,7 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       ...parsed,
       includePaths: ["**"],
       excludePaths: [],
-      resources: [...resources.entries()].sort(([a2], [b2]) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0).map(([path39, content2]) => ({ path: path39, content: content2 }))
+      resources: [...resources.entries()].sort(([a2], [b2]) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0).map(([path40, content2]) => ({ path: path40, content: content2 }))
     });
   }
   try {
@@ -215501,8 +216127,8 @@ var ReviewSkillsReceiptCollector = class {
     const acceptedPaths = new Set(
       input.acceptedEvidence.flatMap(
         (item) => item.coverageManifest.paths.filter(
-          (path39) => path39.kind !== "unavailable" && path39.kind !== "policy_excluded"
-        ).map((path39) => path39.path)
+          (path40) => path40.kind !== "unavailable" && path40.kind !== "policy_excluded"
+        ).map((path40) => path40.path)
       )
     );
     const witnessedByKey = /* @__PURE__ */ new Map();
@@ -215523,12 +216149,12 @@ var ReviewSkillsReceiptCollector = class {
     ];
     const changedPaths = [...new Set(input.changedPaths)];
     const status = (skill) => {
-      if (!changedPaths.some((path39) => reviewSkillMatchesPath(skill, path39)))
+      if (!changedPaths.some((path40) => reviewSkillMatchesPath(skill, path40)))
         return 3;
-      if ([...suppliedPaths].some((path39) => reviewSkillMatchesPath(skill, path39)))
+      if ([...suppliedPaths].some((path40) => reviewSkillMatchesPath(skill, path40)))
         return 0;
       return [...acceptedPaths].some(
-        (path39) => reviewSkillMatchesPath(skill, path39)
+        (path40) => reviewSkillMatchesPath(skill, path40)
       ) ? 1 : 2;
     };
     const lines = [
@@ -215566,7 +216192,7 @@ var ReviewSkillsReceiptCollector = class {
         continue;
       }
       const count2 = [...acceptedPaths].filter(
-        (path39) => reviewSkillMatchesPath(skill, path39)
+        (path40) => reviewSkillMatchesPath(skill, path40)
       ).length;
       const row = `- ${renderReviewSkillsDiagnosticText(`${directory}/SKILL.md`)} \u2014 ${statuses[status(skill)]}; matching paths in accepted scope: ${count2}`;
       if (Buffer.byteLength([...lines, row].join("\n")) > 4e3) {
@@ -215603,7 +216229,7 @@ function observeNativeReviewSkillsSupply(delegate, collector, requestCount) {
           providerInvocationKey: input.manifest.providerInvocationKey,
           payloadHash: observation.payloadHash,
           paths: input.invocation.coverageManifest.paths.map(
-            (path39) => path39.path
+            (path40) => path40.path
           )
         });
       return observation;
@@ -215638,10 +216264,10 @@ var ContextToolsError = class extends Error {
 function contextToolsError(code) {
   return new ContextToolsError(code);
 }
-function record6(value) {
+function record7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function keys3(value, expected) {
+function keys4(value, expected) {
   return Object.keys(value).sort().join(",") === expected.sort().join(",");
 }
 function approvedEndpoint(value) {
@@ -215664,7 +216290,7 @@ function parseContextToolsPlan(json3) {
   } catch {
     throw contextToolsError("plan_invalid");
   }
-  if (!record6(value) || !keys3(value, [
+  if (!record7(value) || !keys4(value, [
     "version",
     "builtinTools",
     "servers",
@@ -215672,7 +216298,7 @@ function parseContextToolsPlan(json3) {
     "planDigest"
   ]) || value.version !== 1 || !Array.isArray(value.builtinTools) || value.builtinTools.length > 2 || new Set(value.builtinTools).size !== value.builtinTools.length || value.builtinTools.some(
     (x2) => x2 !== "github.issue.read" && x2 !== "repository.docs.read"
-  ) || !Array.isArray(value.servers) || value.servers.length > contextToolsContract.maxServers || !record6(value.limits) || !keys3(value.limits, [
+  ) || !Array.isArray(value.servers) || value.servers.length > contextToolsContract.maxServers || !record7(value.limits) || !keys4(value.limits, [
     "startupTimeoutMs",
     "callTimeoutMs",
     "responseBytes",
@@ -215682,21 +216308,21 @@ function parseContextToolsPlan(json3) {
   const ids = /* @__PURE__ */ new Set();
   const bindings = /* @__PURE__ */ new Map();
   for (const server of value.servers) {
-    if (!record6(server) || !keys3(server, [
+    if (!record7(server) || !keys4(server, [
       "id",
       "version",
       "url",
       "headers",
       "tools",
       "credentials"
-    ]) || typeof server.id !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(server.id) || ids.has(server.id) || !Number.isSafeInteger(server.version) || Number(server.version) < 1 || typeof server.url !== "string" || !record6(server.headers) || Object.keys(server.headers).length > contextToolsContract.maxHeadersPerServer || !record6(server.credentials) || Object.keys(server.credentials).length > contextToolsContract.maxCredentialBindingsPerServer || !Array.isArray(server.tools) || server.tools.length < 1 || server.tools.length > contextToolsContract.maxToolsPerServer || new Set(server.tools).size !== server.tools.length || server.tools.some(
+    ]) || typeof server.id !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(server.id) || ids.has(server.id) || !Number.isSafeInteger(server.version) || Number(server.version) < 1 || typeof server.url !== "string" || !record7(server.headers) || Object.keys(server.headers).length > contextToolsContract.maxHeadersPerServer || !record7(server.credentials) || Object.keys(server.credentials).length > contextToolsContract.maxCredentialBindingsPerServer || !Array.isArray(server.tools) || server.tools.length < 1 || server.tools.length > contextToolsContract.maxToolsPerServer || new Set(server.tools).size !== server.tools.length || server.tools.some(
       (x2) => typeof x2 !== "string" || !toolNamePattern.test(x2)
     ))
       throw contextToolsError("plan_invalid");
     approvedEndpoint(server.url);
     ids.add(server.id);
     for (const [name, binding] of Object.entries(server.credentials)) {
-      if (!logicalNamePattern.test(name) || !record6(binding) || !(binding.source === "github-secret" && keys3(binding, ["source", "name"]) && typeof binding.name === "string" && logicalNamePattern.test(binding.name) || binding.source === "dashboard-secret" && keys3(binding, ["source", "credentialRef", "version"]) && typeof binding.credentialRef === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(binding.credentialRef) && Number.isSafeInteger(binding.version) && Number(binding.version) > 0))
+      if (!logicalNamePattern.test(name) || !record7(binding) || !(binding.source === "github-secret" && keys4(binding, ["source", "name"]) && typeof binding.name === "string" && logicalNamePattern.test(binding.name) || binding.source === "dashboard-secret" && keys4(binding, ["source", "credentialRef", "version"]) && typeof binding.credentialRef === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(binding.credentialRef) && Number.isSafeInteger(binding.version) && Number(binding.version) > 0))
         throw contextToolsError("plan_invalid");
       const identity = canonicalJson2(binding);
       if (bindings.has(name) && bindings.get(name) !== identity)
@@ -215936,18 +216562,18 @@ function assignProp(target, prop, value) {
     configurable: true
   });
 }
-function getElementAtPath(obj, path39) {
-  if (!path39)
+function getElementAtPath(obj, path40) {
+  if (!path40)
     return obj;
-  return path39.reduce((acc, key) => acc?.[key], obj);
+  return path40.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
-  const keys4 = Object.keys(promisesObj);
-  const promises4 = keys4.map((key) => promisesObj[key]);
+  const keys5 = Object.keys(promisesObj);
+  const promises4 = keys5.map((key) => promisesObj[key]);
   return Promise.all(promises4).then((results) => {
     const resolvedObj = {};
-    for (let i2 = 0; i2 < keys4.length; i2++) {
-      resolvedObj[keys4[i2]] = results[i2];
+    for (let i2 = 0; i2 < keys5.length; i2++) {
+      resolvedObj[keys5[i2]] = results[i2];
     }
     return resolvedObj;
   });
@@ -216259,11 +216885,11 @@ function aborted(x2, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path39, issues) {
+function prefixIssues(path40, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path39);
+    iss.path.unshift(path40);
     return iss;
   });
 }
@@ -216498,7 +217124,7 @@ var string = (params) => {
   return new RegExp(`^${regex}$`);
 };
 var bigint = /^\d+n?$/;
-var integer = /^\d+$/;
+var integer2 = /^\d+$/;
 var number = /^-?\d+(?:\.\d+)?/i;
 var boolean = /true|false/i;
 var _null2 = /null/i;
@@ -216607,7 +217233,7 @@ var $ZodCheckNumberFormat = /* @__PURE__ */ $constructor("$ZodCheckNumberFormat"
     bag.minimum = minimum;
     bag.maximum = maximum;
     if (isInt)
-      bag.pattern = integer;
+      bag.pattern = integer2;
   });
   inst._zod.check = (payload) => {
     const input = payload.value;
@@ -217513,8 +218139,8 @@ function handleOptionalObjectResult(result2, final, key, input) {
 var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
   $ZodType.init(inst, def);
   const _normalized = cached(() => {
-    const keys4 = Object.keys(def.shape);
-    for (const k2 of keys4) {
+    const keys5 = Object.keys(def.shape);
+    for (const k2 of keys5) {
       if (!(def.shape[k2] instanceof $ZodType)) {
         throw new Error(`Invalid element at key "${k2}": expected a Zod schema`);
       }
@@ -217522,9 +218148,9 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
     const okeys = optionalKeys(def.shape);
     return {
       shape: def.shape,
-      keys: keys4,
-      keySet: new Set(keys4),
-      numKeys: keys4.length,
+      keys: keys5,
+      keySet: new Set(keys5),
+      numKeys: keys5.length,
       optionalKeys: new Set(okeys)
     };
   });
@@ -219412,7 +220038,7 @@ var ZodRecord2 = /* @__PURE__ */ $constructor("ZodRecord", (inst, def) => {
   inst.keyType = def.keyType;
   inst.valueType = def.valueType;
 });
-function record7(keyType, valueType, params) {
+function record8(keyType, valueType, params) {
   return new ZodRecord2({
     type: "record",
     keyType,
@@ -219425,11 +220051,11 @@ var ZodEnum2 = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
   ZodType2.init(inst, def);
   inst.enum = def.entries;
   inst.options = Object.values(def.entries);
-  const keys4 = new Set(Object.keys(def.entries));
+  const keys5 = new Set(Object.keys(def.entries));
   inst.extract = (values, params) => {
     const newEntries = {};
     for (const value of values) {
-      if (keys4.has(value)) {
+      if (keys5.has(value)) {
         newEntries[value] = def.entries[value];
       } else
         throw new Error(`Key ${value} not found in enum`);
@@ -219444,7 +220070,7 @@ var ZodEnum2 = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
   inst.exclude = (values, params) => {
     const newEntries = { ...def.entries };
     for (const value of values) {
-      if (keys4.has(value)) {
+      if (keys5.has(value)) {
         delete newEntries[value];
       } else
         throw new Error(`Key ${value} not found in enum`);
@@ -219923,7 +220549,7 @@ var ImplementationSchema = BaseMetadataSchema.extend({
 });
 var FormElicitationCapabilitySchema = intersection(object3({
   applyDefaults: boolean2().optional()
-}), record7(string2(), unknown()));
+}), record8(string2(), unknown()));
 var ElicitationCapabilitySchema = preprocess((value) => {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     if (Object.keys(value).length === 0) {
@@ -219934,7 +220560,7 @@ var ElicitationCapabilitySchema = preprocess((value) => {
 }, intersection(object3({
   form: FormElicitationCapabilitySchema.optional(),
   url: AssertObjectSchema.optional()
-}), record7(string2(), unknown()).optional()));
+}), record8(string2(), unknown()).optional()));
 var ClientTasksCapabilitySchema = looseObject({
   /**
    * Present if the client supports listing tasks.
@@ -219987,7 +220613,7 @@ var ClientCapabilitiesSchema = object3({
   /**
    * Experimental, non-standard capabilities that the client supports.
    */
-  experimental: record7(string2(), AssertObjectSchema).optional(),
+  experimental: record8(string2(), AssertObjectSchema).optional(),
   /**
    * Present if the client supports sampling from an LLM.
    */
@@ -220022,7 +220648,7 @@ var ClientCapabilitiesSchema = object3({
   /**
    * Extensions that the client supports. Keys are extension identifiers (vendor-prefix/extension-name).
    */
-  extensions: record7(string2(), AssertObjectSchema).optional()
+  extensions: record8(string2(), AssertObjectSchema).optional()
 });
 var InitializeRequestParamsSchema = BaseRequestParamsSchema.extend({
   /**
@@ -220041,7 +220667,7 @@ var ServerCapabilitiesSchema = object3({
   /**
    * Experimental, non-standard capabilities that the server supports.
    */
-  experimental: record7(string2(), AssertObjectSchema).optional(),
+  experimental: record8(string2(), AssertObjectSchema).optional(),
   /**
    * Present if the server supports sending log messages to the client.
    */
@@ -220088,7 +220714,7 @@ var ServerCapabilitiesSchema = object3({
   /**
    * Extensions that the server supports. Keys are extension identifiers (vendor-prefix/extension-name).
    */
-  extensions: record7(string2(), AssertObjectSchema).optional()
+  extensions: record8(string2(), AssertObjectSchema).optional()
 });
 var InitializeResultSchema = ResultSchema.extend({
   /**
@@ -220227,7 +220853,7 @@ var ResourceContentsSchema = object3({
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var TextResourceContentsSchema = ResourceContentsSchema.extend({
   /**
@@ -220421,7 +221047,7 @@ var GetPromptRequestParamsSchema = BaseRequestParamsSchema.extend({
   /**
    * Arguments to use for templating the prompt.
    */
-  arguments: record7(string2(), string2()).optional()
+  arguments: record8(string2(), string2()).optional()
 });
 var GetPromptRequestSchema = RequestSchema.extend({
   method: literal("prompts/get"),
@@ -220441,7 +221067,7 @@ var TextContentSchema = object3({
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var ImageContentSchema = object3({
   type: literal("image"),
@@ -220461,7 +221087,7 @@ var ImageContentSchema = object3({
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var AudioContentSchema = object3({
   type: literal("audio"),
@@ -220481,7 +221107,7 @@ var AudioContentSchema = object3({
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var ToolUseContentSchema = object3({
   type: literal("tool_use"),
@@ -220499,12 +221125,12 @@ var ToolUseContentSchema = object3({
    * Arguments to pass to the tool.
    * Must conform to the tool's inputSchema.
    */
-  input: record7(string2(), unknown()),
+  input: record8(string2(), unknown()),
   /**
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var EmbeddedResourceSchema = object3({
   type: literal("resource"),
@@ -220517,7 +221143,7 @@ var EmbeddedResourceSchema = object3({
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var ResourceLinkSchema = ResourceSchema.extend({
   type: literal("resource_link")
@@ -220607,7 +221233,7 @@ var ToolSchema = object3({
    */
   inputSchema: object3({
     type: literal("object"),
-    properties: record7(string2(), AssertObjectSchema).optional(),
+    properties: record8(string2(), AssertObjectSchema).optional(),
     required: array(string2()).optional()
   }).catchall(unknown()),
   /**
@@ -220617,7 +221243,7 @@ var ToolSchema = object3({
    */
   outputSchema: object3({
     type: literal("object"),
-    properties: record7(string2(), AssertObjectSchema).optional(),
+    properties: record8(string2(), AssertObjectSchema).optional(),
     required: array(string2()).optional()
   }).catchall(unknown()).optional(),
   /**
@@ -220632,7 +221258,7 @@ var ToolSchema = object3({
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var ListToolsRequestSchema = PaginatedRequestSchema.extend({
   method: literal("tools/list")
@@ -220653,7 +221279,7 @@ var CallToolResultSchema = ResultSchema.extend({
    *
    * If the Tool defines an outputSchema, this field MUST be present in the result, and contain a JSON object that matches the schema.
    */
-  structuredContent: record7(string2(), unknown()).optional(),
+  structuredContent: record8(string2(), unknown()).optional(),
   /**
    * Whether the tool call ended in an error.
    *
@@ -220681,7 +221307,7 @@ var CallToolRequestParamsSchema = TaskAugmentedRequestParamsSchema.extend({
   /**
    * Arguments to pass to the tool.
    */
-  arguments: record7(string2(), unknown()).optional()
+  arguments: record8(string2(), unknown()).optional()
 });
 var CallToolRequestSchema = RequestSchema.extend({
   method: literal("tools/call"),
@@ -220783,7 +221409,7 @@ var ToolResultContentSchema = object3({
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var SamplingContentSchema = discriminatedUnion("type", [TextContentSchema, ImageContentSchema, AudioContentSchema]);
 var SamplingMessageContentBlockSchema = discriminatedUnion("type", [
@@ -220800,7 +221426,7 @@ var SamplingMessageSchema = object3({
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var CreateMessageRequestParamsSchema = TaskAugmentedRequestParamsSchema.extend({
   messages: array(SamplingMessageSchema),
@@ -220988,7 +221614,7 @@ var ElicitRequestFormParamsSchema = TaskAugmentedRequestParamsSchema.extend({
    */
   requestedSchema: object3({
     type: literal("object"),
-    properties: record7(string2(), PrimitiveSchemaDefinitionSchema),
+    properties: record8(string2(), PrimitiveSchemaDefinitionSchema),
     required: array(string2()).optional()
   })
 });
@@ -221040,7 +221666,7 @@ var ElicitResultSchema = ResultSchema.extend({
    * Per MCP spec, content is "typically omitted" for decline/cancel actions.
    * We normalize null to undefined for leniency while maintaining type compatibility.
    */
-  content: preprocess((val) => val === null ? void 0 : val, record7(string2(), union([string2(), number2(), boolean2(), array(string2())])).optional())
+  content: preprocess((val) => val === null ? void 0 : val, record8(string2(), union([string2(), number2(), boolean2(), array(string2())])).optional())
 });
 var ResourceTemplateReferenceSchema = object3({
   type: literal("ref/resource"),
@@ -221075,7 +221701,7 @@ var CompleteRequestParamsSchema = BaseRequestParamsSchema.extend({
     /**
      * Previously-resolved variables in a URI template or prompt.
      */
-    arguments: record7(string2(), string2()).optional()
+    arguments: record8(string2(), string2()).optional()
   }).optional()
 });
 var CompleteRequestSchema = RequestSchema.extend({
@@ -221111,7 +221737,7 @@ var RootSchema = object3({
    * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
    * for notes on _meta usage.
    */
-  _meta: record7(string2(), unknown()).optional()
+  _meta: record8(string2(), unknown()).optional()
 });
 var ListRootsRequestSchema = RequestSchema.extend({
   method: literal("roots/list"),
@@ -224668,7 +225294,7 @@ function bindContextToolCredentials(input) {
     throw contextToolsError("credentials_invalid");
   }
   const collect = (values, selected) => {
-    if (!record6(values) || Buffer.byteLength(JSON.stringify(values)) > contextToolsContract.maxCredentialMapBytes || Object.keys(values).some((key) => !selected.has(key)))
+    if (!record7(values) || Buffer.byteLength(JSON.stringify(values)) > contextToolsContract.maxCredentialMapBytes || Object.keys(values).some((key) => !selected.has(key)))
       throw contextToolsError("credentials_invalid");
     const result2 = /* @__PURE__ */ new Map();
     for (const name of selected) {
@@ -224689,7 +225315,7 @@ function bindContextToolCredentials(input) {
       return value;
     }
     if (Array.isArray(value)) return value.map(redact);
-    if (record6(value))
+    if (record7(value))
       return Object.fromEntries(
         Object.entries(value).map(([key, child]) => [
           redact(key),
@@ -226915,7 +227541,7 @@ function createPinnedHttpsFetch(input) {
       throw contextToolsError("request_too_large");
     return new Promise((resolve6, reject) => {
       let settled = false;
-      const fail2 = (code) => {
+      const fail3 = (code) => {
         if (!settled) {
           settled = true;
           reject(contextToolsError(code));
@@ -226936,29 +227562,29 @@ function createPinnedHttpsFetch(input) {
           const status = res.statusCode ?? 0;
           if (status < 200 || status > 599) {
             res.destroy();
-            fail2("response_invalid");
+            fail3("response_invalid");
             return;
           }
           if (status >= 300 && status < 400) {
             res.destroy();
-            fail2("redirect_forbidden");
+            fail3("redirect_forbidden");
             return;
           }
           if (status === 401 || status === 403) {
             res.destroy();
-            fail2("remote_auth_unavailable");
+            fail3("remote_auth_unavailable");
             return;
           }
           const chunks = [];
-          let bytes = 0;
+          let bytes2 = 0;
           res.on("data", (chunk) => {
-            bytes += chunk.length;
-            if (bytes > input.responseBytes) {
+            bytes2 += chunk.length;
+            if (bytes2 > input.responseBytes) {
               res.destroy();
-              fail2("response_too_large");
+              fail3("response_too_large");
             } else chunks.push(chunk);
           });
-          res.on("error", () => fail2("response_failed"));
+          res.on("error", () => fail3("response_failed"));
           res.on("end", () => {
             if (settled) return;
             settled = true;
@@ -226983,14 +227609,14 @@ function createPinnedHttpsFetch(input) {
       );
       const deadline = setTimeout(
         () => {
-          fail2("deadline");
+          fail3("deadline");
           req.destroy();
         },
         Math.max(1, input.timeoutMs - (Date.now() - began))
       );
       deadline.unref();
       const abort = () => {
-        fail2("aborted");
+        fail3("aborted");
         req.destroy();
       };
       init?.signal?.addEventListener("abort", abort, { once: true });
@@ -226998,12 +227624,12 @@ function createPinnedHttpsFetch(input) {
         socket.once("secureConnect", () => {
           const actual = socket.remoteAddress?.replace(/^::ffff:/, "");
           if (!actual || normalizeAddress(actual) !== normalizeAddress(address.address)) {
-            fail2("destination_changed");
+            fail3("destination_changed");
             req.destroy();
           }
         });
       });
-      req.on("error", () => fail2("request_failed"));
+      req.on("error", () => fail3("request_failed"));
       req.on("close", () => {
         clearTimeout(deadline);
         init?.signal?.removeEventListener("abort", abort);
@@ -227252,10 +227878,10 @@ async function serveContextTools(input) {
       return;
     }
     const chunks = [];
-    let bytes = 0;
+    let bytes2 = 0;
     for await (const chunk of req) {
-      bytes += chunk.length;
-      if (bytes > 131072) {
+      bytes2 += chunk.length;
+      if (bytes2 > 131072) {
         res.writeHead(413);
         res.end();
         return;
@@ -227263,7 +227889,7 @@ async function serveContextTools(input) {
       chunks.push(Buffer.from(chunk));
     }
     const body2 = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    if (!record6(body2) || Date.now() >= input.deadlineMs) {
+    if (!record7(body2) || Date.now() >= input.deadlineMs) {
       res.writeHead(400);
       res.end();
       return;
@@ -227428,6 +228054,7 @@ async function prepareOcrContextTools(input) {
           cache: "no-store",
           headers: {
             authorization: `Bearer ${authorization.authorizationToken}`,
+            ...input.reviewerId ? { "x-reviewrouter-reviewer-id": input.reviewerId } : {},
             "content-type": "application/json"
           },
           body: JSON.stringify({
@@ -227455,11 +228082,11 @@ async function prepareOcrContextTools(input) {
     const reader = response.body?.getReader();
     if (!reader) throw contextToolsError("server_unavailable");
     const chunks = [];
-    let bytes = 0;
+    let bytes2 = 0;
     try {
       for (let item = await reader.read(); !item.done; item = await reader.read()) {
-        bytes += item.value.byteLength;
-        if (bytes > plan.limits.responseBytes)
+        bytes2 += item.value.byteLength;
+        if (bytes2 > plan.limits.responseBytes)
           throw contextToolsError("response_too_large");
         chunks.push(item.value);
       }
@@ -227473,7 +228100,7 @@ async function prepareOcrContextTools(input) {
     } catch {
       throw contextToolsError("server_unavailable");
     }
-    if (!record6(value)) throw contextToolsError("server_unavailable");
+    if (!record7(value)) throw contextToolsError("server_unavailable");
     return value;
   };
   const dashboard = plan.servers.some(
@@ -227484,7 +228111,7 @@ async function prepareOcrContextTools(input) {
   let dashboardSecrets = {};
   if (dashboard || plan.builtinTools.includes("github.issue.read")) {
     const result2 = await post("credentials");
-    if (result2.planDigest !== plan.planDigest || !record6(result2.secrets) || Object.values(result2.secrets).some((value) => typeof value !== "string"))
+    if (result2.planDigest !== plan.planDigest || !record7(result2.secrets) || Object.values(result2.secrets).some((value) => typeof value !== "string"))
       throw contextToolsError("credentials_unavailable");
     dashboardSecrets = result2.secrets;
   }
@@ -227870,13 +228497,13 @@ function selectDirectProvider(config2, expectedMode) {
   if (!selected || !mode || expectedMode !== void 0 && mode !== expectedMode || config2.providers.length !== 1 || config2.providerLimit !== 1 || config2.providerMaxParallel !== 1 || config2.inlineMinAgreement !== 1 || config2.synthesisModel !== selected || config2.fallbackProviders.length !== 0 || config2.requiredHealthyProviders?.length !== 1 || config2.requiredHealthyProviders[0] !== selected)
     throw new Error("review_action_v2_direct_provider_policy_invalid");
   const descriptor = providerApiDescriptors[mode];
-  const model = selected.slice(descriptor.runtimePrefix.length + 1);
-  if (mode === "openrouter-api" ? !/^[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(model) : model !== descriptor.defaultModel)
+  const model2 = selected.slice(descriptor.runtimePrefix.length + 1);
+  if (mode === "openrouter-api" ? !/^[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(model2) : model2 !== descriptor.defaultModel)
     throw new Error("review_action_v2_direct_provider_model_invalid");
   return Object.freeze({
     mode,
     providerName: selected,
-    model,
+    model: model2,
     modelProvider: mode === "mimo-token-plan-api" ? "mimo" : mode === "kimi-code-api" ? "kimi" : "openrouter"
   });
 }
@@ -231498,11 +232125,11 @@ function assertCodexChatGptAuth(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("codex_auth_json_invalid_shape");
   }
-  const record10 = value;
-  if (record10.auth_mode !== "chatgpt") {
+  const record11 = value;
+  if (record11.auth_mode !== "chatgpt") {
     throw new Error("codex_auth_json_auth_mode_not_chatgpt");
   }
-  if (!record10.tokens || typeof record10.tokens.refresh_token !== "string" || record10.tokens.refresh_token.length === 0) {
+  if (!record11.tokens || typeof record11.tokens.refresh_token !== "string" || record11.tokens.refresh_token.length === 0) {
     throw new Error("codex_auth_json_refresh_token_missing");
   }
 }
@@ -232520,7 +233147,7 @@ function buildReviewInvestigationSeedEnvelope(input) {
   if (changedPathFacts.size !== input.probePlan.changedPaths.length) {
     throw new Error("review_investigation_seed_changed_path_duplicate");
   }
-  if (changedPathFacts.size !== paths.length || paths.some((path39) => !changedPathFacts.has(path39))) {
+  if (changedPathFacts.size !== paths.length || paths.some((path40) => !changedPathFacts.has(path40))) {
     throw new Error("review_investigation_seed_path_set_mismatch");
   }
   const inventory = prepareCanonicalInventory(input.canonicalInventory);
@@ -233885,22 +234512,22 @@ function parseRawInventory(raw) {
   }
   const entries = [];
   for (let index = 0; index < tokens.length; index += 2) {
-    const record10 = decodeUtf8(
+    const record11 = decodeUtf8(
       tokens[index],
       "canonical_inventory_raw_record_encoding_invalid"
     );
-    const path39 = decodeUtf8(
+    const path40 = decodeUtf8(
       tokens[index + 1],
       "canonical_inventory_path_encoding_invalid"
     );
-    const match2 = RAW_RECORD.exec(record10);
-    if (!match2 || !path39 || path39.includes("\0")) {
+    const match2 = RAW_RECORD.exec(record11);
+    if (!match2 || !path40 || path40.includes("\0")) {
       throw new Error("canonical_inventory_raw_record_invalid");
     }
     entries.push(
       Object.freeze({
         status: rawStatus(match2[5]),
-        path: path39,
+        path: path40,
         beforeMode: match2[1],
         afterMode: match2[2],
         beforeOid: requireGitOidOrZero2(match2[3]),
@@ -237191,7 +237818,7 @@ var ContextAttestationReplayRunner = class {
         ),
         recorder
       });
-      const dependencies = [];
+      const dependencies2 = [];
       let previousEventHash = eventChainSeedHash;
       for (const source of plan.sourceDependencies) {
         await replayOperation(gateway, source);
@@ -237211,7 +237838,7 @@ var ContextAttestationReplayRunner = class {
         const eventHash = sha2562(
           canonicalizeReviewContextReplayEvent(eventWithoutHash)
         );
-        dependencies.push(Object.freeze({ ...eventWithoutHash, eventHash }));
+        dependencies2.push(Object.freeze({ ...eventWithoutHash, eventHash }));
         previousEventHash = eventHash;
       }
       const replayResultCanonicalJson = canonicalJson2({
@@ -237221,7 +237848,7 @@ var ContextAttestationReplayRunner = class {
         checkoutTreeOid: targetCheckoutTreeOid,
         authenticatedChainHash: previousEventHash,
         complete: true,
-        dependencies
+        dependencies: dependencies2
       });
       return Object.freeze({
         targetCheckoutTreeOid,
@@ -237553,7 +238180,7 @@ function parseReplayPlan(candidate) {
   if (parsed.planVersion !== 1 || parsed.attestationId !== candidate.attestationId || parsed.attestationHash !== candidate.attestationHash || !Array.isArray(parsed.sourceDependencies) || parsed.sourceDependencies.length === 0 || parsed.sourceDependencies.length > CONTEXT_GATEWAY_MAX_OPERATIONS) {
     throw new Error("context_replay_plan_scope_invalid");
   }
-  const dependencies = parsed.sourceDependencies.map((value, index) => {
+  const dependencies2 = parsed.sourceDependencies.map((value, index) => {
     if (!isRecord9(value)) throw new Error("context_replay_dependency_invalid");
     requireExactKeys3(value, [
       "operation",
@@ -237592,7 +238219,7 @@ function parseReplayPlan(candidate) {
       stringField(parsed, "gatewayBinaryHash"),
       "source_gateway_binary_hash"
     ),
-    sourceDependencies: Object.freeze(dependencies)
+    sourceDependencies: Object.freeze(dependencies2)
   });
 }
 function parseReplayPlanV4(parsed, candidate) {
@@ -237776,8 +238403,15 @@ var ProviderInvocationFailureClassifier = class {
   constructor(gatewayFailureFact = () => void 0) {
     this.gatewayFailureFact = gatewayFailureFact;
   }
-  classify(error4) {
-    const fact = this.gatewayFailureFact();
+  scope(_error, context5) {
+    const fact = this.gatewayFailureFact(context5);
+    if (fact?.failureScope === "allocation") {
+      return fact.concurrencyGroupId === context5.concurrencyGroupId ? "allocation" : "run";
+    }
+    return fact ? fact.failureScope ?? "reviewer" : void 0;
+  }
+  classify(error4, context5) {
+    const fact = this.gatewayFailureFact(context5);
     if (error4 instanceof ContextToolsError || fact?.code === "context_tools_unavailable")
       return "configuration_mismatch" /* ConfigurationMismatch */;
     if (fact?.code === "admission_limited" && (fact.effect === "not_dispatched" || fact.effect === "rejected_before_dispatch")) {
@@ -237896,8 +238530,8 @@ function diagnosticText(error4) {
   if (typeof error4 !== "object" || error4 === null || Array.isArray(error4)) {
     return "";
   }
-  const record10 = error4;
-  return [record10.name, record10.code, record10.message].filter((value) => typeof value === "string").join(" ");
+  const record11 = error4;
+  return [record11.name, record11.code, record11.message].filter((value) => typeof value === "string").join(" ");
 }
 
 // src/review-orchestration/infrastructure/git-review-revision-materializer.ts
@@ -238111,7 +238745,7 @@ var FreshGitHubLifecycleInventory = class {
       ),
       promptTargets: Object.freeze([
         ...raw.candidates,
-        ...raw.manualAttention.map((record10) => record10.target)
+        ...raw.manualAttention.map((record11) => record11.target)
       ])
     });
   }
@@ -238119,12 +238753,12 @@ var FreshGitHubLifecycleInventory = class {
 function toRevalidationTargets(raw, ledgerWatermark, activeSkips = []) {
   const targets = [
     ...raw.candidates,
-    ...raw.manualAttention.map((record10) => ({
-      ...record10.target,
+    ...raw.manualAttention.map((record11) => ({
+      ...record11.target,
       reasonCodes: [
         .../* @__PURE__ */ new Set([
-          ...record10.target.reasonCodes ?? [],
-          ...record10.reasonCodes
+          ...record11.target.reasonCodes ?? [],
+          ...record11.reasonCodes
         ])
       ]
     }))
@@ -238132,10 +238766,10 @@ function toRevalidationTargets(raw, ledgerWatermark, activeSkips = []) {
   return Object.freeze(
     targets.map((target) => {
       const reasons = target.reasonCodes ?? [];
-      const path39 = target.currentPath || target.originalPath;
+      const path40 = target.currentPath || target.originalPath;
       const line2 = target.currentLine ?? target.originalLine;
       const commandDismissed = reasons.includes("command_dismissed") || activeSkips.some(
-        (skip) => skip.fingerprint === target.fingerprint || skip.legacyFingerprint === target.fingerprint || target.parentCommentDatabaseId !== void 0 && skip.parentCommentId === target.parentCommentDatabaseId || line2 !== void 0 && skip.line != null && skip.path?.toLowerCase() === path39.toLowerCase() && skip.line === line2
+        (skip) => skip.fingerprint === target.fingerprint || skip.legacyFingerprint === target.fingerprint || target.parentCommentDatabaseId !== void 0 && skip.parentCommentId === target.parentCommentDatabaseId || line2 !== void 0 && skip.line != null && skip.path?.toLowerCase() === path40.toLowerCase() && skip.line === line2
       );
       const completeWitness = typeof target.parentCommentCreatedAt === "string" && typeof target.parentCommentBodyHash === "string" && /^[a-f0-9]{64}$/.test(target.parentCommentBodyHash) && typeof target.claimHash === "string" && /^[a-f0-9]{64}$/.test(target.claimHash) && typeof target.threadStateHash === "string" && /^[a-f0-9]{64}$/.test(target.threadStateHash) && target.findingMarkerAmbiguous === false;
       return Object.freeze({
@@ -238191,9 +238825,9 @@ function mapFreshInventory(raw, expectedHeadSha, ledger) {
     ...raw.candidates.map((target) => ({ target, manual: false })),
     // Include server-authorized observation-only parents without mutation trust.
     ...raw.manualAttention.filter(
-      (record10) => record10.target.trustedAuthor || record10.target.managedObservation
-    ).map((record10) => ({
-      target: record10.target,
+      (record11) => record11.target.trustedAuthor || record11.target.managedObservation
+    ).map((record11) => ({
+      target: record11.target,
       manual: true
     }))
   ].sort(
@@ -238355,9 +238989,9 @@ var import_crypto47 = require("crypto");
 
 // src/review-projection/application/build-current-review-projection.ts
 var BuildCurrentReviewProjection = class {
-  constructor(dependencies) {
-    this.dependencies = dependencies;
-    this.limits = validateReviewProjectionLimits(dependencies.limits);
+  constructor(dependencies2) {
+    this.dependencies = dependencies2;
+    this.limits = validateReviewProjectionLimits(dependencies2.limits);
   }
   limits;
   currentReviewProjector = new CurrentReviewProjector();
@@ -238557,13 +239191,13 @@ var BuildCurrentReviewProjection = class {
       },
       snapshot: coverageOnly ? { occurrenceProvenance: [], lineageHints: [] } : buildSnapshotFacts(occurrences)
     });
-    const canonicalJson19 = canonicalizeReviewProjection(envelope);
-    const byteCount = Buffer.byteLength(canonicalJson19, "utf8");
+    const canonicalJson20 = canonicalizeReviewProjection(envelope);
+    const byteCount = Buffer.byteLength(canonicalJson20, "utf8");
     assertWithinProjectionLimit("maxProjectionBytes", byteCount, this.limits);
     return deepFreezeProjection({
       envelope,
-      canonicalJson: canonicalJson19,
-      projectionHash: hashReviewProjectionCanonicalJson(canonicalJson19),
+      canonicalJson: canonicalJson20,
+      projectionHash: hashReviewProjectionCanonicalJson(canonicalJson20),
       byteCount,
       findingCount: occurrences.length
     });
@@ -238843,7 +239477,7 @@ function buildLifecycleFacts(inventory, decisions, hints, coverage, occurrences,
       ...decision?.reasonCodes ?? [],
       ...!revisionFiles.some(
         (file) => [file.path, file.previousPath].some(
-          (path39) => path39 !== void 0 && (target.currentPath === path39 || target.originalPath === path39)
+          (path40) => path40 !== void 0 && (target.currentPath === path40 || target.originalPath === path40)
         )
       ) ? ["outside_review_scope"] : [],
       ...target.disposition === "human_reply" /* HumanReply */ ? ["human_reply"] : [],
@@ -238952,11 +239586,11 @@ function countOccurrenceStates(occurrences) {
 function publicationMarker(kind, scope) {
   return `reviewrouter:${kind}:v2:${scope.reviewRevisionHash}`;
 }
-function summaryPlacement2(lineageId, path39, reason) {
+function summaryPlacement2(lineageId, path40, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path39,
+    path: path40,
     reason
   };
 }
@@ -239092,8 +239726,8 @@ function validateGateDecision(occurrences, gate, verificationFacts) {
 function assertNonEmpty(name, value) {
   if (!value.trim()) throw new Error(`${name} must not be empty`);
 }
-function normalizePath2(path39) {
-  return path39.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath2(path40) {
+  return path40.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique2(values) {
   return Array.from(new Set(values)).sort(
@@ -239243,17 +239877,17 @@ var LegacyReviewProjectionPolicyAdapter = class {
     });
     const decisions = /* @__PURE__ */ new Map();
     const collect = (records, verdict) => {
-      for (const record10 of records) {
-        decisions.set(record10.target.targetId, {
-          targetId: record10.target.targetId,
+      for (const record11 of records) {
+        decisions.set(record11.target.targetId, {
+          targetId: record11.target.targetId,
           verdict,
-          reasonCodes: sortedUnique3(record10.reasonCodes),
-          ...verdict === "still_valid" /* StillValid */ && record10.reasonCodes.includes("current_finding_present") ? {
+          reasonCodes: sortedUnique3(record11.reasonCodes),
+          ...verdict === "still_valid" /* StillValid */ && record11.reasonCodes.includes("current_finding_present") ? {
             currentSourceFindingIds: sortedUnique3(
               query.findings.filter(
                 (finding) => currentFindingMatchesTarget(
                   toLegacyFinding(finding),
-                  record10.target
+                  record11.target
                 )
               ).flatMap((finding) => finding.sourceFindingIds)
             )
@@ -239727,8 +240361,8 @@ function minimalLegacyReview(findings) {
     }
   };
 }
-function findRevisionFile(path39, revisionFiles) {
-  const normalized = normalizePath3(path39);
+function findRevisionFile(path40, revisionFiles) {
+  const normalized = normalizePath3(path40);
   return revisionFiles.find(
     (file) => normalizePath3(file.path) === normalized || file.previousPath && normalizePath3(file.previousPath) === normalized
   );
@@ -239750,8 +240384,8 @@ function toProjectionSeverity2(severity) {
 function toLegacySeverity(severity) {
   return severity;
 }
-function normalizePath3(path39) {
-  return path39.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath3(path40) {
+  return path40.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique3(values) {
   return Array.from(new Set(values)).sort(
@@ -240018,10 +240652,10 @@ var ProductionReviewProjectionCommandFactory = class {
       const accepted = evidence.get(assignment.workSlotId);
       if (!accepted) {
         if (assignment.required) {
-          for (const path39 of assignment.filePaths) {
+          for (const path40 of assignment.filePaths) {
             recordManifestFile(
               {
-                path: path39,
+                path: path40,
                 status: "unreviewed",
                 reason: exhaustedWorkSlots.has(assignment.workSlotId) ? "required work slot exhausted before producing accepted evidence" : "required work slot produced no accepted evidence"
               },
@@ -240031,17 +240665,17 @@ var ProductionReviewProjectionCommandFactory = class {
         }
         continue;
       }
-      for (const path39 of accepted.coverageManifest.paths) {
+      for (const path40 of accepted.coverageManifest.paths) {
         recordManifestFile(
-          promptCoverageToManifestFile(path39),
+          promptCoverageToManifestFile(path40),
           assignment.required
         );
       }
     }
-    for (const path39 of this.input.uncoveredPaths) {
+    for (const path40 of this.input.uncoveredPaths) {
       recordManifestFile(
         {
-          path: path39,
+          path: path40,
           status: "unreviewed",
           reason: "no review work slot covered this file"
         },
@@ -240079,13 +240713,13 @@ var ProductionReviewProjectionCommandFactory = class {
           `work_slot_investigation_inconclusive:${assignment.workSlotId}`
         );
       }
-      for (const path39 of manifest.paths) {
-        if (path39.kind === "full_patch" /* FullPatch */) {
-          reviewedFiles.add(path39.path);
-        } else if (path39.kind === "policy_excluded" /* PolicyExcluded */) {
-          policyExcludedFiles.add(path39.path);
+      for (const path40 of manifest.paths) {
+        if (path40.kind === "full_patch" /* FullPatch */) {
+          reviewedFiles.add(path40.path);
+        } else if (path40.kind === "policy_excluded" /* PolicyExcluded */) {
+          policyExcludedFiles.add(path40.path);
         } else {
-          coverageLimitations.push(`path_coverage:${path39.path}:${path39.kind}`);
+          coverageLimitations.push(`path_coverage:${path40.path}:${path40.kind}`);
         }
       }
       if (!isReviewPromptCoverageComplete(manifest)) {
@@ -240103,7 +240737,7 @@ var ProductionReviewProjectionCommandFactory = class {
         (omission) => `pull_request_load:${omission.reason}`
       ) : [],
       ...requiredExhaustedWorkSlotIds.map((id) => `work_slot_exhausted:${id}`),
-      ...this.input.uncoveredPaths.map((path39) => `work_slot_uncovered:${path39}`),
+      ...this.input.uncoveredPaths.map((path40) => `work_slot_uncovered:${path40}`),
       ...(this.input.lifecycleVerification ? [] : this.input.uncoveredLifecycleTargetIds).map((targetId) => `lifecycle_target_uncovered:${targetId}`),
       ...coverageLimitations
     ].sort();
@@ -240117,9 +240751,9 @@ var ProductionReviewProjectionCommandFactory = class {
       ].sort()
     );
     const providerExecution = providerExecutionSummary(
-      this.input.lifecycleVerification ? this.input.assignments.filter(
+      this.input.assignments.filter(
         (assignment) => assignment.taskKind === "finding_discovery"
-      ) : this.input.assignments,
+      ),
       evidence
     );
     const manifestFiles = Object.freeze(
@@ -240190,7 +240824,7 @@ function validateAcceptedEvidence(input) {
   for (const accepted of input.evidence) {
     const { coverageManifest: manifest, workSlotId } = accepted;
     const assignment = assignments.get(workSlotId);
-    if (manifest.workSlotId !== workSlotId || !assignment || accepted.observation.providerKind !== assignment.providerKind || evidence.has(workSlotId)) {
+    if (manifest.workSlotId !== workSlotId || !assignment || accepted.observation.providerKind !== assignment.providerKind || assignment.providerVoteIdentityHash !== void 0 && accepted.observation.providerVoteIdentityHash !== assignment.providerVoteIdentityHash || evidence.has(workSlotId)) {
       throw new Error("review_projection_coverage_manifest_scope_invalid");
     }
     const rebuilt = createReviewPromptCoverageManifest({
@@ -240209,9 +240843,10 @@ function validateAcceptedEvidence(input) {
 function providerExecutionSummary(assignments, evidence) {
   const byProvider = /* @__PURE__ */ new Map();
   for (const assignment of assignments) {
-    const providerAssignments = byProvider.get(assignment.providerKind) ?? [];
+    const vote = assignment.providerVoteIdentityHash ?? assignment.providerKind;
+    const providerAssignments = byProvider.get(vote) ?? [];
     providerAssignments.push(assignment);
-    byProvider.set(assignment.providerKind, providerAssignments);
+    byProvider.set(vote, providerAssignments);
   }
   const succeededProviders = [...byProvider.values()].filter(
     (providerAssignments) => {
@@ -240412,50 +241047,50 @@ function compareCodeUnits8(left, right) {
   if (left > right) return 1;
   return 0;
 }
-function promptCoverageToManifestFile(path39) {
-  switch (path39.kind) {
+function promptCoverageToManifestFile(path40) {
+  switch (path40.kind) {
     case "full_patch" /* FullPatch */:
-      return { path: path39.path, status: "full" };
+      return { path: path40.path, status: "full" };
     case "policy_excluded" /* PolicyExcluded */:
       return {
-        path: path39.path,
+        path: path40.path,
         status: "skipped",
         reason: "excluded by review policy"
       };
     case "summary_only" /* SummaryOnly */:
       return {
-        path: path39.path,
+        path: path40.path,
         status: "compacted",
         reason: "summary-only content in prompt"
       };
     case "trusted_read" /* TrustedRead */:
       return {
-        path: path39.path,
+        path: path40.path,
         status: "compacted",
         reason: "trusted read without full patch"
       };
     case "trimmed" /* Trimmed */:
       return {
-        path: path39.path,
+        path: path40.path,
         status: "metadata-only",
         reason: "diff trimmed in prompt"
       };
     case "metadata_only" /* MetadataOnly */:
       return {
-        path: path39.path,
+        path: path40.path,
         status: "metadata-only",
         reason: "metadata-only content in prompt"
       };
     case "unavailable" /* Unavailable */:
       return {
-        path: path39.path,
+        path: path40.path,
         status: "unreviewed",
         reason: "file content unavailable"
       };
   }
 }
-function normalizeManifestPath(path39) {
-  return path39.startsWith("./") ? path39.slice(2) : path39;
+function normalizeManifestPath(path40) {
+  return path40.startsWith("./") ? path40.slice(2) : path40;
 }
 function sha25615(value) {
   return (0, import_crypto47.createHash)("sha256").update(value).digest("hex");
@@ -240674,7 +241309,7 @@ var lifecycleVerificationDescriptorDigestV2 = "sha256:20a13b73ea31192e95c01ad66c
 function parseLifecycleVerificationCapabilityV2(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) invalid4();
   const row = value;
-  const keys4 = [
+  const keys5 = [
     "extensionId",
     "descriptorDigest",
     "executor",
@@ -240692,7 +241327,7 @@ function parseLifecycleVerificationCapabilityV2(value) {
     "deadlineMs",
     "attemptBudget"
   ];
-  if (Object.keys(row).length !== keys4.length || keys4.some((key) => !Object.hasOwn(row, key)) || row.extensionId !== lifecycleVerificationContractV2.extensionId || row.descriptorDigest !== lifecycleVerificationDescriptorDigestV2 || row.executor !== lifecycleVerificationContract.executor || row.version !== 2 || !isReviewModelTransport(row.modelTransport) || typeof row.routeIdentityHash !== "string" || !/^[a-f0-9]{64}$/.test(row.routeIdentityHash) || !isReviewModelWireProtocol(row.protocol) || !reviewModelWireProtocolMatchesTransport(
+  if (Object.keys(row).length !== keys5.length || keys5.some((key) => !Object.hasOwn(row, key)) || row.extensionId !== lifecycleVerificationContractV2.extensionId || row.descriptorDigest !== lifecycleVerificationDescriptorDigestV2 || row.executor !== lifecycleVerificationContract.executor || row.version !== 2 || !isReviewModelTransport(row.modelTransport) || typeof row.routeIdentityHash !== "string" || !/^[a-f0-9]{64}$/.test(row.routeIdentityHash) || !isReviewModelWireProtocol(row.protocol) || !reviewModelWireProtocolMatchesTransport(
     row.modelTransport,
     row.protocol
   ) || row.providerIndex !== 0 || typeof row.providerKind !== "string" || !row.providerKind || row.providerKind.length > 64 || typeof row.model !== "string" || !row.model.trim() || row.model.length > 256 || row.maxDispatches !== lifecycleVerificationContract.maxPackets || row.attemptBudget !== 1)
@@ -240720,19 +241355,19 @@ var invalid5 = () => ({
   valid: false,
   reason: "missing_or_invalid_verdict"
 });
-function exactRecord(value, keys4) {
-  return !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === keys4.length && keys4.every((key) => Object.hasOwn(value, key));
+function exactRecord(value, keys5) {
+  return !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === keys5.length && keys5.every((key) => Object.hasOwn(value, key));
 }
 function boundedText2(value, max = 2048) {
   return typeof value === "string" && Buffer.byteLength(value, "utf8") <= max;
 }
-function validateLifecycleResponse(bytes, prepared, actualModel, requestHash, maxResponseBytes = REVALIDATION_LIMITS.responseBytes) {
-  if (bytes.byteLength > Math.min(maxResponseBytes, REVALIDATION_LIMITS.responseBytes) || actualModel !== prepared.packet.participant.model || requestHash !== prepared.requestHash || byteHash(prepared.requestBytes) !== prepared.requestHash)
+function validateLifecycleResponse(bytes2, prepared, actualModel, requestHash, maxResponseBytes = REVALIDATION_LIMITS.responseBytes) {
+  if (bytes2.byteLength > Math.min(maxResponseBytes, REVALIDATION_LIMITS.responseBytes) || actualModel !== prepared.packet.participant.model || requestHash !== prepared.requestHash || byteHash(prepared.requestBytes) !== prepared.requestHash)
     return invalid5();
   let output;
   try {
     output = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
     );
   } catch {
     return invalid5();
@@ -240801,8 +241436,8 @@ function validateLifecycleResponse(bytes, prepared, actualModel, requestHash, ma
 }
 
 // src/finding-revalidation/application/plan-revalidation.ts
-function normalizedPath(path39) {
-  return !!path39 && !path39.includes("\\") && !path39.includes("\0") && !path39.startsWith("/") && path39.split("/").every((segment) => !!segment && segment !== "." && segment !== "..");
+function normalizedPath(path40) {
+  return !!path40 && !path40.includes("\\") && !path40.includes("\0") && !path40.startsWith("/") && path40.split("/").every((segment) => !!segment && segment !== "." && segment !== "..");
 }
 function witness(target, resolutionHistory) {
   return {
@@ -240905,18 +241540,18 @@ async function planFindingRevalidation(input, ports) {
     }
   };
   const sourceCache = /* @__PURE__ */ new Map();
-  const read = (path39, inclusionReason) => {
-    const cached2 = sourceCache.get(path39);
+  const read = (path40, inclusionReason) => {
+    const cached2 = sourceCache.get(path40);
     if (cached2) return cached2;
     const result2 = (async () => {
-      if (!normalizedPath(path39) || !ports.isPathAllowed(path39))
+      if (!normalizedPath(path40) || !ports.isPathAllowed(path40))
         return {
           source: null,
           reason: "sensitive_context_unavailable"
         };
       const result3 = await ports.sourceReader.read({
         headSha: scope.headSha,
-        path: path39,
+        path: path40,
         maxBytes: fileLimit
       });
       if (result3.kind !== "file")
@@ -240924,7 +241559,7 @@ async function planFindingRevalidation(input, ports) {
           source: null,
           reason: result3.kind === "oversized" ? "source_oversized" : result3.kind === "missing" ? "context_insufficient" : "unsupported_source"
         };
-      if (result3.headSha !== scope.headSha || result3.path !== path39 || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(result3.blobOid))
+      if (result3.headSha !== scope.headSha || result3.path !== path40 || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(result3.blobOid))
         return { source: null, reason: "unsupported_source" };
       if (result3.bytes.byteLength > fileLimit)
         return { source: null, reason: "source_oversized" };
@@ -240940,7 +241575,7 @@ async function planFindingRevalidation(input, ports) {
       return {
         source: {
           headSha: scope.headSha,
-          path: path39,
+          path: path40,
           blobOid: result3.blobOid,
           contentHash: byteHash(result3.bytes),
           content,
@@ -240952,7 +241587,7 @@ async function planFindingRevalidation(input, ports) {
         reason: "verified"
       };
     })();
-    sourceCache.set(path39, result2);
+    sourceCache.set(path40, result2);
     return result2;
   };
   const candidates = [...input.targets].sort(
@@ -241154,13 +241789,13 @@ function createGitImmutableSourceReader(input) {
     return result2.stdout;
   }
   return {
-    async read({ headSha, path: path39, maxBytes }) {
-      if (!/^[a-f0-9]{40}$/.test(headSha) || !path39 || Buffer.byteLength(path39, "utf8") > 4096 || path39.startsWith("/") || path39.includes("\\") || path39.includes("\0") || path39.split("/").some((segment) => !segment || segment === "." || segment === "..") || !Number.isInteger(maxBytes) || maxBytes <= 0)
+    async read({ headSha, path: path40, maxBytes }) {
+      if (!/^[a-f0-9]{40}$/.test(headSha) || !path40 || Buffer.byteLength(path40, "utf8") > 4096 || path40.startsWith("/") || path40.includes("\\") || path40.includes("\0") || path40.split("/").some((segment) => !segment || segment === "." || segment === "..") || !Number.isInteger(maxBytes) || maxBytes <= 0)
         return { kind: "unsupported" };
       const limit = Math.min(maxBytes, REVALIDATION_LIMITS.fileBytes);
       try {
         const tree = await git(
-          ["ls-tree", "-z", headSha, "--", `:(literal)${path39}`],
+          ["ls-tree", "-z", headSha, "--", `:(literal)${path40}`],
           16 * 1024
         );
         if (!tree.length) return { kind: "missing" };
@@ -241170,20 +241805,20 @@ function createGitImmutableSourceReader(input) {
         const entry = /^(100644|100755) blob ([a-f0-9]{40})\t([\s\S]+)$/.exec(
           entries[0]
         );
-        if (!entry || entry[3] !== path39) return { kind: "unsupported" };
+        if (!entry || entry[3] !== path40) return { kind: "unsupported" };
         const blobOid = entry[2];
         const sizeText = (await git(["cat-file", "-s", blobOid], 128)).toString("utf8").trim();
         if (!/^\d+$/.test(sizeText)) return { kind: "unsupported" };
         const size = Number(sizeText);
         if (!Number.isSafeInteger(size) || size > limit)
           return { kind: "oversized" };
-        const bytes = await git(
+        const bytes2 = await git(
           ["cat-file", "blob", blobOid],
           Math.max(1, limit)
         );
-        if (bytes.byteLength !== size || classifyUtf8Content(bytes).kind !== "text")
+        if (bytes2.byteLength !== size || classifyUtf8Content(bytes2).kind !== "text")
           return { kind: "unsupported" };
-        return { kind: "file", headSha, path: path39, blobOid, bytes };
+        return { kind: "file", headSha, path: path40, blobOid, bytes: bytes2 };
       } catch {
         return { kind: "unsupported" };
       }
@@ -241194,18 +241829,18 @@ function createGitImmutableSourceReader(input) {
 // src/review-orchestration/infrastructure/lifecycle-verification-invocation.ts
 var lifecycleTargetWitnesses = (packet) => packet.targets.map((target) => target.witness).sort((left, right) => left.targetId.localeCompare(right.targetId));
 var lifecycleHash = (value) => (0, import_crypto49.createHash)("sha256").update(canonicalRevalidationJson(value)).digest("hex");
-function readLifecycleCapability(json3, model, providerKind, route) {
+function readLifecycleCapability(json3, model2, providerKind, route) {
   if (!json3 || Buffer.byteLength(json3, "utf8") > 4096) return void 0;
   try {
     const raw = JSON.parse(json3);
     if (raw?.extensionId === "lifecycle-verification.v2") {
       const capability = parseLifecycleVerificationCapabilityV2(raw);
-      if (!route || capability.model !== model || capability.providerKind !== providerKind || capability.routeIdentityHash !== route.routeIdentityHash || capability.modelTransport !== route.transport || capability.model !== route.model)
+      if (!route || capability.model !== model2 || capability.providerKind !== providerKind || capability.routeIdentityHash !== route.routeIdentityHash || capability.modelTransport !== route.transport || capability.model !== route.model)
         return void 0;
       return capability;
     }
     const value = raw;
-    if (value.extensionId !== lifecycleVerificationContract.extensionId || value.descriptorDigest !== lifecycleVerificationDescriptorDigest || value.executor !== lifecycleVerificationContract.executor || value.modelTransport !== "account_gateway" || value.providerIndex !== 0 || value.providerKind !== providerKind || value.model !== model || value.maxDispatches !== 2 || value.attemptBudget !== 1)
+    if (value.extensionId !== lifecycleVerificationContract.extensionId || value.descriptorDigest !== lifecycleVerificationDescriptorDigest || value.executor !== lifecycleVerificationContract.executor || value.modelTransport !== "account_gateway" || value.providerIndex !== 0 || value.providerKind !== providerKind || value.model !== model2 || value.maxDispatches !== 2 || value.attemptBudget !== 1)
       return void 0;
     for (const [key, limit] of Object.entries({
       maxPromptBytes: lifecycleVerificationContract.maxPromptBytes,
@@ -242108,10 +242743,10 @@ function planOcrReviewAssignments(input) {
     compatibilityKey: input.compatibilityKey,
     providers: [
       {
-        providerName: "ocr/managed",
+        providerName: input.reviewerId ? `ocr/managed:${input.reviewerId}` : "ocr/managed",
         providerKind: "ocr" /* Ocr */,
         providerVoteIdentityHash: ocrLanes[0].providerVoteIdentityHash,
-        required: true,
+        required: input.reviewerRequired ?? true,
         attemptBudget: Math.min(
           input.attemptBudget ?? OCR_ATTEMPT_BUDGET,
           Math.max(1, input.authorization.limits.maxAttemptsPerSlot)
@@ -242241,6 +242876,7 @@ var OcrReviewInvocationAdapter = class {
   /** Model-free: deterministic preview and semantic capture only (§5.2). */
   async prepare(input) {
     this.options.signal?.throwIfAborted();
+    input.signal?.throwIfAborted();
     const assignment = this.assignments.get(input.workSlot.workSlotId);
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error("review_action_v2_assignment_missing");
@@ -242307,6 +242943,7 @@ var OcrReviewInvocationAdapter = class {
     }
     const previewSignal = AbortSignal.any([
       ...this.options.signal ? [this.options.signal] : [],
+      ...input.signal ? [input.signal] : [],
       AbortSignal.timeout(timeoutMs)
     ]);
     previewSignal.throwIfAborted();
@@ -242341,19 +242978,19 @@ var OcrReviewInvocationAdapter = class {
     const previewSelectedPaths = Object.freeze(
       parseOcrPreviewSelection(readPreviewOutput(previewOutputPath))
     );
-    const pathCoverage = assignedPaths.map((path39) => {
+    const pathCoverage = assignedPaths.map((path40) => {
       const file = assignment.context.files.find(
-        (candidate) => candidate.filename === path39
+        (candidate) => candidate.filename === path40
       );
       return {
-        path: path39,
+        path: path40,
         // The full canonical patch of every assigned path is in the exact
         // revision OCR reviews; a preview-skipped path stays visible as
         // unreviewed, never as an RR policy exclusion (§8.1).
-        kind: previewSelectedPaths.includes(path39) ? "full_patch" /* FullPatch */ : "unavailable" /* Unavailable */,
+        kind: previewSelectedPaths.includes(path40) ? "full_patch" /* FullPatch */ : "unavailable" /* Unavailable */,
         contentHash: sha25616(
           canonicalJson16({
-            filename: path39,
+            filename: path40,
             patch: file?.patch ?? null,
             status: file?.status ?? null
           })
@@ -242675,9 +243312,9 @@ function assertOcrInvocationLive(input) {
 }
 function readPreviewOutput(outputPath) {
   try {
-    const bytes = fs26.readFileSync(outputPath);
-    if (bytes.length > 4 * 1024 * 1024) return void 0;
-    return JSON.parse(bytes.toString("utf8"));
+    const bytes2 = fs26.readFileSync(outputPath);
+    if (bytes2.length > 4 * 1024 * 1024) return void 0;
+    return JSON.parse(bytes2.toString("utf8"));
   } catch {
     return void 0;
   }
@@ -242696,9 +243333,9 @@ function parseOcrPreviewSelection(raw) {
     const selected = value.files.flatMap((file) => {
       if (typeof file !== "object" || file === null) return [];
       const entry = file;
-      const path39 = entry.path;
-      if (typeof path39 !== "string") return [];
-      return entry.will_review === true ? [path39] : [];
+      const path40 = entry.path;
+      if (typeof path40 !== "string") return [];
+      return entry.will_review === true ? [path40] : [];
     });
     return Object.freeze([...new Set(selected)]);
   }
@@ -242738,8 +243375,8 @@ var SystemReviewOrchestrationClock = class {
 
 // src/review-investigation/application/replay-investigation-on-revision.ts
 var ReplayInvestigationOnRevision = class {
-  constructor(dependencies) {
-    this.dependencies = dependencies;
+  constructor(dependencies2) {
+    this.dependencies = dependencies2;
   }
   async execute(input) {
     if (!await this.isCurrent(input)) return null;
@@ -243735,14 +244372,14 @@ function requireRecord3(value, field) {
 function isRecord11(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function requireExactKeys4(value, keys4) {
-  if (!hasExactKeys2(value, keys4)) {
+function requireExactKeys4(value, keys5) {
+  if (!hasExactKeys2(value, keys5)) {
     throw invalidResponse("investigation_shape_invalid");
   }
 }
-function hasExactKeys2(value, keys4) {
+function hasExactKeys2(value, keys5) {
   const actual = Object.keys(value).sort();
-  const expected = [...keys4].sort();
+  const expected = [...keys5].sort();
   return !(actual.length !== expected.length || actual.some((key, index) => key !== expected[index]));
 }
 function requireString4(value, field) {
@@ -243786,9 +244423,9 @@ function nullableCanonicalJson(value, field) {
   return value;
 }
 function requireDigest5(value, field) {
-  const digest5 = requireString4(value, field);
-  if (!/^[a-f0-9]{64}$/.test(digest5)) throw invalidResponse(`${field}_invalid`);
-  return digest5;
+  const digest6 = requireString4(value, field);
+  if (!/^[a-f0-9]{64}$/.test(digest6)) throw invalidResponse(`${field}_invalid`);
+  return digest6;
 }
 function requireNonNegativeInteger4(value, field) {
   if (!Number.isSafeInteger(value) || Number(value) < 0) {
@@ -244011,8 +244648,8 @@ function leaseFromAcquire(input) {
   return lease;
 }
 function deterministicId2(namespace, parts) {
-  const digest5 = (0, import_crypto51.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
-  return `rr:${namespace}:${digest5}`;
+  const digest6 = (0, import_crypto51.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  return `rr:${namespace}:${digest6}`;
 }
 function requireString5(value, field) {
   if (typeof value !== "string" || value.length === 0) {
@@ -245051,9 +245688,9 @@ var RolloutGatedReviewAgentSelector = class {
   }
 };
 function assertCanonicalRolloutDependencies(flags) {
-  const dependencies = reviewInvestigationRolloutAuthorizationV3Contract.dependencies;
+  const dependencies2 = reviewInvestigationRolloutAuthorizationV3Contract.dependencies;
   for (const capability of reviewInvestigationRolloutAuthorizationV3Contract.capabilities) {
-    for (const dependency of dependencies[capability]) {
+    for (const dependency of dependencies2[capability]) {
       const capabilityKey = capability;
       const dependencyKey = dependency;
       assertDependency(
@@ -245234,8 +245871,8 @@ var ReviewActionV2InvestigationContextAttestationAdapter = class {
   }
 };
 function deterministicId3(namespace, parts) {
-  const digest5 = (0, import_crypto52.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
-  return `rr:${namespace}:${digest5}`;
+  const digest6 = (0, import_crypto52.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  return `rr:${namespace}:${digest6}`;
 }
 function requireString6(value, field) {
   if (typeof value !== "string" || value.length === 0) {
@@ -245305,14 +245942,17 @@ var ProductionT0ReviewRunner = class {
     const modelDispatchCapability = dispatchJson ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson)) : void 0;
     if (input.preparedRoute && !modelDispatchCapability)
       throw new Error("review_action_v2_prepared_route_unqualified");
-    if (admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== void 0 && !input.ocr)
+    if (admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== void 0 && !input.ocr && !input.accountGateway?.reviewers)
       throw contextToolsError("agent_unsupported");
+    const primaryEngineIsOcr = input.ocr !== void 0 || input.accountGateway?.reviewers?.find(
+      (lane) => lane.reviewer.reviewerId === input.accountGateway?.reviewerPlan?.primaryReviewerId
+    )?.reviewer.agentProfile.agentKind === "ocr";
     const agentProfile = admittedRuntime ? {
       json: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
       digest: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
     } : void 0;
-    const approvedOcrAgent = input.ocr ? readApprovedOcrReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
-    const approvedAgent = agentProfile && !input.ocr ? readApprovedReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
+    const approvedOcrAgent = primaryEngineIsOcr ? readApprovedOcrReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
+    const approvedAgent = agentProfile && !primaryEngineIsOcr ? readApprovedReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
     if (approvedAgent && approvedAgent.agentKind !== "codex")
       throw new Error("review_investigation_approved_agent_unavailable");
     const authoritativeDeadlineEpochMs = process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
@@ -245344,21 +245984,21 @@ var ProductionT0ReviewRunner = class {
       updatePrDescription: admittedRuntime ? capturedDescriptionFlag !== "false" : loadedConfig.updatePrDescription !== false
     };
     const directProvider = input.providerApi ? readDirectProviderSelection(input.providerApi.runtimeConfig.runtimeEnv) : void 0;
-    const codexProviderName = input.ocr ? "" : input.providerApi ? directProvider.providerName : selectCodexProvider(config2);
-    const model = codexProviderName.slice(codexProviderName.indexOf("/") + 1);
-    const gatewayModelSettings = input.accountGateway && !input.ocr && !isAccountGatewayMiMoModel(model) ? readAdmittedGatewayCodexModelSettings(
+    const codexProviderName = primaryEngineIsOcr ? "" : input.providerApi ? directProvider.providerName : selectCodexProvider(config2);
+    const model2 = codexProviderName.slice(codexProviderName.indexOf("/") + 1);
+    const gatewayModelSettings = input.accountGateway && !primaryEngineIsOcr && !isAccountGatewayMiMoModel(model2) ? readAdmittedGatewayCodexModelSettings(
       input.accountGateway.runtimeConfig,
-      model
+      model2
     ) : void 0;
-    const reasoningEffort = input.ocr ? null : resolveProductionInvestigationReasoningEffort({
-      codexModel: model,
+    const reasoningEffort = primaryEngineIsOcr ? null : resolveProductionInvestigationReasoningEffort({
+      codexModel: model2,
       accountGateway: preparedRoute !== void 0,
       providerApi: input.providerApi !== void 0,
       ...directProvider ? { providerApiAuthMode: directProvider.mode } : {},
       serverReasoningEffort,
       gatewayModelSettings
     });
-    if (input.providerApi || input.accountGateway && model === "mimo-v2.6-pro") {
+    if (input.providerApi || input.accountGateway && model2 === "mimo-v2.6-pro") {
       if (reasoningEffort === null) delete process.env.CODEX_REASONING_EFFORT;
       else process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
@@ -245498,11 +246138,16 @@ var ProductionT0ReviewRunner = class {
         ]
       });
       const admittedAgent = approvedOcrAgent ?? approvedAgent;
-      const skillsMaterialization = admittedAgent?.reviewSkillsVersion === 1 ? await materializeReviewSkillsWithDiagnostics({
+      const skillsMaterialization = admittedAgent?.reviewSkillsVersion === 1 || input.accountGateway?.reviewers?.some(
+        (lane) => lane.reviewer.agentProfile.reviewSkillsVersion === 1
+      ) ? await materializeReviewSkillsWithDiagnostics({
         capture: await fetchCapturedReviewSkills({
           apiUrl: input.apiUrl,
           authorizationToken: authorization.authorizationToken,
           baseSha: authorization.facts.baseSha,
+          reviewerId: input.accountGateway?.reviewers?.find(
+            (lane) => lane.reviewer.agentProfile.reviewSkillsVersion === 1
+          )?.reviewer.reviewerId,
           signal,
           timeoutMs: executionDeadline.clampProviderTimeout(3e4),
           fetchImpl
@@ -245535,11 +246180,6 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           }
         }
       };
-      assertReviewSkillsExecutionInput(
-        reviewSkills,
-        admittedAgent ?? {},
-        authorization.facts.baseSha
-      );
       const lifecycleInventory = new FreshGitHubLifecycleInventory(
         github,
         new ReviewLedger(github, process.env.REVIEW_ROUTER_LEDGER_KEY)
@@ -245549,253 +246189,824 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
         authorization.facts.headSha
       );
       signal?.throwIfAborted();
-      if (input.ocr) {
-        const ocrRuntimeEnv = preparedRoute.runtimeConfig.runtimeEnv;
-        const ocrModel = modelDispatchCapability?.model ?? ocrRuntimeEnv.CODEX_MODEL;
-        if (!ocrModel || !approvedOcrAgent) {
-          throw new Error("review_action_v2_ocr_model_missing");
-        }
-        const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
-        const ocrModelReasoningEffort = input.accountGateway ? resolveAdmittedGatewayOcrReasoningEffort(
-          preparedRoute.runtimeConfig,
-          ocrModel,
-          ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
-        ) : ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
-        const modelTransport = preparedRoute.modelTransport;
-        const capabilityAuthorization = modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
-        if (!capabilityAuthorization) {
-          throw new Error("review_action_v2_ocr_capability_missing");
-        }
-        const contextTools = await prepareOcrContextTools({
-          runtimeEnv: ocrRuntimeEnv,
-          githubJson: process.env[CONTEXT_TOOLS_CREDENTIALS_ENV],
-          apiUrl: input.apiUrl,
-          authorization: () => controlPlane.currentAuthorization(),
-          fetchImpl,
-          mask: setSecret,
-          checkoutRoot: path30.resolve(input.workspacePath),
-          headSha: authorization.facts.headSha,
-          mergeBaseSha: authorization.facts.mergeBaseSha,
-          deadlineMs: Date.now() + executionDeadline.clampProviderTimeout(providerTimeoutMs),
-          ...signal ? { signal } : {}
-        });
-        try {
-          if (contextTools) {
-            if (!modelTransport.setContextToolsGuard)
-              throw contextToolsError("transport_guard_unavailable");
-            modelTransport.setContextToolsGuard(() => {
-              const receipt = contextTools.receipt();
-              if (!receipt.nativeConnected || receipt.hadFailure)
-                throw contextToolsError("required_context_unavailable");
-            });
-            await (0, import_promises14.writeFile)(
-              input.ocr.run.configPath,
-              buildOcrManagedConfigJson({
-                baseUrl: modelTransport.baseUrl,
-                rawCapability: extractRawLoopbackCapability(
-                  capabilityAuthorization
-                ),
-                model: ocrModel,
-                limits: {
-                  requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
-                },
-                modelReasoningEffort: ocrModelReasoningEffort,
-                ...input.accountGateway ? { admittedRuntimeConfig: preparedRoute.runtimeConfig } : {},
-                protocol: modelDispatchCapability?.transport === "runner_local_anthropic" ? "anthropic-messages" : "openai-responses",
-                language: ocrLanguage,
-                contextTools: contextTools.config
-              }),
-              { mode: 384 }
-            );
-          }
-          const baseOcrCompatibilityKey = hashIncrementalCompatibility(
+      const sharedReviewSkills = reviewSkills;
+      const parentAuthorization = authorization;
+      const parentRestore = preplanningRestore;
+      const parentConfig = config2;
+      const identities = new DeterministicReviewOrchestrationIdentity();
+      const reviewerPlan = input.accountGateway?.reviewerPlan;
+      const commonCompatibilityKey = reviewerPlan ? sha25617(
+        canonicalJson17({
+          policy: hashIncrementalCompatibility(
             config2,
             process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
             reviewSkillsCacheIdentity(reviewSkills)
-          );
-          const contextReceipt = contextTools?.receipt();
-          const ocrCompatibilityKey = contextReceipt ? sha25617(
-            canonicalJson17({
-              baseOcrCompatibilityKey,
-              contextTools: {
-                planDigest: contextReceipt.planDigest,
-                schemaDigest: contextReceipt.schemaDigest
-              }
-            })
-          ) : baseOcrCompatibilityKey;
-          const ocrBackgroundParts = [
-            pr2.title,
-            stripOwnedPrDescriptionBlocks(pr2.body)
-          ].filter((part) => part.trim().length > 0);
-          const prDescription2 = createPrDescriptionGeneration({
-            enabled: config2.updatePrDescription,
-            scopedCompanionDispatch: !!admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-            capabilityJson: admittedRuntime?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
-            pr: pr2,
-            reviewRevisionHash: authorization.facts.reviewRevisionHash,
-            requestedModel: ocrModel,
-            providerKind: "ocr" /* Ocr */,
-            language: config2.outputLanguage,
-            config: config2,
-            transport: modelTransport,
-            memorySnapshot: descriptionMemory.current(),
-            warn: warning
-          });
-          const lifecycleCapability2 = config2.reviewThreadLifecycle !== "off" && preparedRoute ? readLifecycleCapability(
-            admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-            ocrModel,
-            "ocr" /* Ocr */,
-            modelDispatchCapability
-          ) : void 0;
-          let planned2 = planOcrReviewAssignments({
-            ...modelDispatchCapability ? { attemptBudget: 1 } : {},
-            prDescriptionEnabled: prDescription2 !== void 0,
-            authorization,
-            pr: pr2,
-            config: config2,
-            compatibilityKey: ocrCompatibilityKey,
-            lifecycleTargets: selectLegacyLifecycleTargets(
-              config2.reviewThreadLifecycle,
-              admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-              initialLifecycle.promptTargets
-            ),
-            liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
-          });
-          assertLegacyReviewPlanRestorable(preplanningRestore, planned2.plan);
-          const lifecycle2 = preplanningRestore ? restoreProductionLifecycleVerification(
-            preplanningRestore,
-            planned2.plan,
-            config2
-          ) : lifecycleCapability2 ? await planProductionLifecycleVerification({
-            capability: lifecycleCapability2,
-            authorization,
-            plan: planned2.plan,
-            repository: input.repository,
-            checkoutRoot: path30.resolve(input.workspacePath),
-            compatibilityKey: ocrCompatibilityKey,
-            config: config2,
-            inventory: initialLifecycle.inventory,
-            targets: initialLifecycle.revalidationTargets,
-            resolutionHistory,
-            renames: pr2.files.filter((file) => !!file.previousFilename).map((file) => ({
-              previousFilename: file.previousFilename,
-              filename: file.filename
-            }))
-          }) : void 0;
-          if (preplanningRestore?.persistedPlan?.compatibilityKey && preplanningRestore.persistedPlan.compatibilityKey !== ocrCompatibilityKey)
-            throw new Error("review_restore_compatibility_changed");
-          const finalPlan2 = restorePersistedWorkPlan(
-            preplanningRestore,
-            lifecycle2?.plan ?? planned2.plan
-          );
-          planned2 = {
-            ...planned2,
-            plan: finalPlan2,
-            assignments: rebindReviewAssignmentsToWorkPlan(
-              planned2.assignments,
-              finalPlan2
+          ),
+          reviewerPlan: {
+            ...reviewerPlan,
+            reviewers: reviewerPlan.reviewers.map(
+              ({
+                modelSettings: _modelCapabilities,
+                unavailableReason: _availability,
+                ...capturedReviewer
+              }) => capturedReviewer
             )
+          }
+        })
+      ) : void 0;
+      const prepareLane = async (input2, reviewer, slotBudget, bootstrapFailure = false) => {
+        const preparedRoute2 = input2.preparedRoute ?? input2.accountGateway ?? input2.providerApi;
+        const admittedRuntime2 = preparedRoute2?.runtimeConfig;
+        const dispatchJson2 = admittedRuntime2?.runtimeEnv[reviewModelDispatchContract.capabilityRuntimeEnvKey];
+        const modelDispatchCapability2 = dispatchJson2 ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson2)) : void 0;
+        const laneConfig = reviewer && admittedRuntime2 ? ConfigLoader.loadRuntimeEnvironment(admittedRuntime2.runtimeEnv, {
+          modelTransport: true
+        }) : parentConfig;
+        const primary = !reviewer || reviewer.reviewerId === reviewerPlan?.primaryReviewerId;
+        const config3 = {
+          ...laneConfig,
+          ...preparedRoute2 ? { providerRetries: 1 } : {},
+          updatePrDescription: primary && parentConfig.updatePrDescription,
+          reviewThreadLifecycle: primary ? parentConfig.reviewThreadLifecycle : "off"
+        };
+        const authorization2 = reviewer ? {
+          ...parentAuthorization,
+          limits: {
+            ...parentAuthorization.limits,
+            maxWorkSlots: slotBudget?.maxSlots ?? parentAuthorization.limits.maxWorkSlots
+          },
+          facts: {
+            ...parentAuthorization.facts,
+            providerVoteLanes: [
+              {
+                providerKind: reviewer.agentProfile.agentKind === "ocr" ? "ocr" /* Ocr */ : "codex" /* Codex */,
+                providerVoteIdentityHash: reviewer.providerVoteIdentityHash
+              }
+            ],
+            reviewInvestigation: reviewer.investigationGrant?.descriptor
+          }
+        } : parentAuthorization;
+        const preplanningRestore2 = reviewer ? null : parentRestore;
+        const laneEngineIsOcr = input2.ocr !== void 0 || reviewer?.agentProfile.agentKind === "ocr";
+        const approvedOcrAgent2 = laneEngineIsOcr && admittedRuntime2 ? readApprovedOcrReviewAgent(
+          admittedRuntime2.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
+          admittedRuntime2.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
+        ) : void 0;
+        const approvedAgent2 = !laneEngineIsOcr && admittedRuntime2 ? readApprovedReviewAgent(
+          admittedRuntime2.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
+          admittedRuntime2.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
+        ) : void 0;
+        const laneProfile = approvedOcrAgent2 ?? approvedAgent2;
+        const reviewSkills2 = laneProfile?.reviewSkillsVersion === 1 ? sharedReviewSkills : LEGACY_REVIEW_SKILLS;
+        if (reviewSkills2.kind === "legacy" && sharedReviewSkills.kind === "captured" && (sharedReviewSkills.capture.gitSources.length > 0 || sharedReviewSkills.capture.webSkills.length > 0))
+          throw new Error("review_skills_agent_incompatible");
+        assertReviewSkillsExecutionInput(
+          reviewSkills2,
+          laneProfile ?? {},
+          authorization2.facts.baseSha
+        );
+        if (admittedRuntime2?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== void 0 && !laneEngineIsOcr)
+          throw contextToolsError("agent_unsupported");
+        if (bootstrapFailure && reviewer) {
+          if (primary)
+            createPrDescriptionGeneration({
+              enabled: config3.updatePrDescription !== false,
+              scopedCompanionDispatch: !!admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+              capabilityJson: admittedRuntime2?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
+              pr: pr2,
+              reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+              requestedModel: reviewer.requestedModel,
+              providerKind: laneEngineIsOcr ? "ocr" /* Ocr */ : "codex" /* Codex */,
+              language: config3.outputLanguage,
+              config: config3,
+              transport: input2.accountGateway?.modelTransport,
+              warn: warning
+            })?.unavailable();
+          const compatibilityKey2 = commonCompatibilityKey;
+          const planInput = {
+            authorization: authorization2,
+            pr: pr2,
+            config: config3,
+            compatibilityKey: compatibilityKey2,
+            reviewerId: reviewer.reviewerId,
+            reviewerRequired: reviewer.required,
+            lifecycleTargets: [],
+            liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
           };
-          const bridge = {
-            baseUrl: modelTransport.baseUrl,
-            capabilityAuthorization,
-            actualModel: () => modelTransport.actualModel(),
-            requestCount: () => modelTransport.requestCount?.(),
-            effectFacts: input.ocr.effectFacts,
-            releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true,
-            reopenConsumer: () => modelTransport.reopenConsumer?.() === true
+          const planned2 = laneEngineIsOcr ? planOcrReviewAssignments(planInput) : planAssignments({
+            ...planInput,
+            providerName: selectCodexProvider(config3),
+            accountGateway: true,
+            maxDiscoverySlots: slotBudget?.discoverySlots
+          });
+          const assignments = planned2.assignments.map((assignment) => ({
+            workSlotId: assignment.workSlot.workSlotId,
+            taskKind: assignment.workSlot.taskKind,
+            providerKind: assignment.workSlot.providerKind,
+            providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
+            required: assignment.workSlot.required,
+            filePaths: assignment.context.files.map((file) => file.filename)
+          }));
+          const unavailable = async () => {
+            throw new ReviewInvocationConfigurationMismatchError(
+              "actual_model_evidence_unavailable" /* ActualModelEvidenceUnavailable */
+            );
           };
-          const invocationAdapter2 = new OcrReviewInvocationAdapter(
-            planned2.assignments,
-            {
-              ...signal ? { signal } : {},
-              previewTimeoutMs: () => Math.floor(
-                executionDeadline.clampProviderTimeout(providerTimeoutMs)
+          return {
+            plan: planned2.plan,
+            compatibilityKey: compatibilityKey2,
+            assignments,
+            uncoveredPaths: planned2.uncoveredPaths,
+            uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+            cleanup: async () => {
+            },
+            dependencies: {
+              controlPlane,
+              revisionGuard,
+              oidc: { getToken: () => oidc.requestToken(input2.audience) },
+              invocationManifestAssembler: new GeneratedProviderInvocationManifestAssembler(
+                authorization2,
+                config3,
+                compatibilityKey2
               ),
-              model: ocrModel,
-              binaryPath: input.ocr.run.binaryPath,
-              binarySha256: approvedOcrAgent.binarySha256,
-              packageVersion: approvedOcrAgent.packageVersion,
-              profileRef: approvedOcrAgent.profileRef,
-              run: input.ocr.run,
-              ...contextTools ? {
-                contextTools,
-                contextToolsReceipt: (receipt) => logger.info("Managed OCR context tools", {
-                  planDigest: receipt.planDigest,
-                  schemaDigest: receipt.schemaDigest,
-                  selectedTools: receipt.availableTools,
-                  nativeConnected: receipt.nativeConnected,
-                  calls: receipt.calls,
-                  hadFailure: receipt.hadFailure,
-                  toolCalls: receipt.toolCalls
+              invocations: { prepare: unavailable, execute: unavailable },
+              invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+                preparedRoute2?.modelTransport.failureFact
+              ),
+              leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+              projectionBuilder: createProductionReviewProjectionBuilder({
+                authorizationFacts: authorization2.facts,
+                pr: pr2,
+                config: config3,
+                protocolLimits: authorization2.limits,
+                assignments,
+                uncoveredPaths: planned2.uncoveredPaths,
+                uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+                lifecycleInventory,
+                skillsReceipt
+              }),
+              identities,
+              clock: new SystemReviewOrchestrationClock(),
+              delay: new CancellableReviewOrchestrationDelay(),
+              executionDeadline,
+              signal,
+              ...this.progress ? { progress: this.progress } : {}
+            }
+          };
+        }
+        const directProvider2 = input2.providerApi ? readDirectProviderSelection(
+          input2.providerApi.runtimeConfig.runtimeEnv
+        ) : void 0;
+        const providerName = input2.ocr ? "" : input2.providerApi ? directProvider2.providerName : selectCodexProvider(config3);
+        const model3 = reviewer?.requestedModel ?? providerName.slice(providerName.indexOf("/") + 1);
+        const gatewayModelSettings2 = input2.accountGateway && !input2.ocr && !isAccountGatewayMiMoModel(model3) ? readAdmittedGatewayCodexModelSettings(
+          input2.accountGateway.runtimeConfig,
+          model3
+        ) : void 0;
+        const serverReasoningEffort2 = admittedRuntime2?.runtimeEnv.CODEX_REASONING_EFFORT;
+        const reasoningEffort2 = laneEngineIsOcr ? null : resolveProductionInvestigationReasoningEffort({
+          codexModel: model3,
+          accountGateway: preparedRoute2 !== void 0,
+          providerApi: !!input2.providerApi,
+          ...directProvider2 ? { providerApiAuthMode: directProvider2.mode } : {},
+          serverReasoningEffort: serverReasoningEffort2,
+          gatewayModelSettings: gatewayModelSettings2
+        });
+        if (input2.ocr) {
+          const ocrRuntimeEnv = preparedRoute2.runtimeConfig.runtimeEnv;
+          const ocrModel = modelDispatchCapability2?.model ?? ocrRuntimeEnv.CODEX_MODEL;
+          if (!ocrModel || !approvedOcrAgent2) {
+            throw new Error("review_action_v2_ocr_model_missing");
+          }
+          const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
+          const ocrModelReasoningEffort = input2.accountGateway ? resolveAdmittedGatewayOcrReasoningEffort(
+            preparedRoute2.runtimeConfig,
+            ocrModel,
+            ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
+          ) : ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
+          const modelTransport = preparedRoute2.modelTransport;
+          const capabilityAuthorization = modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
+          if (!capabilityAuthorization) {
+            throw new Error("review_action_v2_ocr_capability_missing");
+          }
+          const contextTools = await prepareOcrContextTools({
+            runtimeEnv: ocrRuntimeEnv,
+            reviewerId: reviewer?.reviewerId,
+            githubJson: process.env[CONTEXT_TOOLS_CREDENTIALS_ENV],
+            apiUrl: input2.apiUrl,
+            authorization: () => controlPlane.currentAuthorization(),
+            fetchImpl,
+            mask: setSecret,
+            checkoutRoot: path30.resolve(input2.workspacePath),
+            headSha: authorization2.facts.headSha,
+            mergeBaseSha: authorization2.facts.mergeBaseSha,
+            deadlineMs: Date.now() + executionDeadline.clampProviderTimeout(providerTimeoutMs),
+            ...signal ? { signal } : {}
+          });
+          try {
+            if (contextTools) {
+              if (!modelTransport.setContextToolsGuard)
+                throw contextToolsError("transport_guard_unavailable");
+              modelTransport.setContextToolsGuard(() => {
+                const receipt = contextTools.receipt();
+                if (!receipt.nativeConnected || receipt.hadFailure)
+                  throw contextToolsError("required_context_unavailable");
+              });
+              await (0, import_promises14.writeFile)(
+                input2.ocr.run.configPath,
+                buildOcrManagedConfigJson({
+                  baseUrl: modelTransport.baseUrl,
+                  rawCapability: extractRawLoopbackCapability(
+                    capabilityAuthorization
+                  ),
+                  model: ocrModel,
+                  limits: {
+                    requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
+                  },
+                  modelReasoningEffort: ocrModelReasoningEffort,
+                  ...input2.accountGateway ? { admittedRuntimeConfig: preparedRoute2.runtimeConfig } : {},
+                  protocol: modelDispatchCapability2?.transport === "runner_local_anthropic" ? "anthropic-messages" : "openai-responses",
+                  language: ocrLanguage,
+                  contextTools: contextTools.config
+                }),
+                { mode: 384 }
+              );
+            }
+            const baseOcrCompatibilityKey = hashIncrementalCompatibility(
+              config3,
+              process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+              reviewSkillsCacheIdentity(reviewSkills2)
+            );
+            const contextReceipt = contextTools?.receipt();
+            const ocrCompatibilityKey = commonCompatibilityKey ?? (contextReceipt ? sha25617(
+              canonicalJson17({
+                baseOcrCompatibilityKey,
+                contextTools: {
+                  planDigest: contextReceipt.planDigest,
+                  schemaDigest: contextReceipt.schemaDigest
+                }
+              })
+            ) : baseOcrCompatibilityKey);
+            const ocrBackgroundParts = [
+              pr2.title,
+              stripOwnedPrDescriptionBlocks(pr2.body)
+            ].filter((part) => part.trim().length > 0);
+            const prDescription2 = createPrDescriptionGeneration({
+              enabled: config3.updatePrDescription !== false,
+              scopedCompanionDispatch: !!admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+              capabilityJson: admittedRuntime2?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
+              pr: pr2,
+              reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+              requestedModel: ocrModel,
+              providerKind: "ocr" /* Ocr */,
+              language: config3.outputLanguage,
+              config: config3,
+              transport: modelTransport,
+              memorySnapshot: descriptionMemory.current(),
+              warn: warning
+            });
+            const lifecycleCapability2 = config3.reviewThreadLifecycle !== "off" && preparedRoute2 ? readLifecycleCapability(
+              admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+              ocrModel,
+              "ocr" /* Ocr */,
+              modelDispatchCapability2
+            ) : void 0;
+            let planned2 = planOcrReviewAssignments({
+              ...modelDispatchCapability2 ? { attemptBudget: 1 } : {},
+              prDescriptionEnabled: prDescription2 !== void 0,
+              reviewerId: reviewer?.reviewerId,
+              reviewerRequired: reviewer?.required,
+              authorization: authorization2,
+              pr: pr2,
+              config: config3,
+              compatibilityKey: ocrCompatibilityKey,
+              lifecycleTargets: selectLegacyLifecycleTargets(
+                config3.reviewThreadLifecycle,
+                admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+                initialLifecycle.promptTargets
+              ),
+              liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
+            });
+            assertLegacyReviewPlanRestorable(preplanningRestore2, planned2.plan);
+            const lifecycle2 = preplanningRestore2 ? restoreProductionLifecycleVerification(
+              preplanningRestore2,
+              planned2.plan,
+              config3
+            ) : lifecycleCapability2 ? await planProductionLifecycleVerification({
+              capability: lifecycleCapability2,
+              authorization: authorization2,
+              plan: planned2.plan,
+              repository: input2.repository,
+              checkoutRoot: path30.resolve(input2.workspacePath),
+              compatibilityKey: ocrCompatibilityKey,
+              config: config3,
+              inventory: initialLifecycle.inventory,
+              targets: initialLifecycle.revalidationTargets,
+              resolutionHistory,
+              renames: pr2.files.filter((file) => !!file.previousFilename).map((file) => ({
+                previousFilename: file.previousFilename,
+                filename: file.filename
+              }))
+            }) : void 0;
+            if (preplanningRestore2?.persistedPlan?.compatibilityKey && preplanningRestore2.persistedPlan.compatibilityKey !== ocrCompatibilityKey)
+              throw new Error("review_restore_compatibility_changed");
+            const finalPlan2 = restorePersistedWorkPlan(
+              preplanningRestore2,
+              lifecycle2?.plan ?? planned2.plan
+            );
+            planned2 = {
+              ...planned2,
+              plan: finalPlan2,
+              assignments: rebindReviewAssignmentsToWorkPlan(
+                planned2.assignments,
+                finalPlan2
+              )
+            };
+            const bridge = {
+              baseUrl: modelTransport.baseUrl,
+              capabilityAuthorization,
+              actualModel: () => modelTransport.actualModel(),
+              requestCount: () => modelTransport.requestCount?.(),
+              effectFacts: input2.ocr.effectFacts,
+              releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true,
+              reopenConsumer: () => modelTransport.reopenConsumer?.() === true
+            };
+            const invocationAdapter2 = new OcrReviewInvocationAdapter(
+              planned2.assignments,
+              {
+                ...signal ? { signal } : {},
+                previewTimeoutMs: () => Math.floor(
+                  executionDeadline.clampProviderTimeout(providerTimeoutMs)
+                ),
+                model: ocrModel,
+                binaryPath: input2.ocr.run.binaryPath,
+                binarySha256: approvedOcrAgent2.binarySha256,
+                packageVersion: approvedOcrAgent2.packageVersion,
+                profileRef: approvedOcrAgent2.profileRef,
+                run: input2.ocr.run,
+                ...contextTools ? {
+                  contextTools,
+                  contextToolsReceipt: (receipt) => logger.info("Managed OCR context tools", {
+                    planDigest: receipt.planDigest,
+                    schemaDigest: receipt.schemaDigest,
+                    selectedTools: receipt.availableTools,
+                    nativeConnected: receipt.nativeConnected,
+                    calls: receipt.calls,
+                    hadFailure: receipt.hadFailure,
+                    toolCalls: receipt.toolCalls
+                  })
+                } : {},
+                bridge,
+                limits: {
+                  requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
+                },
+                ocrEffort: "medium",
+                modelReasoningEffort: ocrModelReasoningEffort,
+                language: ocrLanguage,
+                reviewSkills: reviewSkills2,
+                reviewMemory,
+                freshReviewSkillsSupply: (supply) => skillsReceiptCollector.record(supply),
+                ruleText: reviewSkills2.kind === "legacy" ? buildOcrControlledRuleText({
+                  language: ocrLanguage,
+                  assignedPaths: pr2.files.map((file) => file.filename).sort()
+                }) : buildOcrSkillsControlledRuleText({
+                  language: ocrLanguage,
+                  assignedPaths: pr2.files.map((file) => file.filename).sort(),
+                  reviewSkills: reviewSkills2
+                }),
+                backgroundText: ocrBackgroundParts.length > 0 ? ocrBackgroundParts.join("\n\n") : null,
+                checkoutRoot: path30.resolve(input2.workspacePath),
+                processRunner: runOcrReviewProcess,
+                previewRunner: runOcrReviewProcess,
+                acceptanceDiagnostic: (diagnostic) => logger.info("Managed OCR acceptance", diagnostic)
+              }
+            );
+            if (prDescription2 && !planned2.plan.assignments.some(
+              (assignment) => assignment.workSlot.taskKind === "pr_description" /* PrDescription */
+            ))
+              warning(
+                "AI PR description omitted: no optional task budget remains."
+              );
+            const discoveryInvocations = scopedModelInvocations(
+              invocationAdapter2,
+              modelTransport
+            );
+            return {
+              dependencies: {
+                ...prDescription2 ? { prDescription: prDescription2 } : {},
+                controlPlane,
+                revisionGuard,
+                oidc: {
+                  getToken: () => oidc.requestToken(input2.audience)
+                },
+                invocationManifestAssembler: restoredLifecycleManifestAssembler(
+                  preplanningRestore2,
+                  new GeneratedProviderInvocationManifestAssembler(
+                    authorization2,
+                    config3,
+                    ocrCompatibilityKey
+                  )
+                ),
+                invocations: preplanningRestore2?.persistedPlan ? restoredLifecycleInvocations(
+                  preplanningRestore2,
+                  discoveryInvocations
+                ) : lifecycle2 && lifecycleCapability2 ? compositeLifecycleInvocations({
+                  discovery: discoveryInvocations,
+                  packetsByWorkSlotId: lifecycle2.packetsByWorkSlotId,
+                  capability: lifecycleCapability2,
+                  outputCap: lifecycle2.outputCap,
+                  reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+                  liveLifecycleStateHash: lifecycle2.liveLifecycleStateHash,
+                  transport: modelTransport
+                }) : discoveryInvocations,
+                memoryAdmission,
+                invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+                  modelTransport.failureFact
+                ),
+                invocationDiagnostics: new LoggingReviewInvocationDiagnostics(
+                  logger
+                ),
+                investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(logger),
+                leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+                projectionBuilder: createProductionReviewProjectionBuilder({
+                  authorizationFacts: authorization2.facts,
+                  pr: pr2,
+                  config: config3,
+                  protocolLimits: authorization2.limits,
+                  assignments: planned2.plan.assignments.map((assignment) => ({
+                    workSlotId: assignment.workSlot.workSlotId,
+                    taskKind: assignment.workSlot.taskKind,
+                    providerKind: assignment.workSlot.providerKind,
+                    providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
+                    required: assignment.workSlot.required,
+                    filePaths: planned2.assignments.find(
+                      (item) => item.workSlot.workSlotId === assignment.workSlot.workSlotId
+                    )?.context.files.map((file) => file.filename) ?? []
+                  })),
+                  uncoveredPaths: planned2.uncoveredPaths,
+                  uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+                  lifecycleInventory,
+                  ...lifecycle2?.lifecycleVerification ? { lifecycleVerification: lifecycle2.lifecycleVerification } : {},
+                  skillsReceipt
+                }),
+                identities,
+                clock: new SystemReviewOrchestrationClock(),
+                delay: new CancellableReviewOrchestrationDelay(),
+                executionDeadline,
+                signal,
+                ...this.progress ? { progress: this.progress } : {}
+              },
+              plan: planned2.plan,
+              compatibilityKey: ocrCompatibilityKey,
+              assignments: planned2.plan.assignments.map((assignment) => ({
+                workSlotId: assignment.workSlot.workSlotId,
+                taskKind: assignment.workSlot.taskKind,
+                providerKind: assignment.workSlot.providerKind,
+                providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
+                required: assignment.workSlot.required,
+                filePaths: planned2.assignments.find(
+                  (item) => item.workSlot.workSlotId === assignment.workSlot.workSlotId
+                )?.context.files.map((file) => file.filename) ?? []
+              })),
+              uncoveredPaths: planned2.uncoveredPaths,
+              uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+              lifecycleVerification: lifecycle2?.lifecycleVerification,
+              cleanup: async () => {
+                modelTransport.setContextToolsGuard?.(void 0);
+                await contextTools?.close();
+              }
+            };
+          } catch (error4) {
+            modelTransport.setContextToolsGuard?.(void 0);
+            await contextTools?.close();
+            throw error4;
+          }
+        }
+        const agenticContext = config3.codexAgenticContext ?? true;
+        const investigationRolloutResolution = resolveProductionReviewInvestigationRolloutResolution({
+          flags: readProductionReviewInvestigationRolloutFlags(),
+          agenticContext,
+          authorization: authorization2,
+          primaryProviderKind: "codex" /* Codex */,
+          reviewDepth: config3.reviewDepth
+        });
+        const investigationRollout = investigationRolloutResolution.rollout;
+        emitReviewInvestigationTelemetry(
+          formatProductionReviewInvestigationRolloutTelemetry(
+            investigationRolloutResolution
+          )
+        );
+        const investigationRecordingEnabled = investigationRollout.recordingEnabled;
+        const provider = new CodexProvider(model3, {
+          ...usageDelivery ? {
+            usageDelivery,
+            usageUpstreamBaseUrl: process.env.REVIEW_AUTH_MODE === "openai-api" ? "https://api.openai.com/v1" : input2.providerInstanceId || process.env.REVIEW_AUTH_MODE === "codex-oauth" ? "https://chatgpt.com/backend-api/codex" : void 0
+          } : {},
+          agenticContext,
+          binaryPath: input2.codexBinaryPath,
+          reasoningEffort: reasoningEffort2,
+          waitForProcessClose: true,
+          eventAudit: config3.codexEventAudit,
+          modelProvider: input2.providerApi ? directProvider2.modelProvider : resolveAccountGatewayModelProvider(
+            model3,
+            preparedRoute2?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+            preparedRoute2?.modelTransport
+          ),
+          ...input2.providerApi ? {
+            providerNamePrefix: directProvider2.mode === "kimi-code-api" ? "kimi" : directProvider2.mode === "mimo-token-plan-api" ? "codex-mimo" : "openrouter",
+            providerApiTransport: input2.providerApi.modelTransport,
+            disableBuiltinTools: true,
+            waitForProcessClose: true
+          } : {},
+          ...preparedRoute2 && !input2.providerApi ? {
+            accountGateway: preparedRoute2.modelTransport,
+            ...gatewayModelSettings2 ? {
+              accountGatewayModelSettings: gatewayModelSettings2,
+              accountGatewaySavedReasoningEffort: serverReasoningEffort2
+            } : {}
+          } : {}
+        });
+        const compatibilityKey = commonCompatibilityKey ?? hashIncrementalCompatibility(
+          config3,
+          process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+          reviewSkillsCacheIdentity(reviewSkills2)
+        );
+        const gatewayBundlePath = resolveContextGatewayBundlePath();
+        const requiredContextWitness = new SubprocessRequiredContextWitnessRunner();
+        const contextGatewayOptions = resolveProductionContextGatewaySessionFactoryOptions({
+          agenticContext,
+          investigationRecordingEnabled,
+          checkoutRoot: path30.resolve(input2.workspacePath),
+          gatewayBundlePath
+        });
+        const contextGateway = contextGatewayOptions ? new ContextGatewayInvocationSessionFactory(
+          controlPlane,
+          contextGatewayOptions,
+          requiredContextWitness
+        ) : void 0;
+        const contextReplayRunner = contextGateway ? new ContextAttestationReplayRunner({
+          checkoutRoot: path30.resolve(input2.workspacePath),
+          gatewayBundlePath
+        }) : void 0;
+        const prDescription = createPrDescriptionGeneration({
+          enabled: config3.updatePrDescription !== false,
+          scopedCompanionDispatch: !!admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+          capabilityJson: admittedRuntime2?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
+          pr: pr2,
+          reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+          requestedModel: model3,
+          providerKind: "codex" /* Codex */,
+          language: config3.outputLanguage,
+          config: config3,
+          transport: preparedRoute2?.modelTransport,
+          memorySnapshot: descriptionMemory.current(),
+          warn: warning
+        });
+        const lifecycleCapability = config3.reviewThreadLifecycle !== "off" && preparedRoute2 ? readLifecycleCapability(
+          admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+          model3,
+          "codex" /* Codex */,
+          modelDispatchCapability2
+        ) : void 0;
+        let planned = planAssignments({
+          prDescriptionEnabled: prDescription !== void 0,
+          reviewerId: reviewer?.reviewerId,
+          reviewerRequired: reviewer?.required,
+          maxDiscoverySlots: slotBudget?.discoverySlots,
+          authorization: authorization2,
+          pr: pr2,
+          config: config3,
+          providerName: provider.name,
+          compatibilityKey,
+          lifecycleTargets: selectLegacyLifecycleTargets(
+            config3.reviewThreadLifecycle,
+            admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+            initialLifecycle.promptTargets
+          ),
+          liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+          accountGateway: preparedRoute2 !== void 0
+        });
+        assertLegacyReviewPlanRestorable(preplanningRestore2, planned.plan);
+        const lifecycle = preplanningRestore2 ? restoreProductionLifecycleVerification(
+          preplanningRestore2,
+          planned.plan,
+          config3
+        ) : lifecycleCapability ? await planProductionLifecycleVerification({
+          capability: lifecycleCapability,
+          authorization: authorization2,
+          plan: planned.plan,
+          repository: input2.repository,
+          checkoutRoot: path30.resolve(input2.workspacePath),
+          compatibilityKey,
+          config: config3,
+          inventory: initialLifecycle.inventory,
+          targets: initialLifecycle.revalidationTargets,
+          resolutionHistory,
+          renames: pr2.files.filter((file) => !!file.previousFilename).map((file) => ({
+            previousFilename: file.previousFilename,
+            filename: file.filename
+          }))
+        }) : void 0;
+        if (preplanningRestore2?.persistedPlan?.compatibilityKey && preplanningRestore2.persistedPlan.compatibilityKey !== compatibilityKey)
+          throw new Error("review_restore_compatibility_changed");
+        const finalPlan = restorePersistedWorkPlan(
+          preplanningRestore2,
+          lifecycle?.plan ?? planned.plan
+        );
+        planned = {
+          ...planned,
+          plan: finalPlan,
+          assignments: rebindReviewAssignmentsToWorkPlan(
+            planned.assignments,
+            finalPlan
+          )
+        };
+        const invocationAdapter = new CodexReviewInvocationAdapter(
+          provider,
+          new PromptBuilder(
+            config3,
+            "standard",
+            void 0,
+            void 0,
+            void 0,
+            reviewSkills2
+          ),
+          planned.assignments,
+          providerTimeoutMs,
+          agenticContext,
+          contextGateway,
+          false,
+          preparedRoute2 ? reasoningEffort2 : "xhigh",
+          input2.providerApi?.credentialLease,
+          gatewayModelSettings2,
+          reviewMemory
+        );
+        const investigationInvocationAdapter = createProductionReviewInvestigationInvocation({
+          rollout: investigationRollout,
+          create: () => new CodexReviewInvocationAdapter(
+            provider,
+            new PromptBuilder(
+              config3,
+              "standard",
+              void 0,
+              void 0,
+              void 0,
+              reviewSkills2
+            ),
+            planned.assignments,
+            providerTimeoutMs,
+            agenticContext,
+            contextGateway,
+            true,
+            reasoningEffort2,
+            input2.providerApi?.credentialLease,
+            gatewayModelSettings2,
+            reviewMemory
+          )
+        });
+        const investigationProtocol = investigationRecordingEnabled ? new ReviewActionV2InvestigationAdapter(reviewActionClient) : void 0;
+        const investigationRecording = investigationProtocol && contextGatewayOptions ? new ReviewInvestigationRecordingAdapter(
+          (recordingInput) => {
+            const legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate();
+            if (preparedRoute2) legacyFallbackGate.close();
+            const investigationControlPlane = new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
+              investigationProtocol,
+              legacyFallbackGate
+            );
+            const currency = new RevisionGuardInvestigationCurrencyAdapter(
+              revisionGuard
+            );
+            const investigationGatewayFactory = createProductionReviewInvestigationGatewayFactory(
+              new ContextGatewayInvocationSessionFactory(
+                new ReviewActionV2InvestigationContextAttestationAdapter(
+                  reviewActionClient,
+                  recordingInput.authorization.authorizationToken
+                ),
+                contextGatewayOptions,
+                requiredContextWitness
+              )
+            );
+            const gateway = new ContextGatewayV4InvestigationAdapter(
+              investigationGatewayFactory,
+              {
+                revision: {
+                  baseSha: authorization2.facts.baseSha,
+                  mergeBaseSha: authorization2.facts.mergeBaseSha,
+                  headSha: authorization2.facts.headSha
+                },
+                preparedManifestKey: recordingInput.manifest.manifestKey,
+                providerKind: recordingInput.invocation.manifestFacts.providerKind,
+                requestedModel: recordingInput.invocation.requestedModel,
+                executionProfile: recordingInput.invocation.manifestFacts.executionProfile,
+                providerInvocationKey: recordingInput.manifest.providerInvocationKey,
+                toolPolicyHash: recordingInput.invocation.manifestFacts.toolPolicyHash
+              }
+            );
+            const agents = createProductionReviewInvestigationAgentSelector({
+              authorization: authorization2,
+              primaryProviderKind: "codex" /* Codex */,
+              contextCriticEnabled: investigationRollout.contextCriticEnabled,
+              agents: createConfiguredProductionInvestigationAgents({
+                approvedAgent: approvedAgent2,
+                ...input2.providerApi ? {
+                  directCredentialLease: input2.providerApi.credentialLease,
+                  directModelProvider: directProvider2.modelProvider
+                } : {},
+                codexModel: model3,
+                codexBinaryPath: input2.codexBinaryPath,
+                executionSessions: gateway,
+                modelTransport: preparedRoute2?.modelTransport,
+                admittedGatewayModel: preparedRoute2?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+                reasoningEffort: reasoningEffort2,
+                gatewayModelSettings: gatewayModelSettings2
+              })
+            });
+            return new RunInvestigationWorkSlot({
+              controlPlane: investigationControlPlane,
+              legacyFallbackGate,
+              delay: new CancellableReviewOrchestrationDelay(),
+              leases: new ReviewActionV2InvestigationLeaseAdapter(
+                reviewActionClient
+              ),
+              ...investigationRollout.crossRevisionReplayEnabled && contextReplayRunner ? {
+                replay: new ReplayInvestigationOnRevision({
+                  controlPlane: investigationControlPlane,
+                  receipts: contextReplayRunner,
+                  currency
                 })
               } : {},
-              bridge,
-              limits: {
-                requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
-              },
-              ocrEffort: "medium",
-              modelReasoningEffort: ocrModelReasoningEffort,
-              language: ocrLanguage,
-              reviewSkills,
-              reviewMemory,
-              freshReviewSkillsSupply: (supply) => skillsReceiptCollector.record(supply),
-              ruleText: reviewSkills.kind === "legacy" ? buildOcrControlledRuleText({
-                language: ocrLanguage,
-                assignedPaths: pr2.files.map((file) => file.filename).sort()
-              }) : buildOcrSkillsControlledRuleText({
-                language: ocrLanguage,
-                assignedPaths: pr2.files.map((file) => file.filename).sort(),
-                reviewSkills
-              }),
-              backgroundText: ocrBackgroundParts.length > 0 ? ocrBackgroundParts.join("\n\n") : null,
-              checkoutRoot: path30.resolve(input.workspacePath),
-              processRunner: runOcrReviewProcess,
-              previewRunner: runOcrReviewProcess,
-              acceptanceDiagnostic: (diagnostic) => logger.info("Managed OCR acceptance", diagnostic)
-            }
+              turnRunner: new RunInvestigationTurn({
+                controlPlane: investigationControlPlane,
+                currency,
+                gateway,
+                agents,
+                diagnostics: new LoggingInvestigationOperationalDiagnostics(logger),
+                now: () => /* @__PURE__ */ new Date()
+              })
+            });
+          },
+          {
+            workingDirectory: path30.resolve(input2.workspacePath),
+            leaseDurationMs: providerTimeoutMs + 5 * 6e4,
+            providerTimeoutMs,
+            certificateTtlMs: 24 * 60 * 6e4,
+            minimumCapacityParkMs: 6e4,
+            actionBudget: reviewInvestigationActionBudgetForDepth(
+              config3.reviewDepth
+            ),
+            policy: REVIEW_INVESTIGATION_PRODUCTION_POLICY
+          },
+          productionReviewInvestigationRecordingMode(
+            investigationRollout
+          ),
+          investigationRollout.verifiedCleanEnabled
+        ) : void 0;
+        if (prDescription && !planned.plan.assignments.some(
+          (assignment) => assignment.workSlot.taskKind === "pr_description" /* PrDescription */
+        ))
+          warning(
+            "AI PR description omitted: no optional task budget remains."
           );
-          const discoveryInvocations = scopedModelInvocations(
-            invocationAdapter2,
-            modelTransport
-          );
-          const identities2 = new DeterministicReviewOrchestrationIdentity();
-          if (prDescription2 && !planned2.plan.assignments.some(
-            (assignment) => assignment.workSlot.taskKind === "pr_description" /* PrDescription */
-          ))
-            warning(
-              "AI PR description omitted: no optional task budget remains."
-            );
-          const useCase2 = new RunT0ReviewOrchestration({
-            ...prDescription2 ? { prDescription: prDescription2 } : {},
+        const nativeDiscoveryInvocations = observeNativeReviewSkillsSupply(
+          preparedRoute2 ? scopedModelInvocations(
+            invocationAdapter,
+            preparedRoute2.modelTransport
+          ) : invocationAdapter,
+          skillsReceiptCollector,
+          () => preparedRoute2?.modelTransport.requestCount?.()
+        );
+        return {
+          dependencies: {
+            ...prDescription ? { prDescription } : {},
             controlPlane,
             revisionGuard,
             oidc: {
-              getToken: () => oidc.requestToken(input.audience)
+              getToken: () => oidc.requestToken(input2.audience)
             },
             invocationManifestAssembler: restoredLifecycleManifestAssembler(
-              preplanningRestore,
+              preplanningRestore2,
               new GeneratedProviderInvocationManifestAssembler(
-                authorization,
-                config2,
-                ocrCompatibilityKey
+                authorization2,
+                config3,
+                compatibilityKey
               )
             ),
-            invocations: preplanningRestore?.persistedPlan ? restoredLifecycleInvocations(
-              preplanningRestore,
-              discoveryInvocations
-            ) : lifecycle2 && lifecycleCapability2 ? compositeLifecycleInvocations({
-              discovery: discoveryInvocations,
-              packetsByWorkSlotId: lifecycle2.packetsByWorkSlotId,
-              capability: lifecycleCapability2,
-              outputCap: lifecycle2.outputCap,
-              reviewRevisionHash: authorization.facts.reviewRevisionHash,
-              liveLifecycleStateHash: lifecycle2.liveLifecycleStateHash,
-              transport: modelTransport
-            }) : discoveryInvocations,
+            invocations: preplanningRestore2?.persistedPlan ? restoredLifecycleInvocations(
+              preplanningRestore2,
+              nativeDiscoveryInvocations
+            ) : lifecycle && lifecycleCapability ? compositeLifecycleInvocations({
+              discovery: nativeDiscoveryInvocations,
+              packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
+              capability: lifecycleCapability,
+              outputCap: lifecycle.outputCap,
+              reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+              liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
+              transport: preparedRoute2.modelTransport
+            }) : nativeDiscoveryInvocations,
             memoryAdmission,
+            ...investigationInvocationAdapter ? { investigationInvocations: investigationInvocationAdapter } : {},
             invocationFailureClassifier: new ProviderInvocationFailureClassifier(
-              modelTransport.failureFact
+              preparedRoute2?.modelTransport.failureFact
             ),
             invocationDiagnostics: new LoggingReviewInvocationDiagnostics(
               logger
@@ -245804,411 +247015,46 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               logger
             ),
             leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+            ...investigationRecording ? { investigationRecording } : {},
             projectionBuilder: createProductionReviewProjectionBuilder({
-              authorizationFacts: authorization.facts,
+              authorizationFacts: authorization2.facts,
               pr: pr2,
-              config: config2,
-              protocolLimits: authorization.limits,
-              assignments: planned2.plan.assignments.map((assignment) => ({
+              config: config3,
+              protocolLimits: authorization2.limits,
+              assignments: planned.plan.assignments.map((assignment) => ({
                 workSlotId: assignment.workSlot.workSlotId,
                 taskKind: assignment.workSlot.taskKind,
                 providerKind: assignment.workSlot.providerKind,
+                providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
                 required: assignment.workSlot.required,
-                filePaths: planned2.assignments.find(
+                filePaths: planned.assignments.find(
                   (item) => item.workSlot.workSlotId === assignment.workSlot.workSlotId
                 )?.context.files.map((file) => file.filename) ?? []
               })),
-              uncoveredPaths: planned2.uncoveredPaths,
-              uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+              uncoveredPaths: planned.uncoveredPaths,
+              uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
               lifecycleInventory,
-              ...lifecycle2?.lifecycleVerification ? { lifecycleVerification: lifecycle2.lifecycleVerification } : {},
+              ...lifecycle?.lifecycleVerification ? { lifecycleVerification: lifecycle.lifecycleVerification } : {},
               skillsReceipt
             }),
-            identities: identities2,
+            ...contextGateway ? {
+              contextReplay: contextReplayRunner,
+              contextAttestations: controlPlane
+            } : {},
+            identities,
             clock: new SystemReviewOrchestrationClock(),
             delay: new CancellableReviewOrchestrationDelay(),
             executionDeadline,
             signal,
             ...this.progress ? { progress: this.progress } : {}
-          });
-          const result3 = await useCase2.executeAuthorized(
-            {
-              executionId: identities2.deterministicId("execution", [
-                authorization.authorizationId,
-                authorization.facts.reviewRevisionHash,
-                planned2.plan.planHash
-              ]),
-              baseSha: authorization.facts.baseSha,
-              mergeBaseSha: authorization.facts.mergeBaseSha,
-              headSha: authorization.facts.headSha,
-              reviewRevisionHash: authorization.facts.reviewRevisionHash,
-              compatibilityKey: ocrCompatibilityKey,
-              planHash: planned2.plan.planHash,
-              workSlotsCanonicalJson: planned2.plan.workSlotsCanonicalJson,
-              assignmentManifestCanonicalJson: planned2.plan.assignmentManifestCanonicalJson,
-              assignmentManifestHash: planned2.plan.assignmentManifestHash,
-              workSlots: planned2.plan.assignments.map(
-                (assignment) => assignment.workSlot
-              ),
-              sourceRunId: authorization.facts.sourceRunId,
-              sourceRunAttempt: authorization.facts.sourceRunAttempt,
-              ownerIdHash: sha25617(
-                canonicalJson17({
-                  authorizationId: authorization.authorizationId,
-                  providerInstanceId: input.providerInstanceId,
-                  sourceRunAttempt: authorization.facts.sourceRunAttempt,
-                  sourceRunId: authorization.facts.sourceRunId
-                })
-              ),
-              allowPartial: true,
-              ...preplanningRestore ? { restoredExecution: preplanningRestore, restoreOnly: true } : {}
-            },
-            authorization
-          );
-          signal?.throwIfAborted();
-          return mapOrchestrationResultToCodexOutcome(result3);
-        } finally {
-          modelTransport.setContextToolsGuard?.(void 0);
-          await contextTools?.close();
-        }
-      }
-      const agenticContext = config2.codexAgenticContext ?? true;
-      const investigationRolloutResolution = resolveProductionReviewInvestigationRolloutResolution({
-        flags: readProductionReviewInvestigationRolloutFlags(),
-        agenticContext,
-        authorization,
-        primaryProviderKind: "codex" /* Codex */,
-        reviewDepth: config2.reviewDepth
-      });
-      const investigationRollout = investigationRolloutResolution.rollout;
-      emitReviewInvestigationTelemetry(
-        formatProductionReviewInvestigationRolloutTelemetry(
-          investigationRolloutResolution
-        )
-      );
-      const investigationRecordingEnabled = investigationRollout.recordingEnabled;
-      const provider = new CodexProvider(model, {
-        ...usageDelivery ? {
-          usageDelivery,
-          usageUpstreamBaseUrl: process.env.REVIEW_AUTH_MODE === "openai-api" ? "https://api.openai.com/v1" : input.providerInstanceId || process.env.REVIEW_AUTH_MODE === "codex-oauth" ? "https://chatgpt.com/backend-api/codex" : void 0
-        } : {},
-        agenticContext,
-        eventAudit: config2.codexEventAudit,
-        modelProvider: input.providerApi ? directProvider.modelProvider : resolveAccountGatewayModelProvider(
-          model,
-          preparedRoute?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-          preparedRoute?.modelTransport
-        ),
-        ...input.providerApi ? {
-          providerNamePrefix: directProvider.mode === "kimi-code-api" ? "kimi" : directProvider.mode === "mimo-token-plan-api" ? "codex-mimo" : "openrouter",
-          providerApiTransport: input.providerApi.modelTransport,
-          disableBuiltinTools: true,
-          waitForProcessClose: true
-        } : {},
-        ...preparedRoute && !input.providerApi ? {
-          accountGateway: preparedRoute.modelTransport,
-          ...gatewayModelSettings ? {
-            accountGatewayModelSettings: gatewayModelSettings,
-            accountGatewaySavedReasoningEffort: serverReasoningEffort
-          } : {}
-        } : {}
-      });
-      const compatibilityKey = hashIncrementalCompatibility(
-        config2,
-        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
-        reviewSkillsCacheIdentity(reviewSkills)
-      );
-      const gatewayBundlePath = resolveContextGatewayBundlePath();
-      const requiredContextWitness = new SubprocessRequiredContextWitnessRunner();
-      const contextGatewayOptions = resolveProductionContextGatewaySessionFactoryOptions({
-        agenticContext,
-        investigationRecordingEnabled,
-        checkoutRoot: path30.resolve(input.workspacePath),
-        gatewayBundlePath
-      });
-      const contextGateway = contextGatewayOptions ? new ContextGatewayInvocationSessionFactory(
-        controlPlane,
-        contextGatewayOptions,
-        requiredContextWitness
-      ) : void 0;
-      const contextReplayRunner = contextGateway ? new ContextAttestationReplayRunner({
-        checkoutRoot: path30.resolve(input.workspacePath),
-        gatewayBundlePath
-      }) : void 0;
-      const prDescription = createPrDescriptionGeneration({
-        enabled: config2.updatePrDescription,
-        scopedCompanionDispatch: !!admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-        capabilityJson: admittedRuntime?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
-        pr: pr2,
-        reviewRevisionHash: authorization.facts.reviewRevisionHash,
-        requestedModel: model,
-        providerKind: "codex" /* Codex */,
-        language: config2.outputLanguage,
-        config: config2,
-        transport: preparedRoute?.modelTransport,
-        memorySnapshot: descriptionMemory.current(),
-        warn: warning
-      });
-      const lifecycleCapability = config2.reviewThreadLifecycle !== "off" && preparedRoute ? readLifecycleCapability(
-        admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-        model,
-        "codex" /* Codex */,
-        modelDispatchCapability
-      ) : void 0;
-      let planned = planAssignments({
-        prDescriptionEnabled: prDescription !== void 0,
-        authorization,
-        pr: pr2,
-        config: config2,
-        providerName: provider.name,
-        compatibilityKey,
-        lifecycleTargets: selectLegacyLifecycleTargets(
-          config2.reviewThreadLifecycle,
-          admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-          initialLifecycle.promptTargets
-        ),
-        liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
-        accountGateway: preparedRoute !== void 0
-      });
-      assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
-      const lifecycle = preplanningRestore ? restoreProductionLifecycleVerification(
-        preplanningRestore,
-        planned.plan,
-        config2
-      ) : lifecycleCapability ? await planProductionLifecycleVerification({
-        capability: lifecycleCapability,
-        authorization,
-        plan: planned.plan,
-        repository: input.repository,
-        checkoutRoot: path30.resolve(input.workspacePath),
-        compatibilityKey,
-        config: config2,
-        inventory: initialLifecycle.inventory,
-        targets: initialLifecycle.revalidationTargets,
-        resolutionHistory,
-        renames: pr2.files.filter((file) => !!file.previousFilename).map((file) => ({
-          previousFilename: file.previousFilename,
-          filename: file.filename
-        }))
-      }) : void 0;
-      if (preplanningRestore?.persistedPlan?.compatibilityKey && preplanningRestore.persistedPlan.compatibilityKey !== compatibilityKey)
-        throw new Error("review_restore_compatibility_changed");
-      const finalPlan = restorePersistedWorkPlan(
-        preplanningRestore,
-        lifecycle?.plan ?? planned.plan
-      );
-      planned = {
-        ...planned,
-        plan: finalPlan,
-        assignments: rebindReviewAssignmentsToWorkPlan(
-          planned.assignments,
-          finalPlan
-        )
-      };
-      const invocationAdapter = new CodexReviewInvocationAdapter(
-        provider,
-        new PromptBuilder(
-          config2,
-          "standard",
-          void 0,
-          void 0,
-          void 0,
-          reviewSkills
-        ),
-        planned.assignments,
-        providerTimeoutMs,
-        agenticContext,
-        contextGateway,
-        false,
-        preparedRoute ? reasoningEffort : "xhigh",
-        input.providerApi?.credentialLease,
-        gatewayModelSettings,
-        reviewMemory
-      );
-      const investigationInvocationAdapter = createProductionReviewInvestigationInvocation({
-        rollout: investigationRollout,
-        create: () => new CodexReviewInvocationAdapter(
-          provider,
-          new PromptBuilder(
-            config2,
-            "standard",
-            void 0,
-            void 0,
-            void 0,
-            reviewSkills
-          ),
-          planned.assignments,
-          providerTimeoutMs,
-          agenticContext,
-          contextGateway,
-          true,
-          reasoningEffort,
-          input.providerApi?.credentialLease,
-          gatewayModelSettings,
-          reviewMemory
-        )
-      });
-      const identities = new DeterministicReviewOrchestrationIdentity();
-      const investigationProtocol = investigationRecordingEnabled ? new ReviewActionV2InvestigationAdapter(reviewActionClient) : void 0;
-      const investigationRecording = investigationProtocol && contextGatewayOptions ? new ReviewInvestigationRecordingAdapter(
-        (recordingInput) => {
-          const legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate();
-          if (preparedRoute) legacyFallbackGate.close();
-          const investigationControlPlane = new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
-            investigationProtocol,
-            legacyFallbackGate
-          );
-          const currency = new RevisionGuardInvestigationCurrencyAdapter(
-            revisionGuard
-          );
-          const investigationGatewayFactory = createProductionReviewInvestigationGatewayFactory(
-            new ContextGatewayInvocationSessionFactory(
-              new ReviewActionV2InvestigationContextAttestationAdapter(
-                reviewActionClient,
-                recordingInput.authorization.authorizationToken
-              ),
-              contextGatewayOptions,
-              requiredContextWitness
-            )
-          );
-          const gateway = new ContextGatewayV4InvestigationAdapter(
-            investigationGatewayFactory,
-            {
-              revision: {
-                baseSha: authorization.facts.baseSha,
-                mergeBaseSha: authorization.facts.mergeBaseSha,
-                headSha: authorization.facts.headSha
-              },
-              preparedManifestKey: recordingInput.manifest.manifestKey,
-              providerKind: recordingInput.invocation.manifestFacts.providerKind,
-              requestedModel: recordingInput.invocation.requestedModel,
-              executionProfile: recordingInput.invocation.manifestFacts.executionProfile,
-              providerInvocationKey: recordingInput.manifest.providerInvocationKey,
-              toolPolicyHash: recordingInput.invocation.manifestFacts.toolPolicyHash
-            }
-          );
-          const agents = createProductionReviewInvestigationAgentSelector(
-            {
-              authorization,
-              primaryProviderKind: "codex" /* Codex */,
-              contextCriticEnabled: investigationRollout.contextCriticEnabled,
-              agents: createConfiguredProductionInvestigationAgents({
-                approvedAgent,
-                ...input.providerApi ? {
-                  directCredentialLease: input.providerApi.credentialLease,
-                  directModelProvider: directProvider.modelProvider
-                } : {},
-                codexModel: model,
-                codexBinaryPath: input.codexBinaryPath,
-                executionSessions: gateway,
-                modelTransport: preparedRoute?.modelTransport,
-                admittedGatewayModel: preparedRoute?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-                reasoningEffort,
-                gatewayModelSettings
-              })
-            }
-          );
-          return new RunInvestigationWorkSlot({
-            controlPlane: investigationControlPlane,
-            legacyFallbackGate,
-            delay: new CancellableReviewOrchestrationDelay(),
-            leases: new ReviewActionV2InvestigationLeaseAdapter(
-              reviewActionClient
-            ),
-            ...investigationRollout.crossRevisionReplayEnabled && contextReplayRunner ? {
-              replay: new ReplayInvestigationOnRevision({
-                controlPlane: investigationControlPlane,
-                receipts: contextReplayRunner,
-                currency
-              })
-            } : {},
-            turnRunner: new RunInvestigationTurn({
-              controlPlane: investigationControlPlane,
-              currency,
-              gateway,
-              agents,
-              diagnostics: new LoggingInvestigationOperationalDiagnostics(
-                logger
-              ),
-              now: () => /* @__PURE__ */ new Date()
-            })
-          });
-        },
-        {
-          workingDirectory: path30.resolve(input.workspacePath),
-          leaseDurationMs: providerTimeoutMs + 5 * 6e4,
-          providerTimeoutMs,
-          certificateTtlMs: 24 * 60 * 6e4,
-          minimumCapacityParkMs: 6e4,
-          actionBudget: reviewInvestigationActionBudgetForDepth(
-            config2.reviewDepth
-          ),
-          policy: REVIEW_INVESTIGATION_PRODUCTION_POLICY
-        },
-        productionReviewInvestigationRecordingMode(investigationRollout),
-        investigationRollout.verifiedCleanEnabled
-      ) : void 0;
-      if (prDescription && !planned.plan.assignments.some(
-        (assignment) => assignment.workSlot.taskKind === "pr_description" /* PrDescription */
-      ))
-        warning(
-          "AI PR description omitted: no optional task budget remains."
-        );
-      const nativeDiscoveryInvocations = observeNativeReviewSkillsSupply(
-        preparedRoute ? scopedModelInvocations(
-          invocationAdapter,
-          preparedRoute.modelTransport
-        ) : invocationAdapter,
-        skillsReceiptCollector,
-        () => preparedRoute?.modelTransport.requestCount?.()
-      );
-      const useCase = new RunT0ReviewOrchestration({
-        ...prDescription ? { prDescription } : {},
-        controlPlane,
-        revisionGuard,
-        oidc: {
-          getToken: () => oidc.requestToken(input.audience)
-        },
-        invocationManifestAssembler: restoredLifecycleManifestAssembler(
-          preplanningRestore,
-          new GeneratedProviderInvocationManifestAssembler(
-            authorization,
-            config2,
-            compatibilityKey
-          )
-        ),
-        invocations: preplanningRestore?.persistedPlan ? restoredLifecycleInvocations(
-          preplanningRestore,
-          nativeDiscoveryInvocations
-        ) : lifecycle && lifecycleCapability ? compositeLifecycleInvocations({
-          discovery: nativeDiscoveryInvocations,
-          packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
-          capability: lifecycleCapability,
-          outputCap: lifecycle.outputCap,
-          reviewRevisionHash: authorization.facts.reviewRevisionHash,
-          liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
-          transport: preparedRoute.modelTransport
-        }) : nativeDiscoveryInvocations,
-        memoryAdmission,
-        ...investigationInvocationAdapter ? { investigationInvocations: investigationInvocationAdapter } : {},
-        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
-          preparedRoute?.modelTransport.failureFact
-        ),
-        invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
-        investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
-          logger
-        ),
-        leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
-        ...investigationRecording ? { investigationRecording } : {},
-        projectionBuilder: createProductionReviewProjectionBuilder({
-          authorizationFacts: authorization.facts,
-          pr: pr2,
-          config: config2,
-          protocolLimits: authorization.limits,
+          },
+          plan: planned.plan,
+          compatibilityKey,
           assignments: planned.plan.assignments.map((assignment) => ({
             workSlotId: assignment.workSlot.workSlotId,
             taskKind: assignment.workSlot.taskKind,
             providerKind: assignment.workSlot.providerKind,
+            providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
             required: assignment.workSlot.required,
             filePaths: planned.assignments.find(
               (item) => item.workSlot.workSlotId === assignment.workSlot.workSlotId
@@ -246216,42 +247062,185 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           })),
           uncoveredPaths: planned.uncoveredPaths,
           uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
-          lifecycleInventory,
-          ...lifecycle?.lifecycleVerification ? { lifecycleVerification: lifecycle.lifecycleVerification } : {},
-          skillsReceipt
-        }),
-        ...contextGateway ? {
-          contextReplay: contextReplayRunner,
-          contextAttestations: controlPlane
-        } : {},
-        identities,
-        clock: new SystemReviewOrchestrationClock(),
-        delay: new CancellableReviewOrchestrationDelay(),
-        executionDeadline,
-        signal,
-        ...this.progress ? { progress: this.progress } : {}
-      });
-      const result2 = await useCase.executeAuthorized(
-        {
+          lifecycleVerification: lifecycle?.lifecycleVerification,
+          cleanup: async () => {
+          }
+        };
+      };
+      const preparedLanes = [];
+      try {
+        const runtimes = input.accountGateway?.reviewers;
+        if (reviewerPlan && runtimes) {
+          if (runtimes.length !== reviewerPlan.reviewers.length || runtimes.some(
+            (runtime, index) => runtime.reviewer.reviewerId !== reviewerPlan.reviewers[index]?.reviewerId
+          ))
+            throw new Error("review_action_v2_reviewer_sessions_mismatch");
+          const budgets = planReviewerSlotBudgets({
+            runtimes,
+            authorization,
+            pr: pr2,
+            config: parentConfig,
+            compatibilityKey: commonCompatibilityKey,
+            lifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
+          });
+          for (const runtime of runtimes) {
+            const laneInput = {
+              ...input,
+              codexHome: runtime.codexHome,
+              codexBinaryPath: runtime.codexBinaryPath,
+              ocr: runtime.ocr,
+              accountGateway: {
+                ...input.accountGateway,
+                runtimeConfig: runtime.runtimeConfig,
+                modelTransport: runtime.modelTransport
+              }
+            };
+            preparedLanes.push(
+              await prepareLane(
+                laneInput,
+                runtime.reviewer,
+                budgets.get(runtime.reviewer.reviewerId),
+                runtime.bootstrapFailure === true
+              )
+            );
+          }
+        } else preparedLanes.push(await prepareLane(input));
+        const primaryIndex = reviewerPlan ? reviewerPlan.reviewers.findIndex(
+          (reviewer) => reviewer.reviewerId === reviewerPlan.primaryReviewerId
+        ) : 0;
+        const primary = preparedLanes[primaryIndex];
+        const combined = reviewerPlan ? combineProductionReviewLanes(
+          preparedLanes,
+          commonCompatibilityKey,
+          authorization
+        ) : primary;
+        const plan = restorePersistedWorkPlan(parentRestore, combined.plan);
+        assertLegacyReviewPlanRestorable(parentRestore, plan);
+        const compatibilityKey = combined.compatibilityKey;
+        if (parentRestore?.persistedPlan?.compatibilityKey && parentRestore.persistedPlan.compatibilityKey !== compatibilityKey)
+          throw new Error("review_restore_compatibility_changed");
+        const byVote = new Map(
+          preparedLanes.map((lane, index) => [
+            reviewerPlan?.reviewers[index].providerVoteIdentityHash ?? lane.plan.assignments[0].workSlot.providerVoteIdentityHash,
+            lane
+          ])
+        );
+        const route = (slot) => {
+          const lane = byVote.get(slot.providerVoteIdentityHash);
+          if (!lane) throw new Error("review_action_v2_reviewer_vote_missing");
+          return lane;
+        };
+        const slots = new Map(
+          plan.assignments.map((assignment) => [
+            assignment.workSlot.workSlotId,
+            assignment.workSlot
+          ])
+        );
+        const invocationSlot = (invocation) => {
+          const slot = slots.get(invocation.workSlotId);
+          if (!slot) throw new Error("review_action_v2_reviewer_slot_missing");
+          return slot;
+        };
+        const laneInvocations = {
+          prepare: (request3) => route(request3.workSlot).dependencies.invocations.prepare(request3),
+          execute: (request3) => route(
+            invocationSlot(request3.invocation)
+          ).dependencies.invocations.execute(request3)
+        };
+        const lifecycleVerification = parentRestore ? restoreProductionLifecycleVerification(
+          parentRestore,
+          plan,
+          parentConfig
+        ).lifecycleVerification : primary.lifecycleVerification;
+        const modelTransports = new Map(
+          runtimes?.map((runtime) => [
+            runtime.reviewer.providerVoteIdentityHash,
+            runtime.modelTransport
+          ]) ?? []
+        );
+        const dependencies2 = reviewerPlan ? {
+          ...primary.dependencies,
+          memoryAdmission,
+          invocations: parentRestore?.persistedPlan ? restoredLifecycleInvocations(parentRestore, laneInvocations) : laneInvocations,
+          invocationManifestAssembler: restoredLifecycleManifestAssembler(
+            parentRestore,
+            {
+              assemble: (invocation) => route(
+                invocationSlot(invocation)
+              ).dependencies.invocationManifestAssembler.assemble(
+                invocation
+              )
+            }
+          ),
+          investigationInvocations: {
+            prepare: (request3) => {
+              const port = route(request3.workSlot).dependencies.investigationInvocations;
+              if (!port)
+                throw new Error(
+                  "review_investigation_reviewer_unavailable"
+                );
+              return port.prepare(request3);
+            },
+            execute: (request3) => {
+              const port = route(invocationSlot(request3.invocation)).dependencies.investigationInvocations;
+              if (!port)
+                throw new Error(
+                  "review_investigation_reviewer_unavailable"
+                );
+              return port.execute(request3);
+            }
+          },
+          resolveInvestigationRecording: (slot) => route(slot).dependencies.investigationRecording,
+          ...preparedLanes.some((lane) => lane.dependencies.contextReplay) ? {
+            contextReplay: {
+              replay: (request3) => route(
+                request3.candidate.observation
+              ).dependencies.contextReplay?.replay(request3) ?? Promise.resolve(null)
+            },
+            contextAttestations: controlPlane
+          } : {},
+          invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+            (context5) => context5 ? modelTransports.get(context5.workSlot.providerVoteIdentityHash)?.failureFact() : void 0
+          ),
+          reviewerScheduling: {
+            maxParallelReviewers: reviewerPlan.maxParallelReviewers,
+            reviewers: reviewerPlan.reviewers,
+            concurrencyGroups: reviewerPlan.concurrencyGroups.map(
+              (group) => ({
+                id: group.concurrencyGroupId,
+                maxParallel: group.maxParallel
+              })
+            )
+          },
+          projectionBuilder: createProductionReviewProjectionBuilder({
+            authorizationFacts: authorization.facts,
+            pr: pr2,
+            config: {
+              ...parentConfig,
+              inlineMinAgreement: reviewerPlan.inlineMinAgreement
+            },
+            protocolLimits: authorization.limits,
+            assignments: combined.assignments,
+            uncoveredPaths: combined.uncoveredPaths,
+            uncoveredLifecycleTargetIds: combined.uncoveredLifecycleTargetIds,
+            lifecycleInventory,
+            ...lifecycleVerification ? { lifecycleVerification } : {},
+            skillsReceipt
+          })
+        } : primary.dependencies;
+        const command = {
           executionId: identities.deterministicId("execution", [
             authorization.authorizationId,
             authorization.facts.reviewRevisionHash,
-            planned.plan.planHash
+            plan.planHash
           ]),
-          baseSha: authorization.facts.baseSha,
-          mergeBaseSha: authorization.facts.mergeBaseSha,
-          headSha: authorization.facts.headSha,
-          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          ...authorization.facts,
           compatibilityKey,
-          planHash: planned.plan.planHash,
-          workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
-          assignmentManifestCanonicalJson: planned.plan.assignmentManifestCanonicalJson,
-          assignmentManifestHash: planned.plan.assignmentManifestHash,
-          workSlots: planned.plan.assignments.map(
-            (assignment) => assignment.workSlot
-          ),
-          sourceRunId: authorization.facts.sourceRunId,
-          sourceRunAttempt: authorization.facts.sourceRunAttempt,
+          planHash: plan.planHash,
+          workSlotsCanonicalJson: plan.workSlotsCanonicalJson,
+          assignmentManifestCanonicalJson: plan.assignmentManifestCanonicalJson,
+          assignmentManifestHash: plan.assignmentManifestHash,
+          workSlots: plan.assignments.map((assignment) => assignment.workSlot),
           ownerIdHash: sha25617(
             canonicalJson17({
               authorizationId: authorization.authorizationId,
@@ -246261,12 +247250,16 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             })
           ),
           allowPartial: true,
-          ...preplanningRestore ? { restoredExecution: preplanningRestore, restoreOnly: true } : {}
-        },
-        authorization
-      );
-      signal?.throwIfAborted();
-      return mapOrchestrationResultToCodexOutcome(result2);
+          ...parentRestore ? { restoredExecution: parentRestore, restoreOnly: true } : {}
+        };
+        const result2 = await new RunT0ReviewOrchestration(
+          dependencies2
+        ).executeAuthorized(command, authorization);
+        signal?.throwIfAborted();
+        return mapOrchestrationResultToCodexOutcome(result2);
+      } finally {
+        for (const lane of preparedLanes) await lane.cleanup();
+      }
     } finally {
       await usageDelivery?.cleanup();
     }
@@ -246382,10 +247375,10 @@ function resolveProductionInvestigationReasoningEffort(input) {
       return null;
     }
     const mimo = input.providerApiAuthMode === "mimo-token-plan-api";
-    const effort3 = input.serverReasoningEffort ?? (mimo ? "high" : "xhigh");
-    if (effort3 !== "low" && effort3 !== "medium" && effort3 !== "high" && (effort3 !== "xhigh" || mimo))
+    const effort4 = input.serverReasoningEffort ?? (mimo ? "high" : "xhigh");
+    if (effort4 !== "low" && effort4 !== "medium" && effort4 !== "high" && (effort4 !== "xhigh" || mimo))
       throw new Error("provider_api_reasoning_effort_unsupported");
-    return effort3;
+    return effort4;
   }
   if (!input.accountGateway) return "xhigh";
   if (input.codexModel !== "mimo-v2.6-pro") {
@@ -246397,17 +247390,17 @@ function resolveProductionInvestigationReasoningEffort(input) {
         input.serverReasoningEffort
       );
     }
-    const effort3 = input.serverReasoningEffort;
-    if (effort3 === void 0) return "xhigh";
-    if (effort3 !== "minimal" && effort3 !== "low" && effort3 !== "medium" && effort3 !== "high" && effort3 !== "xhigh" && effort3 !== "max" && effort3 !== "ultra")
+    const effort4 = input.serverReasoningEffort;
+    if (effort4 === void 0) return "xhigh";
+    if (effort4 !== "minimal" && effort4 !== "low" && effort4 !== "medium" && effort4 !== "high" && effort4 !== "xhigh" && effort4 !== "max" && effort4 !== "ultra")
       throw new Error("account_gateway_codex_reasoning_effort_unsupported");
-    return effort3;
+    return effort4;
   }
-  const effort2 = input.serverReasoningEffort ?? "high";
-  if (effort2 !== "low" && effort2 !== "medium" && effort2 !== "high") {
+  const effort3 = input.serverReasoningEffort ?? "high";
+  if (effort3 !== "low" && effort3 !== "medium" && effort3 !== "high") {
     throw new Error("account_gateway_mimo_reasoning_effort_unsupported");
   }
-  return effort2;
+  return effort3;
 }
 function resolveAccountGatewayModelProvider(selectedModel, admittedModel, transport) {
   return transport && admittedModel === selectedModel && isAccountGatewayMiMoModel(admittedModel) ? "mimo" : void 0;
@@ -246748,16 +247741,20 @@ function planAssignments(input) {
     input.providerName
   ]);
   const allBatches = tokenSafeBatches.length === 0 ? [[]] : tokenSafeBatches;
-  const batches = allBatches.slice(0, maxSlots);
+  const discoverySlots = Math.min(
+    maxSlots,
+    input.maxDiscoverySlots ?? maxSlots
+  );
+  const batches = allBatches.slice(0, discoverySlots);
   const descriptionEnabled = input.prDescriptionEnabled === true && batches.length < maxSlots;
   const uncoveredPaths = Object.freeze(
-    allBatches.slice(maxSlots).flatMap((batch) => batch.map((file) => file.filename)).sort()
+    allBatches.slice(discoverySlots).flatMap((batch) => batch.map((file) => file.filename)).sort()
   );
   const plannedBatches = batches.map((batch) => {
     const lifecycleTargets = input.lifecycleTargets.filter(
       (target) => batch.some(
         (file) => [file.filename, file.previousFilename].some(
-          (path39) => path39 !== void 0 && (target.currentPath === path39 || target.originalPath === path39)
+          (path40) => path40 !== void 0 && (target.currentPath === path40 || target.originalPath === path40)
         )
       )
     );
@@ -246781,7 +247778,7 @@ function planAssignments(input) {
     input.lifecycleTargets.filter(
       (target) => !assignedLifecycleTargetIds.has(target.targetId) && files.some(
         (file) => [file.filename, file.previousFilename].some(
-          (path39) => path39 !== void 0 && (target.currentPath === path39 || target.originalPath === path39)
+          (path40) => path40 !== void 0 && (target.currentPath === path40 || target.originalPath === path40)
         )
       )
     ).map((target) => target.targetId).sort()
@@ -246796,10 +247793,10 @@ function planAssignments(input) {
     compatibilityKey: input.compatibilityKey,
     providers: [
       {
-        providerName: input.providerName,
+        providerName: input.reviewerId ? `${input.providerName}:${input.reviewerId}` : input.providerName,
         providerKind: "codex" /* Codex */,
         providerVoteIdentityHash: codexLanes[0].providerVoteIdentityHash,
-        required: true,
+        required: input.reviewerRequired ?? true,
         attemptBudget,
         retryPolicyVersion: input.accountGateway ? "account-gateway-no-replay.v1" : CODEX_RETRY_POLICY_VERSION
       }
@@ -247018,11 +248015,11 @@ function runAccountGatewayGit(args, options, signal, timeoutMs = 6e4) {
     signal.addEventListener("abort", cancel3, { once: true });
     if (signal.aborted) cancel3();
     let stdout = "";
-    let bytes = 0;
+    let bytes2 = 0;
     const collect = (chunk, output) => {
       if (failed) return;
-      bytes += chunk.length;
-      if (bytes > 256 * 1024)
+      bytes2 += chunk.length;
+      if (bytes2 > 256 * 1024)
         stop(new Error("account_gateway_git_output_bound"));
       else if (!failed && output) stdout += chunk.toString();
     };
@@ -247052,37 +248049,325 @@ var CancellableReviewOrchestrationDelay = class extends SystemReviewOrchestratio
     });
   }
 };
+function combineProductionReviewLanes(lanes, compatibilityKey, authorization) {
+  const assignments = lanes.flatMap((lane) => lane.plan.assignments);
+  if (assignments.length > authorization.limits.maxWorkSlots)
+    throw new Error("review_work_plan_slot_limit_exceeded");
+  const manifests = lanes.map(
+    (lane) => JSON.parse(lane.plan.assignmentManifestCanonicalJson)
+  );
+  const eligiblePaths = [
+    ...new Set(manifests.flatMap((manifest2) => manifest2.eligiblePaths))
+  ].sort();
+  const assignedPaths = new Set(
+    manifests.flatMap(
+      (manifest2) => manifest2.assignments.flatMap((assignment) => assignment.paths)
+    )
+  );
+  const lifecyclePlan = manifests.find(
+    (manifest2) => manifest2.lifecyclePlan !== void 0
+  )?.lifecyclePlan;
+  const manifest = createStableReviewAssignmentManifest({
+    assignments: manifests.flatMap((manifest2) => manifest2.assignments),
+    eligiblePaths,
+    uncoveredPaths: eligiblePaths.filter((path40) => !assignedPaths.has(path40)),
+    excludedPaths: manifests.flatMap((manifest2) => manifest2.excludedPaths),
+    ...lifecyclePlan !== void 0 ? { lifecyclePlan } : {}
+  });
+  const workSlots = assignments.map((assignment) => assignment.workSlot).sort((left, right) => left.workSlotId < right.workSlotId ? -1 : 1);
+  const workSlotsCanonicalJson = canonicalJson17(workSlots);
+  const planHash = sha25617(
+    `rr.review-work-plan.v2\0${canonicalJson17({
+      assignmentManifestHash: manifest.assignmentManifestHash,
+      compatibilityKey,
+      reviewRevisionHash: authorization.facts.reviewRevisionHash,
+      workSlots
+    })}`
+  );
+  return {
+    ...lanes[0],
+    compatibilityKey,
+    plan: { ...manifest, workSlotsCanonicalJson, planHash, assignments },
+    assignments: lanes.flatMap((lane) => lane.assignments),
+    uncoveredPaths: [
+      ...new Set(lanes.flatMap((lane) => lane.uncoveredPaths))
+    ].sort(),
+    uncoveredLifecycleTargetIds: [
+      ...new Set(lanes.flatMap((lane) => lane.uncoveredLifecycleTargetIds))
+    ].sort()
+  };
+}
+function planReviewerSlotBudgets(input) {
+  const maximum = input.authorization.limits.maxWorkSlots;
+  if (input.runtimes.length > maximum)
+    throw new Error("review_work_plan_required_group_cannot_fit");
+  const counts = input.runtimes.map((runtime) => {
+    if (runtime.reviewer.agentProfile.agentKind === "ocr") return 1;
+    const config2 = ConfigLoader.loadRuntimeEnvironment(
+      runtime.runtimeConfig.runtimeEnv,
+      { modelTransport: true }
+    );
+    const authorization = {
+      ...input.authorization,
+      facts: {
+        ...input.authorization.facts,
+        providerVoteLanes: [
+          {
+            providerKind: "codex" /* Codex */,
+            providerVoteIdentityHash: runtime.reviewer.providerVoteIdentityHash
+          }
+        ]
+      }
+    };
+    return planAssignments({
+      authorization,
+      pr: input.pr,
+      config: config2,
+      providerName: selectCodexProvider(config2),
+      compatibilityKey: input.compatibilityKey,
+      lifecycleTargets: [],
+      liveLifecycleStateHash: input.lifecycleStateHash,
+      accountGateway: true
+    }).plan.assignments.length;
+  });
+  const budgets = input.runtimes.map(() => 1);
+  let remaining = maximum - budgets.length;
+  for (const required2 of [true, false]) {
+    while (remaining > 0) {
+      const nextGroup = input.runtimes.map((runtime, index) => ({ runtime, index })).filter(
+        ({ runtime, index }) => runtime.reviewer.required === required2 && budgets[index] < counts[index]
+      );
+      if (!nextGroup.length || nextGroup.length > remaining) break;
+      for (const { index } of nextGroup) {
+        budgets[index] += 1;
+        remaining -= 1;
+      }
+    }
+  }
+  const discoverySlots = [...budgets];
+  if (remaining > 0) budgets[0] += remaining;
+  return new Map(
+    input.runtimes.map((runtime, index) => [
+      runtime.reviewer.reviewerId,
+      { maxSlots: budgets[index], discoverySlots: discoverySlots[index] }
+    ])
+  );
+}
 
-// src/codex-oauth/account-gateway-runtime.ts
-var import_child_process22 = require("child_process");
-var import_util36 = require("util");
-var fs28 = __toESM(require("fs/promises"));
-var os16 = __toESM(require("os"));
-var path32 = __toESM(require("path"));
-
-// src/codex-oauth/safe-checkout.ts
+// src/codex-oauth/account-gateway-reviewer-session.ts
 var import_child_process21 = require("child_process");
+var import_util36 = require("util");
 var fs27 = __toESM(require("fs/promises"));
 var os15 = __toESM(require("os"));
 var path31 = __toESM(require("path"));
+function reviewerRuntimeConfig(parent, reviewer) {
+  const runtimeEnv = { ...parent.runtimeEnv };
+  if (reviewer.agentProfile.agentKind !== "ocr")
+    delete runtimeEnv[CONTEXT_TOOLS_PLAN_ENV];
+  delete runtimeEnv.CODEX_REASONING_EFFORT;
+  delete runtimeEnv.REVIEW_ROUTER_GATEWAY_MODEL_SETTINGS_JSON;
+  runtimeEnv.CODEX_MODEL = reviewer.requestedModel;
+  runtimeEnv.REVIEW_PROVIDERS = `${reviewer.agentProfile.agentKind === "ocr" ? "ocr" : "codex"}/${reviewer.requestedModel}`;
+  runtimeEnv.CODEX_AGENTIC_CONTEXT = String(reviewer.agenticContext);
+  runtimeEnv.CODEX_FAST_MODE = String(reviewer.fastMode);
+  if (reviewer.reasoningEffort)
+    runtimeEnv.CODEX_REASONING_EFFORT = reviewer.reasoningEffort;
+  if (reviewer.modelSettings)
+    runtimeEnv.REVIEW_ROUTER_GATEWAY_MODEL_SETTINGS_JSON = JSON.stringify(
+      reviewer.modelSettings
+    );
+  runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON = canonicalJson18(
+    reviewer.agentProfile
+  );
+  runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST = reviewer.agentProfileDigest;
+  return Object.freeze({ ...parent, runtimeEnv: Object.freeze(runtimeEnv) });
+}
+async function prepareAccountGatewayReviewerSession(input) {
+  const { reviewer, signal } = input;
+  const runtimeConfig = reviewerRuntimeConfig(input.runtimeConfig, reviewer);
+  const transport = new AccountGatewayModelTransport(
+    input.apiUrl,
+    input.authorization,
+    void 0,
+    void 0,
+    false,
+    void 0,
+    void 0,
+    reviewer.reviewerId
+  );
+  input.registerTransport(transport);
+  signal.throwIfAborted();
+  const bridge = await startLocalGatewayModelTransport(transport);
+  let privateHome;
+  let cli;
+  let ocrRun;
+  let ocrBinary;
+  input.registerCleanup(async () => {
+    transport.cancelInference();
+    const operations = [
+      () => bridge?.dispose(),
+      () => ocrRun?.cleanup(),
+      () => ocrBinary?.cleanup(),
+      () => privateHome ? fs27.rm(privateHome, { recursive: true, force: true }) : void 0,
+      () => cli?.clear?.()
+    ];
+    const settled = await Promise.allSettled(
+      operations.map((operation) => Promise.resolve().then(operation))
+    );
+    if (settled.some((result2) => result2.status === "rejected"))
+      throw new Error("account_gateway_child_cleanup_failed");
+  });
+  signal.throwIfAborted();
+  try {
+    if ("unavailableReason" in reviewer && reviewer.unavailableReason !== void 0)
+      throw new Error("account_gateway_captured_reviewer_unavailable");
+    const profileJson = runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON;
+    const profileDigest = runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST;
+    if (reviewer.agentProfile.agentKind === "ocr") {
+      const approvedAgent2 = readApprovedOcrReviewAgent(
+        profileJson,
+        profileDigest
+      );
+      ocrBinary = await resolveApprovedOcrBinary({ approvedAgent: approvedAgent2, signal });
+      ocrRun = await prepareOcrManagedRun({
+        approvedAgent: approvedAgent2,
+        baseUrl: bridge.baseUrl,
+        rawCapability: extractRawLoopbackCapability(
+          bridge.environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ""
+        ),
+        model: reviewer.requestedModel,
+        requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3,
+        modelReasoningEffort: reviewer.reasoningEffort ?? null,
+        admittedRuntimeConfig: runtimeConfig,
+        language: runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
+        signal,
+        env: { ...process.env, REVIEWROUTER_OCR_BINARY: ocrBinary.binaryPath }
+      });
+      return Object.freeze({
+        reviewer,
+        runtimeConfig,
+        modelTransport: bridge,
+        ocr: {
+          run: ocrRun,
+          effectFacts: () => transport.lastFailure ? { effect: transport.lastFailure.effect } : void 0
+        }
+      });
+    }
+    const approvedAgent = readApprovedReviewAgent(profileJson, profileDigest);
+    if (approvedAgent.agentKind !== "codex")
+      throw new Error("review_action_v2_reviewer_engine_unsupported");
+    cli = await prepareCodexCliBeforeAuthRead({
+      signal,
+      approvedAgent,
+      logger: { info, warn: warning }
+    });
+    const version4 = await (0, import_util36.promisify)(import_child_process21.execFile)(cli.binaryPath, ["--version"], {
+      signal,
+      killSignal: "SIGKILL",
+      timeout: 1e4,
+      maxBuffer: 16384,
+      env: { PATH: process.env.PATH, HOME: os15.tmpdir() }
+    });
+    assertApprovedReviewAgentVersion(
+      approvedAgent,
+      version4.stdout.trim().replace(/^codex-cli /, "")
+    );
+    await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
+      binary: cli.binaryPath,
+      executionSessions: {
+        resolve: () => {
+          throw new Error("review_agent_precheckout_session_unavailable");
+        }
+      }
+    }).negotiate({
+      providerKind: "codex" /* Codex */,
+      executionProfile: "gateway_attested_agent_v1" /* GatewayAttestedAgentV1 */,
+      minimumConfinement: "gateway_only" /* GatewayOnly */,
+      requireActualModelAttribution: true,
+      requireUsageAttribution: true,
+      requireFencedCancellation: true,
+      minimumMaxTurns: 1
+    });
+    privateHome = await fs27.mkdtemp(
+      path31.join(
+        process.env.RUNNER_TEMP || os15.tmpdir(),
+        "reviewrouter-reviewer-"
+      )
+    );
+    await fs27.chmod(privateHome, 448);
+    const codexHome = path31.join(privateHome, ".codex");
+    await fs27.mkdir(codexHome, { mode: 448 });
+    await fs27.writeFile(
+      path31.join(codexHome, "config.toml"),
+      bridge.configuration.join("\n") + "\n",
+      { mode: 384 }
+    );
+    return Object.freeze({
+      reviewer,
+      runtimeConfig,
+      codexHome,
+      codexBinaryPath: cli.binaryPath,
+      modelTransport: {
+        ...bridge,
+        environment: Object.freeze({
+          ...bridge.environment,
+          HOME: privateHome,
+          CODEX_HOME: codexHome
+        })
+      }
+    });
+  } catch {
+    signal.throwIfAborted();
+    warning(
+      "Account gateway reviewer engine is unavailable; its review coverage will be incomplete."
+    );
+    return Object.freeze({
+      reviewer,
+      runtimeConfig,
+      modelTransport: bridge,
+      bootstrapFailure: true
+    });
+  }
+}
+function canonicalJson18(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson18).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.keys(value).sort().map(
+      (key) => `${JSON.stringify(key)}:${canonicalJson18(value[key])}`
+    ).join(",")}}`;
+  return JSON.stringify(value);
+}
+
+// src/codex-oauth/account-gateway-runtime.ts
+var import_child_process23 = require("child_process");
+var import_util37 = require("util");
+var fs29 = __toESM(require("fs/promises"));
+var os17 = __toESM(require("os"));
+var path33 = __toESM(require("path"));
+
+// src/codex-oauth/safe-checkout.ts
+var import_child_process22 = require("child_process");
+var fs28 = __toESM(require("fs/promises"));
+var os16 = __toESM(require("os"));
+var path32 = __toESM(require("path"));
 async function createIsolatedCheckoutWorkspace(input) {
-  const runnerTempPath = input.runnerTempPath || os15.tmpdir();
-  await fs27.mkdir(runnerTempPath, { recursive: true, mode: 448 });
-  const realRunnerTempPath = await fs27.realpath(runnerTempPath);
-  const workspacePath = await fs27.mkdtemp(
-    path31.join(realRunnerTempPath, "reviewrouter-pr-")
+  const runnerTempPath = input.runnerTempPath || os16.tmpdir();
+  await fs28.mkdir(runnerTempPath, { recursive: true, mode: 448 });
+  const realRunnerTempPath = await fs28.realpath(runnerTempPath);
+  const workspacePath = await fs28.mkdtemp(
+    path32.join(realRunnerTempPath, "reviewrouter-pr-")
   );
   try {
-    await fs27.chmod(workspacePath, 448);
+    await fs28.chmod(workspacePath, 448);
     if (input.githubWorkspacePath) {
-      const githubWorkspacePath = await fs27.realpath(input.githubWorkspacePath);
+      const githubWorkspacePath = await fs28.realpath(input.githubWorkspacePath);
       if (pathsOverlap(workspacePath, githubWorkspacePath)) {
         throw new Error("codex_oauth_checkout_workspace_not_isolated");
       }
     }
     return workspacePath;
   } catch (error4) {
-    await fs27.rm(workspacePath, { recursive: true, force: true }).catch(() => {
+    await fs28.rm(workspacePath, { recursive: true, force: true }).catch(() => {
       warning("Isolated checkout cleanup failed; removal unconfirmed");
     });
     throw error4;
@@ -247094,7 +248379,7 @@ async function safeCheckoutRepository(input) {
   assertFullSha(input.headSha);
   if (input.mergeBaseSha !== void 0) assertFullSha(input.mergeBaseSha);
   await assertWorkspaceEmpty(input.workspacePath);
-  const gitHome = await fs27.mkdtemp(path31.join(os15.tmpdir(), "reviewrouter-git-"));
+  const gitHome = await fs28.mkdtemp(path32.join(os16.tmpdir(), "reviewrouter-git-"));
   let failed = false;
   try {
     await runGit2(["init", "."], input.workspacePath, gitHome, input.signal);
@@ -247167,15 +248452,15 @@ async function safeCheckoutRepository(input) {
     failed = true;
     throw error4;
   } finally {
-    await fs27.rm(gitHome, { recursive: true, force: true }).catch((error4) => {
+    await fs28.rm(gitHome, { recursive: true, force: true }).catch((error4) => {
       warning("Git home cleanup failed; removal unconfirmed");
       if (!failed) throw error4;
     });
   }
 }
 async function assertWorkspaceEmpty(workspacePath) {
-  await fs27.mkdir(workspacePath, { recursive: true, mode: 448 });
-  const entries = await fs27.readdir(workspacePath);
+  await fs28.mkdir(workspacePath, { recursive: true, mode: 448 });
+  const entries = await fs28.readdir(workspacePath);
   const unsafeEntries = entries.filter((entry) => entry !== ".git");
   if (unsafeEntries.length > 0) {
     throw new Error("codex_oauth_workspace_not_empty_before_checkout");
@@ -247190,7 +248475,7 @@ function runGit2(args, cwd, home, signal, timeoutMs = 6e4) {
   if (boundedTimeoutMs <= 0)
     throw new Error("account_gateway_checkout_timeout");
   return new Promise((resolve6, reject) => {
-    const child = (0, import_child_process21.spawn)("git", args, {
+    const child = (0, import_child_process22.spawn)("git", args, {
       cwd,
       detached: signal !== void 0 && process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
@@ -247268,8 +248553,8 @@ function pathsOverlap(left, right) {
   return pathIsWithin(left, right) || pathIsWithin(right, left);
 }
 function pathIsWithin(parent, candidate) {
-  const relative4 = path31.relative(parent, candidate);
-  return relative4 === "" || !relative4.startsWith(`..${path31.sep}`) && relative4 !== ".." && !path31.isAbsolute(relative4);
+  const relative4 = path32.relative(parent, candidate);
+  return relative4 === "" || !relative4.startsWith(`..${path32.sep}`) && relative4 !== ".." && !path32.isAbsolute(relative4);
 }
 function safeGitError(value) {
   return value.replace(/x-access-token:[^@\s]+@/g, "x-access-token:[redacted]@").replace(
@@ -247322,11 +248607,14 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
   let bridge;
   let ocrRun;
   let ocrBinary;
+  const childCleanups = [];
+  const childTransports = [];
   let reason = "failed";
   const onSignal = () => {
     reason = "cancelled";
     run3.abort(new Error("account_gateway_cancelled"));
     transport.cancelInference();
+    for (const child of childTransports) child.cancelInference();
   };
   process.on("SIGTERM", onSignal);
   process.on("SIGINT", onSignal);
@@ -247355,18 +248643,17 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         authorization.facts.headSha
       );
       if (admittedRuntimeConfig) {
-        const canonicalEnv2 = (config2) => JSON.stringify(
-          Object.entries(config2.runtimeEnv).sort(
-            ([a2], [b2]) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0
-          )
+        assertAccountGatewayRuntimeConfigContinuity(
+          admittedRuntimeConfig,
+          capability2.runtimeConfig
         );
-        if (capability2.runtimeConfig.configVersion !== admittedRuntimeConfig.configVersion || canonicalEnv2(capability2.runtimeConfig) !== canonicalEnv2(admittedRuntimeConfig)) {
-          throw new Error("account_gateway_runtime_config_changed");
-        }
       } else {
         admittedRuntimeConfig = capability2.runtimeConfig;
       }
-      return capability2;
+      return Object.freeze({
+        ...capability2,
+        runtimeConfig: admittedRuntimeConfig
+      });
     };
     phase = "checkout_capability";
     const capability = await readCapability();
@@ -247381,150 +248668,221 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         })
       );
     run3.signal.throwIfAborted();
-    const agentProfileJson = capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON;
-    const agentProfileDigest = capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST;
-    const agentKind = readApprovedReviewAgentKind(
-      agentProfileJson,
-      agentProfileDigest
-    );
-    let ocrAgent;
-    if (agentKind === "ocr") {
-      ocrAgent = readApprovedOcrReviewAgent(
-        agentProfileJson,
-        agentProfileDigest
-      );
-      phase = "prepare_ocr";
-      ocrBinary = await resolveApprovedOcrBinary({
-        approvedAgent: ocrAgent,
-        signal: run3.signal
-      });
-    } else {
-      const agentProfile = readApprovedReviewAgent(
-        agentProfileJson,
-        agentProfileDigest
-      );
-      phase = "prepare_cli";
-      cli = await prepareCodexCliBeforeAuthRead({
-        signal: run3.signal,
-        approvedAgent: agentProfile,
-        logger: { info, warn: warning }
-      });
-      phase = "version";
-      const version4 = await (0, import_util36.promisify)(import_child_process22.execFile)(cli.binaryPath, ["--version"], {
-        signal: run3.signal,
-        killSignal: "SIGKILL",
-        timeout: 1e4,
-        maxBuffer: 16384,
-        env: { PATH: process.env.PATH, HOME: os16.tmpdir() }
-      });
-      assertApprovedReviewAgentVersion(
-        agentProfile,
-        version4.stdout.trim().replace(/^codex-cli /, "")
-      );
-      phase = "negotiate";
-      await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
-        binary: cli.binaryPath,
-        executionSessions: {
-          resolve: () => {
-            throw new Error("review_agent_precheckout_session_unavailable");
-          }
-        }
-      }).negotiate({
-        providerKind: "codex" /* Codex */,
-        executionProfile: "gateway_attested_agent_v1" /* GatewayAttestedAgentV1 */,
-        minimumConfinement: "gateway_only" /* GatewayOnly */,
-        requireActualModelAttribution: true,
-        requireUsageAttribution: true,
-        requireFencedCancellation: true,
-        minimumMaxTurns: 1
-      });
-    }
-    run3.signal.throwIfAborted();
-    phase = "create_workspace";
-    workspacePath = await createIsolatedCheckoutWorkspace({
-      runnerTempPath: process.env.RUNNER_TEMP,
-      githubWorkspacePath: input.workspacePath
-    });
-    phase = "checkout";
-    await safeCheckoutRepository({
-      repository: capability.repository,
-      headSha: capability.headSha,
-      ...ocrAgent ? { mergeBaseSha: authorization.facts.mergeBaseSha } : {},
-      workspacePath,
-      token: capability.token,
-      signal: run3.signal
-    });
-    run3.signal.throwIfAborted();
-    phase = "local_transport";
-    bridge = await startLocalGatewayModelTransport(transport, observeTransport2);
-    if (ocrAgent) {
-      const model = capability.runtimeConfig.runtimeEnv.CODEX_MODEL;
-      if (!model) throw new Error("review_action_v2_ocr_model_missing");
-      ocrRun = await prepareOcrManagedRun({
-        approvedAgent: ocrAgent,
-        baseUrl: bridge.baseUrl,
-        rawCapability: extractRawLoopbackCapability(
-          bridge.environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ""
-        ),
-        model,
-        requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3,
-        modelReasoningEffort: capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
-        admittedRuntimeConfig: capability.runtimeConfig,
-        language: capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
-        signal: run3.signal,
-        env: {
-          ...process.env,
-          REVIEWROUTER_OCR_BINARY: ocrBinary.binaryPath
-        }
-      });
-    } else {
-      codexHome = await fs28.mkdtemp(
-        path32.join(
-          process.env.RUNNER_TEMP || os16.tmpdir(),
-          "reviewrouter-keyless-codex-"
+    const planJson = capability.runtimeConfig.runtimeEnv[reviewerPlanContract.runtimeEnvKey];
+    const reviewerPlan = planJson === void 0 ? void 0 : parseReviewReviewerPlan(planJson);
+    let review;
+    if (reviewerPlan) {
+      if (authorization.facts.providerVoteLanes.length !== reviewerPlan.reviewers.length || reviewerPlan.reviewers.some(
+        (reviewer) => !authorization.facts.providerVoteLanes.some(
+          (lane) => lane.providerVoteIdentityHash === reviewer.providerVoteIdentityHash && lane.providerKind === (reviewer.agentProfile.agentKind === "ocr" ? "ocr" : "codex")
         )
-      );
-      await fs28.chmod(codexHome, 448);
-      await fs28.writeFile(
-        path32.join(codexHome, "config.toml"),
-        bridge.configuration.join("\n") + "\n",
-        { mode: 384 }
-      );
-    }
-    run3.signal.throwIfAborted();
-    phase = "runner";
-    const review = await ports.review.run({
-      ...input,
-      repository: capability.repository,
-      headSha: capability.headSha,
-      workspacePath,
-      ...codexHome ? { codexHome } : {},
-      ...cli ? { codexBinaryPath: cli.binaryPath } : {},
-      scmReadToken: capability.token,
-      scmReadTokenExpiresAt: capability.expiresAt,
-      refreshScmReadToken: readCapability,
-      accountGateway: {
-        runtimeConfig: capability.runtimeConfig,
-        controlPlane,
-        modelTransport: codexHome !== void 0 ? {
-          ...bridge,
-          environment: Object.freeze({
-            ...bridge.environment,
-            CODEX_HOME: codexHome
-          })
-        } : bridge,
+      ))
+        throw new Error("account_gateway_reviewer_plan_authority_mismatch");
+      phase = "create_workspace";
+      workspacePath = await createIsolatedCheckoutWorkspace({
+        runnerTempPath: process.env.RUNNER_TEMP,
+        githubWorkspacePath: input.workspacePath
+      });
+      phase = "checkout";
+      await safeCheckoutRepository({
+        repository: capability.repository,
+        headSha: capability.headSha,
+        mergeBaseSha: authorization.facts.mergeBaseSha,
+        workspacePath,
+        token: capability.token,
         signal: run3.signal
-      },
-      ...ocrRun ? {
-        ocr: {
-          run: ocrRun,
-          effectFacts: () => {
-            const failure = transport.lastFailure;
-            return failure ? { effect: failure.effect } : void 0;
-          }
+      });
+      phase = "local_transport";
+      const reviewers = [];
+      for (const reviewer of reviewerPlan.reviewers)
+        reviewers.push(
+          await prepareAccountGatewayReviewerSession({
+            apiUrl: input.apiUrl,
+            authorization: () => controlPlane.currentAuthorization().authorizationToken,
+            runtimeConfig: capability.runtimeConfig,
+            reviewer,
+            signal: run3.signal,
+            registerCleanup: (cleanup) => childCleanups.push(cleanup),
+            registerTransport: (child) => childTransports.push(child)
+          })
+        );
+      const primary = reviewers.find(
+        (reviewer) => reviewer.reviewer.reviewerId === reviewerPlan.primaryReviewerId
+      );
+      phase = "runner";
+      review = await ports.review.run({
+        ...input,
+        repository: capability.repository,
+        headSha: capability.headSha,
+        workspacePath,
+        ...primary.codexHome ? { codexHome: primary.codexHome } : {},
+        ...primary.codexBinaryPath ? { codexBinaryPath: primary.codexBinaryPath } : {},
+        ...primary.ocr ? { ocr: primary.ocr } : {},
+        scmReadToken: capability.token,
+        scmReadTokenExpiresAt: capability.expiresAt,
+        refreshScmReadToken: readCapability,
+        accountGateway: {
+          runtimeConfig: capability.runtimeConfig,
+          controlPlane,
+          modelTransport: primary.modelTransport,
+          signal: run3.signal,
+          reviewerPlan,
+          reviewers
         }
-      } : {}
-    });
+      });
+    } else {
+      const agentProfileJson = capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON;
+      const agentProfileDigest = capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST;
+      const agentKind = readApprovedReviewAgentKind(
+        agentProfileJson,
+        agentProfileDigest
+      );
+      let ocrAgent;
+      if (agentKind === "ocr") {
+        ocrAgent = readApprovedOcrReviewAgent(
+          agentProfileJson,
+          agentProfileDigest
+        );
+        phase = "prepare_ocr";
+        ocrBinary = await resolveApprovedOcrBinary({
+          approvedAgent: ocrAgent,
+          signal: run3.signal
+        });
+      } else {
+        const agentProfile = readApprovedReviewAgent(
+          agentProfileJson,
+          agentProfileDigest
+        );
+        phase = "prepare_cli";
+        cli = await prepareCodexCliBeforeAuthRead({
+          signal: run3.signal,
+          approvedAgent: agentProfile,
+          logger: { info, warn: warning }
+        });
+        phase = "version";
+        const version4 = await (0, import_util37.promisify)(import_child_process23.execFile)(
+          cli.binaryPath,
+          ["--version"],
+          {
+            signal: run3.signal,
+            killSignal: "SIGKILL",
+            timeout: 1e4,
+            maxBuffer: 16384,
+            env: { PATH: process.env.PATH, HOME: os17.tmpdir() }
+          }
+        );
+        assertApprovedReviewAgentVersion(
+          agentProfile,
+          version4.stdout.trim().replace(/^codex-cli /, "")
+        );
+        phase = "negotiate";
+        await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
+          binary: cli.binaryPath,
+          executionSessions: {
+            resolve: () => {
+              throw new Error("review_agent_precheckout_session_unavailable");
+            }
+          }
+        }).negotiate({
+          providerKind: "codex" /* Codex */,
+          executionProfile: "gateway_attested_agent_v1" /* GatewayAttestedAgentV1 */,
+          minimumConfinement: "gateway_only" /* GatewayOnly */,
+          requireActualModelAttribution: true,
+          requireUsageAttribution: true,
+          requireFencedCancellation: true,
+          minimumMaxTurns: 1
+        });
+      }
+      run3.signal.throwIfAborted();
+      phase = "create_workspace";
+      workspacePath = await createIsolatedCheckoutWorkspace({
+        runnerTempPath: process.env.RUNNER_TEMP,
+        githubWorkspacePath: input.workspacePath
+      });
+      phase = "checkout";
+      await safeCheckoutRepository({
+        repository: capability.repository,
+        headSha: capability.headSha,
+        ...ocrAgent ? { mergeBaseSha: authorization.facts.mergeBaseSha } : {},
+        workspacePath,
+        token: capability.token,
+        signal: run3.signal
+      });
+      run3.signal.throwIfAborted();
+      phase = "local_transport";
+      bridge = await startLocalGatewayModelTransport(
+        transport,
+        observeTransport2
+      );
+      if (ocrAgent) {
+        const model2 = capability.runtimeConfig.runtimeEnv.CODEX_MODEL;
+        if (!model2) throw new Error("review_action_v2_ocr_model_missing");
+        ocrRun = await prepareOcrManagedRun({
+          approvedAgent: ocrAgent,
+          baseUrl: bridge.baseUrl,
+          rawCapability: extractRawLoopbackCapability(
+            bridge.environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ""
+          ),
+          model: model2,
+          requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3,
+          modelReasoningEffort: capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
+          admittedRuntimeConfig: capability.runtimeConfig,
+          language: capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
+          signal: run3.signal,
+          env: {
+            ...process.env,
+            REVIEWROUTER_OCR_BINARY: ocrBinary.binaryPath
+          }
+        });
+      } else {
+        codexHome = await fs29.mkdtemp(
+          path33.join(
+            process.env.RUNNER_TEMP || os17.tmpdir(),
+            "reviewrouter-keyless-codex-"
+          )
+        );
+        await fs29.chmod(codexHome, 448);
+        await fs29.writeFile(
+          path33.join(codexHome, "config.toml"),
+          bridge.configuration.join("\n") + "\n",
+          { mode: 384 }
+        );
+      }
+      run3.signal.throwIfAborted();
+      phase = "runner";
+      review = await ports.review.run({
+        ...input,
+        repository: capability.repository,
+        headSha: capability.headSha,
+        workspacePath,
+        ...codexHome ? { codexHome } : {},
+        ...cli ? { codexBinaryPath: cli.binaryPath } : {},
+        scmReadToken: capability.token,
+        scmReadTokenExpiresAt: capability.expiresAt,
+        refreshScmReadToken: readCapability,
+        accountGateway: {
+          runtimeConfig: capability.runtimeConfig,
+          controlPlane,
+          modelTransport: codexHome !== void 0 ? {
+            ...bridge,
+            environment: Object.freeze({
+              ...bridge.environment,
+              CODEX_HOME: codexHome
+            })
+          } : bridge,
+          signal: run3.signal
+        },
+        ...ocrRun ? {
+          ocr: {
+            run: ocrRun,
+            effectFacts: () => {
+              const failure = transport.lastFailure;
+              return failure ? { effect: failure.effect } : void 0;
+            }
+          }
+        } : {}
+      });
+    }
     phase = "terminal";
     ports.observeRelay(transport.lastFailure);
     run3.signal.throwIfAborted();
@@ -247541,6 +248899,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     );
   } finally {
     transport.cancelInference();
+    for (const child of childTransports) child.cancelInference();
     try {
       if (authorized) {
         const requestRef = transport.lastRequestRef;
@@ -247554,6 +248913,18 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
               }))
             );
         } finally {
+          for (const child of childTransports) {
+            ports.observeRelay(child.lastFailure);
+            const requestRef2 = child.lastRequestRef;
+            if (requestRef2)
+              ports.observeReadback(
+                requestRef2,
+                await child.readRequest(requestRef2).catch(() => ({
+                  httpStatus: 0,
+                  value: { effect: "effect_unknown" }
+                }))
+              );
+          }
           ports.observeClose(await transport.close(reason));
         }
       }
@@ -247572,18 +248943,20 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
             if (!failed) setFailed("account_gateway_cleanup_failed");
           }
         };
+        for (const childCleanup of childCleanups)
+          await cleanup("reviewer", childCleanup);
         await cleanup("bridge", async () => bridge?.dispose());
         await cleanup("OCR run", async () => ocrRun?.cleanup());
         await cleanup("OCR binary", async () => ocrBinary?.cleanup());
         if (codexHome)
           await cleanup(
             "CODEX_HOME",
-            () => fs28.rm(codexHome, { recursive: true, force: true })
+            () => fs29.rm(codexHome, { recursive: true, force: true })
           );
         if (workspacePath)
           await cleanup(
             "checkout",
-            () => fs28.rm(workspacePath, { recursive: true, force: true })
+            () => fs29.rm(workspacePath, { recursive: true, force: true })
           );
         await cleanup("CLI", async () => cli?.clear?.());
       } finally {
@@ -247611,6 +248984,69 @@ function validateAccountGatewayCheckout(result2, repository, headSha) {
     permissions: Object.freeze({ contents: "read", pullRequests: "read" }),
     runtimeConfig: parseAdmittedRuntimeConfig(body2.runtimeConfig)
   });
+}
+function assertAccountGatewayRuntimeConfigContinuity(initial, current) {
+  const fail3 = () => {
+    throw new Error("account_gateway_runtime_config_changed");
+  };
+  if (initial.configVersion !== current.configVersion) fail3();
+  const canonicalEnv2 = (env) => canonicalJson(env);
+  const firstJson = initial.runtimeEnv[reviewerPlanContract.runtimeEnvKey];
+  const nextJson = current.runtimeEnv[reviewerPlanContract.runtimeEnvKey];
+  if (firstJson === void 0 || nextJson === void 0) {
+    if (canonicalEnv2(initial.runtimeEnv) !== canonicalEnv2(current.runtimeEnv))
+      fail3();
+    return;
+  }
+  const first = parseReviewReviewerPlan(firstJson);
+  const next = parseReviewReviewerPlan(nextJson);
+  const { reviewers: firstReviewers, ...firstPlan } = first;
+  const { reviewers: nextReviewers, ...nextPlan } = next;
+  if (canonicalJson(firstPlan) !== canonicalJson(nextPlan) || firstReviewers.length !== nextReviewers.length)
+    fail3();
+  firstReviewers.forEach((reviewer, index) => {
+    const currentReviewer = nextReviewers[index];
+    const {
+      unavailableReason: _firstAvailability,
+      modelSettings: firstSettings2,
+      ...firstStable
+    } = reviewer;
+    const {
+      unavailableReason: _nextAvailability,
+      modelSettings: nextSettings2,
+      ...nextStable
+    } = currentReviewer;
+    if (canonicalJson(firstStable) !== canonicalJson(nextStable) || firstSettings2 !== void 0 && nextSettings2 !== void 0 && canonicalJson(firstSettings2) !== canonicalJson(nextSettings2) || firstSettings2 !== void 0 && nextSettings2 === void 0 && currentReviewer.unavailableReason === void 0 || firstSettings2 === void 0 && nextSettings2 !== void 0 && reviewer.unavailableReason === void 0)
+      fail3();
+  });
+  const normalized = {
+    ...current.runtimeEnv,
+    [reviewerPlanContract.runtimeEnvKey]: firstJson
+  };
+  const modelSettingsKey = "REVIEW_ROUTER_GATEWAY_MODEL_SETTINGS_JSON";
+  const firstSettings = initial.runtimeEnv[modelSettingsKey];
+  const nextSettings = current.runtimeEnv[modelSettingsKey];
+  if (firstSettings !== nextSettings) {
+    const firstPrimary = firstReviewers.find(
+      (reviewer) => reviewer.reviewerId === first.primaryReviewerId
+    );
+    const nextPrimary = nextReviewers.find(
+      (reviewer) => reviewer.reviewerId === next.primaryReviewerId
+    );
+    if (firstSettings !== void 0 && nextSettings === void 0 && nextPrimary.unavailableReason === void 0 || firstSettings === void 0 && nextSettings !== void 0 && firstPrimary.unavailableReason === void 0)
+      fail3();
+    if (firstSettings !== void 0 && nextSettings !== void 0) {
+      try {
+        if (canonicalJson(JSON.parse(firstSettings)) !== canonicalJson(JSON.parse(nextSettings)))
+          fail3();
+      } catch {
+        fail3();
+      }
+    }
+    if (firstSettings === void 0) delete normalized[modelSettingsKey];
+    else normalized[modelSettingsKey] = firstSettings;
+  }
+  if (canonicalEnv2(initial.runtimeEnv) !== canonicalEnv2(normalized)) fail3();
 }
 
 // src/codex-oauth/provider-api-runtime.ts
@@ -247720,7 +249156,7 @@ async function runProviderApiRuntime(input, ports) {
         apiUrl: input.apiUrl,
         executionToken: authorization.authorizationToken,
         invocationId: `${authorization.authorizationId}-provider-api`,
-        temporaryDirectory: process.env.RUNNER_TEMP || os17.tmpdir(),
+        temporaryDirectory: process.env.RUNNER_TEMP || os18.tmpdir(),
         fetchImpl: ports.fetchImpl,
         uploadArtifact: uploadUsageArtifact,
         status: (status) => setOutput("provider_usage_status", status)
@@ -247771,7 +249207,7 @@ async function runProviderApiRuntime(input, ports) {
         killSignal: "SIGKILL",
         timeout: 1e4,
         maxBuffer: 16384,
-        env: { PATH: process.env.PATH, HOME: os17.tmpdir() }
+        env: { PATH: process.env.PATH, HOME: os18.tmpdir() }
       });
       assertApprovedReviewAgentVersion(
         agent,
@@ -247792,13 +249228,13 @@ async function runProviderApiRuntime(input, ports) {
       signal: run3.signal
     });
     if (agent.agentKind !== "ocr") {
-      codexHome = await fs29.mkdtemp(
-        path33.join(
-          process.env.RUNNER_TEMP || os17.tmpdir(),
+      codexHome = await fs30.mkdtemp(
+        path34.join(
+          process.env.RUNNER_TEMP || os18.tmpdir(),
           "reviewrouter-provider-api-"
         )
       );
-      await fs29.chmod(codexHome, 448);
+      await fs30.chmod(codexHome, 448);
     }
     phase = "local_transport";
     modelTransport = await startDirectProviderApiModelTransport(
@@ -247860,8 +249296,8 @@ async function runProviderApiRuntime(input, ports) {
           CODEX_HOME: codexHome
         })
       });
-      await fs29.writeFile(
-        path33.join(codexHome, "config.toml"),
+      await fs30.writeFile(
+        path34.join(codexHome, "config.toml"),
         [
           ...CODEX_SHELL_ENVIRONMENT_POLICY,
           ...modelTransport.configuration
@@ -247926,11 +249362,11 @@ async function runProviderApiRuntime(input, ports) {
         await usageDelivery?.cleanup();
       },
       async () => {
-        if (codexHome) await fs29.rm(codexHome, { recursive: true, force: true });
+        if (codexHome) await fs30.rm(codexHome, { recursive: true, force: true });
       },
       async () => {
         if (workspacePath)
-          await fs29.rm(workspacePath, { recursive: true, force: true });
+          await fs30.rm(workspacePath, { recursive: true, force: true });
       },
       async () => {
         await cli?.clear?.();
@@ -247946,17 +249382,17 @@ async function runProviderApiRuntime(input, ports) {
 }
 
 // src/codex-oauth/subscription-model-runtime.ts
-var fs31 = __toESM(require("node:fs/promises"));
-var path35 = __toESM(require("node:path"));
+var fs32 = __toESM(require("node:fs/promises"));
+var path36 = __toESM(require("node:path"));
 
 // src/codex-oauth/codex-auth-refresh-validation.ts
 var CODEX_AUTH_EXPIRY_MARGIN_MS = 6e4;
 function object4(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function authFacts(bytes) {
+function authFacts(bytes2) {
   const compact = compactCodexAuthJsonBytes({
-    authJsonBytes: bytes
+    authJsonBytes: bytes2
   }).compactAuthJsonBytes;
   const parsed = JSON.parse(compact);
   const tokens = parsed.tokens;
@@ -248019,7 +249455,7 @@ function validateCodexRefreshInput(authJson) {
 // src/review-orchestration/infrastructure/runner-local-anthropic-model-transport.ts
 var import_crypto55 = require("crypto");
 var import_http2 = require("http");
-var import_util37 = require("util");
+var import_util38 = require("util");
 var RUNNER_LOCAL_ANTHROPIC_ROUTE = Object.freeze({
   descriptor: "claude-subscription-messages.v1",
   endpoint: "https://api.anthropic.com/v1/messages",
@@ -248044,7 +249480,7 @@ async function startRunnerLocalAnthropicModelTransport(input) {
   input.signal?.throwIfAborted();
   if (Date.now() >= deadline)
     throw new Error("anthropic_prepared_route_expired");
-  const effort2 = input.reasoningEffort == null ? null : anthropicReasoningEffort(input.reasoningEffort);
+  const effort3 = input.reasoningEffort == null ? null : anthropicReasoningEffort(input.reasoningEffort);
   const capability = (0, import_crypto55.randomBytes)(32).toString("hex");
   const expectedAuthorization = Buffer.from(`Bearer ${capability}`);
   let address = "";
@@ -248059,12 +249495,12 @@ async function startRunnerLocalAnthropicModelTransport(input) {
   let disposal;
   const active = /* @__PURE__ */ new Set();
   const flights = /* @__PURE__ */ new Set();
-  const execute = async (bytes, signal, scope, responseLimit = cap.maxResponseBytes, verifier = false, outputCap = cap.maxOutputTokens) => {
+  const execute = async (bytes2, signal, scope, responseLimit = cap.maxResponseBytes, verifier = false, outputCap = cap.maxOutputTokens) => {
     signal.throwIfAborted();
     if (stopping || fenced || busy || Date.now() >= deadline)
       throw new Error("anthropic_route_unavailable");
     contextGuard?.();
-    const prepared = normalizeRequest(bytes, verifier, outputCap);
+    const prepared = normalizeRequest(bytes2, verifier, outputCap);
     const controller = new AbortController();
     active.add(controller);
     busy = true;
@@ -248156,17 +249592,17 @@ async function startRunnerLocalAnthropicModelTransport(input) {
       busy = false;
     }
   };
-  function normalizeRequest(bytes, verifier, outputCap) {
+  function normalizeRequest(bytes2, verifier, outputCap) {
     if (!Number.isSafeInteger(outputCap) || outputCap < 1 || outputCap > cap.maxOutputTokens)
       throw new Error("anthropic_verification_output_cap_invalid");
-    if (!bytes.byteLength || bytes.byteLength > cap.maxRequestBytes)
+    if (!bytes2.byteLength || bytes2.byteLength > cap.maxRequestBytes)
       throw new Error("anthropic_request_bound");
     const row = JSON.parse(
-      new import_util37.TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      new import_util38.TextDecoder("utf-8", { fatal: true }).decode(bytes2)
     );
-    if (!record8(row) || row.model !== cap.model || row.stream !== void 0 && row.stream !== false || !Array.isArray(row.messages) || row.messages.length === 0 || typeof row.max_tokens !== "number" || !Number.isSafeInteger(row.max_tokens) || row.max_tokens < 1)
+    if (!record9(row) || row.model !== cap.model || row.stream !== void 0 && row.stream !== false || !Array.isArray(row.messages) || row.messages.length === 0 || typeof row.max_tokens !== "number" || !Number.isSafeInteger(row.max_tokens) || row.max_tokens < 1)
       throw new Error("anthropic_request_invalid");
-    const keys4 = /* @__PURE__ */ new Set([
+    const keys5 = /* @__PURE__ */ new Set([
       "model",
       "messages",
       "system",
@@ -248180,18 +249616,18 @@ async function startRunnerLocalAnthropicModelTransport(input) {
       "thinking",
       "output_config"
     ]);
-    if (Object.keys(row).some((key) => !keys4.has(key)))
+    if (Object.keys(row).some((key) => !keys5.has(key)))
       throw new Error("anthropic_request_field_unavailable");
-    if (row.output_config !== void 0 && (!record8(row.output_config) || Object.keys(row.output_config).length !== 1 || row.output_config.effort !== effort2))
+    if (row.output_config !== void 0 && (!record9(row.output_config) || Object.keys(row.output_config).length !== 1 || row.output_config.effort !== effort3))
       throw new Error("anthropic_request_settings_mismatch");
-    if (effort2 !== null && row.output_config === void 0)
+    if (effort3 !== null && row.output_config === void 0)
       throw new Error("anthropic_request_settings_mismatch");
     const toolNames = [];
     if (row.tools !== void 0) {
       if (!Array.isArray(row.tools) || row.tools.length > 128)
         throw new Error("anthropic_request_tools_invalid");
       for (const tool of row.tools) {
-        if (!record8(tool) || tool.type !== void 0 && tool.type !== "custom" || typeof tool.name !== "string" || !/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(tool.name) || toolNames.includes(tool.name) || !record8(tool.input_schema))
+        if (!record9(tool) || tool.type !== void 0 && tool.type !== "custom" || typeof tool.name !== "string" || !/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(tool.name) || toolNames.includes(tool.name) || !record9(tool.input_schema))
           throw new Error("anthropic_request_tools_invalid");
         toolNames.push(tool.name);
       }
@@ -248211,7 +249647,7 @@ async function startRunnerLocalAnthropicModelTransport(input) {
       };
     }
     return {
-      bytes: Buffer.from(bytes),
+      bytes: Buffer.from(bytes2),
       maxOutputTokens: row.max_tokens,
       toolNames
     };
@@ -248250,12 +249686,12 @@ async function startRunnerLocalAnthropicModelTransport(input) {
         once: true
       });
       try {
-        const bytes = await boundedBytes2(
+        const bytes2 = await boundedBytes2(
           request3,
           cap.maxRequestBytes,
           controller.signal
         );
-        const result2 = await execute(bytes, controller.signal);
+        const result2 = await execute(bytes2, controller.signal);
         controller.signal.throwIfAborted();
         reply.writeHead(200, {
           "content-type": "application/json",
@@ -248327,7 +249763,7 @@ async function startRunnerLocalAnthropicModelTransport(input) {
     beginInvocation: (scope) => dispatch.beginInvocation(scope),
     encodeLifecycleRequest: (semantic) => encodeAnthropicVerificationRequest({
       ...semantic,
-      reasoningEffort: effort2
+      reasoningEffort: effort3
     }).requestBytes,
     generateLifecycleVerification: (request3) => {
       const flight = (async () => {
@@ -248381,10 +249817,10 @@ async function boundedBytes2(source, limit, signal) {
   signal.throwIfAborted();
   return Buffer.concat(chunks);
 }
-function hash5(bytes) {
-  return (0, import_crypto55.createHash)("sha256").update(bytes).digest("hex");
+function hash5(bytes2) {
+  return (0, import_crypto55.createHash)("sha256").update(bytes2).digest("hex");
 }
-function record8(value) {
+function record9(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -248464,9 +249900,9 @@ async function prepareClaudeSubscriptionModelRoute(input) {
 }
 
 // src/codex-oauth/prepared-model-review-runtime.ts
-var fs30 = __toESM(require("node:fs/promises"));
-var os18 = __toESM(require("node:os"));
-var path34 = __toESM(require("node:path"));
+var fs31 = __toESM(require("node:fs/promises"));
+var os19 = __toESM(require("node:os"));
+var path35 = __toESM(require("node:path"));
 async function runPreparedModelReview(input, ports) {
   const signal = ports.signal;
   signal.throwIfAborted();
@@ -248604,15 +250040,15 @@ async function runPreparedModelReview(input, ports) {
         env: { ...process.env, REVIEWROUTER_OCR_BINARY: binary2.binaryPath }
       });
     } else {
-      codexHome = await fs30.mkdtemp(
-        path34.join(
-          process.env.RUNNER_TEMP || os18.tmpdir(),
+      codexHome = await fs31.mkdtemp(
+        path35.join(
+          process.env.RUNNER_TEMP || os19.tmpdir(),
           "reviewrouter-native-capability-"
         )
       );
-      await fs30.chmod(codexHome, 448);
-      await fs30.writeFile(
-        path34.join(codexHome, "config.toml"),
+      await fs31.chmod(codexHome, 448);
+      await fs31.writeFile(
+        path35.join(codexHome, "config.toml"),
         [
           ...CODEX_SHELL_ENVIRONMENT_POLICY,
           ...modelTransport.configuration
@@ -248653,7 +250089,7 @@ async function runPreparedModelReview(input, ports) {
       () => binary2?.cleanup(),
       () => cli?.clear?.(),
       ...[codexHome, workspace].map(
-        (directory) => () => directory ? fs30.rm(directory, { recursive: true, force: true }) : void 0
+        (directory) => () => directory ? fs31.rm(directory, { recursive: true, force: true }) : void 0
       )
     ]);
   }
@@ -248684,10 +250120,10 @@ async function boundedCheckoutResponse(response) {
     throw new Error("prepared_model_checkout_unavailable");
   }
   const chunks = [];
-  let bytes = 0;
+  let bytes2 = 0;
   for await (const chunk of response.body) {
-    bytes += chunk.byteLength;
-    if (bytes > 65536) throw new Error("prepared_model_checkout_bound");
+    bytes2 += chunk.byteLength;
+    if (bytes2 > 65536) throw new Error("prepared_model_checkout_bound");
     chunks.push(chunk);
   }
   return JSON.parse(
@@ -248705,7 +250141,7 @@ function createPreparedCodexSubscriptionReviewRunner(input) {
     async run(request3) {
       if (!request3.codexHome)
         throw new Error("codex_subscription_prepared_auth_missing");
-      const authPath = path35.join(request3.codexHome, "auth.json");
+      const authPath = path36.join(request3.codexHome, "auth.json");
       return runPreparedModelReview(request3, {
         review: input.review,
         fetchImpl: input.fetchImpl,
@@ -248715,11 +250151,11 @@ function createPreparedCodexSubscriptionReviewRunner(input) {
           const cap = modelDispatch.capability;
           if (cap.wireProtocol !== "codex-responses" || runtimeConfig.runtimeEnv.REVIEW_AUTH_MODE !== "codex-oauth" || runtimeConfig.runtimeEnv.CODEX_MODEL !== cap.model)
             throw new Error("codex_subscription_admitted_route_invalid");
-          const stat5 = await fs31.lstat(authPath);
+          const stat5 = await fs32.lstat(authPath);
           if (!stat5.isFile() || stat5.size > CODEX_ROTATING_AUTH_JSON_MAX_BYTES)
             throw new Error("codex_subscription_prepared_auth_invalid");
           const credential = readPreparedCodexCredential(
-            await fs31.readFile(authPath, "utf8"),
+            await fs32.readFile(authPath, "utf8"),
             Date.parse(cap.deadline)
           );
           setSecret(credential.accessToken);
@@ -248802,7 +250238,7 @@ async function runPreparedSubscriptionRuntime(input, ports) {
 }
 
 // src/codex-oauth/action.ts
-var path38 = __toESM(require("path"));
+var path39 = __toESM(require("path"));
 
 // src/codex-oauth/control-plane.ts
 var CodexOAuthControlPlaneClient = class {
@@ -248877,8 +250313,8 @@ var CodexOAuthControlPlaneClient = class {
       isActionCommentTokenResponse
     );
   }
-  async postJson(path39, body2, guard) {
-    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path39), {
+  async postJson(path40, body2, guard) {
+    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path40), {
       method: "POST",
       headers: {
         accept: "application/json",
@@ -248898,8 +250334,8 @@ var CodexOAuthControlPlaneClient = class {
     }
     return payload;
   }
-  async postJsonWithAuthorization(path39, bearerToken, body2, guard) {
-    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path39), {
+  async postJsonWithAuthorization(path40, bearerToken, body2, guard) {
+    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path40), {
       method: "POST",
       headers: {
         accept: "application/json",
@@ -248992,11 +250428,11 @@ function parseTrustedApiUrl(apiUrl) {
   }
   throw new Error("codex_oauth_api_url_invalid");
 }
-function resolveApiPath(apiUrl, path39) {
-  if (!path39.startsWith("/") || path39.startsWith("//") || path39.includes("\\") || path39.includes("?") || path39.includes("#") || path39.includes("..") || /%2e|%2f|%5c/i.test(path39)) {
+function resolveApiPath(apiUrl, path40) {
+  if (!path40.startsWith("/") || path40.startsWith("//") || path40.includes("\\") || path40.includes("?") || path40.includes("#") || path40.includes("..") || /%2e|%2f|%5c/i.test(path40)) {
     throw new Error("codex_oauth_api_path_invalid");
   }
-  const resolved = new URL(path39, apiUrl);
+  const resolved = new URL(path40, apiUrl);
   if (resolved.origin !== apiUrl.origin) {
     throw new Error("codex_oauth_api_path_invalid");
   }
@@ -249018,11 +250454,11 @@ function asRecord2(value) {
 }
 
 // src/codex-oauth/codex-bootstrap.ts
-var import_child_process23 = require("child_process");
-var fs32 = __toESM(require("fs/promises"));
-var os19 = __toESM(require("os"));
-var path36 = __toESM(require("path"));
-var import_util38 = require("util");
+var import_child_process24 = require("child_process");
+var fs33 = __toESM(require("fs/promises"));
+var os20 = __toESM(require("os"));
+var path37 = __toESM(require("path"));
+var import_util39 = require("util");
 async function refreshCodexAuthWithOfficialCli(input) {
   input.signal?.throwIfAborted();
   validateCodexRefreshInput(input.authJsonBytes);
@@ -249032,23 +250468,23 @@ async function refreshCodexAuthWithOfficialCli(input) {
     throw new Error("codex_oauth_refresh_timeout_invalid");
   const startedAt = Date.now();
   const parent = await ensureCodexOAuthRuntimeParent();
-  const root = await fs32.mkdtemp(path36.join(parent, "reviewrouter-codex-oauth-"));
-  const home = path36.join(root, "home");
-  const codexHome = path36.join(root, "codex");
-  const emptyCwd = path36.join(root, "empty");
-  const authPath = path36.join(codexHome, "auth.json");
-  const clearAuthMaterial = () => fs32.rm(root, { recursive: true, force: true });
+  const root = await fs33.mkdtemp(path37.join(parent, "reviewrouter-codex-oauth-"));
+  const home = path37.join(root, "home");
+  const codexHome = path37.join(root, "codex");
+  const emptyCwd = path37.join(root, "empty");
+  const authPath = path37.join(codexHome, "auth.json");
+  const clearAuthMaterial = () => fs33.rm(root, { recursive: true, force: true });
   try {
-    await fs32.chmod(root, 448);
-    await fs32.mkdir(home, { recursive: true, mode: 448 });
-    await fs32.mkdir(codexHome, { recursive: true, mode: 448 });
-    await fs32.mkdir(emptyCwd, { recursive: true, mode: 448 });
-    await fs32.writeFile(authPath, input.authJsonBytes, {
+    await fs33.chmod(root, 448);
+    await fs33.mkdir(home, { recursive: true, mode: 448 });
+    await fs33.mkdir(codexHome, { recursive: true, mode: 448 });
+    await fs33.mkdir(emptyCwd, { recursive: true, mode: 448 });
+    await fs33.writeFile(authPath, input.authJsonBytes, {
       encoding: "utf8",
       mode: 384
     });
-    await fs32.writeFile(
-      path36.join(codexHome, "config.toml"),
+    await fs33.writeFile(
+      path37.join(codexHome, "config.toml"),
       'cli_auth_credentials_store = "file"\napproval_policy = "never"\n',
       { encoding: "utf8", mode: 384 }
     );
@@ -249066,13 +250502,13 @@ async function refreshCodexAuthWithOfficialCli(input) {
       ...refreshTokenUrl ? { refreshTokenUrl } : {}
     });
     input.signal?.throwIfAborted();
-    const stat5 = await fs32.stat(authPath);
+    const stat5 = await fs33.stat(authPath);
     if (!stat5.isFile() || stat5.size > CODEX_ROTATING_AUTH_JSON_MAX_BYTES)
       throw new Error("codex_oauth_refresh_auth_invalid");
     const now = Date.now();
     const validated = validateCodexRefreshedAuth({
       originalAuthJson: input.authJsonBytes,
-      refreshedAuthJson: await fs32.readFile(authPath, "utf8"),
+      refreshedAuthJson: await fs33.readFile(authPath, "utf8"),
       startedAt,
       now,
       requiredValidUntil: input.requiredValidUntil ?? now
@@ -249084,16 +250520,16 @@ async function refreshCodexAuthWithOfficialCli(input) {
   }
 }
 async function ensureCodexOAuthRuntimeParent(env = process.env) {
-  const home = env.HOME?.trim() || os19.homedir();
-  const parent = home && path36.isAbsolute(home) ? path36.join(home, ".reviewrouter", "runtime") : path36.join(os19.tmpdir(), "reviewrouter-runtime");
-  await fs32.mkdir(parent, { recursive: true, mode: 448 });
-  await fs32.chmod(parent, 448).catch(() => void 0);
+  const home = env.HOME?.trim() || os20.homedir();
+  const parent = home && path37.isAbsolute(home) ? path37.join(home, ".reviewrouter", "runtime") : path37.join(os20.tmpdir(), "reviewrouter-runtime");
+  await fs33.mkdir(parent, { recursive: true, mode: 448 });
+  await fs33.chmod(parent, 448).catch(() => void 0);
   return parent;
 }
 async function runCodexAuthRefreshProtocol(input) {
   input.signal?.throwIfAborted();
   return new Promise((resolve6, reject) => {
-    const child = (0, import_child_process23.spawn)(input.binary, ["app-server"], {
+    const child = (0, import_child_process24.spawn)(input.binary, ["app-server"], {
       cwd: input.cwd,
       detached: true,
       shell: false,
@@ -249113,7 +250549,7 @@ async function runCodexAuthRefreshProtocol(input) {
     let stdoutBytes = 0;
     let stderrBytes = 0;
     let pending = "";
-    const decoder2 = new import_util38.TextDecoder("utf-8", { fatal: true });
+    const decoder2 = new import_util39.TextDecoder("utf-8", { fatal: true });
     let killTimer;
     const kill = (signal) => {
       try {
@@ -249155,12 +250591,12 @@ async function runCodexAuthRefreshProtocol(input) {
           pending = pending.slice(newline + 1);
           if (!line2.trim()) continue;
           const message = JSON.parse(line2);
-          if (!record9(message)) throw new Error();
+          if (!record10(message)) throw new Error();
           if (!Object.hasOwn(message, "id")) {
             if (typeof message.method !== "string") throw new Error();
             continue;
           }
-          if (Object.hasOwn(message, "method") || Object.hasOwn(message, "error") || !record9(message.result))
+          if (Object.hasOwn(message, "method") || Object.hasOwn(message, "error") || !record10(message.result))
             throw new Error();
           if (phase === "initialize" && message.id === 1) {
             phase = "account";
@@ -249170,7 +250606,7 @@ async function runCodexAuthRefreshProtocol(input) {
               method: "account/read",
               params: { refreshToken: true }
             });
-          } else if (phase === "account" && message.id === 2 && record9(message.result.account) && message.result.account.type === "chatgpt") {
+          } else if (phase === "account" && message.id === 2 && record10(message.result.account) && message.result.account.type === "chatgpt") {
             receivedAccount = true;
             finish();
             return;
@@ -249210,7 +250646,7 @@ async function runCodexAuthRefreshProtocol(input) {
       });
   });
 }
-function record9(value) {
+function record10(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function loopbackRefreshUrl(value) {
@@ -249627,12 +251063,12 @@ function parseCanonicalObject2(raw) {
   } catch (error4) {
     throw new Error("review_action_v2_handoff_json_invalid", { cause: error4 });
   }
-  if (!isRecord12(value) || canonicalJson18(value) !== raw) {
+  if (!isRecord12(value) || canonicalJson19(value) !== raw) {
     throw new Error("review_action_v2_handoff_not_canonical");
   }
   return value;
 }
-function canonicalJson18(value) {
+function canonicalJson19(value) {
   return `${JSON.stringify(canonicalize4(value), null, 2)}
 `;
 }
@@ -249663,7 +251099,7 @@ function isRecord12(value) {
 }
 
 // src/codex-oauth/ci-review-progress.ts
-var fs33 = __toESM(require("fs"));
+var fs34 = __toESM(require("fs"));
 var CI_PROGRESS_MARKER = "<!-- review-router-live-progress -->";
 function formatCiReviewProgress(snapshot2) {
   const percent = snapshot2.counts.total === 0 && !(snapshot2.phase === "terminal" && snapshot2.terminal === "complete") ? 0 : percentage(snapshot2.counts.completed, snapshot2.counts.total);
@@ -249743,7 +251179,7 @@ var CiReviewProgressPublisher = class {
   appendSummary(body2) {
     if (this.input.summaryPath) {
       try {
-        fs33.appendFileSync(this.input.summaryPath, `
+        fs34.appendFileSync(this.input.summaryPath, `
 ${body2}
 `, "utf8");
       } catch (error4) {
@@ -249912,7 +251348,7 @@ var GitHubCiProgressAdapter = class {
 function isForkPullRequest(eventPath) {
   if (!eventPath) return false;
   try {
-    const event = JSON.parse(fs33.readFileSync(eventPath, "utf8"));
+    const event = JSON.parse(fs34.readFileSync(eventPath, "utf8"));
     return event.pull_request?.head?.repo?.fork === true || typeof event.repository?.full_name === "string" && typeof event.pull_request?.head?.repo?.full_name === "string" && event.repository.full_name !== event.pull_request.head.repo.full_name;
   } catch {
     return true;
@@ -250155,7 +251591,7 @@ async function runCodexOAuthRotatingAction(options = {}) {
     process.removeListener("SIGINT", cancelRun);
     process.removeListener("SIGTERM", cancelRun);
     if (t0WorkspacePath) {
-      fs34.rmSync(t0WorkspacePath, { recursive: true, force: true });
+      fs35.rmSync(t0WorkspacePath, { recursive: true, force: true });
     }
   }
 }
@@ -250347,7 +251783,7 @@ async function runAccountGatewayActionInternal(options = {}) {
       const summaryPath = process.env.GITHUB_STEP_SUMMARY;
       if (summaryPath) {
         try {
-          fs34.appendFileSync(
+          fs35.appendFileSync(
             summaryPath,
             `
 Gateway result: ${fact.code}; effect: ${fact.effect}.
@@ -250889,7 +252325,7 @@ function appendTerminalOutcomeStepSummary(report) {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (!summaryPath) return;
   try {
-    fs34.appendFileSync(summaryPath, `
+    fs35.appendFileSync(summaryPath, `
 ${report.stepSummary}
 `, "utf8");
   } catch (error4) {
@@ -251036,8 +252472,8 @@ async function runReviewComputation(input) {
     process.env.CODEX_HEALTHCHECK_MODE = "binary";
     if (input.codexBinaryPath) {
       process.env.REVIEWROUTER_CODEX_BINARY = input.codexBinaryPath;
-      const codexBinDir = path38.dirname(input.codexBinaryPath);
-      process.env.PATH = previousPath ? `${codexBinDir}${path38.delimiter}${previousPath}` : codexBinDir;
+      const codexBinDir = path39.dirname(input.codexBinaryPath);
+      process.env.PATH = previousPath ? `${codexBinDir}${path39.delimiter}${previousPath}` : codexBinDir;
     }
     process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = "never";
     await applyCodexRotatingReviewRuntimeConfig({
@@ -251167,7 +252603,7 @@ function readPullRequestEvent() {
   if (!eventPath) {
     throw new Error("codex_oauth_github_event_path_missing");
   }
-  const event = JSON.parse(fs34.readFileSync(eventPath, "utf8"));
+  const event = JSON.parse(fs35.readFileSync(eventPath, "utf8"));
   const eventName = process.env.GITHUB_EVENT_NAME || "";
   const workflowDispatch = eventName === "workflow_dispatch";
   const repository = event.repository?.full_name || process.env.GITHUB_REPOSITORY;
@@ -251556,7 +252992,7 @@ async function runInteraction(token, actionsToken, runtimeConfig) {
     if (runtimeConfig?.status !== "applied")
       throw new Error("managed_conversation_session_required");
     const payload = JSON.parse(
-      fs35.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
+      fs36.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
     );
     if (payload.action === "deleted" || !parseInteractionCommand(String(payload.comment?.body || ""))) {
       await new ManagedConversationHandler(
@@ -251591,7 +253027,7 @@ async function runInteraction(token, actionsToken, runtimeConfig) {
 async function runInteractionPreflight(token) {
   const githubClient = new GitHubClient(token);
   const payload = JSON.parse(
-    fs35.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
+    fs36.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
   );
   if (process.env.REVIEW_ROUTER_INTERACTION_BACKEND === "account-gateway") {
     const eligible = conversationSource(payload) !== null;
@@ -251636,7 +253072,7 @@ async function runInteractionPreflight(token) {
 }
 function createDiscussionHandler(githubClient) {
   const options = loadDiscussionOptionsFromEnv();
-  const { model, providerOptions } = resolveDiscussionCodexConfiguration(
+  const { model: model2, providerOptions } = resolveDiscussionCodexConfiguration(
     process.env
   );
   const timeoutSeconds = parsePositiveInteger(
@@ -251644,7 +253080,7 @@ function createDiscussionHandler(githubClient) {
     60
   );
   const responder = options.mode === "off" ? void 0 : new CodexDiscussionResponder(
-    model,
+    model2,
     timeoutSeconds * 1e3,
     providerOptions
   );

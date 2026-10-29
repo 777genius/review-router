@@ -5,11 +5,11 @@
 import {
   waitForNewtestRootChallenge,
   withNewtestAbort,
-} from "./newtest-root-rendezvous";
-import { NEWTEST_V4_ROOT_URL } from "../config/review-router-endpoints";
+} from './newtest-root-rendezvous';
+import { NEWTEST_V4_ROOT_URL } from '../config/review-router-endpoints';
 const ROOT = NEWTEST_V4_ROOT_URL;
-const TEST_REPOSITORY = "777genius/reviewrouter-e2e-prod-20260529-000305";
-const TEST_REPOSITORY_ID = "1252762369";
+const TEST_REPOSITORY = '777genius/reviewrouter-e2e-prod-20260529-000305';
+const TEST_REPOSITORY_ID = '1252762369';
 const SHA = /^[a-f0-9]{40}$/;
 const HASH = /^[a-f0-9]{64}$/;
 
@@ -31,23 +31,23 @@ export function validateNewtestJobIdentity(identity: NewtestJobIdentity): void {
     identity.repository !== TEST_REPOSITORY ||
     identity.repositoryId !== TEST_REPOSITORY_ID ||
     identity.headRepository !== TEST_REPOSITORY ||
-    identity.eventName !== "pull_request" ||
-    identity.runAttempt !== "1" ||
+    identity.eventName !== 'pull_request' ||
+    identity.runAttempt !== '1' ||
     !/^[1-9][0-9]*$/.test(identity.runId) ||
     !/^[1-9][0-9]*$/.test(identity.pullRequestNumber) ||
     !SHA.test(identity.headSha) ||
-    identity.workflowRepository !== "777genius/review-router" ||
+    identity.workflowRepository !== '777genius/review-router' ||
     !SHA.test(identity.workflowSha)
   )
-    throw new Error("newtest_job_identity_rejected");
+    throw new Error('newtest_job_identity_rejected');
 }
 
 async function boundedJson(
   response: Response,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<unknown> {
   if (response.status !== 200 || !response.body)
-    throw new Error("newtest_root_response_rejected");
+    throw new Error('newtest_root_response_rejected');
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
@@ -58,10 +58,10 @@ async function boundedJson(
         : reader.read());
       if (chunk.done) break;
       length += chunk.value.length;
-      if (length > 4096) throw new Error("newtest_root_response_oversized");
+      if (length > 4096) throw new Error('newtest_root_response_oversized');
       chunks.push(chunk.value);
     }
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
   } finally {
     void reader.cancel().catch(() => undefined);
     reader.releaseLock();
@@ -69,8 +69,8 @@ async function boundedJson(
 }
 
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("newtest_root_response_invalid");
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('newtest_root_response_invalid');
   return value as Record<string, unknown>;
 }
 
@@ -92,7 +92,7 @@ export function createNewtestJobTransport(input: {
   let consumed = false;
   return Object.freeze({
     async runOnce(): Promise<string> {
-      if (consumed) throw new Error("newtest_job_already_consumed");
+      if (consumed) throw new Error('newtest_job_already_consumed');
       consumed = true; // Sticky even after preflight/unknown POST failure.
       const challenge = record(
         await waitForNewtestRootChallenge({
@@ -100,54 +100,54 @@ export function createNewtestJobTransport(input: {
           fetch: fetchImpl,
           read: boundedJson,
           ...input.readiness,
-        }),
+        })
       );
       if (
-        challenge.schema !== "newtest-v4-root-challenge-v1" ||
+        challenge.schema !== 'newtest-v4-root-challenge-v1' ||
         challenge.repositoryId !== TEST_REPOSITORY_ID ||
         challenge.runId !== identity.runId ||
         challenge.sourceSha !== identity.workflowSha ||
         challenge.headSha !== identity.headSha ||
-        typeof challenge.nonce !== "string" ||
+        typeof challenge.nonce !== 'string' ||
         !HASH.test(challenge.nonce) ||
-        typeof challenge.expiresAt !== "number" ||
+        typeof challenge.expiresAt !== 'number' ||
         challenge.expiresAt <= now() ||
         challenge.expiresAt > now() + 300_000
       )
-        throw new Error("newtest_root_challenge_rejected");
-      const oidc = await requestOidc("reviewrouter");
+        throw new Error('newtest_root_challenge_rejected');
+      const oidc = await requestOidc('reviewrouter');
       if (!oidc || Buffer.byteLength(oidc) > 24_576)
-        throw new Error("newtest_oidc_invalid");
+        throw new Error('newtest_oidc_invalid');
       if (challenge.expiresAt <= now())
-        throw new Error("newtest_root_challenge_expired");
+        throw new Error('newtest_root_challenge_expired');
       const body = JSON.stringify({
-        schema: "newtest-v4-job-request-v1",
+        schema: 'newtest-v4-job-request-v1',
         identity,
         nonce: challenge.nonce,
         oidc,
       });
       if (Buffer.byteLength(body) > 32_768)
-        throw new Error("newtest_job_request_oversized");
+        throw new Error('newtest_job_request_oversized');
       const receipt = record(
         await boundedJson(
-          await fetchImpl(new URL("dispatch", ROOT), {
-            method: "POST",
-            redirect: "error",
-            headers: { "content-type": "application/json" },
+          await fetchImpl(new URL('dispatch', ROOT), {
+            method: 'POST',
+            redirect: 'error',
+            headers: { 'content-type': 'application/json' },
             body,
             signal: AbortSignal.timeout(600_000),
-          }),
-        ),
+          })
+        )
       );
       if (
-        receipt.schema !== "newtest-v4-root-receipt-v1" ||
-        receipt.status !== "completed" ||
+        receipt.schema !== 'newtest-v4-root-receipt-v1' ||
+        receipt.status !== 'completed' ||
         receipt.runId !== identity.runId ||
         receipt.sourceSha !== identity.workflowSha ||
-        typeof receipt.evidenceHash !== "string" ||
+        typeof receipt.evidenceHash !== 'string' ||
         !HASH.test(receipt.evidenceHash)
       )
-        throw new Error("newtest_root_completion_not_proven");
+        throw new Error('newtest_root_completion_not_proven');
       // Receipt locator only. The trusted root's native effect/debit/artifact/
       // publication evidence, not this transport response, establishes E2E.
       return receipt.evidenceHash;

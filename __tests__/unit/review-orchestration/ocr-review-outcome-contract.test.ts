@@ -15,7 +15,9 @@ import {
 
 const validPhase = { state: 'not_applicable', reason: 'no_candidates' };
 
-function validGroup(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function validGroup(
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
   return {
     paths: ['calc.ts'],
     main_completed: true,
@@ -32,7 +34,9 @@ function validGroup(overrides: Record<string, unknown> = {}): Record<string, unk
   };
 }
 
-function validOutcome(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function validOutcome(
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
   return {
     schema_version: OCR_OUTCOME_SCHEMA_VERSION,
     run_stop_cause: null,
@@ -144,7 +148,9 @@ describe('parseOcrReviewOutcome (§7.4 reviewrouter_outcome)', () => {
     [
       'non-boolean main_completed',
       {
-        ...validOutcome({ groups: [{ ...validGroup(), main_completed: 'yes' }] }),
+        ...validOutcome({
+          groups: [{ ...validGroup(), main_completed: 'yes' }],
+        }),
       },
     ],
     [
@@ -515,7 +521,13 @@ describe('parseOcrNativeReviewResult (native jsonOutput + managed extension)', (
           severity: 'high',
         },
       ],
-      warnings: [{ file: 'calc.ts', message: 'grace round', type: 'review_limit_reached' }],
+      warnings: [
+        {
+          file: 'calc.ts',
+          message: 'grace round',
+          type: 'review_limit_reached',
+        },
+      ],
       manifest: {
         schema_version: 'ocr.run-manifest/v1',
         operation: 'review',
@@ -534,7 +546,11 @@ describe('parseOcrNativeReviewResult (native jsonOutput + managed extension)', (
   it('accepts the real native shape and carries observed fields', () => {
     const result = parseOcrNativeReviewResult(validNative(), admission);
     expect(result.requestedModel).toBe('admitted-model');
-    expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
+    expect(result.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+    });
     expect(result.comments).toHaveLength(1);
     expect(result.comments[0].severity).toBe('high');
     expect(result.warnings).toEqual(['grace round']);
@@ -550,21 +566,51 @@ describe('parseOcrNativeReviewResult (native jsonOutput + managed extension)', (
   });
 
   it.each([
-    ['schema version mismatch', (raw: Record<string, unknown>) => {
-      (raw.manifest as Record<string, unknown>).schema_version = 'other/v9';
-    }],
-    ['wrong operation', (raw: Record<string, unknown>) => {
-      (raw.manifest as Record<string, unknown>).operation = 'scan';
-    }],
-    ['wrong input mode', (raw: Record<string, unknown>) => {
-      ((raw.manifest as Record<string, unknown>).input as Record<string, unknown>).mode = 'staged';
-    }],
-    ['resolved base mismatch', (raw: Record<string, unknown>) => {
-      ((raw.manifest as Record<string, unknown>).input as Record<string, unknown>).resolved_base = 'd'.repeat(40);
-    }],
-    ['resolved head mismatch', (raw: Record<string, unknown>) => {
-      ((raw.manifest as Record<string, unknown>).input as Record<string, unknown>).resolved_head = 'd'.repeat(40);
-    }],
+    [
+      'schema version mismatch',
+      (raw: Record<string, unknown>) => {
+        (raw.manifest as Record<string, unknown>).schema_version = 'other/v9';
+      },
+    ],
+    [
+      'wrong operation',
+      (raw: Record<string, unknown>) => {
+        (raw.manifest as Record<string, unknown>).operation = 'scan';
+      },
+    ],
+    [
+      'wrong input mode',
+      (raw: Record<string, unknown>) => {
+        (
+          (raw.manifest as Record<string, unknown>).input as Record<
+            string,
+            unknown
+          >
+        ).mode = 'staged';
+      },
+    ],
+    [
+      'resolved base mismatch',
+      (raw: Record<string, unknown>) => {
+        (
+          (raw.manifest as Record<string, unknown>).input as Record<
+            string,
+            unknown
+          >
+        ).resolved_base = 'd'.repeat(40);
+      },
+    ],
+    [
+      'resolved head mismatch',
+      (raw: Record<string, unknown>) => {
+        (
+          (raw.manifest as Record<string, unknown>).input as Record<
+            string,
+            unknown
+          >
+        ).resolved_head = 'd'.repeat(40);
+      },
+    ],
   ])('rejects manifest %s', (_label, mutate) => {
     const raw = validNative();
     mutate(raw);
@@ -584,7 +630,10 @@ describe('parseOcrNativeReviewResult (native jsonOutput + managed extension)', (
       OcrNativeResultContractViolation
     );
     expect(() =>
-      parseOcrNativeReviewResult({ ...validNative(), manifest: null }, admission)
+      parseOcrNativeReviewResult(
+        { ...validNative(), manifest: null },
+        admission
+      )
     ).toThrow(OcrNativeResultContractViolation);
   });
 });

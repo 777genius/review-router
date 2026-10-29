@@ -1,3 +1,7 @@
+import {
+  parseReviewReviewerPlan,
+  reviewerPlanContract,
+} from './generated/review-action-v2/review-reviewer-plan';
 import type { RuntimeConfigResult } from './runtime-config';
 
 export type ProviderCliPlan = {
@@ -59,8 +63,15 @@ export function resolveProviderCliPlan(
 ): ProviderCliPlan {
   const authMode = (env.REVIEW_AUTH_MODE || '').trim();
   if (authMode === gatewayAuthMode) {
+    const planJson = env[reviewerPlanContract.runtimeEnvKey];
+    const reviewerPlan =
+      planJson === undefined ? undefined : parseReviewReviewerPlan(planJson);
     return {
-      codexCliNeeded: true,
+      codexCliNeeded: reviewerPlan
+        ? reviewerPlan.reviewers.some(
+            (reviewer) => reviewer.agentProfile.agentKind === 'codex'
+          )
+        : true,
       codexOauthNeeded: false,
       claudeCliNeeded: false,
     };

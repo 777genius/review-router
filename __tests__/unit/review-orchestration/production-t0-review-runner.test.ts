@@ -1,3 +1,11 @@
+import { CONTEXT_TOOLS_PLAN_ENV } from '../../../src/context-tools/contract';
+import type { AccountGatewayReviewerRuntime } from '../../../src/codex-oauth/account-gateway-reviewer-session';
+import { reviewerRuntimeConfig } from '../../../src/codex-oauth/account-gateway-reviewer-session';
+import { OcrReviewInvocationAdapter } from '../../../src/review-orchestration/infrastructure/ocr-review-invocation-adapter';
+import type {
+  ReviewReviewerPlanV1,
+  ReviewReviewerPlanReviewerV1,
+} from '../../../src/control-plane/generated/review-action-v2/review-reviewer-plan';
 import { execFileSync } from 'node:child_process';
 import {
   RunT0ReviewOrchestration,
@@ -10,6 +18,8 @@ import {
 import { GitReviewRevisionMaterializer } from '../../../src/review-orchestration/infrastructure/git-review-revision-materializer';
 import { PullRequestLoader } from '../../../src/github/pr-loader';
 import { reviewMemoryBundle } from '../../helpers/review-memory-v2-fixture';
+import { prDescriptionContract } from '../../../src/control-plane/generated/review-action-v2/companion-contracts';
+import { prDescriptionExtensionV1 } from '../../../src/control-plane/generated/review-action-v2/pr-description-invocation-manifest-v1';
 import {
   readAdmittedGatewayCodexModelSettings,
   GATEWAY_CODEX_MODEL_SETTINGS_ENV,
@@ -133,6 +143,7 @@ describe('ProductionT0ReviewRunner policy', () => {
     ['available', 'codex'],
     ['available', 'direct'],
     ['available', 'provider-api'],
+    ['description', 'codex'],
     ['disabled', 'codex'],
     ['outage', 'codex'],
     ['restore', 'codex'],
@@ -210,10 +221,10 @@ describe('ProductionT0ReviewRunner policy', () => {
         providers: [providerName],
         synthesisModel: providerName,
         codexAgenticContext: false,
-        updatePrDescription: false,
+        updatePrDescription: mode === 'description',
       };
       const boundary = new Error('production_memory_composition_verified');
-      const fetchImpl = jest.fn().mockImplementation(async (url) => {
+      const fetchImpl = jest.fn().mockImplementation(async (url, options) => {
         if (String(url).endsWith('/session/exchange'))
           return new Response(
             JSON.stringify({ sessionToken: 'fixture-session' })
@@ -232,6 +243,9 @@ describe('ProductionT0ReviewRunner policy', () => {
           );
         if (String(url).endsWith('/bundle')) {
           if (mode === 'outage') throw new Error('private engine diagnostic');
+          const description =
+            mode === 'description' &&
+            JSON.parse(String(options.body)).task === 'pr_description';
           return new Response(
             JSON.stringify(
               reviewMemoryBundle({
@@ -241,6 +255,30 @@ describe('ProductionT0ReviewRunner policy', () => {
                 baseSha,
                 headSha,
                 reviewRevisionHash: admitted.facts.reviewRevisionHash,
+                ...(mode === 'description'
+                  ? {
+                      bundleId: description
+                        ? 'bundle-description'
+                        : 'bundle-review',
+                      contextPolicy: {
+                        audience: description ? 'public' : 'repository',
+                        repositoryId: 'repository-memory-fixture',
+                        allowedTasks: description
+                          ? ['pr_description']
+                          : ['review', 'investigation'],
+                      },
+                      ...(description
+                        ? {
+                            items: [
+                              {
+                                ...reviewMemoryBundle().items[0]!,
+                                body: 'Public description guidance.',
+                              },
+                            ],
+                          }
+                        : {}),
+                    }
+                  : {}),
               })
             ),
             { headers: { 'content-type': 'application/json' } }
@@ -344,6 +382,32 @@ describe('ProductionT0ReviewRunner policy', () => {
                 )
               ).toBe(true);
           }
+          if (mode === 'description') {
+            const descriptionSlot = command.workSlots.find(
+              (slot) => slot.taskKind === ReviewTaskKind.PrDescription
+            )!;
+            const description = await dependencies.prDescription!.prepare({
+              workSlot: descriptionSlot,
+              attemptOrdinal: 1,
+            });
+            expect(description.reviewPrompt).toContain(
+              'Public description guidance.'
+            );
+            expect(description.reviewPrompt).not.toContain(
+              'All outbound calls require a bounded timeout.'
+            );
+            expect(description.manifestFacts.memoryBundleHash).toMatch(
+              /^[a-f0-9]{64}$/
+            );
+            expect(description.manifestFacts.memoryBundleHash).not.toBe(
+              prepared[0]!.hash
+            );
+            expect(
+              await dependencies.memoryAdmission!.isEligible(
+                description.manifestFacts.memoryBundleHash
+              )
+            ).toBe(true);
+          }
           throw boundary;
         });
       try {
@@ -361,7 +425,13 @@ describe('ProductionT0ReviewRunner policy', () => {
             CODEX_AGENTIC_CONTEXT: 'false',
             REVIEW_ROUTER_MEMORY_ENABLED:
               mode === 'disabled' ? 'false' : 'true',
-            UPDATE_PR_DESCRIPTION: 'false',
+            UPDATE_PR_DESCRIPTION: String(mode === 'description'),
+            ...(mode === 'description'
+              ? {
+                  [prDescriptionContract.capabilityRuntimeEnvKey]:
+                    JSON.stringify(prDescriptionExtensionV1),
+                }
+              : {}),
             ...(engine === 'provider-api'
               ? {
                   REVIEW_AUTH_MODE: 'openrouter-api',
@@ -447,6 +517,9 @@ describe('ProductionT0ReviewRunner policy', () => {
               },
               actualModel: () => 'gpt-memory-test',
               failureFact: () => undefined,
+              generatePrDescription: async () => {
+                throw new Error('unexpected-description-inference');
+              },
               dispose: async () => {},
             },
           },
@@ -527,7 +600,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           expect(prepared).toHaveLength(2);
           expect(prepared[0]).toEqual(prepared[1]);
         }
-        if (mode === 'available') {
+        if (mode === 'available' || mode === 'description') {
           expect(prepared[0].prompt).toContain(
             'All outbound calls require a bounded timeout.'
           );
@@ -542,7 +615,9 @@ describe('ProductionT0ReviewRunner policy', () => {
           fetchImpl.mock.calls.filter(([url]) =>
             String(url).endsWith('/bundle')
           )
-        ).toHaveLength(mode === 'disabled' ? 0 : 1);
+        ).toHaveLength(
+          mode === 'disabled' ? 0 : mode === 'description' ? 2 : 1
+        );
       } finally {
         execute.mockRestore();
         for (const spy of spies) spy.mockRestore();
@@ -620,6 +695,503 @@ describe('ProductionT0ReviewRunner policy', () => {
           serverReasoningEffort,
         })
       ).toThrow('provider_api_reasoning_effort_unsupported');
+    }
+  );
+
+  it.each([
+    ['codex', 'codex'],
+    ['codex', 'ocr'],
+    ['ocr', 'codex'],
+    ['ocr', 'ocr'],
+    ['codex', 'codex', 'ocr'],
+  ] as const)(
+    'composes exact reviewer lanes, captured memory and full OCR inventories for %j',
+    async (...engineKinds) => {
+      const root = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), 't0-multi-composition-'))
+      );
+      const previousEnv = { ...process.env };
+      const git = (...args: string[]) =>
+        execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+      git('init', '--quiet');
+      for (const name of ['one.ts', 'two.ts', 'three.ts'])
+        fs.writeFileSync(path.join(root, name), 'export const value = 1;\n');
+      git('add', '.');
+      git(
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '--quiet',
+        '-m',
+        'base'
+      );
+      const baseSha = git('rev-parse', 'HEAD');
+      for (const name of ['one.ts', 'two.ts', 'three.ts'])
+        fs.writeFileSync(path.join(root, name), 'export const value = 2;\n');
+      git('add', '.');
+      git(
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '--quiet',
+        '-m',
+        'head'
+      );
+      const headSha = git('rev-parse', 'HEAD');
+      const pr = {
+        ...pullRequest(['one.ts', 'two.ts', 'three.ts']),
+        baseSha,
+        headSha,
+      };
+      const reviewers: ReviewReviewerPlanReviewerV1[] = engineKinds.map(
+        (kind, index) => {
+          const agentProfile =
+            kind === 'codex'
+              ? JSON.parse(admittedAgentJson)
+              : {
+                  profileRef: 'ocr-qualified',
+                  agentKind: 'ocr',
+                  binarySha256: 'b'.repeat(64),
+                  packageVersion: '1.2.3',
+                  modelTransports: ['account_gateway'],
+                  contextGateway: false,
+                  cancellation: true,
+                };
+          return {
+            reviewerId: `reviewer-${index}`,
+            providerIndex: index,
+            providerVoteIdentityHash: String(index + 6).repeat(64),
+            required: true,
+            transport: 'account_gateway',
+            requestedModel: `gpt-reviewer-${index}`,
+            reasoningEffort: index % 2 ? 'high' : 'xhigh',
+            agenticContext: kind === 'ocr',
+            fastMode: false,
+            agentProfile,
+            agentProfileDigest: createHash('sha256')
+              .update(canonicalJson(agentProfile))
+              .digest('hex'),
+            concurrencyGroupId: 'shared-allocation',
+            investigationGrant: null,
+          };
+        }
+      );
+      const reviewerPlan: ReviewReviewerPlanV1 = {
+        planVersion: 1,
+        primaryReviewerId: reviewers[0].reviewerId,
+        maxParallelReviewers: 2,
+        inlineMinAgreement: 2,
+        reviewers,
+        concurrencyGroups: [
+          { concurrencyGroupId: 'shared-allocation', maxParallel: 2 },
+        ],
+      };
+      const admitted = authorization(8);
+      admitted.facts = {
+        ...admitted.facts,
+        baseSha,
+        mergeBaseSha: baseSha,
+        headSha,
+        providerVoteLanes: reviewers.map((reviewer) => ({
+          providerKind:
+            reviewer.agentProfile.agentKind === 'ocr'
+              ? ReviewExecutionProviderKind.Ocr
+              : ReviewExecutionProviderKind.Codex,
+          providerVoteIdentityHash: reviewer.providerVoteIdentityHash,
+        })),
+      };
+      const selectedTools =
+        engineKinds[0] === 'ocr' && engineKinds[1] === 'codex';
+      const memoryEnabled =
+        engineKinds.length === 2 &&
+        engineKinds.every((kind) => kind === 'codex');
+      const contextPlanPreimage = {
+        version: 1,
+        builtinTools: ['repository.docs.read'],
+        servers: [],
+        limits: {
+          startupTimeoutMs: 30000,
+          callTimeoutMs: 30000,
+          responseBytes: 1048576,
+          maxCalls: 128,
+        },
+      };
+      const contextPlanJson = JSON.stringify({
+        ...contextPlanPreimage,
+        planDigest: `sha256:${createHash('sha256').update(canonicalJson(contextPlanPreimage)).digest('hex')}`,
+      });
+      const parentRuntime = parseAdmittedRuntimeConfig({
+        protocolVersion: 1,
+        configVersion: 1,
+        runtimeEnv: {
+          ...admittedAgentEnv,
+          CODEX_MODEL: reviewers[0].requestedModel,
+          CODEX_AGENTIC_CONTEXT: String(reviewers[0].agenticContext),
+          REVIEW_ROUTER_AGENT_PROFILE_JSON: canonicalJson(
+            reviewers[0].agentProfile
+          ),
+          REVIEW_ROUTER_AGENT_PROFILE_DIGEST: reviewers[0].agentProfileDigest,
+          REVIEW_PROVIDERS: `codex/${reviewers[0].requestedModel}`,
+          UPDATE_PR_DESCRIPTION: 'false',
+          REVIEW_ROUTER_MEMORY_ENABLED: String(memoryEnabled),
+          BATCH_MAX_FILES: '1',
+          REVIEW_ROUTER_REVIEWER_PLAN_JSON: JSON.stringify(reviewerPlan),
+          ...(selectedTools
+            ? { [CONTEXT_TOOLS_PLAN_ENV]: contextPlanJson }
+            : {}),
+        },
+      });
+      const modelTransport = {
+        baseUrl: 'http://127.0.0.1:1',
+        configuration: [],
+        environment: {
+          REVIEWROUTER_LOCAL_MODEL_TOKEN: `Bearer ${'a'.repeat(64)}`,
+        },
+        actualModel: () => 'captured-model',
+        failureFact: () => undefined,
+        dispose: async () => {},
+        setContextToolsGuard: jest.fn(),
+      };
+      const distinctOcrTransports =
+        engineKinds.length === 2 && engineKinds.every((kind) => kind === 'ocr');
+      const runtimes: AccountGatewayReviewerRuntime[] = reviewers.map(
+        (reviewer, index) => ({
+          reviewer,
+          runtimeConfig: reviewerRuntimeConfig(parentRuntime, reviewer),
+          modelTransport: distinctOcrTransports
+            ? {
+                ...modelTransport,
+                baseUrl: `http://127.0.0.1:${index + 1}`,
+                environment: {
+                  ...modelTransport.environment,
+                  REVIEWROUTER_LOCAL_MODEL_TOKEN: `Bearer ${String(index + 1).repeat(64)}`,
+                },
+              }
+            : modelTransport,
+          ...(reviewer.agentProfile.agentKind === 'ocr'
+            ? {
+                ocr: {
+                  run: {
+                    binaryPath: '/never-run',
+                    runDirectory: root,
+                    homeDirectory: root,
+                    configPath: path.join(root, 'ocr-config'),
+                    rulePath: path.join(root, 'ocr-rule'),
+                    backgroundPath: path.join(root, 'ocr-background'),
+                    cleanup: async () => {},
+                  },
+                  effectFacts: () => undefined,
+                },
+              }
+            : {
+                codexHome: path.join(root, reviewer.reviewerId),
+                codexBinaryPath: '/never-run',
+              }),
+        })
+      );
+      const boundary = new Error('multi_composition_verified');
+      const fetchImpl = jest.fn().mockImplementation(async (url) => {
+        if (String(url).endsWith('/bundle'))
+          return new Response(
+            JSON.stringify(
+              reviewMemoryBundle({
+                authorizationId: admitted.authorizationId,
+                repositoryConnectionId: admitted.facts.repositoryConnectionId,
+                pullRequestNumber: pr.number,
+                baseSha,
+                headSha,
+                reviewRevisionHash: admitted.facts.reviewRevisionHash,
+                contextPolicy: {
+                  audience: 'repository',
+                  repositoryId: 'repository-memory-fixture',
+                  allowedTasks: ['review', 'investigation'],
+                },
+              })
+            ),
+            { headers: { 'content-type': 'application/json' } }
+          );
+        if (String(url).endsWith('/admit'))
+          return new Response(
+            JSON.stringify({ protocolVersion: 2, eligible: true }),
+            { headers: { 'content-type': 'application/json' } }
+          );
+        throw new Error('unexpected-memory-request');
+      });
+      const spies = [
+        jest
+          .spyOn(GitHubActionsOidcTokenProvider.prototype, 'requestToken')
+          .mockResolvedValue('fixture-oidc'),
+        jest
+          .spyOn(GitHubReviewRevisionGuard.prototype, 'loadCurrentRevision')
+          .mockResolvedValue({ ...admitted.facts, pullRequestState: 'open' }),
+        jest.spyOn(PullRequestLoader.prototype, 'load').mockResolvedValue(pr),
+        jest
+          .spyOn(GitReviewRevisionMaterializer.prototype, 'ensureAvailable')
+          .mockResolvedValue(),
+        jest
+          .spyOn(FreshGitHubLifecycleInventory.prototype, 'loadForPrompt')
+          .mockResolvedValue({
+            promptTargets: [],
+            inventory: { lifecycleStateHash: '8'.repeat(64) },
+          } as never),
+        jest
+          .spyOn(CodexProvider.prototype, 'prepareInvocation')
+          .mockImplementation(async function (this: CodexProvider, prompt) {
+            const model = this.name.slice(this.name.indexOf('/') + 1);
+            return createPreparedProviderInvocation({
+              providerKind: ProviderKind.CodexCli,
+              providerName: this.name,
+              requestedModel: model,
+              timeoutMs: 1000,
+              request: {
+                prompt,
+                outputSchema: { type: 'object' },
+                environment: {},
+              },
+            }) as never;
+          }),
+        jest
+          .spyOn(CodexProvider.prototype, 'describePreparedEnvironmentContract')
+          .mockReturnValue({}),
+        jest
+          .spyOn(OcrReviewInvocationAdapter.prototype, 'prepare')
+          .mockImplementation(async function (
+            this: OcrReviewInvocationAdapter,
+            request
+          ) {
+            const { model, bridge } = (
+              this as unknown as {
+                options: {
+                  model: string;
+                  bridge: {
+                    baseUrl: string;
+                    capabilityAuthorization: string;
+                  };
+                };
+              }
+            ).options;
+            if (distinctOcrTransports) {
+              const runtime = runtimes.find(
+                (item) => item.reviewer.requestedModel === model
+              )!;
+              expect(bridge.baseUrl).toBe(runtime.modelTransport.baseUrl);
+              expect(bridge.capabilityAuthorization).toBe(
+                runtime.modelTransport.environment
+                  .REVIEWROUTER_LOCAL_MODEL_TOKEN
+              );
+            }
+            return {
+              workSlotId: request.workSlot.workSlotId,
+              requestedModel: model,
+              investigationProbePlan: null,
+            } as never;
+          }),
+      ];
+      let unavailableVote: string | undefined;
+      const plannedIdentities: string[][] = [];
+      const execute = jest
+        .spyOn(RunT0ReviewOrchestration.prototype, 'executeAuthorized')
+        .mockImplementation(async function (
+          this: RunT0ReviewOrchestration,
+          command
+        ) {
+          const dependencies = (
+            this as unknown as {
+              dependencies: RunT0ReviewOrchestrationDependencies;
+            }
+          ).dependencies;
+          plannedIdentities.push([
+            command.compatibilityKey,
+            command.planHash,
+            command.executionId,
+          ]);
+          expect(dependencies.reviewerScheduling?.maxParallelReviewers).toBe(2);
+          expect(dependencies.reviewerScheduling?.concurrencyGroups).toEqual([
+            { id: 'shared-allocation', maxParallel: 2 },
+          ]);
+          if (selectedTools) {
+            expect(
+              runtimes[0].runtimeConfig.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV]
+            ).toBe(contextPlanJson);
+            expect(
+              runtimes[1].runtimeConfig.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV]
+            ).toBeUndefined();
+            expect(
+              JSON.parse(
+                fs.readFileSync(runtimes[0].ocr!.run.configPath, 'utf8')
+              ).mcp_servers.reviewrouter_context.tools
+            ).toEqual(['rr_repository_docs_read']);
+            expect(modelTransport.setContextToolsGuard).toHaveBeenCalledWith(
+              expect.any(Function)
+            );
+          }
+          const manifest = JSON.parse(
+            command.assignmentManifestCanonicalJson
+          ) as { assignments: { workSlotId: string; paths: string[] }[] };
+          for (const reviewer of reviewers) {
+            const slots = command.workSlots.filter(
+              (slot) =>
+                slot.providerVoteIdentityHash ===
+                reviewer.providerVoteIdentityHash
+            );
+            expect(slots).toHaveLength(
+              reviewer.agentProfile.agentKind === 'ocr' ? 1 : 3
+            );
+            for (const workSlot of slots) {
+              if (workSlot.providerVoteIdentityHash === unavailableVote) {
+                await expect(
+                  dependencies.invocations.prepare({
+                    workSlot,
+                    attemptOrdinal: 1,
+                  })
+                ).rejects.toBeInstanceOf(
+                  ReviewInvocationConfigurationMismatchError
+                );
+                continue;
+              }
+
+              const invocation = await dependencies.invocations.prepare({
+                workSlot,
+                attemptOrdinal: 1,
+              });
+              expect(invocation.requestedModel).toBe(reviewer.requestedModel);
+              if (reviewer.agentProfile.agentKind === 'ocr') {
+                expect(invocation.investigationProbePlan).toBeNull();
+                expect(
+                  manifest.assignments.find(
+                    (assignment) =>
+                      assignment.workSlotId === workSlot.workSlotId
+                  )?.paths
+                ).toEqual(['one.ts', 'three.ts', 'two.ts']);
+              } else {
+                if (memoryEnabled) {
+                  expect(invocation.reviewPrompt).toContain(
+                    'All outbound calls require a bounded timeout.'
+                  );
+                  expect(invocation.manifestFacts.memoryBundleHash).toMatch(
+                    /^[a-f0-9]{64}$/
+                  );
+                  expect(
+                    dependencies.memoryAdmission!.allowsInvestigation!()
+                  ).toBe(true);
+                  expect(
+                    await dependencies.memoryAdmission!.isEligible(
+                      invocation.manifestFacts.memoryBundleHash
+                    )
+                  ).toBe(true);
+                }
+                const assembled =
+                  await dependencies.invocationManifestAssembler.assemble(
+                    invocation
+                  );
+                expect(assembled.providerVoteIdentityHash).toBe(
+                  reviewer.providerVoteIdentityHash
+                );
+                expect(
+                  JSON.parse(assembled.manifestCanonicalJson).requestedModel
+                ).toBe(reviewer.requestedModel);
+              }
+              expect(
+                dependencies.resolveInvestigationRecording?.(workSlot)
+              ).toBeUndefined();
+            }
+          }
+          expect(
+            new Set(command.workSlots.map((slot) => slot.workSlotId)).size
+          ).toBe(command.workSlots.length);
+          throw boundary;
+        });
+      const runnerInput: Parameters<ProductionT0ReviewRunner['run']>[0] = {
+        apiUrl: 'https://fixture.invalid',
+        audience: 'reviewrouter',
+        workflowSchemaVersion: 1,
+        repository: 'fixture/repository',
+        pullRequestNumber: 1,
+        headSha,
+        workspacePath: root,
+        scmReadToken: 'fixture-scm',
+        scmReadTokenExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+        refreshScmReadToken: async () => {
+          throw new Error('unexpected-refresh');
+        },
+        ...(runtimes[0].ocr ? { ocr: runtimes[0].ocr } : {}),
+        accountGateway: {
+          runtimeConfig: parentRuntime,
+          controlPlane: {
+            currentAuthorization: () => admitted,
+            restoreExecution: async () => null,
+          } as never,
+          modelTransport,
+          reviewerPlan,
+          reviewers: runtimes,
+        },
+      };
+      try {
+        await expect(
+          new ProductionT0ReviewRunner(fetchImpl).run(runnerInput)
+        ).rejects.toBe(boundary);
+        expect(execute).toHaveBeenCalledTimes(1);
+        for (const unavailableIndex of memoryEnabled ? [1, 0] : []) {
+          unavailableVote =
+            reviewers[unavailableIndex]!.providerVoteIdentityHash;
+          const changedReviewers = reviewers.map((reviewer, index) =>
+            index === unavailableIndex
+              ? {
+                  ...reviewer,
+                  unavailableReason: 'allocation_unavailable' as const,
+                }
+              : reviewer
+          );
+          const changedPlan: ReviewReviewerPlanV1 = {
+            ...reviewerPlan,
+            reviewers: changedReviewers,
+          };
+          const changedRuntime = {
+            ...parentRuntime,
+            runtimeEnv: {
+              ...parentRuntime.runtimeEnv,
+              REVIEW_ROUTER_REVIEWER_PLAN_JSON: JSON.stringify(changedPlan),
+            },
+          };
+          await expect(
+            new ProductionT0ReviewRunner(fetchImpl).run({
+              ...runnerInput,
+              accountGateway: {
+                ...runnerInput.accountGateway!,
+                runtimeConfig: changedRuntime,
+                reviewerPlan: changedPlan,
+                reviewers: runtimes.map((runtime, index) => ({
+                  ...runtime,
+                  reviewer: changedReviewers[index]!,
+                  runtimeConfig: reviewerRuntimeConfig(
+                    changedRuntime,
+                    changedReviewers[index]!
+                  ),
+                  ...(index === unavailableIndex
+                    ? { bootstrapFailure: true as const }
+                    : {}),
+                })),
+              },
+            })
+          ).rejects.toBe(boundary);
+          expect(plannedIdentities.at(-1)).toEqual(plannedIdentities[0]);
+        }
+        expect(execute).toHaveBeenCalledTimes(memoryEnabled ? 3 : 1);
+        expect(
+          fetchImpl.mock.calls.filter(([url]) =>
+            String(url).endsWith('/bundle')
+          )
+        ).toHaveLength(memoryEnabled ? 3 : 0);
+      } finally {
+        execute.mockRestore();
+        spies.forEach((spy) => spy.mockRestore());
+        process.env = previousEnv;
+        fs.rmSync(root, { recursive: true, force: true });
+      }
     }
   );
 

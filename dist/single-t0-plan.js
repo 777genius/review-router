@@ -397,9 +397,9 @@ var require_tunnel = __commonJS({
       for (var i = 1, len = arguments.length; i < len; ++i) {
         var overrides = arguments[i];
         if (typeof overrides === "object") {
-          var keys4 = Object.keys(overrides);
-          for (var j = 0, keyLen = keys4.length; j < keyLen; ++j) {
-            var k = keys4[j];
+          var keys5 = Object.keys(overrides);
+          for (var j = 0, keyLen = keys5.length; j < keyLen; ++j) {
+            var k = keys5[j];
             if (overrides[k] !== void 0) {
               target[k] = overrides[k];
             }
@@ -1951,9 +1951,9 @@ var require_request = __commonJS({
               processHeader(this, header[0], header[1]);
             }
           } else {
-            const keys4 = Object.keys(headers);
-            for (let i = 0; i < keys4.length; ++i) {
-              processHeader(this, keys4[i], headers[keys4[i]]);
+            const keys5 = Object.keys(headers);
+            for (let i = 0; i < keys5.length; ++i) {
+              processHeader(this, keys5[i], headers[keys5[i]]);
             }
           }
         } else if (headers != null) {
@@ -3541,8 +3541,8 @@ var require_data_url = __commonJS({
       return input.slice(start, position.position);
     }
     function stringPercentDecode(input) {
-      const bytes = encoder2.encode(input);
-      return percentDecode(bytes);
+      const bytes2 = encoder2.encode(input);
+      return percentDecode(bytes2);
     }
     function isHexCharByte(byte) {
       return byte >= 48 && byte <= 57 || byte >= 65 && byte <= 70 || byte >= 97 && byte <= 102;
@@ -4010,16 +4010,16 @@ var require_webidl = __commonJS({
         }
         const result2 = {};
         if (!types3.isProxy(O)) {
-          const keys5 = [...Object.getOwnPropertyNames(O), ...Object.getOwnPropertySymbols(O)];
-          for (const key of keys5) {
+          const keys6 = [...Object.getOwnPropertyNames(O), ...Object.getOwnPropertySymbols(O)];
+          for (const key of keys6) {
             const typedKey = keyConverter(key, prefix2, argument);
             const typedValue = valueConverter(O[key], prefix2, argument);
             result2[typedKey] = typedValue;
           }
           return result2;
         }
-        const keys4 = Reflect.ownKeys(O);
-        for (const key of keys4) {
+        const keys5 = Reflect.ownKeys(O);
+        for (const key of keys5) {
           const desc = Reflect.getOwnPropertyDescriptor(O, key);
           if (desc?.enumerable) {
             const typedKey = keyConverter(key, prefix2, argument);
@@ -4525,7 +4525,7 @@ var require_util2 = __commonJS({
         return false;
       }
     }
-    function bytesMatch(bytes, metadataList) {
+    function bytesMatch(bytes2, metadataList) {
       if (crypto6 === void 0) {
         return true;
       }
@@ -4541,7 +4541,7 @@ var require_util2 = __commonJS({
       for (const item of metadata2) {
         const algorithm = item.algo;
         const expectedValue = item.hash;
-        let actualValue = crypto6.createHash(algorithm).update(bytes).digest("base64");
+        let actualValue = crypto6.createHash(algorithm).update(bytes2).digest("base64");
         if (actualValue[actualValue.length - 1] === "=") {
           if (actualValue[actualValue.length - 2] === "=") {
             actualValue = actualValue.slice(0, -2);
@@ -4733,7 +4733,7 @@ var require_util2 = __commonJS({
           writable: true,
           enumerable: true,
           configurable: true,
-          value: function keys4() {
+          value: function keys5() {
             webidl.brandCheck(this, object4);
             return makeIterator(this, "key");
           }
@@ -4819,17 +4819,17 @@ var require_util2 = __commonJS({
       return input;
     }
     async function readAllBytes(reader) {
-      const bytes = [];
+      const bytes2 = [];
       let byteLength = 0;
       while (true) {
         const { done, value: chunk } = await reader.read();
         if (done) {
-          return Buffer.concat(bytes, byteLength);
+          return Buffer.concat(bytes2, byteLength);
         }
         if (!isUint8Array(chunk)) {
           throw new TypeError("Received non-Uint8Array chunk");
         }
-        bytes.push(chunk);
+        bytes2.push(chunk);
         byteLength += chunk.length;
       }
     }
@@ -5783,19 +5783,19 @@ Content-Type: ${value.type || "application/octet-stream"}\r
     function bodyMixinMethods(instance) {
       const methods = {
         blob() {
-          return consumeBody(this, (bytes) => {
+          return consumeBody(this, (bytes2) => {
             let mimeType = bodyMimeType(this);
             if (mimeType === null) {
               mimeType = "";
             } else if (mimeType) {
               mimeType = serializeAMimeType(mimeType);
             }
-            return new Blob2([bytes], { type: mimeType });
+            return new Blob2([bytes2], { type: mimeType });
           }, instance);
         },
         arrayBuffer() {
-          return consumeBody(this, (bytes) => {
-            return new Uint8Array(bytes).buffer;
+          return consumeBody(this, (bytes2) => {
+            return new Uint8Array(bytes2).buffer;
           }, instance);
         },
         text() {
@@ -5834,8 +5834,8 @@ Content-Type: ${value.type || "application/octet-stream"}\r
           }, instance);
         },
         bytes() {
-          return consumeBody(this, (bytes) => {
-            return new Uint8Array(bytes);
+          return consumeBody(this, (bytes2) => {
+            return new Uint8Array(bytes2);
           }, instance);
         }
       };
@@ -5870,8 +5870,8 @@ Content-Type: ${value.type || "application/octet-stream"}\r
       const body2 = object4[kState].body;
       return body2 != null && (body2.stream.locked || util4.isDisturbed(body2.stream));
     }
-    function parseJSONFromBytes(bytes) {
-      return JSON.parse(utf8DecodeBytes(bytes));
+    function parseJSONFromBytes(bytes2) {
+      return JSON.parse(utf8DecodeBytes(bytes2));
     }
     function bodyMimeType(requestOrResponse) {
       const headers = requestOrResponse[kState].headersList;
@@ -10977,10 +10977,10 @@ var require_mock_utils = __commonJS({
       };
     }
     function generateKeyValues(data) {
-      const keys4 = Object.keys(data);
+      const keys5 = Object.keys(data);
       const result2 = [];
-      for (let i = 0; i < keys4.length; ++i) {
-        const key = keys4[i];
+      for (let i = 0; i < keys5.length; ++i) {
+        const key = keys5[i];
         const value = data[key];
         const name = Buffer.from(`${key}`);
         if (Array.isArray(value)) {
@@ -11400,9 +11400,9 @@ var require_pluralizer = __commonJS({
       }
       pluralize(count2) {
         const one = count2 === 1;
-        const keys4 = one ? singulars : plurals;
+        const keys5 = one ? singulars : plurals;
         const noun = one ? this.singular : this.plural;
-        return { ...keys4, count: count2, noun };
+        return { ...keys5, count: count2, noun };
       }
     };
   }
@@ -11956,16 +11956,16 @@ var require_dns = __commonJS({
       setRecords(origin, addresses) {
         const timestamp3 = Date.now();
         const records = { records: { 4: null, 6: null } };
-        for (const record6 of addresses) {
-          record6.timestamp = timestamp3;
-          if (typeof record6.ttl === "number") {
-            record6.ttl = Math.min(record6.ttl, this.#maxTTL);
+        for (const record7 of addresses) {
+          record7.timestamp = timestamp3;
+          if (typeof record7.ttl === "number") {
+            record7.ttl = Math.min(record7.ttl, this.#maxTTL);
           } else {
-            record6.ttl = this.#maxTTL;
+            record7.ttl = this.#maxTTL;
           }
-          const familyRecords = records.records[record6.family] ?? { ips: [] };
-          familyRecords.ips.push(record6);
-          records.records[record6.family] = familyRecords;
+          const familyRecords = records.records[record7.family] ?? { ips: [] };
+          familyRecords.ips.push(record7);
+          records.records[record7.family] = familyRecords;
         }
         this.#records.set(origin.hostname, records);
       }
@@ -12126,9 +12126,9 @@ var require_headers = __commonJS({
           appendHeader(headers, header[0], header[1]);
         }
       } else if (typeof object4 === "object" && object4 !== null) {
-        const keys4 = Object.keys(object4);
-        for (let i = 0; i < keys4.length; ++i) {
-          appendHeader(headers, keys4[i], object4[keys4[i]]);
+        const keys5 = Object.keys(object4);
+        for (let i = 0; i < keys5.length; ++i) {
+          appendHeader(headers, keys5[i], object4[keys5[i]]);
         }
       } else {
         throw webidl.errors.conversionFailed({
@@ -12574,10 +12574,10 @@ var require_response = __commonJS({
         if (init !== null) {
           init = webidl.converters.ResponseInit(init);
         }
-        const bytes = textEncoder.encode(
+        const bytes2 = textEncoder.encode(
           serializeJavascriptValueToJSONString(data)
         );
-        const body2 = extractBody(bytes);
+        const body2 = extractBody(bytes2);
         const responseObject = fromInnerResponse(makeResponse({}), "response");
         initializeResponse(responseObject, init, { body: body2[0], type: "application/json" });
         return responseObject;
@@ -14034,12 +14034,12 @@ var require_fetch = __commonJS({
           processBodyError(response.error);
           return;
         }
-        const processBody = (bytes) => {
-          if (!bytesMatch(bytes, request3.integrity)) {
+        const processBody = (bytes2) => {
+          if (!bytesMatch(bytes2, request3.integrity)) {
             processBodyError("integrity mismatch");
             return;
           }
-          response.body = safelyExtractBody(bytes)[0];
+          response.body = safelyExtractBody(bytes2)[0];
           fetchFinale(fetchParams, response);
         };
         await fullyReadBody(response.body, processBody, processBodyError);
@@ -14452,12 +14452,12 @@ var require_fetch = __commonJS({
       if (request3.body == null && fetchParams.processRequestEndOfBody) {
         queueMicrotask(() => fetchParams.processRequestEndOfBody());
       } else if (request3.body != null) {
-        const processBodyChunk = async function* (bytes) {
+        const processBodyChunk = async function* (bytes2) {
           if (isCancelled(fetchParams)) {
             return;
           }
-          yield bytes;
-          fetchParams.processRequestBodyChunkLength?.(bytes.byteLength);
+          yield bytes2;
+          fetchParams.processRequestBodyChunkLength?.(bytes2.byteLength);
         };
         const processEndOfBody = () => {
           if (isCancelled(fetchParams)) {
@@ -14479,8 +14479,8 @@ var require_fetch = __commonJS({
         };
         requestBody = async function* () {
           try {
-            for await (const bytes of request3.body.stream) {
-              yield* processBodyChunk(bytes);
+            for await (const bytes2 of request3.body.stream) {
+              yield* processBodyChunk(bytes2);
             }
             processEndOfBody();
           } catch (err) {
@@ -14532,33 +14532,33 @@ var require_fetch = __commonJS({
       }
       fetchParams.controller.resume = async () => {
         while (true) {
-          let bytes;
+          let bytes2;
           let isFailure;
           try {
             const { done, value } = await fetchParams.controller.next();
             if (isAborted2(fetchParams)) {
               break;
             }
-            bytes = done ? void 0 : value;
+            bytes2 = done ? void 0 : value;
           } catch (err) {
             if (fetchParams.controller.ended && !timingInfo.encodedBodySize) {
-              bytes = void 0;
+              bytes2 = void 0;
             } else {
-              bytes = err;
+              bytes2 = err;
               isFailure = true;
             }
           }
-          if (bytes === void 0) {
+          if (bytes2 === void 0) {
             readableStreamClose(fetchParams.controller.controller);
             finalizeResponse(fetchParams, response);
             return;
           }
-          timingInfo.decodedBodySize += bytes?.byteLength ?? 0;
+          timingInfo.decodedBodySize += bytes2?.byteLength ?? 0;
           if (isFailure) {
-            fetchParams.controller.terminate(bytes);
+            fetchParams.controller.terminate(bytes2);
             return;
           }
-          const buffer2 = new Uint8Array(bytes);
+          const buffer2 = new Uint8Array(bytes2);
           if (buffer2.byteLength) {
             fetchParams.controller.controller.enqueue(buffer2);
           }
@@ -14684,9 +14684,9 @@ var require_fetch = __commonJS({
               if (fetchParams.controller.dump) {
                 return;
               }
-              const bytes = chunk;
-              timingInfo.encodedBodySize += bytes.byteLength;
-              return this.body.push(bytes);
+              const bytes2 = chunk;
+              timingInfo.encodedBodySize += bytes2.byteLength;
+              return this.body.push(bytes2);
             },
             onComplete() {
               if (this.abort) {
@@ -15132,7 +15132,7 @@ var require_util4 = __commonJS({
       fr[kError] = null;
       const stream4 = blob.stream();
       const reader = stream4.getReader();
-      const bytes = [];
+      const bytes2 = [];
       let chunkPromise = reader.read();
       let isFirstChunk = true;
       (async () => {
@@ -15146,7 +15146,7 @@ var require_util4 = __commonJS({
             }
             isFirstChunk = false;
             if (!done && types3.isUint8Array(value)) {
-              bytes.push(value);
+              bytes2.push(value);
               if ((fr[kLastProgressEventFired] === void 0 || Date.now() - fr[kLastProgressEventFired] >= 50) && !fr[kAborted]) {
                 fr[kLastProgressEventFired] = Date.now();
                 queueMicrotask(() => {
@@ -15158,7 +15158,7 @@ var require_util4 = __commonJS({
               queueMicrotask(() => {
                 fr[kState] = "done";
                 try {
-                  const result2 = packageData(bytes, type2, blob.type, encodingName);
+                  const result2 = packageData(bytes2, type2, blob.type, encodingName);
                   if (fr[kAborted]) {
                     return;
                   }
@@ -15198,7 +15198,7 @@ var require_util4 = __commonJS({
       });
       reader.dispatchEvent(event);
     }
-    function packageData(bytes, type2, mimeType, encodingName) {
+    function packageData(bytes2, type2, mimeType, encodingName) {
       switch (type2) {
         case "DataURL": {
           let dataURL = "data:";
@@ -15208,7 +15208,7 @@ var require_util4 = __commonJS({
           }
           dataURL += ";base64,";
           const decoder2 = new StringDecoder("latin1");
-          for (const chunk of bytes) {
+          for (const chunk of bytes2) {
             dataURL += btoa2(decoder2.write(chunk));
           }
           dataURL += btoa2(decoder2.end());
@@ -15228,16 +15228,16 @@ var require_util4 = __commonJS({
           if (encoding === "failure") {
             encoding = "UTF-8";
           }
-          return decode(bytes, encoding);
+          return decode(bytes2, encoding);
         }
         case "ArrayBuffer": {
-          const sequence = combineByteSequences(bytes);
+          const sequence = combineByteSequences(bytes2);
           return sequence.buffer;
         }
         case "BinaryString": {
           let binaryString = "";
           const decoder2 = new StringDecoder("latin1");
-          for (const chunk of bytes) {
+          for (const chunk of bytes2) {
             binaryString += decoder2.write(chunk);
           }
           binaryString += decoder2.end();
@@ -15246,14 +15246,14 @@ var require_util4 = __commonJS({
       }
     }
     function decode(ioQueue, encoding) {
-      const bytes = combineByteSequences(ioQueue);
-      const BOMEncoding = BOMSniffing(bytes);
+      const bytes2 = combineByteSequences(ioQueue);
+      const BOMEncoding = BOMSniffing(bytes2);
       let slice = 0;
       if (BOMEncoding !== null) {
         encoding = BOMEncoding;
         slice = BOMEncoding === "UTF-8" ? 3 : 2;
       }
-      const sliced = bytes.slice(slice);
+      const sliced = bytes2.slice(slice);
       return new TextDecoder(encoding).decode(sliced);
     }
     function BOMSniffing(ioQueue) {
@@ -15806,9 +15806,9 @@ var require_cache = __commonJS({
           // 16.
         };
         operations.push(operation);
-        const bytes = await bodyReadPromise.promise;
+        const bytes2 = await bodyReadPromise.promise;
         if (clonedResponse.body != null) {
-          clonedResponse.body.source = bytes;
+          clonedResponse.body.source = bytes2;
         }
         const cacheJobPromise = createDeferredPromise();
         let errorData = null;
@@ -16219,8 +16219,8 @@ var require_cachestorage = __commonJS({
        */
       async keys() {
         webidl.brandCheck(this, _CacheStorage);
-        const keys4 = this.#caches.keys();
-        return [...keys4];
+        const keys5 = this.#caches.keys();
+        return [...keys5];
       }
     };
     Object.defineProperties(CacheStorage.prototype, {
@@ -17388,8 +17388,8 @@ var require_connection = __commonJS({
             return;
           }
           const secWSAccept = response.headersList.get("Sec-WebSocket-Accept");
-          const digest5 = crypto6.createHash("sha1").update(keyValue + uid).digest("base64");
-          if (secWSAccept !== digest5) {
+          const digest6 = crypto6.createHash("sha1").update(keyValue + uid).digest("base64");
+          if (secWSAccept !== digest6) {
             failWebsocketConnection(ws, "Incorrect hash received in Sec-WebSocket-Accept header.");
             return;
           }
@@ -20512,7 +20512,7 @@ var require_base64 = __commonJS({
         es -= 2;
       else if (base64Str[base64Str.length - 1] == "=")
         es -= 1;
-      let bytes = new Uint8Array(es), bytePos = 0, groupPos = 0, b, p = 0;
+      let bytes2 = new Uint8Array(es), bytePos = 0, groupPos = 0, b, p = 0;
       for (let i = 0; i < base64Str.length; i++) {
         b = decTable[base64Str.charCodeAt(i)];
         if (b === void 0) {
@@ -20536,30 +20536,30 @@ var require_base64 = __commonJS({
             groupPos = 1;
             break;
           case 1:
-            bytes[bytePos++] = p << 2 | (b & 48) >> 4;
+            bytes2[bytePos++] = p << 2 | (b & 48) >> 4;
             p = b;
             groupPos = 2;
             break;
           case 2:
-            bytes[bytePos++] = (p & 15) << 4 | (b & 60) >> 2;
+            bytes2[bytePos++] = (p & 15) << 4 | (b & 60) >> 2;
             p = b;
             groupPos = 3;
             break;
           case 3:
-            bytes[bytePos++] = (p & 3) << 6 | b;
+            bytes2[bytePos++] = (p & 3) << 6 | b;
             groupPos = 0;
             break;
         }
       }
       if (groupPos == 1)
         throw Error(`invalid base64 string.`);
-      return bytes.subarray(0, bytePos);
+      return bytes2.subarray(0, bytePos);
     }
     exports2.base64decode = base64decode;
-    function base64encode2(bytes) {
+    function base64encode2(bytes2) {
       let base642 = "", groupPos = 0, b, p = 0;
-      for (let i = 0; i < bytes.length; i++) {
-        b = bytes[i];
+      for (let i = 0; i < bytes2.length; i++) {
+        b = bytes2[i];
         switch (groupPos) {
           case 0:
             base642 += encTable[b >> 2];
@@ -20597,23 +20597,23 @@ var require_protobufjs_utf8 = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.utf8read = void 0;
     var fromCharCodes = (chunk) => String.fromCharCode.apply(String, chunk);
-    function utf8read(bytes) {
-      if (bytes.length < 1)
+    function utf8read(bytes2) {
+      if (bytes2.length < 1)
         return "";
       let pos = 0, parts = [], chunk = [], i = 0, t;
-      let len = bytes.length;
+      let len = bytes2.length;
       while (pos < len) {
-        t = bytes[pos++];
+        t = bytes2[pos++];
         if (t < 128)
           chunk[i++] = t;
         else if (t > 191 && t < 224)
-          chunk[i++] = (t & 31) << 6 | bytes[pos++] & 63;
+          chunk[i++] = (t & 31) << 6 | bytes2[pos++] & 63;
         else if (t > 239 && t < 365) {
-          t = ((t & 7) << 18 | (bytes[pos++] & 63) << 12 | (bytes[pos++] & 63) << 6 | bytes[pos++] & 63) - 65536;
+          t = ((t & 7) << 18 | (bytes2[pos++] & 63) << 12 | (bytes2[pos++] & 63) << 6 | bytes2[pos++] & 63) - 65536;
           chunk[i++] = 55296 + (t >> 10);
           chunk[i++] = 56320 + (t & 1023);
         } else
-          chunk[i++] = (t & 15) << 12 | (bytes[pos++] & 63) << 6 | bytes[pos++] & 63;
+          chunk[i++] = (t & 15) << 12 | (bytes2[pos++] & 63) << 6 | bytes2[pos++] & 63;
         if (i > 8191) {
           parts.push(fromCharCodes(chunk));
           i = 0;
@@ -20708,19 +20708,19 @@ var require_goog_varint = __commonJS({
       throw new Error("invalid varint");
     }
     exports2.varint64read = varint64read;
-    function varint64write(lo, hi, bytes) {
+    function varint64write(lo, hi, bytes2) {
       for (let i = 0; i < 28; i = i + 7) {
         const shift = lo >>> i;
         const hasNext = !(shift >>> 7 == 0 && hi == 0);
         const byte = (hasNext ? shift | 128 : shift) & 255;
-        bytes.push(byte);
+        bytes2.push(byte);
         if (!hasNext) {
           return;
         }
       }
       const splitBits = lo >>> 28 & 15 | (hi & 7) << 4;
       const hasMoreBits = !(hi >> 3 == 0);
-      bytes.push((hasMoreBits ? splitBits | 128 : splitBits) & 255);
+      bytes2.push((hasMoreBits ? splitBits | 128 : splitBits) & 255);
       if (!hasMoreBits) {
         return;
       }
@@ -20728,12 +20728,12 @@ var require_goog_varint = __commonJS({
         const shift = hi >>> i;
         const hasNext = !(shift >>> 7 == 0);
         const byte = (hasNext ? shift | 128 : shift) & 255;
-        bytes.push(byte);
+        bytes2.push(byte);
         if (!hasNext) {
           return;
         }
       }
-      bytes.push(hi >>> 31 & 1);
+      bytes2.push(hi >>> 31 & 1);
     }
     exports2.varint64write = varint64write;
     var TWO_PWR_32_DBL = (1 << 16) * (1 << 16);
@@ -20803,19 +20803,19 @@ var require_goog_varint = __commonJS({
       );
     }
     exports2.int64toString = int64toString;
-    function varint32write(value, bytes) {
+    function varint32write(value, bytes2) {
       if (value >= 0) {
         while (value > 127) {
-          bytes.push(value & 127 | 128);
+          bytes2.push(value & 127 | 128);
           value = value >>> 7;
         }
-        bytes.push(value);
+        bytes2.push(value);
       } else {
         for (let i = 0; i < 9; i++) {
-          bytes.push(value & 127 | 128);
+          bytes2.push(value & 127 | 128);
           value = value >> 7;
         }
-        bytes.push(1);
+        bytes2.push(1);
       }
     }
     exports2.varint32write = varint32write;
@@ -21086,7 +21086,7 @@ var require_binary_reader = __commonJS({
     var goog_varint_1 = require_goog_varint();
     var defaultsRead = {
       readUnknownField: true,
-      readerFactory: (bytes) => new BinaryReader(bytes)
+      readerFactory: (bytes2) => new BinaryReader(bytes2)
     };
     function binaryReadOptions(options) {
       return options ? Object.assign(Object.assign({}, defaultsRead), options) : defaultsRead;
@@ -21331,14 +21331,14 @@ var require_binary_writer = __commonJS({
         let len = 0;
         for (let i = 0; i < this.chunks.length; i++)
           len += this.chunks[i].length;
-        let bytes = new Uint8Array(len);
+        let bytes2 = new Uint8Array(len);
         let offset = 0;
         for (let i = 0; i < this.chunks.length; i++) {
-          bytes.set(this.chunks[i], offset);
+          bytes2.set(this.chunks[i], offset);
           offset += this.chunks[i].length;
         }
         this.chunks = [];
-        return bytes;
+        return bytes2;
       }
       /**
        * Start a new fork for length-delimited data like a message
@@ -21808,11 +21808,11 @@ var require_reflection_type_check = __commonJS({
         if (message === null || message === void 0 || typeof message != "object")
           return false;
         this.prepare();
-        let keys4 = Object.keys(message), data = this.data;
-        if (keys4.length < data.req.length || data.req.some((n) => !keys4.includes(n)))
+        let keys5 = Object.keys(message), data = this.data;
+        if (keys5.length < data.req.length || data.req.some((n) => !keys5.includes(n)))
           return false;
         if (!allowExcessProperties) {
-          if (keys4.some((k) => !data.known.includes(k)))
+          if (keys5.some((k) => !data.known.includes(k)))
             return false;
         }
         if (depth < 1) {
@@ -21942,18 +21942,18 @@ var require_reflection_type_check = __commonJS({
         return true;
       }
       mapKeys(map2, type2, depth) {
-        let keys4 = Object.keys(map2);
+        let keys5 = Object.keys(map2);
         switch (type2) {
           case reflection_info_1.ScalarType.INT32:
           case reflection_info_1.ScalarType.FIXED32:
           case reflection_info_1.ScalarType.SFIXED32:
           case reflection_info_1.ScalarType.SINT32:
           case reflection_info_1.ScalarType.UINT32:
-            return this.scalars(keys4.slice(0, depth).map((k) => parseInt(k)), type2, depth);
+            return this.scalars(keys5.slice(0, depth).map((k) => parseInt(k)), type2, depth);
           case reflection_info_1.ScalarType.BOOL:
-            return this.scalars(keys4.slice(0, depth).map((k) => k == "true" ? true : k == "false" ? false : k), type2, depth);
+            return this.scalars(keys5.slice(0, depth).map((k) => k == "true" ? true : k == "false" ? false : k), type2, depth);
           default:
-            return this.scalars(keys4, type2, depth, reflection_info_1.LongType.STRING);
+            return this.scalars(keys5, type2, depth, reflection_info_1.LongType.STRING);
         }
       }
     };
@@ -27871,8 +27871,8 @@ var init_restError = __esm({
 });
 
 // node_modules/@typespec/ts-http-runtime/dist/esm/util/bytesEncoding.js
-function uint8ArrayToString(bytes, format) {
-  return Buffer.from(bytes).toString(format);
+function uint8ArrayToString(bytes2, format) {
+  return Buffer.from(bytes2).toString(format);
 }
 function stringToUint8Array(value, format) {
   return Buffer.from(value, format);
@@ -29425,9 +29425,9 @@ var require_node = __commonJS({
     }
     function init(debug3) {
       debug3.inspectOpts = {};
-      const keys4 = Object.keys(exports2.inspectOpts);
-      for (let i = 0; i < keys4.length; i++) {
-        debug3.inspectOpts[keys4[i]] = exports2.inspectOpts[keys4[i]];
+      const keys5 = Object.keys(exports2.inspectOpts);
+      for (let i = 0; i < keys5.length; i++) {
+        debug3.inspectOpts[keys5[i]] = exports2.inspectOpts[keys5[i]];
       }
     }
     module2.exports = require_common()(exports2);
@@ -29913,11 +29913,11 @@ var require_dist2 = __commonJS({
     function resume(socket) {
       socket.resume();
     }
-    function omit3(obj, ...keys4) {
+    function omit3(obj, ...keys5) {
       const ret = {};
       let key;
       for (key in obj) {
-        if (!keys4.includes(key)) {
+        if (!keys5.includes(key)) {
           ret[key] = obj[key];
         }
       }
@@ -30043,11 +30043,11 @@ var require_dist3 = __commonJS({
     };
     HttpProxyAgent2.protocols = ["http", "https"];
     exports2.HttpProxyAgent = HttpProxyAgent2;
-    function omit3(obj, ...keys4) {
+    function omit3(obj, ...keys5) {
       const ret = {};
       let key;
       for (key in obj) {
-        if (!keys4.includes(key)) {
+        if (!keys5.includes(key)) {
           ret[key] = obj[key];
         }
       }
@@ -31024,8 +31024,8 @@ function isError2(e) {
 function randomUUID2() {
   return randomUUID();
 }
-function uint8ArrayToString2(bytes, format) {
-  return uint8ArrayToString(bytes, format);
+function uint8ArrayToString2(bytes2, format) {
+  return uint8ArrayToString(bytes2, format);
 }
 function stringToUint8Array2(value, format) {
   return stringToUint8Array(value, format);
@@ -38462,18 +38462,18 @@ function compress(arr, options, matcher, readonlyMatcher) {
   return compressedObj;
 }
 function propName(obj) {
-  const keys4 = Object.keys(obj);
-  for (let i = 0; i < keys4.length; i++) {
-    const key = keys4[i];
+  const keys5 = Object.keys(obj);
+  for (let i = 0; i < keys5.length; i++) {
+    const key = keys5[i];
     if (key !== ":@") return key;
   }
 }
 function assignAttributes(obj, attrMap, readonlyMatcher, options) {
   if (attrMap) {
-    const keys4 = Object.keys(attrMap);
-    const len = keys4.length;
+    const keys5 = Object.keys(attrMap);
+    const len = keys5.length;
     for (let i = 0; i < len; i++) {
-      const atrrName = keys4[i];
+      const atrrName = keys5[i];
       const rawAttrName = atrrName.startsWith(options.attributeNamePrefix) ? atrrName.substring(options.attributeNamePrefix.length) : atrrName;
       const jPathOrMatcher = options.jPath ? readonlyMatcher.toString() + "." + rawAttrName : readonlyMatcher;
       if (options.isArray(atrrName, jPathOrMatcher, true, true)) {
@@ -38790,9 +38790,9 @@ function attr_to_str_raw(attrMap, options) {
   return attrStr;
 }
 function propName2(obj) {
-  const keys4 = Object.keys(obj);
-  for (let i = 0; i < keys4.length; i++) {
-    const key = keys4[i];
+  const keys5 = Object.keys(obj);
+  for (let i = 0; i < keys5.length; i++) {
+    const key = keys5[i];
     if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
     if (key !== ":@") return key;
   }
@@ -41083,11 +41083,11 @@ var init_crc64 = __esm({
         function _base64ToArrayBuffer(base642) {
           var binary_string = window.atob(base642);
           var len = binary_string.length;
-          var bytes = new Uint8Array(len);
+          var bytes2 = new Uint8Array(len);
           for (var i = 0; i < len; i++) {
-            bytes[i] = binary_string.charCodeAt(i);
+            bytes2[i] = binary_string.charCodeAt(i);
           }
-          return bytes;
+          return bytes2;
         }
         function getBinary(file) {
           if (typeof Buffer == "function") {
@@ -41914,8 +41914,8 @@ var init_crc64 = __esm({
           },
           alloc: function(array2, view) {
             assert2(ensureCache.buffer);
-            var bytes = view.BYTES_PER_ELEMENT;
-            var len = array2.length * bytes;
+            var bytes2 = view.BYTES_PER_ELEMENT;
+            var len = array2.length * bytes2;
             len = len + 7 & -8;
             var ret;
             if (ensureCache.pos + len >= ensureCache.size) {
@@ -41931,8 +41931,8 @@ var init_crc64 = __esm({
           },
           copy: function(array2, view, offset) {
             offset >>>= 0;
-            var bytes = view.BYTES_PER_ELEMENT;
-            switch (bytes) {
+            var bytes2 = view.BYTES_PER_ELEMENT;
+            switch (bytes2) {
               case 2:
                 offset >>>= 1;
                 break;
@@ -61490,11 +61490,11 @@ var init_AvroParser = __esm({
        * @param options -
        */
       static async readFixedBytes(stream4, length, options = {}) {
-        const bytes = await stream4.read(length, { abortSignal: options.abortSignal });
-        if (bytes.length !== length) {
+        const bytes2 = await stream4.read(length, { abortSignal: options.abortSignal });
+        if (bytes2.length !== length) {
           throw new Error("Hit stream end.");
         }
-        return bytes;
+        return bytes2;
       }
       /**
        * Reads a single byte from the stream.
@@ -61778,14 +61778,14 @@ var init_AvroParser = __esm({
       }
       // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
       async read(stream4, options = {}) {
-        const record6 = {};
-        record6["$schema"] = this._name;
+        const record7 = {};
+        record7["$schema"] = this._name;
         for (const key in this._fields) {
           if (Object.prototype.hasOwnProperty.call(this._fields, key)) {
-            record6[key] = await this._fields[key].read(stream4, options);
+            record7[key] = await this._fields[key].read(stream4, options);
           }
         }
-        return record6;
+        return record7;
       }
     };
   }
@@ -67848,17 +67848,17 @@ var require_async = __commonJS({
             readyToCheck.push(key);
             return;
           }
-          var dependencies = task.slice(0, task.length - 1);
-          var remainingDependencies = dependencies.length;
+          var dependencies2 = task.slice(0, task.length - 1);
+          var remainingDependencies = dependencies2.length;
           if (remainingDependencies === 0) {
             enqueueTask(key, task);
             readyToCheck.push(key);
             return;
           }
           uncheckedDependencies[key] = remainingDependencies;
-          dependencies.forEach((dependencyName) => {
+          dependencies2.forEach((dependencyName) => {
             if (!tasks[dependencyName]) {
-              throw new Error("async.auto task `" + key + "` has a non-existent dependency `" + dependencyName + "` in " + dependencies.join(", "));
+              throw new Error("async.auto task `" + key + "` has a non-existent dependency `" + dependencyName + "` in " + dependencies2.join(", "));
             }
             addListener(dependencyName, () => {
               remainingDependencies--;
@@ -69637,9 +69637,9 @@ var require_legacy_streams = __commonJS({
         this.mode = 438;
         this.bufferSize = 64 * 1024;
         options = options || {};
-        var keys4 = Object.keys(options);
-        for (var index = 0, length = keys4.length; index < length; index++) {
-          var key = keys4[index];
+        var keys5 = Object.keys(options);
+        for (var index = 0, length = keys5.length; index < length; index++) {
+          var key = keys5[index];
           this[key] = options[key];
         }
         if (this.encoding) this.setEncoding(this.encoding);
@@ -69685,9 +69685,9 @@ var require_legacy_streams = __commonJS({
         this.mode = 438;
         this.bytesWritten = 0;
         options = options || {};
-        var keys4 = Object.keys(options);
-        for (var index = 0, length = keys4.length; index < length; index++) {
-          var key = keys4[index];
+        var keys5 = Object.keys(options);
+        for (var index = 0, length = keys5.length; index < length; index++) {
+          var key = keys5[index];
           this[key] = options[key];
         }
         if (this.start !== void 0) {
@@ -70952,11 +70952,11 @@ var require_stream_duplex = __commonJS({
     "use strict";
     var pna = require_process_nextick_args();
     var objectKeys = Object.keys || function(obj) {
-      var keys5 = [];
+      var keys6 = [];
       for (var key in obj) {
-        keys5.push(key);
+        keys6.push(key);
       }
-      return keys5;
+      return keys6;
     };
     module2.exports = Duplex;
     var util4 = Object.create(require_util9());
@@ -70965,13 +70965,13 @@ var require_stream_duplex = __commonJS({
     var Writable = require_stream_writable();
     util4.inherits(Duplex, Readable8);
     {
-      keys4 = objectKeys(Writable.prototype);
-      for (v = 0; v < keys4.length; v++) {
-        method = keys4[v];
+      keys5 = objectKeys(Writable.prototype);
+      for (v = 0; v < keys5.length; v++) {
+        method = keys5[v];
         if (!Duplex.prototype[method]) Duplex.prototype[method] = Writable.prototype[method];
       }
     }
-    var keys4;
+    var keys5;
     var method;
     var v;
     function Duplex(options) {
@@ -73440,9 +73440,9 @@ var require_event_target_shim = __commonJS({
         timeStamp: event.timeStamp || Date.now()
       });
       Object.defineProperty(this, "isTrusted", { value: false, enumerable: true });
-      const keys4 = Object.keys(event);
-      for (let i = 0; i < keys4.length; ++i) {
-        const key = keys4[i];
+      const keys5 = Object.keys(event);
+      for (let i = 0; i < keys5.length; ++i) {
+        const key = keys5[i];
         if (!(key in this)) {
           Object.defineProperty(this, key, defineRedirectDescriptor(key));
         }
@@ -73661,8 +73661,8 @@ var require_event_target_shim = __commonJS({
       };
     }
     function defineWrapper(BaseEvent, proto) {
-      const keys4 = Object.keys(proto);
-      if (keys4.length === 0) {
+      const keys5 = Object.keys(proto);
+      if (keys5.length === 0) {
         return BaseEvent;
       }
       function CustomEvent(eventTarget, event) {
@@ -73671,8 +73671,8 @@ var require_event_target_shim = __commonJS({
       CustomEvent.prototype = Object.create(BaseEvent.prototype, {
         constructor: { value: CustomEvent, configurable: true, writable: true }
       });
-      for (let i = 0; i < keys4.length; ++i) {
-        const key = keys4[i];
+      for (let i = 0; i < keys5.length; ++i) {
+        const key = keys5[i];
         if (!(key in BaseEvent.prototype)) {
           const descriptor = Object.getOwnPropertyDescriptor(proto, key);
           const isFunc = typeof descriptor.value === "function";
@@ -74475,10 +74475,10 @@ var require_process = __commonJS({
 var require_process2 = __commonJS({
   "node_modules/readable-stream/lib/internal/shims/process.js"(exports2, module2) {
     "use strict";
-    var process5 = ((base, esmKey, keys4, isValid2) => {
+    var process5 = ((base, esmKey, keys5, isValid2) => {
       if (esmKey in base && base[esmKey] === true) {
         let candidate;
-        for (const key of keys4) {
+        for (const key of keys5) {
           if (!(key in base)) {
             continue;
           }
@@ -77888,9 +77888,9 @@ var require_duplex = __commonJS({
     ObjectSetPrototypeOf(Duplex.prototype, Readable8.prototype);
     ObjectSetPrototypeOf(Duplex, Readable8);
     {
-      const keys4 = ObjectKeys(Writable.prototype);
-      for (let i = 0; i < keys4.length; i++) {
-        const method = keys4[i];
+      const keys5 = ObjectKeys(Writable.prototype);
+      for (let i = 0; i < keys5.length; i++) {
+        const method = keys5[i];
         if (!Duplex.prototype[method]) Duplex.prototype[method] = Writable.prototype[method];
       }
     }
@@ -88942,8 +88942,8 @@ var require_zip_archive_output_stream = __commonJS({
       var process5 = deflate ? new DeflateCRC32Stream(this.options.zlib) : new CRC32Stream();
       var error3 = null;
       function handleStuff() {
-        var digest5 = process5.digest().readUInt32BE(0);
-        ae.setCrc(digest5);
+        var digest6 = process5.digest().readUInt32BE(0);
+        ae.setCrc(digest6);
         ae.setSize(process5.size());
         ae.setCompressedSize(process5.size(true));
         this._afterAppend(ae);
@@ -94345,9 +94345,9 @@ var init_json_with_bigint = __esm({
           const value = node.parent[node.key];
           const isComplexObject = value !== null && typeof value === "object";
           if (isComplexObject) {
-            const keys4 = Object.keys(value);
-            for (let i = keys4.length - 1; i >= 0; i--) {
-              stack.push({ parent: value, key: keys4[i], visited: false });
+            const keys5 = Object.keys(value);
+            for (let i = keys5.length - 1; i >= 0; i--) {
+              stack.push({ parent: value, key: keys5[i], visited: false });
             }
           }
         } else {
@@ -99032,7 +99032,7 @@ var require_implementation2 = __commonJS({
           return false;
         }
       };
-      keysShim = function keys4(object4) {
+      keysShim = function keys5(object4) {
         var isObject3 = object4 !== null && typeof object4 === "object";
         var isFunction = toStr.call(object4) === "[object Function]";
         var isArguments = isArgs(object4);
@@ -99091,7 +99091,7 @@ var require_object_keys = __commonJS({
     var slice = Array.prototype.slice;
     var isArgs = require_isArguments2();
     var origKeys = Object.keys;
-    var keysShim = origKeys ? function keys4(o) {
+    var keysShim = origKeys ? function keys5(o) {
       return origKeys(o);
     } : require_implementation2();
     var originalKeys = Object.keys;
@@ -99102,7 +99102,7 @@ var require_object_keys = __commonJS({
           return args && args.length === arguments.length;
         }(1, 2);
         if (!keysWorksWithArguments) {
-          Object.keys = function keys4(object4) {
+          Object.keys = function keys5(object4) {
             if (isArgs(object4)) {
               return originalKeys(slice.call(object4));
             }
@@ -99122,7 +99122,7 @@ var require_object_keys = __commonJS({
 var require_define_properties = __commonJS({
   "node_modules/define-properties/index.js"(exports2, module2) {
     "use strict";
-    var keys4 = require_object_keys();
+    var keys5 = require_object_keys();
     var hasSymbols = typeof Symbol === "function" && typeof Symbol("foo") === "symbol";
     var toStr = Object.prototype.toString;
     var concat2 = Array.prototype.concat;
@@ -99149,7 +99149,7 @@ var require_define_properties = __commonJS({
     };
     var defineProperties = function(object4, map2) {
       var predicates = arguments.length > 2 ? arguments[2] : {};
-      var props = keys4(map2);
+      var props = keys5(map2);
       if (hasSymbols) {
         props = concat2.call(props, Object.getOwnPropertySymbols(map2));
       }
@@ -99309,8 +99309,8 @@ var require_object_inspect = __commonJS({
       }
       if (typeof obj === "function" && !isRegExp(obj)) {
         var name = nameOf(obj);
-        var keys4 = arrObjKeys(obj, inspect2);
-        return "[Function" + (name ? ": " + name : " (anonymous)") + "]" + (keys4.length > 0 ? " { " + $join.call(keys4, ", ") + " }" : "");
+        var keys5 = arrObjKeys(obj, inspect2);
+        return "[Function" + (name ? ": " + name : " (anonymous)") + "]" + (keys5.length > 0 ? " { " + $join.call(keys5, ", ") + " }" : "");
       }
       if (isSymbol(obj)) {
         var symString = hasShammedSymbols ? $replace.call(String(obj), /^(Symbol\(.*\))_[^)]*$/, "$1") : symToString.call(obj);
@@ -100303,8 +100303,8 @@ var require_GetValueFromBuffer = __commonJS({
         rawValue = $slice(new $Uint8Array(arrayBuffer, byteIndex), 0, elementSize);
       }
       var isLittleEndian = arguments.length > 5 ? arguments[5] : defaultEndianness === "little";
-      var bytes = isLittleEndian ? $slice(safeConcat([0, 0, 0, 0, 0, 0, 0, 0], rawValue), -elementSize) : $slice(safeConcat(rawValue, [0, 0, 0, 0, 0, 0, 0, 0]), 0, elementSize);
-      return RawBytesToNumeric(type2, bytes, isLittleEndian);
+      var bytes2 = isLittleEndian ? $slice(safeConcat([0, 0, 0, 0, 0, 0, 0, 0], rawValue), -elementSize) : $slice(safeConcat(rawValue, [0, 0, 0, 0, 0, 0, 0, 0]), 0, elementSize);
+      return RawBytesToNumeric(type2, bytes2, isLittleEndian);
     };
   }
 });
@@ -103528,7 +103528,7 @@ var require_traverse = __commonJS({
       }
       return void 0;
     }
-    var objectKeys = Object.keys || function keys4(obj) {
+    var objectKeys = Object.keys || function keys5(obj) {
       var res = [];
       for (var key in obj) {
         res[res.length] = key;
@@ -104208,7 +104208,7 @@ var require_buffers = __commonJS({
         this.length += reps[i].length;
       }
       var removed = new Buffers();
-      var bytes = 0;
+      var bytes2 = 0;
       var startBytes = 0;
       for (var ii = 0; ii < buffers.length && startBytes + buffers[ii].length < index; ii++) {
         startBytes += buffers[ii].length;
@@ -104369,12 +104369,12 @@ var require_vars = __commonJS({
     module2.exports = function(store) {
       function getset(name, value) {
         var node = vars.store;
-        var keys4 = name.split(".");
-        keys4.slice(0, -1).forEach(function(k) {
+        var keys5 = name.split(".");
+        keys5.slice(0, -1).forEach(function(k) {
           if (node[k] === void 0) node[k] = {};
           node = node[k];
         });
-        var key = keys4[keys4.length - 1];
+        var key = keys5[keys5.length - 1];
         if (arguments.length == 1) {
           return node[key];
         } else {
@@ -104423,9 +104423,9 @@ var require_binary = __commonJS({
     exports2.stream = function(input) {
       if (input) return exports2.apply(null, arguments);
       var pending = null;
-      function getBytes(bytes, cb, skip) {
+      function getBytes(bytes2, cb, skip) {
         pending = {
-          bytes,
+          bytes: bytes2,
           skip,
           cb: function(buf) {
             pending = null;
@@ -104443,19 +104443,19 @@ var require_binary = __commonJS({
         if (typeof pending === "function") {
           pending();
         } else {
-          var bytes = offset + pending.bytes;
-          if (buffers.length >= bytes) {
+          var bytes2 = offset + pending.bytes;
+          if (buffers.length >= bytes2) {
             var buf;
             if (offset == null) {
-              buf = buffers.splice(0, bytes);
+              buf = buffers.splice(0, bytes2);
               if (!pending.skip) {
                 buf = buf.slice();
               }
             } else {
               if (!pending.skip) {
-                buf = buffers.slice(offset, bytes);
+                buf = buffers.slice(offset, bytes2);
               }
-              offset = bytes;
+              offset = bytes2;
             }
             if (pending.skip) {
               pending.cb();
@@ -104469,9 +104469,9 @@ var require_binary = __commonJS({
         function next() {
           if (!done) saw.next();
         }
-        var self2 = words(function(bytes, cb) {
+        var self2 = words(function(bytes2, cb) {
           return function(name) {
-            getBytes(bytes, function(buf) {
+            getBytes(bytes2, function(buf) {
               vars.set(name, cb(buf));
               next();
             });
@@ -104509,20 +104509,20 @@ var require_binary = __commonJS({
             }.bind(this));
           }, vars.store);
         };
-        self2.buffer = function(name, bytes) {
-          if (typeof bytes === "string") {
-            bytes = vars.get(bytes);
+        self2.buffer = function(name, bytes2) {
+          if (typeof bytes2 === "string") {
+            bytes2 = vars.get(bytes2);
           }
-          getBytes(bytes, function(buf) {
+          getBytes(bytes2, function(buf) {
             vars.set(name, buf);
             next();
           });
         };
-        self2.skip = function(bytes) {
-          if (typeof bytes === "string") {
-            bytes = vars.get(bytes);
+        self2.skip = function(bytes2) {
+          if (typeof bytes2 === "string") {
+            bytes2 = vars.get(bytes2);
           }
-          getBytes(bytes, function() {
+          getBytes(bytes2, function() {
             next();
           });
         };
@@ -104591,11 +104591,11 @@ var require_binary = __commonJS({
       return stream4;
     };
     exports2.parse = function parse6(buffer2) {
-      var self2 = words(function(bytes, cb) {
+      var self2 = words(function(bytes2, cb) {
         return function(name) {
-          if (offset + bytes <= buffer2.length) {
-            var buf = buffer2.slice(offset, offset + bytes);
-            offset += bytes;
+          if (offset + bytes2 <= buffer2.length) {
+            var buf = buffer2.slice(offset, offset + bytes2);
+            offset += bytes2;
             vars.set(name, cb(buf));
           } else {
             vars.set(name, null);
@@ -104639,11 +104639,11 @@ var require_binary = __commonJS({
         vars.set(name, buf);
         return self2;
       };
-      self2.skip = function(bytes) {
-        if (typeof bytes === "string") {
-          bytes = vars.get(bytes);
+      self2.skip = function(bytes2) {
+        if (typeof bytes2 === "string") {
+          bytes2 = vars.get(bytes2);
         }
-        offset += bytes;
+        offset += bytes2;
         return self2;
       };
       self2.scan = function(name, search) {
@@ -104676,42 +104676,42 @@ var require_binary = __commonJS({
       };
       return self2;
     };
-    function decodeLEu(bytes) {
+    function decodeLEu(bytes2) {
       var acc = 0;
-      for (var i = 0; i < bytes.length; i++) {
-        acc += Math.pow(256, i) * bytes[i];
+      for (var i = 0; i < bytes2.length; i++) {
+        acc += Math.pow(256, i) * bytes2[i];
       }
       return acc;
     }
-    function decodeBEu(bytes) {
+    function decodeBEu(bytes2) {
       var acc = 0;
-      for (var i = 0; i < bytes.length; i++) {
-        acc += Math.pow(256, bytes.length - i - 1) * bytes[i];
+      for (var i = 0; i < bytes2.length; i++) {
+        acc += Math.pow(256, bytes2.length - i - 1) * bytes2[i];
       }
       return acc;
     }
-    function decodeBEs(bytes) {
-      var val = decodeBEu(bytes);
-      if ((bytes[0] & 128) == 128) {
-        val -= Math.pow(256, bytes.length);
+    function decodeBEs(bytes2) {
+      var val = decodeBEu(bytes2);
+      if ((bytes2[0] & 128) == 128) {
+        val -= Math.pow(256, bytes2.length);
       }
       return val;
     }
-    function decodeLEs(bytes) {
-      var val = decodeLEu(bytes);
-      if ((bytes[bytes.length - 1] & 128) == 128) {
-        val -= Math.pow(256, bytes.length);
+    function decodeLEs(bytes2) {
+      var val = decodeLEu(bytes2);
+      if ((bytes2[bytes2.length - 1] & 128) == 128) {
+        val -= Math.pow(256, bytes2.length);
       }
       return val;
     }
     function words(decode) {
       var self2 = {};
-      [1, 2, 4, 8].forEach(function(bytes) {
-        var bits = bytes * 8;
-        self2["word" + bits + "le"] = self2["word" + bits + "lu"] = decode(bytes, decodeLEu);
-        self2["word" + bits + "ls"] = decode(bytes, decodeLEs);
-        self2["word" + bits + "be"] = self2["word" + bits + "bu"] = decode(bytes, decodeBEu);
-        self2["word" + bits + "bs"] = decode(bytes, decodeBEs);
+      [1, 2, 4, 8].forEach(function(bytes2) {
+        var bits = bytes2 * 8;
+        self2["word" + bits + "le"] = self2["word" + bits + "lu"] = decode(bytes2, decodeLEu);
+        self2["word" + bits + "ls"] = decode(bytes2, decodeLEs);
+        self2["word" + bits + "be"] = self2["word" + bits + "bu"] = decode(bytes2, decodeBEu);
+        self2["word" + bits + "bs"] = decode(bytes2, decodeBEs);
       });
       self2.word8 = self2.word8u = self2.word8be;
       self2.word8s = self2.word8bs;
@@ -106726,11 +106726,11 @@ var require_light = __commonJS({
             return Object.keys(this.instances);
           }
           async clusterKeys() {
-            var cursor, end, found, i, k, keys4, len, next, start;
+            var cursor, end, found, i, k, keys5, len, next, start;
             if (this.connection == null) {
               return this.Promise.resolve(this.keys());
             }
-            keys4 = [];
+            keys5 = [];
             cursor = null;
             start = `b_${this.id}-`.length;
             end = "_settings".length;
@@ -106739,10 +106739,10 @@ var require_light = __commonJS({
               cursor = ~~next;
               for (i = 0, len = found.length; i < len; i++) {
                 k = found[i];
-                keys4.push(k.slice(start, -end));
+                keys5.push(k.slice(start, -end));
               }
             }
-            return keys4;
+            return keys5;
           }
           _startAutoCleanup() {
             var base;
@@ -109966,7 +109966,7 @@ var require_fast_deep_equal = __commonJS({
       if (a === b) return true;
       if (a && b && typeof a == "object" && typeof b == "object") {
         if (a.constructor !== b.constructor) return false;
-        var length, i, keys4;
+        var length, i, keys5;
         if (Array.isArray(a)) {
           length = a.length;
           if (length != b.length) return false;
@@ -109977,13 +109977,13 @@ var require_fast_deep_equal = __commonJS({
         if (a.constructor === RegExp) return a.source === b.source && a.flags === b.flags;
         if (a.valueOf !== Object.prototype.valueOf) return a.valueOf() === b.valueOf();
         if (a.toString !== Object.prototype.toString) return a.toString() === b.toString();
-        keys4 = Object.keys(a);
-        length = keys4.length;
+        keys5 = Object.keys(a);
+        length = keys5.length;
         if (length !== Object.keys(b).length) return false;
         for (i = length; i-- !== 0; )
-          if (!Object.prototype.hasOwnProperty.call(b, keys4[i])) return false;
+          if (!Object.prototype.hasOwnProperty.call(b, keys5[i])) return false;
         for (i = length; i-- !== 0; ) {
-          var key = keys4[i];
+          var key = keys5[i];
           if (!equal(a[key], b[key])) return false;
         }
         return true;
@@ -120092,8 +120092,8 @@ function canonicalJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
   }
-  const record6 = value;
-  return `{${Object.keys(record6).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record6[key])}`).join(",")}}`;
+  const record7 = value;
+  return `{${Object.keys(record7).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record7[key])}`).join(",")}}`;
 }
 function sha256(value) {
   return (0, import_crypto.createHash)("sha256").update(value, "utf8").digest("hex");
@@ -120476,13 +120476,13 @@ async function postBoundedMemoryJson(input) {
     }
     reader = response.body.getReader();
     const chunks = [];
-    let bytes = 0;
+    let bytes2 = 0;
     for (; ; ) {
       controller.signal.throwIfAborted();
       const next = await reader.read();
       if (next.done) break;
-      bytes += next.value.byteLength;
-      if (bytes > input.maxBytes)
+      bytes2 += next.value.byteLength;
+      if (bytes2 > input.maxBytes)
         throw new Error("review_memory_response_invalid");
       chunks.push(next.value);
     }
@@ -120703,8 +120703,8 @@ function createCapturedReviewSkills(value) {
     schemaVersion: reviewSkillsCompanionContract.schemaVersion,
     ...value
   });
-  const digest5 = `sha256:${(0, import_node_crypto.createHash)("sha256").update(canonicalReviewSkillsJson(payload), "utf8").digest("hex")}`;
-  const result2 = Object.freeze({ ...payload, digest: digest5 });
+  const digest6 = `sha256:${(0, import_node_crypto.createHash)("sha256").update(canonicalReviewSkillsJson(payload), "utf8").digest("hex")}`;
+  const result2 = Object.freeze({ ...payload, digest: digest6 });
   if (encoder.encode(canonicalReviewSkillsJson(result2)).length > reviewSkillsLimits.bundleBytes)
     fail("capture_too_large");
   return result2;
@@ -120720,10 +120720,10 @@ function parseCapturedReviewSkills(value) {
   ]);
   if (typeof value.digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.digest))
     fail("digest_invalid");
-  const { digest: digest5, ...payload } = value;
+  const { digest: digest6, ...payload } = value;
   const normalized = normalizePayload(payload);
   const expected = createCapturedReviewSkills(normalized);
-  if (expected.digest !== digest5) fail("digest_mismatch");
+  if (expected.digest !== digest6) fail("digest_mismatch");
   return expected;
 }
 
@@ -120749,6 +120749,7 @@ async function fetchCapturedReviewSkills(input) {
         method: "POST",
         headers: {
           authorization: `Bearer ${input.authorizationToken}`,
+          ...input.reviewerId ? { "x-reviewrouter-reviewer-id": input.reviewerId } : {},
           "content-type": "application/json",
           accept: "application/json"
         },
@@ -121709,9 +121710,9 @@ function requirePairs() {
     for (let index = 0, length = object4.length; index < length; index += 1) {
       const pair = object4[index];
       if (_toString.call(pair) !== "[object Object]") return false;
-      const keys4 = Object.keys(pair);
-      if (keys4.length !== 1) return false;
-      result2[index] = [keys4[0], pair[keys4[0]]];
+      const keys5 = Object.keys(pair);
+      if (keys5.length !== 1) return false;
+      result2[index] = [keys5[0], pair[keys5[0]]];
     }
     return true;
   }
@@ -121721,8 +121722,8 @@ function requirePairs() {
     const result2 = new Array(object4.length);
     for (let index = 0, length = object4.length; index < length; index += 1) {
       const pair = object4[index];
-      const keys4 = Object.keys(pair);
-      result2[index] = [keys4[0], pair[keys4[0]]];
+      const keys5 = Object.keys(pair);
+      result2[index] = [keys5[0], pair[keys5[0]]];
     }
     return result2;
   }
@@ -123231,9 +123232,9 @@ function requireDumper() {
   function compileStyleMap(schema2, map2) {
     if (map2 === null) return {};
     const result2 = {};
-    const keys4 = Object.keys(map2);
-    for (let index = 0, length = keys4.length; index < length; index += 1) {
-      let tag = keys4[index];
+    const keys5 = Object.keys(map2);
+    for (let index = 0, length = keys5.length; index < length; index += 1) {
+      let tag = keys5[index];
       let style = String(map2[tag]);
       if (tag.slice(0, 2) === "!!") {
         tag = "tag:yaml.org,2002:" + tag.slice(2);
@@ -125911,30 +125912,30 @@ async function materializeReviewSkills(input) {
   return (await materializeReviewSkillsWithDiagnostics(input)).executionInput;
 }
 async function materializeReviewSkillsWithDiagnostics(input) {
-  const fail2 = (code, context5 = {}) => {
+  const fail3 = (code, context5 = {}) => {
     throw new ReviewSkillsMaterializationError(code, {
       baseSha: input.baseSha,
       ...context5
     });
   };
-  const decode = (bytes, context5) => {
+  const decode = (bytes2, context5) => {
     try {
-      return decoder.decode(bytes);
+      return decoder.decode(bytes2);
     } catch {
-      return fail2("review_skills_git_text_invalid", context5);
+      return fail3("review_skills_git_text_invalid", context5);
     }
   };
   const gitRoots = [];
   const capture = structuredClone(input.capture);
   if (!/^[a-f0-9]{40}$/.test(input.baseSha) || capture.baseSha !== input.baseSha)
-    fail2("review_skills_capture_mismatch");
+    fail3("review_skills_capture_mismatch");
   const trees = /* @__PURE__ */ new Map();
-  const charge = (bytes, entries, path19, budget) => {
+  const charge = (bytes2, entries, path19, budget) => {
     if (!budget || !(path19 === budget.root || path19.startsWith(`${budget.root}/`)) || budget.paths.has(path19))
       return;
-    if (budget.bytes + bytes > TREE_BYTES || budget.entries + entries > reviewSkillsLimits.treeEntries)
-      fail2("review_skills_git_tree_too_large", { path: path19, field: "root" });
-    budget.bytes += bytes;
+    if (budget.bytes + bytes2 > TREE_BYTES || budget.entries + entries > reviewSkillsLimits.treeEntries)
+      fail3("review_skills_git_tree_too_large", { path: path19, field: "root" });
+    budget.bytes += bytes2;
     budget.entries += entries;
     budget.paths.add(path19);
   };
@@ -125961,7 +125962,7 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       return result2.stdout;
     } catch {
       input.signal?.throwIfAborted();
-      fail2("review_skills_git_read_failed", { path: path19 });
+      fail3("review_skills_git_read_failed", { path: path19 });
     }
   };
   const tree = async (oid, path19, budget) => {
@@ -125970,18 +125971,18 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       charge(previous.bytes, previous.entries.length, path19, budget);
       return previous.entries;
     }
-    const bytes = await git(["ls-tree", "-z", oid], TREE_BYTES, path19);
+    const bytes2 = await git(["ls-tree", "-z", oid], TREE_BYTES, path19);
     let count2 = 0;
-    for (const byte of bytes) if (byte === 0) count2++;
+    for (const byte of bytes2) if (byte === 0) count2++;
     if (count2 > reviewSkillsLimits.treeEntries)
-      fail2("review_skills_git_tree_too_large", { path: path19, field: "root" });
-    charge(bytes.byteLength, count2, path19, budget);
-    const entries = decode(bytes, { path: path19, field: "root" }).split("\0").filter(Boolean).map((row) => {
+      fail3("review_skills_git_tree_too_large", { path: path19, field: "root" });
+    charge(bytes2.byteLength, count2, path19, budget);
+    const entries = decode(bytes2, { path: path19, field: "root" }).split("\0").filter(Boolean).map((row) => {
       const matched = /^(\d{6}) (blob|tree|commit) ([a-f0-9]{40})\t([^\0]+)$/u.exec(row);
       if (!matched || [...matched[4]].some(
         (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 || character === "/" || character === "\\"
       ))
-        fail2("review_skills_git_path_invalid", { path: path19, field: "root" });
+        fail3("review_skills_git_path_invalid", { path: path19, field: "root" });
       return {
         mode: matched[1],
         type: matched[2],
@@ -125990,8 +125991,8 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       };
     });
     if (entries.length > reviewSkillsLimits.treeEntries)
-      fail2("review_skills_git_tree_too_large", { path: path19, field: "root" });
-    trees.set(oid, { entries, bytes: bytes.byteLength });
+      fail3("review_skills_git_tree_too_large", { path: path19, field: "root" });
+    trees.set(oid, { entries, bytes: bytes2.byteLength });
     return entries;
   };
   const find = async (path19, budget) => {
@@ -126005,7 +126006,7 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       if (!entry) return null;
       if (i === parts.length - 1) return entry;
       if (entry.mode !== "040000" || entry.type !== "tree")
-        fail2("review_skills_git_nonregular", { path: path19 });
+        fail3("review_skills_git_nonregular", { path: path19 });
       oid = entry.oid;
       directory = directory ? `${directory}/${parts[i]}` : parts[i];
     }
@@ -126014,28 +126015,28 @@ async function materializeReviewSkillsWithDiagnostics(input) {
   const read = async (path19, limit, budget) => {
     const entry = await find(path19, budget);
     if (!entry)
-      fail2("review_skills_reference_missing", { path: path19, field: "reference" });
+      fail3("review_skills_reference_missing", { path: path19, field: "reference" });
     if (!/^100(?:644|755)$/.test(entry.mode) || entry.type !== "blob")
-      fail2("review_skills_git_nonregular", { path: path19 });
+      fail3("review_skills_git_nonregular", { path: path19 });
     const size = Number(
       decode(await git(["cat-file", "-s", entry.oid], 128, path19), {
         path: path19
       }).trim()
     );
     if (!Number.isSafeInteger(size) || size > limit)
-      fail2("review_skills_git_blob_too_large", { path: path19 });
+      fail3("review_skills_git_blob_too_large", { path: path19 });
     const content = decode(
       await git(["cat-file", "blob", entry.oid], limit + 1, path19),
       { path: path19 }
     );
     if (content.includes("\0"))
-      fail2("review_skills_git_text_invalid", { path: path19 });
+      fail3("review_skills_git_text_invalid", { path: path19 });
     return content;
   };
   const sources = [];
   for (const source of capture.gitSources) {
     if (source.root !== ".reviewrouter/skills" && source.root !== ".agents/skills")
-      fail2("review_skills_git_root_invalid", { field: "root" });
+      fail3("review_skills_git_root_invalid", { field: "root" });
     const budget = {
       root: source.root,
       bytes: 0,
@@ -126048,27 +126049,27 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       continue;
     }
     if (root.mode !== "040000" || root.type !== "tree")
-      fail2("review_skills_git_nonregular", {
+      fail3("review_skills_git_nonregular", {
         path: source.root,
         field: "root"
       });
     const before = sources.length;
     for (const child of await tree(root.oid, source.root, budget)) {
       if (child.mode === "120000" || child.mode === "160000")
-        fail2("review_skills_git_nonregular", {
+        fail3("review_skills_git_nonregular", {
           path: `${source.root}/${child.name}`
         });
       if (child.type !== "tree") continue;
       const skill = (await tree(child.oid, `${source.root}/${child.name}`, budget)).find((entry) => entry.name === "SKILL.md");
       if (!skill) continue;
       if (!/^100(?:644|755)$/.test(skill.mode) || skill.type !== "blob")
-        fail2("review_skills_git_nonregular", {
+        fail3("review_skills_git_nonregular", {
           path: `${source.root}/${child.name}/SKILL.md`
         });
       const directory = `${source.root}/${child.name}`;
       sources.push({ directory, path: `${directory}/SKILL.md`, budget });
       if (sources.length + capture.webSkills.length > reviewSkillsLimits.skillsPerRun)
-        fail2("review_skills_count_invalid", {
+        fail3("review_skills_count_invalid", {
           path: source.root,
           field: "root"
         });
@@ -126105,7 +126106,7 @@ async function materializeReviewSkillsWithDiagnostics(input) {
     const visit = async (current, text3, depth) => {
       totalBytes += Buffer.byteLength(text3);
       if (totalBytes > reviewSkillsLimits.bundleBytes)
-        fail2("review_skills_bundle_too_large", { path: current });
+        fail3("review_skills_bundle_too_large", { path: current });
       let references;
       try {
         references = markdownReferences(text3);
@@ -126118,7 +126119,7 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       }
       for (const target of references) {
         if (depth >= reviewSkillsLimits.referenceDepth)
-          fail2("review_skills_reference_depth", {
+          fail3("review_skills_reference_depth", {
             path: current,
             field: "reference",
             reference: target
@@ -126127,27 +126128,27 @@ async function materializeReviewSkillsWithDiagnostics(input) {
           import_node_path.posix.join(import_node_path.posix.dirname(current), target)
         );
         if (!resolved.startsWith(`${source.directory}/`) || resolved === source.directory)
-          fail2("review_skills_reference_traversal", {
+          fail3("review_skills_reference_traversal", {
             path: current,
             field: "reference",
             reference: target
           });
         if (visiting.has(resolved))
-          fail2("review_skills_reference_cycle", {
+          fail3("review_skills_reference_cycle", {
             path: current,
             field: "reference",
             reference: target
           });
         if (resources.has(resolved)) continue;
         if (resources.size >= reviewSkillsLimits.referencesPerSkill)
-          fail2("review_skills_reference_count", {
+          fail3("review_skills_reference_count", {
             path: current,
             field: "reference",
             reference: target
           });
-        let reference;
+        let reference2;
         try {
-          reference = await read(
+          reference2 = await read(
             resolved,
             reviewSkillsLimits.referenceBytes,
             source.budget
@@ -126164,9 +126165,9 @@ async function materializeReviewSkillsWithDiagnostics(input) {
             reference: target
           });
         }
-        resources.set(resolved, reference);
+        resources.set(resolved, reference2);
         visiting.add(resolved);
-        await visit(resolved, reference, depth + 1);
+        await visit(resolved, reference2, depth + 1);
         visiting.delete(resolved);
       }
     };
@@ -126470,9 +126471,9 @@ var UsageError = class extends Error {
 var invalid2 = () => {
   throw new UsageError("usage_invalid_fact");
 };
-function exact(value, keys4, optionalKeys2 = []) {
-  if (!value || typeof value !== "object" || Array.isArray(value) || keys4.some((k) => !Object.hasOwn(value, k)) || Object.keys(value).some(
-    (k) => !keys4.includes(k) && !optionalKeys2.includes(k)
+function exact(value, keys5, optionalKeys2 = []) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || keys5.some((k) => !Object.hasOwn(value, k)) || Object.keys(value).some(
+    (k) => !keys5.includes(k) && !optionalKeys2.includes(k)
   ))
     invalid2();
 }
@@ -126665,16 +126666,16 @@ var UsageDelivery = class _UsageDelivery {
   coverageAckRevision = 0;
   /** Pre-register the public key under current OIDC authorization, never expose custody. */
   static prepareRegistration() {
-    const keys4 = (0, import_crypto3.generateKeyPairSync)("ed25519");
+    const keys5 = (0, import_crypto3.generateKeyPairSync)("ed25519");
     return {
-      publicKey: keys4.publicKey.export({ type: "spki", format: "pem" }).toString(),
-      acceptGrant: (options, grant) => _UsageDelivery.fromGrant(options, grant, keys4.privateKey)
+      publicKey: keys5.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      acceptGrant: (options, grant) => _UsageDelivery.fromGrant(options, grant, keys5.privateKey)
     };
   }
   static async create(options) {
     const url3 = new URL("/api/provider-usage/grants", options.apiUrl);
     if (url3.protocol !== "https:") throw new Error("usage_https_required");
-    const keys4 = (0, import_crypto3.generateKeyPairSync)("ed25519");
+    const keys5 = (0, import_crypto3.generateKeyPairSync)("ed25519");
     const response = await (options.fetchImpl ?? fetch)(url3, {
       method: "POST",
       redirect: "error",
@@ -126685,12 +126686,12 @@ var UsageDelivery = class _UsageDelivery {
       },
       body: JSON.stringify({
         invocationId: options.invocationId,
-        publicKey: keys4.publicKey.export({ type: "spki", format: "pem" })
+        publicKey: keys5.publicKey.export({ type: "spki", format: "pem" })
       })
     });
     if (!response.ok) throw new Error("usage_grant_unavailable");
     const grant = await response.json();
-    return _UsageDelivery.fromGrant(options, grant, keys4.privateKey);
+    return _UsageDelivery.fromGrant(options, grant, keys5.privateKey);
   }
   static fromGrant(options, grant, privateKey) {
     if (!grant.grantId || !grant.grantToken || !grant.scope || typeof grant.scope.sourceInstance !== "string" || typeof grant.scope.callIdPrefix !== "string" || !grant.scope.callIdPrefix || typeof grant.scope.provider !== "string" || typeof grant.scope.runtimeType !== "string" || !["direct", "gateway"].includes(grant.scope.route) || grant.scope.invocationId !== options.invocationId || !Number.isSafeInteger(grant.scope.runAttempt) || grant.scope.runAttempt < 1 || !Number.isFinite(Date.parse(grant.expiresAt)) || Date.parse(grant.expiresAt) <= Date.now() || !/^[A-Za-z0-9_-]{1,256}$/.test(grant.scope.invocationId) || ![
@@ -126869,16 +126870,16 @@ var UsageDelivery = class _UsageDelivery {
       Buffer.from(canonicalJson3(envelope)),
       this.privateKey
     ).toString("base64");
-    const bytes = canonicalJson3({ ...envelope, signature });
+    const bytes2 = canonicalJson3({ ...envelope, signature });
     const factEnvelope = { ...envelope };
     delete factEnvelope.producerCoverage;
     const factBytes = canonicalJson3({ ...factEnvelope, signature });
-    if (Buffer.byteLength(factBytes) > (this.options.maxSpoolBytes ?? 4 * 1024 * 1024) || Buffer.byteLength(bytes) > (this.options.maxSpoolBytes ?? 4 * 1024 * 1024) + 2048)
+    if (Buffer.byteLength(factBytes) > (this.options.maxSpoolBytes ?? 4 * 1024 * 1024) || Buffer.byteLength(bytes2) > (this.options.maxSpoolBytes ?? 4 * 1024 * 1024) + 2048)
       throw new Error("usage_spool_overflow");
     const temporary = `${this.artifactPath}.new`;
     const fd = (0, import_fs.openSync)(temporary, "wx", 384);
     try {
-      (0, import_fs.writeFileSync)(fd, bytes);
+      (0, import_fs.writeFileSync)(fd, bytes2);
       (0, import_fs.fsyncSync)(fd);
     } catch (error3) {
       try {
@@ -127148,8 +127149,8 @@ function canonicalJson4(value) {
     return `[${value.map(canonicalJson4).join(",")}]`;
   }
   if (typeof value === "object") {
-    const record6 = value;
-    return `{${Object.keys(record6).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson4(record6[key])}`).join(",")}}`;
+    const record7 = value;
+    return `{${Object.keys(record7).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson4(record7[key])}`).join(",")}}`;
   }
   throw new Error("context_gateway_canonical_value_invalid");
 }
@@ -127585,13 +127586,13 @@ var util3;
     });
   };
   util4.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object4) => {
-    const keys4 = [];
+    const keys5 = [];
     for (const key in object4) {
       if (Object.prototype.hasOwnProperty.call(object4, key)) {
-        keys4.push(key);
+        keys5.push(key);
       }
     }
-    return keys4;
+    return keys5;
   };
   util4.find = (arr, checker) => {
     for (const item of arr) {
@@ -129819,8 +129820,8 @@ var ZodObject = class _ZodObject extends ZodType {
     if (this._cached !== null)
       return this._cached;
     const shape = this._def.shape();
-    const keys4 = util3.objectKeys(shape);
-    this._cached = { shape, keys: keys4 };
+    const keys5 = util3.objectKeys(shape);
+    this._cached = { shape, keys: keys5 };
     return this._cached;
   }
   _parse(input) {
@@ -131683,12 +131684,12 @@ function getElementAtPath(obj, path19) {
   return path19.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
-  const keys4 = Object.keys(promisesObj);
-  const promises4 = keys4.map((key) => promisesObj[key]);
+  const keys5 = Object.keys(promisesObj);
+  const promises4 = keys5.map((key) => promisesObj[key]);
   return Promise.all(promises4).then((results) => {
     const resolvedObj = {};
-    for (let i = 0; i < keys4.length; i++) {
-      resolvedObj[keys4[i]] = results[i];
+    for (let i = 0; i < keys5.length; i++) {
+      resolvedObj[keys5[i]] = results[i];
     }
     return resolvedObj;
   });
@@ -133254,8 +133255,8 @@ function handleOptionalObjectResult(result2, final, key, input) {
 var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
   $ZodType.init(inst, def);
   const _normalized = cached(() => {
-    const keys4 = Object.keys(def.shape);
-    for (const k of keys4) {
+    const keys5 = Object.keys(def.shape);
+    for (const k of keys5) {
       if (!(def.shape[k] instanceof $ZodType)) {
         throw new Error(`Invalid element at key "${k}": expected a Zod schema`);
       }
@@ -133263,9 +133264,9 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
     const okeys = optionalKeys(def.shape);
     return {
       shape: def.shape,
-      keys: keys4,
-      keySet: new Set(keys4),
-      numKeys: keys4.length,
+      keys: keys5,
+      keySet: new Set(keys5),
+      numKeys: keys5.length,
       optionalKeys: new Set(okeys)
     };
   });
@@ -135166,11 +135167,11 @@ var ZodEnum2 = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
   ZodType2.init(inst, def);
   inst.enum = def.entries;
   inst.options = Object.values(def.entries);
-  const keys4 = new Set(Object.keys(def.entries));
+  const keys5 = new Set(Object.keys(def.entries));
   inst.extract = (values, params) => {
     const newEntries = {};
     for (const value of values) {
-      if (keys4.has(value)) {
+      if (keys5.has(value)) {
         newEntries[value] = def.entries[value];
       } else
         throw new Error(`Key ${value} not found in enum`);
@@ -135185,7 +135186,7 @@ var ZodEnum2 = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
   inst.exclude = (values, params) => {
     const newEntries = { ...def.entries };
     for (const value of values) {
-      if (keys4.has(value)) {
+      if (keys5.has(value)) {
         delete newEntries[value];
       } else
         throw new Error(`Key ${value} not found in enum`);
@@ -142656,7 +142657,7 @@ function createPinnedHttpsFetch(input) {
       throw contextToolsError("request_too_large");
     return new Promise((resolve5, reject) => {
       let settled = false;
-      const fail2 = (code) => {
+      const fail3 = (code) => {
         if (!settled) {
           settled = true;
           reject(contextToolsError(code));
@@ -142677,29 +142678,29 @@ function createPinnedHttpsFetch(input) {
           const status = res.statusCode ?? 0;
           if (status < 200 || status > 599) {
             res.destroy();
-            fail2("response_invalid");
+            fail3("response_invalid");
             return;
           }
           if (status >= 300 && status < 400) {
             res.destroy();
-            fail2("redirect_forbidden");
+            fail3("redirect_forbidden");
             return;
           }
           if (status === 401 || status === 403) {
             res.destroy();
-            fail2("remote_auth_unavailable");
+            fail3("remote_auth_unavailable");
             return;
           }
           const chunks = [];
-          let bytes = 0;
+          let bytes2 = 0;
           res.on("data", (chunk) => {
-            bytes += chunk.length;
-            if (bytes > input.responseBytes) {
+            bytes2 += chunk.length;
+            if (bytes2 > input.responseBytes) {
               res.destroy();
-              fail2("response_too_large");
+              fail3("response_too_large");
             } else chunks.push(chunk);
           });
-          res.on("error", () => fail2("response_failed"));
+          res.on("error", () => fail3("response_failed"));
           res.on("end", () => {
             if (settled) return;
             settled = true;
@@ -142724,14 +142725,14 @@ function createPinnedHttpsFetch(input) {
       );
       const deadline = setTimeout(
         () => {
-          fail2("deadline");
+          fail3("deadline");
           req.destroy();
         },
         Math.max(1, input.timeoutMs - (Date.now() - began))
       );
       deadline.unref();
       const abort = () => {
-        fail2("aborted");
+        fail3("aborted");
         req.destroy();
       };
       init?.signal?.addEventListener("abort", abort, { once: true });
@@ -142739,12 +142740,12 @@ function createPinnedHttpsFetch(input) {
         socket.once("secureConnect", () => {
           const actual = socket.remoteAddress?.replace(/^::ffff:/, "");
           if (!actual || normalizeAddress(actual) !== normalizeAddress(address.address)) {
-            fail2("destination_changed");
+            fail3("destination_changed");
             req.destroy();
           }
         });
       });
-      req.on("error", () => fail2("request_failed"));
+      req.on("error", () => fail3("request_failed"));
       req.on("close", () => {
         clearTimeout(deadline);
         init?.signal?.removeEventListener("abort", abort);
@@ -142993,10 +142994,10 @@ async function serveContextTools(input) {
       return;
     }
     const chunks = [];
-    let bytes = 0;
+    let bytes2 = 0;
     for await (const chunk of req) {
-      bytes += chunk.length;
-      if (bytes > 131072) {
+      bytes2 += chunk.length;
+      if (bytes2 > 131072) {
         res.writeHead(413);
         res.end();
         return;
@@ -143169,6 +143170,7 @@ async function prepareOcrContextTools(input) {
           cache: "no-store",
           headers: {
             authorization: `Bearer ${authorization.authorizationToken}`,
+            ...input.reviewerId ? { "x-reviewrouter-reviewer-id": input.reviewerId } : {},
             "content-type": "application/json"
           },
           body: JSON.stringify({
@@ -143196,11 +143198,11 @@ async function prepareOcrContextTools(input) {
     const reader = response.body?.getReader();
     if (!reader) throw contextToolsError("server_unavailable");
     const chunks = [];
-    let bytes = 0;
+    let bytes2 = 0;
     try {
       for (let item = await reader.read(); !item.done; item = await reader.read()) {
-        bytes += item.value.byteLength;
-        if (bytes > plan.limits.responseBytes)
+        bytes2 += item.value.byteLength;
+        if (bytes2 > plan.limits.responseBytes)
           throw contextToolsError("response_too_large");
         chunks.push(item.value);
       }
@@ -143406,7 +143408,10 @@ function parseOcrReviewOutcome(value) {
     throw new OcrManagedContractViolation(issues);
   };
   if (!isRecord(value)) {
-    issues.push({ code: "outcome_not_an_object", detail: "reviewrouter_outcome" });
+    issues.push({
+      code: "outcome_not_an_object",
+      detail: "reviewrouter_outcome"
+    });
     return violation();
   }
   if (value.schema_version !== OCR_OUTCOME_SCHEMA_VERSION) {
@@ -143442,7 +143447,10 @@ function parseOcrReviewOutcome(value) {
   };
   const runStopCause = parseStopCause(value.run_stop_cause, "run_stop_cause");
   if (value.run_stop_cause === void 0) {
-    issues.push({ code: "outcome_stop_cause_missing", detail: "run_stop_cause" });
+    issues.push({
+      code: "outcome_stop_cause_missing",
+      detail: "run_stop_cause"
+    });
     return violation();
   }
   if (value.run_stop_cause !== null && value.run_stop_cause !== void 0 && runStopCause === null) {
@@ -143471,11 +143479,17 @@ function parseOcrReviewOutcome(value) {
     const pathsRaw = groupRaw.paths;
     const paths = [];
     if (!Array.isArray(pathsRaw) || pathsRaw.length === 0) {
-      issues.push({ code: "outcome_group_paths_invalid", detail: field("paths") });
+      issues.push({
+        code: "outcome_group_paths_invalid",
+        detail: field("paths")
+      });
     } else {
       for (const path19 of pathsRaw) {
         if (typeof path19 !== "string" || path19.length === 0) {
-          issues.push({ code: "outcome_group_paths_invalid", detail: field("paths") });
+          issues.push({
+            code: "outcome_group_paths_invalid",
+            detail: field("paths")
+          });
           continue;
         }
         if (paths.includes(path19) || seenPaths.has(path19)) {
@@ -143533,7 +143547,10 @@ function parseOcrReviewOutcome(value) {
     const parsePhase = (name) => {
       const raw = phasesRaw[name];
       if (!isRecord(raw)) {
-        issues.push({ code: "outcome_phase_invalid", detail: field(`phases.${name}`) });
+        issues.push({
+          code: "outcome_phase_invalid",
+          detail: field(`phases.${name}`)
+        });
         return null;
       }
       const state3 = parseState(raw.state, field(`phases.${name}.state`));
@@ -143712,7 +143729,10 @@ function parseOcrNativeReviewResult(raw, admission) {
   }
   const manifestInput = isRecord(manifestRaw.input) ? manifestRaw.input : null;
   if (manifestInput === null) {
-    issues.push({ code: "native_manifest_input_missing", detail: "manifest.input" });
+    issues.push({
+      code: "native_manifest_input_missing",
+      detail: "manifest.input"
+    });
     return violation();
   }
   const manifest = Object.freeze({
@@ -143726,23 +143746,38 @@ function parseOcrNativeReviewResult(raw, admission) {
     })
   });
   if (manifest.schemaVersion !== "ocr.run-manifest/v1") {
-    issues.push({ code: "native_manifest_schema_version", detail: manifest.schemaVersion });
+    issues.push({
+      code: "native_manifest_schema_version",
+      detail: manifest.schemaVersion
+    });
   }
   if (manifest.operation !== "review") {
-    issues.push({ code: "native_manifest_operation", detail: manifest.operation });
+    issues.push({
+      code: "native_manifest_operation",
+      detail: manifest.operation
+    });
   }
   if (manifest.input.mode !== "range") {
     issues.push({ code: "native_manifest_mode", detail: manifest.input.mode });
   }
   if (!sameSha(manifest.input.resolvedBase, admission.mergeBaseSha)) {
-    issues.push({ code: "native_manifest_refs_mismatch", detail: "resolved_base" });
+    issues.push({
+      code: "native_manifest_refs_mismatch",
+      detail: "resolved_base"
+    });
   }
   if (!sameSha(manifest.input.resolvedHead, admission.headSha)) {
-    issues.push({ code: "native_manifest_refs_mismatch", detail: "resolved_head" });
+    issues.push({
+      code: "native_manifest_refs_mismatch",
+      detail: "resolved_head"
+    });
   }
   const outcomeRaw = raw.reviewrouter_outcome;
   if (outcomeRaw === void 0 || outcomeRaw === null) {
-    issues.push({ code: "managed_outcome_missing", detail: "reviewrouter_outcome" });
+    issues.push({
+      code: "managed_outcome_missing",
+      detail: "reviewrouter_outcome"
+    });
     return violation();
   }
   let outcome;
@@ -144012,13 +144047,13 @@ function readAdmittedGatewayCodexModelSettings(runtime, selectedModel) {
     return Object.freeze({ model: value.model, reasoning: null });
   if (!hasKeys(value.reasoning, ["allowed", "default"])) throw invalid6();
   const { allowed, default: defaultEffort } = value.reasoning;
-  if (!Array.isArray(allowed) || allowed.length === 0 || allowed.length > 7 || allowed.some((effort) => !isCanonicalEffort(effort)) || new Set(allowed).size !== allowed.length || !isCanonicalEffort(defaultEffort) || !allowed.includes(defaultEffort))
+  if (!Array.isArray(allowed) || allowed.length === 0 || allowed.length > 7 || allowed.some((effort2) => !isCanonicalEffort(effort2)) || new Set(allowed).size !== allowed.length || !isCanonicalEffort(defaultEffort) || !allowed.includes(defaultEffort))
     throw invalid6();
   return Object.freeze({
     model: value.model,
     reasoning: Object.freeze({
       allowed: Object.freeze(
-        canonicalEfforts.filter((effort) => allowed.includes(effort))
+        canonicalEfforts.filter((effort2) => allowed.includes(effort2))
       ),
       default: defaultEffort
     })
@@ -144054,8 +144089,8 @@ function resolveAdmittedGatewayOcrReasoningEffort(runtime, selectedModel, savedE
 function isCanonicalEffort(value) {
   return typeof value === "string" && canonicalEfforts.includes(value);
 }
-function hasKeys(value, keys4) {
-  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(",") === [...keys4].sort().join(",");
+function hasKeys(value, keys5) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(",") === [...keys5].sort().join(",");
 }
 
 // src/review-orchestration/infrastructure/anthropic-messages-codec.ts
@@ -144212,16 +144247,16 @@ async function readOcrOutputFileAfterClose(readFile9, statSize, outputPath) {
   if (size > OCR_RESULT_FILE_LIMIT_BYTES) {
     throw new OcrOutputTooLargeError("result_file");
   }
-  const bytes = await readFile9(outputPath);
-  if (bytes.length > OCR_RESULT_FILE_LIMIT_BYTES) {
+  const bytes2 = await readFile9(outputPath);
+  if (bytes2.length > OCR_RESULT_FILE_LIMIT_BYTES) {
     throw new OcrOutputTooLargeError("result_file");
   }
-  return bytes;
+  return bytes2;
 }
 function truncateDiagnosticTail(value) {
-  const bytes = Buffer.from(value, "utf8");
-  if (bytes.length <= OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES) return value;
-  return bytes.subarray(0, OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES).toString("utf8");
+  const bytes2 = Buffer.from(value, "utf8");
+  if (bytes2.length <= OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES) return value;
+  return bytes2.subarray(0, OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES).toString("utf8");
 }
 var OcrReviewAcceptanceError = class extends Error {
   constructor(code, detail) {
@@ -144668,9 +144703,9 @@ function compactDiffForPrompt(diff, files, options = {}) {
     }
     const file = fileByName.get(chunk.bPath) || fileByName.get(chunk.aPath);
     const filename = file?.filename || chunk.bPath;
-    const bytes = Buffer.byteLength(chunk.text, "utf8");
+    const bytes2 = Buffer.byteLength(chunk.text, "utf8");
     const changes = file?.changes ?? 0;
-    const reason = getSummaryOnlyDiffReason(filename, bytes, changes, {
+    const reason = getSummaryOnlyDiffReason(filename, bytes2, changes, {
       maxFullFileBytes,
       maxFullFileChanges
     });
@@ -144684,7 +144719,7 @@ function compactDiffForPrompt(diff, files, options = {}) {
       additions: file?.additions ?? 0,
       deletions: file?.deletions ?? 0,
       changes,
-      bytes
+      bytes: bytes2
     };
     summaryOnlyFiles.push(metadata2);
     output.push(formatSummaryOnlyChunk(chunk, metadata2));
@@ -144725,13 +144760,13 @@ function splitDiffIntoChunks(diff) {
   push();
   return chunks;
 }
-function getSummaryOnlyDiffReason(filename, bytes, changes, options = {}) {
+function getSummaryOnlyDiffReason(filename, bytes2, changes, options = {}) {
   const maxFullFileBytes = options.maxFullFileBytes ?? 4e4;
   const maxFullFileChanges = options.maxFullFileChanges ?? 800;
   const lower = filename.toLowerCase();
   if (isDependencyLockPath(lower)) return "dependency lock file";
   if (isGeneratedPath(filename)) return "generated file";
-  if (bytes > maxFullFileBytes)
+  if (bytes2 > maxFullFileBytes)
     return `large diff over ${maxFullFileBytes} bytes`;
   if (changes > maxFullFileChanges)
     return `large diff over ${maxFullFileChanges} changed lines`;
@@ -144788,7 +144823,7 @@ function unquoteGitPath(path19) {
 // src/utils/token-estimation.ts
 function estimateTokensSimple(text3) {
   const characters = text3.length;
-  const bytes = Buffer.byteLength(text3, "utf8");
+  const bytes2 = Buffer.byteLength(text3, "utf8");
   let tokens = Math.ceil(characters / 4);
   const codeIndicators = (text3.match(/[{}()[\];]/g) || []).length;
   const isCodeHeavy = codeIndicators > characters * 0.05;
@@ -144797,7 +144832,7 @@ function estimateTokensSimple(text3) {
   }
   return {
     tokens,
-    bytes,
+    bytes: bytes2,
     characters,
     method: "simple"
   };
@@ -146067,8 +146102,8 @@ function parseReviewAgentTurnOutput(value) {
   return Object.freeze({
     outputVersion: REVIEW_TURN_OUTPUT_VERSION,
     findings: requireArray(root.findings, "findings").map((item) => {
-      const record6 = requireRecord(item, "finding");
-      requireExactKeys(record6, [
+      const record7 = requireRecord(item, "finding");
+      requireExactKeys(record7, [
         "severity",
         "title",
         "body",
@@ -146078,16 +146113,16 @@ function parseReviewAgentTurnOutput(value) {
       ]);
       return Object.freeze({
         severity: requireEnum(
-          record6.severity,
+          record7.severity,
           ReviewTurnFindingSeverity,
           "finding_severity"
         ),
-        title: requireString(record6.title, "finding_title", 240),
-        body: requireString(record6.body, "finding_body", 16e3),
-        path: requireString(record6.path, "finding_path", 2e3),
-        line: requireNullablePositiveInteger(record6.line, "finding_line"),
+        title: requireString(record7.title, "finding_title", 240),
+        body: requireString(record7.body, "finding_body", 16e3),
+        path: requireString(record7.path, "finding_path", 2e3),
+        line: requireNullablePositiveInteger(record7.line, "finding_line"),
         evidenceOperationReceiptIds: requireDigestArray(
-          record6.evidenceOperationReceiptIds,
+          record7.evidenceOperationReceiptIds,
           "finding_receipts"
         )
       });
@@ -146097,17 +146132,17 @@ function parseReviewAgentTurnOutput(value) {
     ),
     closureClaims: requireArray(root.closureClaims, "closure_claims").map(
       (item) => {
-        const record6 = requireRecord(item, "closure_claim");
-        requireExactKeys(record6, ["obligationId", "operationReceiptIds"]);
+        const record7 = requireRecord(item, "closure_claim");
+        requireExactKeys(record7, ["obligationId", "operationReceiptIds"]);
         const operationReceiptIds = requireDigestArray(
-          record6.operationReceiptIds,
+          record7.operationReceiptIds,
           "closure_receipts"
         );
         if (operationReceiptIds.length === 0) {
           throw new Error("review_agent_closure_receipts_required");
         }
         return Object.freeze({
-          obligationId: requireDigest(record6.obligationId, "obligation_id"),
+          obligationId: requireDigest(record7.obligationId, "obligation_id"),
           operationReceiptIds
         });
       }
@@ -146116,14 +146151,14 @@ function parseReviewAgentTurnOutput(value) {
       root.operationBackedDiscoveryClaims,
       "operation_backed_discovery_claims"
     ).map((item) => {
-      const record6 = requireRecord(item, "operation_backed_discovery_claim");
-      requireExactKeys(record6, [
+      const record7 = requireRecord(item, "operation_backed_discovery_claim");
+      requireExactKeys(record7, [
         "sourceObligationId",
         "query",
         "operationReceiptIds"
       ]);
       const operationReceiptIds = requireDigestArray(
-        record6.operationReceiptIds,
+        record7.operationReceiptIds,
         "operation_backed_discovery_receipts"
       );
       if (operationReceiptIds.length === 0) {
@@ -146133,11 +146168,11 @@ function parseReviewAgentTurnOutput(value) {
       }
       return Object.freeze({
         sourceObligationId: requireDigest(
-          record6.sourceObligationId,
+          record7.sourceObligationId,
           "source_obligation_id"
         ),
         query: requireStrictString(
-          record6.query,
+          record7.query,
           "operation_backed_discovery_query",
           1024
         ),
@@ -146148,17 +146183,17 @@ function parseReviewAgentTurnOutput(value) {
       root.unresolvableClaims,
       "unresolvable_claims"
     ).map((item) => {
-      const record6 = requireRecord(item, "unresolvable_claim");
-      requireExactKeys(record6, [
+      const record7 = requireRecord(item, "unresolvable_claim");
+      requireExactKeys(record7, [
         "obligationId",
         "reason",
         "evidenceOperationReceiptIds"
       ]);
       return Object.freeze({
-        obligationId: requireDigest(record6.obligationId, "obligation_id"),
-        reason: requireString(record6.reason, "unresolvable_reason", 2e3),
+        obligationId: requireDigest(record7.obligationId, "obligation_id"),
+        reason: requireString(record7.reason, "unresolvable_reason", 2e3),
         evidenceOperationReceiptIds: requireDigestArray(
-          record6.evidenceOperationReceiptIds,
+          record7.evidenceOperationReceiptIds,
           "unresolvable_receipts"
         )
       });
@@ -146192,19 +146227,19 @@ function parseReviewTurnObligationProposals(value) {
   return Object.freeze(proposals);
 }
 function parseReviewTurnObligationProposal(value) {
-  const record6 = requireRecord(value, "obligation_proposal");
-  if (!Object.prototype.hasOwnProperty.call(record6, "canonicalSubject") && !Object.prototype.hasOwnProperty.call(record6, "canonicalRequirement")) {
-    return normalizeProviderObligationProposal(record6);
+  const record7 = requireRecord(value, "obligation_proposal");
+  if (!Object.prototype.hasOwnProperty.call(record7, "canonicalSubject") && !Object.prototype.hasOwnProperty.call(record7, "canonicalRequirement")) {
+    return normalizeProviderObligationProposal(record7);
   }
-  requireExactKeys(record6, [
+  requireExactKeys(record7, [
     "kind",
     "canonicalSubject",
     "canonicalRequirement",
     "riskPriority"
   ]);
-  const kind = requireProviderProposableObligationKind(record6.kind);
+  const kind = requireProviderProposableObligationKind(record7.kind);
   const canonicalRequirement = requireCanonicalText(
-    record6.canonicalRequirement,
+    record7.canonicalRequirement,
     "obligation_requirement",
     MAX_CANONICAL_REQUIREMENT_LENGTH
   );
@@ -146216,7 +146251,7 @@ function parseReviewTurnObligationProposal(value) {
     subjectVersion: FILE_READ_SUBJECT_VERSION
   });
   const canonicalSubject = requireCanonicalText(
-    record6.canonicalSubject,
+    record7.canonicalSubject,
     "obligation_subject",
     MAX_CANONICAL_SUBJECT_LENGTH
   );
@@ -146228,27 +146263,27 @@ function parseReviewTurnObligationProposal(value) {
     canonicalSubject: expectedSubject,
     canonicalRequirement,
     riskPriority: requireBoundedInteger(
-      record6.riskPriority,
+      record7.riskPriority,
       "risk_priority",
       0,
       MAX_RISK_PRIORITY
     )
   });
 }
-function normalizeProviderObligationProposal(record6) {
+function normalizeProviderObligationProposal(record7) {
   requireExactKeysForField(
-    record6,
+    record7,
     ["kind", "path", "revision", "riskPriority"],
     "obligation_proposal"
   );
-  const kind = requireProviderProposableObligationKind(record6.kind);
+  const kind = requireProviderProposableObligationKind(record7.kind);
   const path19 = requireRepositoryRelativePath(
-    record6.path,
+    record7.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
   );
   const revision = requireEnum(
-    record6.revision,
+    record7.revision,
     ReviewTurnProposalRevision,
     "obligation_requirement_revision"
   );
@@ -146269,7 +146304,7 @@ function normalizeProviderObligationProposal(record6) {
       revision
     }),
     riskPriority: requireBoundedInteger(
-      record6.riskPriority,
+      record7.riskPriority,
       "risk_priority",
       0,
       MAX_RISK_PRIORITY
@@ -146345,16 +146380,16 @@ function requireRecord(value, field) {
   }
   return value;
 }
-function requireExactKeys(record6, keys4) {
-  const actual = Object.keys(record6).sort();
-  const expected = [...keys4].sort();
+function requireExactKeys(record7, keys5) {
+  const actual = Object.keys(record7).sort();
+  const expected = [...keys5].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     throw new Error("review_agent_output_fields_invalid");
   }
 }
-function requireExactKeysForField(record6, keys4, field) {
-  const actual = Object.keys(record6).sort();
-  const expected = [...keys4].sort();
+function requireExactKeysForField(record7, keys5, field) {
+  const actual = Object.keys(record7).sort();
+  const expected = [...keys5].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     throw new Error(`review_agent_${field}_invalid`);
   }
@@ -148383,14 +148418,14 @@ var ConfigLoader = class {
     return cleaned.length > 0 ? cleaned : void 0;
   }
   static codexProviderFromModel(value) {
-    const model = value?.trim();
-    if (!model) return void 0;
-    return model.startsWith("codex/") ? model : `codex/${model}`;
+    const model2 = value?.trim();
+    if (!model2) return void 0;
+    return model2.startsWith("codex/") ? model2 : `codex/${model2}`;
   }
   static claudeProviderFromModel(value) {
-    const model = value?.trim();
-    if (!model) return void 0;
-    return model.startsWith("claude/") ? model : `claude/${model}`;
+    const model2 = value?.trim();
+    if (!model2) return void 0;
+    return model2.startsWith("claude/") ? model2 : `claude/${model2}`;
   }
   static inferredProviderFromAuthMode(authMode, claudeProvider, codexProvider) {
     switch ((authMode || "").trim()) {
@@ -148554,6 +148589,326 @@ var ConfigLoader = class {
   }
 };
 
+// src/control-plane/generated/review-action-v2/review-agent-profile.ts
+function parseReviewAgentProfiles(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 16)
+    invalid3("review_agent_profiles_invalid");
+  const refs = /* @__PURE__ */ new Set();
+  return Object.freeze(
+    value.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item))
+        invalid3("review_agent_profile_invalid");
+      const row = item;
+      const names = [
+        "profileRef",
+        "agentKind",
+        "binarySha256",
+        "packageVersion",
+        "modelTransports",
+        "contextGateway",
+        "cancellation"
+      ];
+      if (Object.hasOwn(row, "reviewSkillsVersion")) {
+        if (row.reviewSkillsVersion !== 1)
+          invalid3("review_agent_skills_capability_invalid");
+        names.push("reviewSkillsVersion");
+      }
+      if (Object.keys(row).length !== names.length || names.some((name) => !Object.hasOwn(row, name)))
+        invalid3("review_agent_profile_invalid");
+      if (typeof row.profileRef !== "string" || typeof row.binarySha256 !== "string" || typeof row.packageVersion !== "string")
+        invalid3("review_agent_profile_invalid");
+      if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(row.profileRef))
+        invalid3("review_agent_profile_ref_invalid");
+      if (!/^[a-f0-9]{64}$/.test(row.binarySha256))
+        invalid3("review_agent_binary_sha256_invalid");
+      if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(
+        row.packageVersion
+      ) || refs.has(row.profileRef))
+        invalid3("review_agent_profile_invalid");
+      const agentKind = row.agentKind;
+      if (agentKind !== "codex" && agentKind !== "claude" && agentKind !== "ocr")
+        invalid3("review_agent_profile_capabilities_invalid");
+      const contextGateway = agentKind === "ocr" ? false : true;
+      if (row.contextGateway !== contextGateway || row.cancellation !== true)
+        invalid3("review_agent_profile_capabilities_invalid");
+      const transports = row.modelTransports;
+      if (!Array.isArray(transports) || transports.length < 1 || transports.length > 2 || new Set(transports).size !== transports.length || transports.some((t) => t !== "account_gateway" && t !== "provider_api"))
+        invalid3("review_agent_profile_transport_invalid");
+      refs.add(row.profileRef);
+      return Object.freeze({
+        profileRef: row.profileRef,
+        agentKind,
+        binarySha256: row.binarySha256,
+        packageVersion: row.packageVersion,
+        modelTransports: Object.freeze([
+          ...transports
+        ]),
+        contextGateway,
+        cancellation: true,
+        ...row.reviewSkillsVersion === 1 ? { reviewSkillsVersion: 1 } : {}
+      });
+    })
+  );
+}
+function invalid3(code) {
+  throw new Error(code);
+}
+
+// src/control-plane/generated/review-action-v2/review-reviewer-plan.ts
+var reviewerPlanContract = Object.freeze({
+  planVersion: 1,
+  maxReviewers: 16,
+  maxPlanBytes: 65536,
+  runtimeEnvKey: "REVIEW_ROUTER_REVIEWER_PLAN_JSON",
+  reviewerIdHeader: "x-reviewrouter-reviewer-id",
+  transport: "account_gateway",
+  investigationDescriptorVersion: 3,
+  reviewerAvailability: 1
+});
+var efforts = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra"
+];
+var dependencies = {
+  context_critic: ["shadow"],
+  cross_revision_replay: ["shadow"],
+  production_effects: ["context_critic", "shadow"],
+  recording: [],
+  shadow: ["recording"],
+  verified_clean: ["context_critic", "production_effects"]
+};
+function parseReviewReviewerPlan(value) {
+  if (typeof value === "string") {
+    if (bytes(value) > reviewerPlanContract.maxPlanBytes) fail2();
+    value = JSON.parse(value);
+  }
+  if (!record6(value) || bytes(JSON.stringify(value)) > reviewerPlanContract.maxPlanBytes || !keys4(value, [
+    "planVersion",
+    "primaryReviewerId",
+    "maxParallelReviewers",
+    "inlineMinAgreement",
+    "reviewers",
+    "concurrencyGroups"
+  ]) || value.planVersion !== 1 || !Array.isArray(value.reviewers) || value.reviewers.length < 1 || value.reviewers.length > 16 || !integer2(value.maxParallelReviewers, 1, value.reviewers.length) || !integer2(value.inlineMinAgreement, 1, value.reviewers.length) || !Array.isArray(value.concurrencyGroups) || value.concurrencyGroups.length < 1 || value.concurrencyGroups.length > value.reviewers.length)
+    fail2();
+  const reviewers = value.reviewers.map(parseReviewer);
+  if (value.primaryReviewerId !== reviewers[0].reviewerId || !unique(reviewers.map((row) => row.reviewerId)) || !unique(reviewers.map((row) => row.providerVoteIdentityHash)) || !unique(reviewers.map((row) => row.providerIndex)) || reviewers.some(
+    (row, index) => index > 0 && row.providerIndex <= reviewers[index - 1].providerIndex
+  ))
+    fail2();
+  const groups = value.concurrencyGroups.map((candidate) => {
+    if (!record6(candidate) || !keys4(candidate, ["concurrencyGroupId", "maxParallel"]) || !reference(candidate.concurrencyGroupId))
+      fail2();
+    const count2 = reviewers.filter(
+      (row) => row.concurrencyGroupId === candidate.concurrencyGroupId
+    ).length;
+    if (!integer2(candidate.maxParallel, 1, count2)) fail2();
+    return Object.freeze({
+      concurrencyGroupId: candidate.concurrencyGroupId,
+      maxParallel: candidate.maxParallel
+    });
+  });
+  if (!unique(groups.map((row) => row.concurrencyGroupId)) || reviewers.some(
+    (row) => !groups.some(
+      (group) => group.concurrencyGroupId === row.concurrencyGroupId
+    )
+  ))
+    fail2();
+  return Object.freeze({
+    planVersion: 1,
+    primaryReviewerId: String(value.primaryReviewerId),
+    maxParallelReviewers: value.maxParallelReviewers,
+    inlineMinAgreement: value.inlineMinAgreement,
+    reviewers: Object.freeze(reviewers),
+    concurrencyGroups: Object.freeze(groups)
+  });
+}
+function parseReviewer(value) {
+  if (!record6(value) || !keys4(value, [
+    "reviewerId",
+    "providerIndex",
+    "providerVoteIdentityHash",
+    "required",
+    "transport",
+    "requestedModel",
+    "agenticContext",
+    "fastMode",
+    "agentProfile",
+    "agentProfileDigest",
+    "concurrencyGroupId",
+    "investigationGrant",
+    ...Object.hasOwn(value, "reasoningEffort") ? ["reasoningEffort"] : [],
+    ...Object.hasOwn(value, "modelSettings") ? ["modelSettings"] : [],
+    ...Object.hasOwn(value, "unavailableReason") ? ["unavailableReason"] : []
+  ]) || !reference(value.reviewerId) || !integer2(value.providerIndex, 0, 15) || !digest2(value.providerVoteIdentityHash) || typeof value.required !== "boolean" || value.transport !== "account_gateway" || !model(value.requestedModel) || typeof value.agenticContext !== "boolean" || typeof value.fastMode !== "boolean" || !digest2(value.agentProfileDigest) || !reference(value.concurrencyGroupId) || Object.hasOwn(value, "reasoningEffort") && !effort(value.reasoningEffort))
+    fail2();
+  if (Object.hasOwn(value, "unavailableReason") && value.unavailableReason !== "allocation_unavailable" && value.unavailableReason !== "model_settings_unavailable")
+    fail2();
+  const agentProfile = parseReviewAgentProfiles([value.agentProfile])[0];
+  if (!agentProfile.modelTransports.includes("account_gateway") || agentProfile.agentKind === "ocr" && !value.agenticContext)
+    fail2();
+  const modelSettings = Object.hasOwn(value, "modelSettings") ? parseReviewReviewerModelSettings(
+    value.modelSettings,
+    value.requestedModel
+  ) : void 0;
+  const investigationGrant = value.investigationGrant === null ? null : parseReviewReviewerInvestigationGrant(value.investigationGrant, {
+    reviewerId: value.reviewerId,
+    providerVoteIdentityHash: value.providerVoteIdentityHash,
+    requestedModel: value.requestedModel,
+    agentProfileDigest: value.agentProfileDigest,
+    agentKind: agentProfile.agentKind,
+    agenticContext: value.agenticContext
+  });
+  return Object.freeze({
+    reviewerId: value.reviewerId,
+    ...value.unavailableReason === void 0 ? {} : {
+      unavailableReason: value.unavailableReason
+    },
+    providerIndex: value.providerIndex,
+    providerVoteIdentityHash: value.providerVoteIdentityHash,
+    required: value.required,
+    transport: "account_gateway",
+    requestedModel: value.requestedModel,
+    ...effort(value.reasoningEffort) ? { reasoningEffort: value.reasoningEffort } : {},
+    agenticContext: value.agenticContext,
+    fastMode: value.fastMode,
+    ...modelSettings ? { modelSettings } : {},
+    agentProfile,
+    agentProfileDigest: value.agentProfileDigest,
+    concurrencyGroupId: value.concurrencyGroupId,
+    investigationGrant
+  });
+}
+function parseReviewReviewerModelSettings(value, requestedModel) {
+  if (!record6(value) || !keys4(value, ["model", "reasoning"]) || value.model !== requestedModel || bytes(JSON.stringify(value)) > 2048)
+    fail2();
+  if (value.reasoning === null)
+    return Object.freeze({ model: requestedModel, reasoning: null });
+  const reasoning = value.reasoning;
+  if (!record6(reasoning) || !keys4(reasoning, ["allowed", "default"]) || !Array.isArray(reasoning.allowed) || reasoning.allowed.length < 1 || reasoning.allowed.length > efforts.length || reasoning.allowed.some((value2) => !effort(value2)) || !unique(reasoning.allowed) || !effort(reasoning.default) || !reasoning.allowed.includes(reasoning.default))
+    fail2();
+  const allowed = reasoning.allowed;
+  if (allowed.some(
+    (value2, index) => index > 0 && efforts.indexOf(value2) <= efforts.indexOf(allowed[index - 1])
+  ))
+    fail2();
+  return Object.freeze({
+    model: requestedModel,
+    reasoning: Object.freeze({
+      allowed: Object.freeze([...allowed]),
+      default: reasoning.default
+    })
+  });
+}
+function parseReviewReviewerInvestigationGrant(value, reviewer) {
+  if (!record6(value) || !keys4(value, [
+    "reviewerId",
+    "providerVoteIdentityHash",
+    "requestedModel",
+    "agentProfileDigest",
+    "descriptor"
+  ]) || value.reviewerId !== reviewer.reviewerId || value.providerVoteIdentityHash !== reviewer.providerVoteIdentityHash || value.requestedModel !== reviewer.requestedModel || value.agentProfileDigest !== reviewer.agentProfileDigest || reviewer.agentKind === "ocr" || !reviewer.agenticContext)
+    fail2();
+  const descriptor = parseReviewReviewerInvestigationDescriptorV3(
+    value.descriptor
+  );
+  const providerKind = reviewer.agentKind === "claude" ? "claude_code" : "codex";
+  if (descriptor.providerCapabilities.length !== 1 || descriptor.providerCapabilities[0].providerKind !== providerKind)
+    fail2();
+  return Object.freeze({
+    reviewerId: reviewer.reviewerId,
+    providerVoteIdentityHash: reviewer.providerVoteIdentityHash,
+    requestedModel: reviewer.requestedModel,
+    agentProfileDigest: reviewer.agentProfileDigest,
+    descriptor
+  });
+}
+function parseReviewReviewerInvestigationDescriptorV3(value) {
+  if (!record6(value) || !keys4(value, [
+    "authorizationDescriptorVersion",
+    "capability",
+    "coverageProfileHash",
+    "extensionCanonicalizerDigest",
+    "extensionId",
+    "extensionSchemaDigest",
+    "policyHash",
+    "providerCapabilities"
+  ]) || value.authorizationDescriptorVersion !== 3 || value.capability !== "review_investigation_v1" || value.extensionId !== "review-investigation-shadow.v1" || !digest2(value.coverageProfileHash) || !digest2(value.extensionCanonicalizerDigest) || !digest2(value.extensionSchemaDigest) || !digest2(value.policyHash) || !Array.isArray(value.providerCapabilities) || value.providerCapabilities.length < 1 || value.providerCapabilities.length > 2)
+    fail2();
+  const providerCapabilities = value.providerCapabilities.map(
+    (row) => {
+      if (!record6(row) || !keys4(row, ["providerKind", "capabilities"]) || row.providerKind !== "codex" && row.providerKind !== "claude_code" || !Array.isArray(row.capabilities) || row.capabilities.length < 1 || row.capabilities.length > 6 || row.capabilities.some(
+        (capability) => typeof capability !== "string" || !Object.hasOwn(dependencies, capability)
+      ) || !unique(row.capabilities) || !row.capabilities.includes("recording"))
+        fail2();
+      const capabilities = row.capabilities;
+      if (capabilities.some(
+        (capability, index) => index > 0 && capability <= capabilities[index - 1]
+      ))
+        fail2();
+      if (capabilities.some(
+        (capability) => dependencies[capability].some(
+          (dependency) => !capabilities.includes(dependency)
+        )
+      ))
+        fail2();
+      return Object.freeze({
+        providerKind: row.providerKind,
+        capabilities: Object.freeze([...capabilities])
+      });
+    }
+  );
+  if (!unique(providerCapabilities.map((row) => row.providerKind)) || providerCapabilities.some(
+    (row, index) => index > 0 && row.providerKind <= providerCapabilities[index - 1].providerKind
+  ))
+    fail2();
+  return Object.freeze({
+    authorizationDescriptorVersion: 3,
+    capability: "review_investigation_v1",
+    coverageProfileHash: value.coverageProfileHash,
+    extensionCanonicalizerDigest: value.extensionCanonicalizerDigest,
+    extensionId: "review-investigation-shadow.v1",
+    extensionSchemaDigest: value.extensionSchemaDigest,
+    policyHash: value.policyHash,
+    providerCapabilities: Object.freeze(providerCapabilities)
+  });
+}
+function record6(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function keys4(value, expected) {
+  return Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
+}
+function reference(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(value);
+}
+function model(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/.test(value);
+}
+function digest2(value) {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+function integer2(value, min, max) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
+}
+function effort(value) {
+  return typeof value === "string" && efforts.includes(value);
+}
+function unique(values) {
+  return new Set(values).size === values.length;
+}
+function bytes(value) {
+  return new TextEncoder().encode(value).byteLength;
+}
+function fail2() {
+  throw new Error("review_reviewer_plan_invalid");
+}
+
 // src/control-plane/runtime-config.ts
 var import_os5 = require("os");
 
@@ -148664,82 +149019,15 @@ var package_default = {
 
 // src/control-plane/approved-review-agent.ts
 var import_node_crypto7 = require("node:crypto");
-
-// src/control-plane/generated/review-action-v2/review-agent-profile.ts
-function parseReviewAgentProfiles(value) {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 16)
-    invalid3("review_agent_profiles_invalid");
-  const refs = /* @__PURE__ */ new Set();
-  return Object.freeze(
-    value.map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item))
-        invalid3("review_agent_profile_invalid");
-      const row = item;
-      const names = [
-        "profileRef",
-        "agentKind",
-        "binarySha256",
-        "packageVersion",
-        "modelTransports",
-        "contextGateway",
-        "cancellation"
-      ];
-      if (Object.hasOwn(row, "reviewSkillsVersion")) {
-        if (row.reviewSkillsVersion !== 1)
-          invalid3("review_agent_skills_capability_invalid");
-        names.push("reviewSkillsVersion");
-      }
-      if (Object.keys(row).length !== names.length || names.some((name) => !Object.hasOwn(row, name)))
-        invalid3("review_agent_profile_invalid");
-      if (typeof row.profileRef !== "string" || typeof row.binarySha256 !== "string" || typeof row.packageVersion !== "string")
-        invalid3("review_agent_profile_invalid");
-      if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(row.profileRef))
-        invalid3("review_agent_profile_ref_invalid");
-      if (!/^[a-f0-9]{64}$/.test(row.binarySha256))
-        invalid3("review_agent_binary_sha256_invalid");
-      if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(
-        row.packageVersion
-      ) || refs.has(row.profileRef))
-        invalid3("review_agent_profile_invalid");
-      const agentKind = row.agentKind;
-      if (agentKind !== "codex" && agentKind !== "claude" && agentKind !== "ocr")
-        invalid3("review_agent_profile_capabilities_invalid");
-      const contextGateway = agentKind === "ocr" ? false : true;
-      if (row.contextGateway !== contextGateway || row.cancellation !== true)
-        invalid3("review_agent_profile_capabilities_invalid");
-      const transports = row.modelTransports;
-      if (!Array.isArray(transports) || transports.length < 1 || transports.length > 2 || new Set(transports).size !== transports.length || transports.some((t) => t !== "account_gateway" && t !== "provider_api"))
-        invalid3("review_agent_profile_transport_invalid");
-      refs.add(row.profileRef);
-      return Object.freeze({
-        profileRef: row.profileRef,
-        agentKind,
-        binarySha256: row.binarySha256,
-        packageVersion: row.packageVersion,
-        modelTransports: Object.freeze([
-          ...transports
-        ]),
-        contextGateway,
-        cancellation: true,
-        ...row.reviewSkillsVersion === 1 ? { reviewSkillsVersion: 1 } : {}
-      });
-    })
-  );
-}
-function invalid3(code) {
-  throw new Error(code);
-}
-
-// src/control-plane/approved-review-agent.ts
-function readApprovedReviewAgent(json3, digest5) {
-  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest5) || (0, import_node_crypto7.createHash)("sha256").update(json3).digest("hex") !== digest5)
+function readApprovedReviewAgent(json3, digest6) {
+  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest6) || (0, import_node_crypto7.createHash)("sha256").update(json3).digest("hex") !== digest6)
     throw new Error("review_agent_profile_digest_mismatch");
   const profile = parseReviewAgentProfiles([JSON.parse(json3)])[0];
   if (!profile) throw new Error("review_agent_profile_invalid");
   return profile;
 }
-function assertApprovedReviewAgentBinary(profile, bytes) {
-  if ((0, import_node_crypto7.createHash)("sha256").update(bytes).digest("hex") !== profile.binarySha256)
+function assertApprovedReviewAgentBinary(profile, bytes2) {
+  if ((0, import_node_crypto7.createHash)("sha256").update(bytes2).digest("hex") !== profile.binarySha256)
     throw new Error("review_agent_binary_drift");
 }
 
@@ -148838,6 +149126,8 @@ function parseAdmittedRuntimeConfig(value) {
   if (!profileJson || !profileDigest)
     throw new Error("runtime_config_agent_profile_required");
   readApprovedReviewAgent(profileJson, profileDigest);
+  const reviewerPlan = parsed.runtimeEnv[reviewerPlanContract.runtimeEnvKey];
+  if (reviewerPlan !== void 0) parseReviewReviewerPlan(reviewerPlan);
   return Object.freeze({
     protocolVersion: 1,
     configVersion: parsed.configVersion,
@@ -184583,6 +184873,10 @@ var manifest_default = {
   contextToolsProfile: {
     extensionId: "context-tools.v1",
     descriptorDigest: "sha256:c188ad0a29581317f23b6aec3f103a7419f67576bea6fb3dc9910cf9ca3a3f7a"
+  },
+  reviewerPlanProfile: {
+    planVersion: 1,
+    descriptorDigest: "sha256:f6a45d7039129a813690f5f769052d3ba078418eb123b0c0c710ef790d2919d6"
   }
 };
 
@@ -188100,9 +188394,9 @@ async function readBoundedJson(response, maxBytes, operationId) {
       reader.releaseLock();
     }
   }
-  const bytes = Buffer.concat(chunks, byteCount);
+  const bytes2 = Buffer.concat(chunks, byteCount);
   try {
-    return JSON.parse(bytes.toString("utf8"));
+    return JSON.parse(bytes2.toString("utf8"));
   } catch (error3) {
     throw new ReviewActionV2ClientError(
       "invalid_response" /* InvalidResponse */,
@@ -189334,13 +189628,13 @@ function selectDirectProvider(config2, expectedMode) {
   if (!selected || !mode || expectedMode !== void 0 && mode !== expectedMode || config2.providers.length !== 1 || config2.providerLimit !== 1 || config2.providerMaxParallel !== 1 || config2.inlineMinAgreement !== 1 || config2.synthesisModel !== selected || config2.fallbackProviders.length !== 0 || config2.requiredHealthyProviders?.length !== 1 || config2.requiredHealthyProviders[0] !== selected)
     throw new Error("review_action_v2_direct_provider_policy_invalid");
   const descriptor = providerApiDescriptors[mode];
-  const model = selected.slice(descriptor.runtimePrefix.length + 1);
-  if (mode === "openrouter-api" ? !/^[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(model) : model !== descriptor.defaultModel)
+  const model2 = selected.slice(descriptor.runtimePrefix.length + 1);
+  if (mode === "openrouter-api" ? !/^[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(model2) : model2 !== descriptor.defaultModel)
     throw new Error("review_action_v2_direct_provider_model_invalid");
   return Object.freeze({
     mode,
     providerName: selected,
-    model,
+    model: model2,
     modelProvider: mode === "mimo-token-plan-api" ? "mimo" : mode === "kimi-code-api" ? "kimi" : "openrouter"
   });
 }
@@ -189574,8 +189868,8 @@ function canonicalJson6(value) {
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalJson6(item)).join(",")}]`;
   }
-  const record6 = value;
-  return `{${Object.keys(record6).sort().filter((key) => record6[key] !== void 0).map((key) => `${JSON.stringify(key)}:${canonicalJson6(record6[key])}`).join(",")}}`;
+  const record7 = value;
+  return `{${Object.keys(record7).sort().filter((key) => record7[key] !== void 0).map((key) => `${JSON.stringify(key)}:${canonicalJson6(record7[key])}`).join(",")}}`;
 }
 function safeEqualHex(a, b) {
   if (!/^[a-f0-9]{64}$/i.test(a) || !/^[a-f0-9]{64}$/i.test(b)) {
@@ -190304,13 +190598,13 @@ async function startCodexUsageRelay(input) {
       try {
         const chunks = [];
         let size = 0;
-        for await (const bytes of request3) {
-          size += bytes.length;
+        for await (const bytes2 of request3) {
+          size += bytes2.length;
           if (size > (input.maxRequestBytes ?? 16 * 1024 * 1024)) {
             response.writeHead(413).end();
             return;
           }
-          chunks.push(Buffer.from(bytes));
+          chunks.push(Buffer.from(bytes2));
         }
         const body2 = Buffer.concat(chunks);
         const parsed = JSON.parse(body2.toString("utf8"));
@@ -190377,12 +190671,12 @@ async function startCodexUsageRelay(input) {
           } catch {
           }
         };
-        for await (const bytes of upstream.body) {
-          observedBytes += bytes.length;
+        for await (const bytes2 of upstream.body) {
+          observedBytes += bytes2.length;
           if (observedBytes > (input.maxResponseBytes ?? 64 * 1024 * 1024))
             throw new Error("usage_relay_response_limit");
           if (parseEnabled) {
-            pending += decoder2.decode(bytes, { stream: true });
+            pending += decoder2.decode(bytes2, { stream: true });
             if (sse) {
               for (; ; ) {
                 const delimiter3 = /\r\n\r\n|\n\n|\r\r/.exec(pending);
@@ -190398,7 +190692,7 @@ async function startCodexUsageRelay(input) {
               parseEnabled = false;
             }
           }
-          if (!response.write(bytes)) {
+          if (!response.write(bytes2)) {
             const drainAbort = new AbortController();
             try {
               await Promise.race([
@@ -190846,13 +191140,13 @@ var mimoModel = {
   auto_review_model_override: null,
   model_specialty: null
 };
-function isAccountGatewayMiMoModel(model) {
-  return model === mimoModel.slug;
+function isAccountGatewayMiMoModel(model2) {
+  return model2 === mimoModel.slug;
 }
-async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration, settings, providerApi = false) {
-  if (settings && (settings.model !== model || isAccountGatewayMiMoModel(model)))
+async function prepareAccountGatewayModelCatalog(model2, codexHome, gatewayConfiguration, settings, providerApi = false) {
+  if (settings && (settings.model !== model2 || isAccountGatewayMiMoModel(model2)))
     throw new Error("account_gateway_codex_model_settings_invalid");
-  const catalogModel = settings ? managedCodexModel(settings) : model === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model) ? mimoModel : providerApi && model === "k3-256k" ? {
+  const catalogModel = settings ? managedCodexModel(settings) : model2 === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model2) ? mimoModel : providerApi && model2 === "k3-256k" ? {
     ...gpt_5_6_sol_model_0_147_0_default,
     slug: "k3-256k",
     display_name: "Kimi Code K3",
@@ -190904,7 +191198,7 @@ function managedCodexModel(settings) {
     base_instructions: "",
     default_reasoning_level: settings.reasoning?.default ?? null,
     supported_reasoning_levels: (settings.reasoning?.allowed ?? []).map(
-      (effort) => ({ effort, description: effort })
+      (effort2) => ({ effort: effort2, description: effort2 })
     ),
     supports_reasoning_summary_parameter: false,
     default_reasoning_summary: "none",
@@ -190956,6 +191250,7 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   streamOutputBytes: 8388608,
   streamFrameBytes: 1048576,
   jsonBytes: 65536,
+  checkoutV4JsonBytes: 131072,
   headerBytes: 16384,
   bufferBytes: 65536,
   requestMs: 36e5,
@@ -191329,11 +191624,11 @@ var CodexCliExitError = class extends Error {
   }
 };
 var CodexProvider = class _CodexProvider extends Provider {
-  constructor(model, options = {}) {
+  constructor(model2, options = {}) {
     super(
-      `${options.providerNamePrefix || "codex"}/${options.providerNameModel || model}`
+      `${options.providerNamePrefix || "codex"}/${options.providerNameModel || model2}`
     );
-    this.model = model;
+    this.model = model2;
     this.options = options;
   }
   static preparedBinaryPath;
@@ -191939,7 +192234,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           clearTimeout(timer);
           options.signal?.removeEventListener("abort", onAbort);
         };
-        const fail2 = (error3) => {
+        const fail3 = (error3) => {
           if (settled) return;
           if (waitForProcessClose) {
             if (!failed) {
@@ -191955,14 +192250,14 @@ ${JSON.stringify(outputSchema)}` : prompt;
         };
         const onAbort = () => {
           terminate();
-          fail2(abortError());
+          fail3(abortError());
         };
         const timer = setTimeout(() => {
           logger7.warn(
             `Codex CLI timeout (${timeoutMs}ms), killing process and all children`
           );
           terminate();
-          fail2(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
+          fail3(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
         }, timeoutMs);
         options.signal?.addEventListener("abort", onAbort, { once: true });
         if (options.signal?.aborted) onAbort();
@@ -191971,7 +192266,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           outputBytes += Buffer.byteLength(chunk);
           if (this.options.accountGateway && outputBytes > ACCOUNT_GATEWAY_BOUNDS.cliOutputBytes) {
             terminate();
-            fail2(new Error("account_gateway_cli_output_bound"));
+            fail3(new Error("account_gateway_cli_output_bound"));
             return false;
           }
           return true;
@@ -191986,7 +192281,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         });
         proc.on("error", (err) => {
           if (waitForProcessClose && proc.pid) terminate();
-          fail2(err);
+          fail3(err);
         });
         proc.on("close", (code) => {
           if (settled) return;
@@ -192343,7 +192638,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
   }
   resolveReasoningEffort(healthCheck) {
     if (this.options.modelProvider === "kimi") return void 0;
-    return healthCheck ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || "low" : process.env.CODEX_REASONING_EFFORT;
+    return healthCheck ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || "low" : this.options.reasoningEffort !== void 0 ? this.options.reasoningEffort ?? void 0 : process.env.CODEX_REASONING_EFFORT;
   }
   async buildRepositoryContextSeed(prompt) {
     const changedFiles = this.extractChangedFiles(prompt).filter((file) => this.isContextReadableFile(file)).slice(0, 5);
@@ -192891,8 +193186,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const event = value;
     const type2 = event.type ?? event.event ?? event.kind;
     if (type2 === "session_configured") {
-      const model = this.findConfiguredModel(event);
-      if (model) models.add(model);
+      const model2 = this.findConfiguredModel(event);
+      if (model2) models.add(model2);
     }
     for (const nested of Object.values(event)) {
       if (nested && typeof nested === "object") {
@@ -193153,7 +193448,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         return;
       }
       if (typeof value === "object") {
-        const record6 = value;
+        const record7 = value;
         for (const key of [
           "message",
           "error",
@@ -193162,7 +193457,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           "code",
           "status"
         ]) {
-          if (key in record6) visit(record6[key], depth + 1);
+          if (key in record7) visit(record7[key], depth + 1);
         }
       }
     };
@@ -193226,6 +193521,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     return message.includes(hint) ? message : this.truncateCliError(`${message} ${hint}`);
   }
   async resolveBinary() {
+    if (this.options.binaryPath) return this.options.binaryPath;
     if (_CodexProvider.preparedBinaryPath && await this.canRun(_CodexProvider.preparedBinaryPath, ["--version"])) {
       return _CodexProvider.preparedBinaryPath;
     }
@@ -194012,8 +194308,8 @@ function assertPositive(value, field) {
 // src/review-investigation/application/run-investigation-turn.ts
 var MAX_SAFE_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1e3;
 var RunInvestigationTurn = class {
-  constructor(dependencies) {
-    this.dependencies = dependencies;
+  constructor(dependencies2) {
+    this.dependencies = dependencies2;
   }
   async execute(input) {
     const turn = requireActiveTurn(input.snapshot);
@@ -194414,8 +194710,8 @@ var ReviewInvestigationDeferredSignal = class extends Error {
   }
 };
 var RunInvestigationWorkSlot = class {
-  constructor(dependencies) {
-    this.dependencies = dependencies;
+  constructor(dependencies2) {
+    this.dependencies = dependencies2;
   }
   async execute(input) {
     throwIfAborted(input.signal);
@@ -194746,8 +195042,8 @@ var MIN_PUBLICATION_POLL_DELAY_MS = 1e3;
 var ReviewMemoryAdmissionChangedSignal = class extends Error {
 };
 var RunT0ReviewOrchestration = class {
-  constructor(dependencies, maxPublicationPolls = null, maxBusyPollsPerProviderLane = 24, revisionPollIntervalMs = 5e3) {
-    this.dependencies = dependencies;
+  constructor(dependencies2, maxPublicationPolls = null, maxBusyPollsPerProviderLane = 24, revisionPollIntervalMs = 5e3) {
+    this.dependencies = dependencies2;
     this.maxPublicationPolls = maxPublicationPolls;
     this.maxBusyPollsPerProviderLane = maxBusyPollsPerProviderLane;
     this.revisionPollIntervalMs = revisionPollIntervalMs;
@@ -194760,6 +195056,50 @@ var RunT0ReviewOrchestration = class {
     if (!Number.isSafeInteger(revisionPollIntervalMs) || revisionPollIntervalMs < 10 || revisionPollIntervalMs > 6e4) {
       throw new Error("review_orchestration_revision_poll_interval_invalid");
     }
+  }
+  parentCommandTail = Promise.resolve();
+  coordinatedExecution;
+  runAbort;
+  laneSignals = /* @__PURE__ */ new Map();
+  failureContext(workSlot, invocation) {
+    const reviewer = this.dependencies.reviewerScheduling?.reviewers.find(
+      (item) => item.providerVoteIdentityHash === workSlot.providerVoteIdentityHash
+    );
+    return {
+      workSlot,
+      ...invocation ? { invocation } : {},
+      ...reviewer ?? {}
+    };
+  }
+  parentLeaseCommand(operation) {
+    if (!this.dependencies.reviewerScheduling) return operation();
+    const command = this.parentCommandTail.then(operation);
+    this.parentCommandTail = command.catch(() => void 0);
+    return command;
+  }
+  /** Only parent commands observe and advance the current stream version. */
+  async parentCommand(input, operation) {
+    if (!this.dependencies.reviewerScheduling)
+      return operation(input.execution);
+    return this.parentLeaseCommand(async () => {
+      const restored = await this.dependencies.controlPlane.restoreExecution({
+        authorization: input.authorization,
+        reviewRevisionHash: input.revision.reviewRevisionHash
+      });
+      const latest = refreshExecutionAdmission(
+        this.coordinatedExecution ?? input.execution,
+        restored
+      );
+      this.coordinatedExecution = latest;
+      const result2 = await operation(latest);
+      if (result2 && typeof result2 === "object" && "streamVersion" in result2 && typeof result2.streamVersion === "string") {
+        this.coordinatedExecution = {
+          ...latest,
+          streamVersion: maxVersion(latest.streamVersion, result2.streamVersion)
+        };
+      }
+      return result2;
+    });
   }
   async execute(command) {
     return this.executeInternal(command);
@@ -194896,9 +195236,8 @@ var RunT0ReviewOrchestration = class {
         (slot) => slot.required || slot.attemptBudget !== 1
       ))
         throw new Error("review_orchestration_description_plan_invalid");
-      for (const workSlot of command.workSlots.filter(
-        (slot) => slot.taskKind !== "pr_description" /* PrDescription */
-      )) {
+      this.coordinatedExecution = execution;
+      const runWorkSlot = async (workSlot) => {
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
           throw new Error("review_orchestration_restored_work_slot_missing");
@@ -194921,7 +195260,7 @@ var RunT0ReviewOrchestration = class {
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: workSlot.workSlotId
           });
-          continue;
+          return;
         }
         if (restoredSlot.state !== "satisfied" /* Satisfied */ && !this.canStartBatch()) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
@@ -194933,7 +195272,7 @@ var RunT0ReviewOrchestration = class {
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: workSlot.workSlotId
           });
-          continue;
+          return;
         }
         if (restoredSlot.state !== "satisfied" /* Satisfied */ && this.providerLaneBusyBudgetExhausted(
           busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0
@@ -194947,7 +195286,7 @@ var RunT0ReviewOrchestration = class {
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: workSlot.workSlotId
           });
-          continue;
+          return;
         }
         await this.assertRevisionCurrent(command);
         const outcome = await this.satisfyWorkSlot({
@@ -194960,12 +195299,18 @@ var RunT0ReviewOrchestration = class {
           restoredSlot,
           restoreOnly: command.restoreOnly === true,
           busyPollsByProviderLane,
-          admissionLimited,
+          admissionLimited: this.dependencies.reviewerScheduling ? false : admissionLimited,
           onEvent: (event) => {
             state3 = evolveReviewOrchestration(state3, event);
           }
         });
-        execution = { ...execution, streamVersion: outcome.streamVersion };
+        execution = {
+          ...execution,
+          streamVersion: maxVersion(
+            execution.streamVersion,
+            outcome.streamVersion
+          )
+        };
         if (outcome.observation) {
           if (!outcome.coverageManifest) {
             throw new Error("review_orchestration_coverage_manifest_missing");
@@ -194997,36 +195342,204 @@ var RunT0ReviewOrchestration = class {
           });
           const terminal = terminalizeCommand(outcome.exhaustionReason);
           if (terminal) {
-            const latestExecution2 = await this.dependencies.controlPlane.restoreExecution({
+            const terminalizedResult = await this.parentCommand(
+              {
+                authorization,
+                execution,
+                revision: command
+              },
+              async (parentExecution) => {
+                let execution2 = parentExecution;
+                const latestExecution2 = await this.dependencies.controlPlane.restoreExecution({
+                  authorization,
+                  reviewRevisionHash: command.reviewRevisionHash
+                });
+                execution2 = refreshExecutionAdmission(
+                  execution2,
+                  latestExecution2
+                );
+                const latestSlot = execution2.restoredExecution.workSlots.find(
+                  (slot) => slot.workSlotId === workSlot.workSlotId
+                );
+                const alreadyExhausted = execution2.restoredExecution.state === "running" /* Running */ && latestSlot?.state === "exhausted" /* Exhausted */ && latestSlot.activeLeaseId === null;
+                if (!alreadyExhausted) {
+                  const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
+                    authorization,
+                    idempotencyKey: this.idempotencyKey("slot-terminalize", [
+                      execution2.executionId,
+                      execution2.generation,
+                      workSlot.workSlotId,
+                      terminal.terminalState,
+                      terminal.reasonCode
+                    ]),
+                    execution: execution2,
+                    reviewRevisionHash: command.reviewRevisionHash,
+                    workSlotId: workSlot.workSlotId,
+                    terminal
+                  });
+                  execution2 = {
+                    ...execution2,
+                    streamVersion: terminalized.streamVersion
+                  };
+                }
+                return { streamVersion: execution2.streamVersion };
+              }
+            );
+            execution = {
+              ...execution,
+              streamVersion: maxVersion(
+                execution.streamVersion,
+                terminalizedResult.streamVersion
+              )
+            };
+          }
+          if (this.dependencies.reviewerScheduling && [
+            "attempt_budget_exhausted" /* AttemptBudgetExhausted */,
+            "admission_limited" /* AdmissionLimited */,
+            "investigation_deferred" /* InvestigationDeferred */
+          ].includes(outcome.exhaustionReason))
+            throw new ReviewScopedInvocationFailure(
+              "reviewer",
+              new Error("review_reviewer_work_exhausted")
+            );
+        }
+      };
+      if (!this.dependencies.reviewerScheduling) {
+        for (const slot of command.workSlots.filter(
+          (slot2) => slot2.taskKind !== "pr_description" /* PrDescription */
+        ))
+          await runWorkSlot(slot);
+      } else {
+        const scheduling = this.dependencies.reviewerScheduling;
+        const lanes = scheduling.reviewers.map((reviewer) => ({
+          ...reviewer,
+          slots: command.workSlots.filter(
+            (slot) => slot.taskKind !== "pr_description" /* PrDescription */ && slot.providerVoteIdentityHash === reviewer.providerVoteIdentityHash
+          ),
+          abort: new AbortController()
+        }));
+        if (!Number.isSafeInteger(scheduling.maxParallelReviewers) || scheduling.maxParallelReviewers < 1 || scheduling.maxParallelReviewers > 16 || lanes.length > 16 || new Set(lanes.map((lane) => lane.providerVoteIdentityHash)).size !== lanes.length || command.workSlots.some(
+          (slot) => !lanes.some(
+            (lane) => lane.providerVoteIdentityHash === slot.providerVoteIdentityHash
+          )
+        ))
+          throw new Error("review_reviewer_scheduling_invalid");
+        const groups = new Map(
+          scheduling.concurrencyGroups.map((group) => [
+            group.id,
+            group.maxParallel
+          ])
+        );
+        if (lanes.some(
+          (lane) => !Number.isSafeInteger(groups.get(lane.concurrencyGroupId)) || groups.get(lane.concurrencyGroupId) < 1
+        ))
+          throw new Error("review_reviewer_scheduling_group_invalid");
+        const busyGroups = /* @__PURE__ */ new Map();
+        const stoppedVotes = /* @__PURE__ */ new Set();
+        const pending = [...lanes];
+        const active = /* @__PURE__ */ new Set();
+        let parentFailure;
+        this.runAbort = new AbortController();
+        const stopRun = () => this.runAbort.abort(this.dependencies.signal?.reason);
+        this.dependencies.signal?.addEventListener("abort", stopRun, {
+          once: true
+        });
+        if (this.dependencies.signal?.aborted) stopRun();
+        const markExhausted = (slot) => {
+          if (acceptedEvidence.some(
+            (item) => item.workSlotId === slot.workSlotId
+          ) || exhaustedWorkSlotIds.includes(slot.workSlotId))
+            return;
+          exhaustedWorkSlotIds.push(slot.workSlotId);
+          exhaustedWorkSlotReasons.set(
+            slot.workSlotId,
+            "admission_limited" /* AdmissionLimited */
+          );
+          state3 = evolveReviewOrchestration(state3, {
+            type: "slot_exhausted" /* SlotExhausted */,
+            workSlotId: slot.workSlotId
+          });
+          this.dependencies.progress?.report({
+            type: "exhausted",
+            workSlotId: slot.workSlotId
+          });
+        };
+        try {
+          while (pending.length || active.size) {
+            while (!parentFailure && !this.runAbort.signal.aborted && active.size < scheduling.maxParallelReviewers) {
+              const index = pending.findIndex(
+                (lane2) => stoppedVotes.has(lane2.providerVoteIdentityHash) || (busyGroups.get(lane2.concurrencyGroupId) ?? 0) < groups.get(lane2.concurrencyGroupId)
+              );
+              if (index < 0) break;
+              const lane = pending.splice(index, 1)[0];
+              if (stoppedVotes.has(lane.providerVoteIdentityHash)) {
+                lane.slots.forEach(markExhausted);
+                continue;
+              }
+              busyGroups.set(
+                lane.concurrencyGroupId,
+                (busyGroups.get(lane.concurrencyGroupId) ?? 0) + 1
+              );
+              this.laneSignals.set(
+                lane.providerVoteIdentityHash,
+                AbortSignal.any([this.runAbort.signal, lane.abort.signal])
+              );
+              const worker = (async () => {
+                for (const slot of lane.slots) {
+                  if (stoppedVotes.has(lane.providerVoteIdentityHash)) {
+                    markExhausted(slot);
+                    continue;
+                  }
+                  this.runAbort.signal.throwIfAborted();
+                  try {
+                    await runWorkSlot(slot);
+                  } catch (error3) {
+                    const scopedFailure = error3 instanceof ReviewScopedInvocationFailure ? error3 : error3 instanceof ReviewInvocationConfigurationMismatchError ? new ReviewScopedInvocationFailure("reviewer", error3) : void 0;
+                    if (!scopedFailure && !stoppedVotes.has(lane.providerVoteIdentityHash))
+                      throw error3;
+                    const scope = scopedFailure?.scope ?? "reviewer";
+                    if (scope === "run") throw error3;
+                    const affected = scope === "allocation" ? lanes.filter(
+                      (candidate) => candidate.concurrencyGroupId === lane.concurrencyGroupId
+                    ) : [lane];
+                    for (const sibling of affected) {
+                      stoppedVotes.add(sibling.providerVoteIdentityHash);
+                      sibling.abort.abort(error3);
+                    }
+                    markExhausted(slot);
+                  }
+                }
+              })().catch((error3) => {
+                parentFailure ??= error3;
+                this.runAbort.abort(error3);
+              }).finally(() => {
+                busyGroups.set(
+                  lane.concurrencyGroupId,
+                  busyGroups.get(lane.concurrencyGroupId) - 1
+                );
+                active.delete(worker);
+                this.laneSignals.delete(lane.providerVoteIdentityHash);
+              });
+              active.add(worker);
+            }
+            if (!active.size) break;
+            await Promise.race(active);
+          }
+          await Promise.allSettled(active);
+          await this.parentCommandTail;
+          this.dependencies.signal?.throwIfAborted();
+          execution = refreshExecutionAdmission(
+            this.coordinatedExecution ?? execution,
+            await this.dependencies.controlPlane.restoreExecution({
               authorization,
               reviewRevisionHash: command.reviewRevisionHash
-            });
-            execution = refreshExecutionAdmission(execution, latestExecution2);
-            const latestSlot = execution.restoredExecution.workSlots.find(
-              (slot) => slot.workSlotId === workSlot.workSlotId
-            );
-            const alreadyExhausted = execution.restoredExecution.state === "running" /* Running */ && latestSlot?.state === "exhausted" /* Exhausted */ && latestSlot.activeLeaseId === null;
-            if (!alreadyExhausted) {
-              const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
-                authorization,
-                idempotencyKey: this.idempotencyKey("slot-terminalize", [
-                  execution.executionId,
-                  execution.generation,
-                  workSlot.workSlotId,
-                  terminal.terminalState,
-                  terminal.reasonCode
-                ]),
-                execution,
-                reviewRevisionHash: command.reviewRevisionHash,
-                workSlotId: workSlot.workSlotId,
-                terminal
-              });
-              execution = {
-                ...execution,
-                streamVersion: terminalized.streamVersion
-              };
-            }
-          }
+            })
+          );
+          this.coordinatedExecution = execution;
+          if (parentFailure) throw parentFailure;
+        } finally {
+          this.dependencies.signal?.removeEventListener("abort", stopRun);
+          this.laneSignals.clear();
         }
       }
       const requiredWorkSlotIds = new Set(
@@ -195408,11 +195921,16 @@ var RunT0ReviewOrchestration = class {
     return renewal;
   }
   async satisfyWorkSlot(input) {
+    const reviewerSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest = null;
     let handledInvestigationOrdinal = null;
     for (let attemptOrdinal = 1; attemptOrdinal <= input.workSlot.attemptBudget; attemptOrdinal += 1) {
       try {
+        reviewerSignal?.throwIfAborted();
         this.dependencies.progress?.report({
           type: "running",
           workSlotId: input.workSlot.workSlotId,
@@ -195425,8 +195943,10 @@ var RunT0ReviewOrchestration = class {
         });
         const authoritativeInvocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
-          attemptOrdinal
+          attemptOrdinal,
+          ...reviewerSignal ? { signal: reviewerSignal } : {}
         });
+        reviewerSignal?.throwIfAborted();
         const authoritativeManifest = await this.dependencies.invocationManifestAssembler.assemble(
           authoritativeInvocation
         );
@@ -195507,8 +196027,14 @@ var RunT0ReviewOrchestration = class {
                 exhaustionReason: "deadline_reached" /* DeadlineReached */
               };
             }
-            if (!(error3 instanceof ReviewInvestigationDeferredSignal))
+            if (!(error3 instanceof ReviewInvestigationDeferredSignal)) {
+              const scope = this.dependencies.reviewerScheduling ? this.dependencies.invocationFailureClassifier.scope?.(
+                error3,
+                this.failureContext(input.workSlot)
+              ) : void 0;
+              if (scope) throw new ReviewScopedInvocationFailure(scope, error3);
               throw error3;
+            }
             this.recordInvestigationDiagnostic({
               outcome: "authoritative_deferred" /* AuthoritativeDeferred */,
               workSlot: input.workSlot,
@@ -195525,11 +196051,12 @@ var RunT0ReviewOrchestration = class {
             };
           }
         }
-        const selectedInvestigationCandidate = investigationCandidate !== null && this.dependencies.investigationRecording?.mode === "authoritative" /* Authoritative */ && !authoritativeInvocation.manifestFacts.taskKindSet.includes(
+        const recording = this.dependencies.resolveInvestigationRecording ? this.dependencies.resolveInvestigationRecording(input.workSlot) : this.dependencies.investigationRecording;
+        const selectedInvestigationCandidate = investigationCandidate !== null && recording?.mode === "authoritative" /* Authoritative */ && !authoritativeInvocation.manifestFacts.taskKindSet.includes(
           "lifecycle_revalidation" /* LifecycleRevalidation */
         ) && (investigationCandidate.observation.findingCount > 0 || investigationCandidate.observation.qualityFlags.includes(
           "investigation_verified_clean"
-        ) && this.dependencies.investigationRecording.verifiedCleanEffectsEnabled === true) ? investigationCandidate : null;
+        ) && recording.verifiedCleanEffectsEnabled === true) ? investigationCandidate : null;
         const invocation = selectedInvestigationCandidate ? selectedInvestigationCandidate.invocation : authoritativeInvocation;
         const manifest = selectedInvestigationCandidate ? selectedInvestigationCandidate.manifest : authoritativeManifest;
         const precomputedObservation = selectedInvestigationCandidate ? selectedInvestigationCandidate.observation : null;
@@ -195568,7 +196095,9 @@ var RunT0ReviewOrchestration = class {
         let lease = null;
         let localBusyPollCount = 0;
         while (lease === null) {
+          reviewerSignal?.throwIfAborted();
           await this.assertMemoryEligible(invocation);
+          reviewerSignal?.throwIfAborted();
           if (!this.canStartInvocation(attemptOrdinal)) {
             input.onEvent({
               type: "slot_exhausted" /* SlotExhausted */,
@@ -195606,14 +196135,12 @@ var RunT0ReviewOrchestration = class {
                 exhaustionReason: "deadline_reached" /* DeadlineReached */
               };
             }
-            if (this.dependencies.signal) {
-              await this.dependencies.delay.sleep(
-                delayMs,
-                this.dependencies.signal
-              );
+            if (waitSignal) {
+              await this.dependencies.delay.sleep(delayMs, waitSignal);
             } else {
               await this.dependencies.delay.sleep(delayMs);
             }
+            reviewerSignal?.throwIfAborted();
             await this.assertRevisionCurrent(input.revision);
             const joined = await this.trySatisfyFromLookup({
               ...input,
@@ -195629,18 +196156,21 @@ var RunT0ReviewOrchestration = class {
               };
             }
           }
-          const acquire = await this.dependencies.controlPlane.acquireInvocationLease({
-            authorization: input.authorization,
-            idempotencyKey: this.idempotencyKey("lease-acquire", [
-              input.execution.executionId,
-              input.workSlot.workSlotId,
-              acquireRequestId
-            ]),
-            execution: { ...input.execution, streamVersion },
-            workSlot: input.workSlot,
-            manifest,
-            acquireRequestId,
-            ownerIdHash: input.ownerIdHash
+          const acquire = await this.parentLeaseCommand(() => {
+            reviewerSignal?.throwIfAborted();
+            return this.dependencies.controlPlane.acquireInvocationLease({
+              authorization: input.authorization,
+              idempotencyKey: this.idempotencyKey("lease-acquire", [
+                input.execution.executionId,
+                input.workSlot.workSlotId,
+                acquireRequestId
+              ]),
+              execution: { ...input.execution, streamVersion },
+              workSlot: input.workSlot,
+              manifest,
+              acquireRequestId,
+              ownerIdHash: input.ownerIdHash
+            });
           });
           if (acquire.status === "acquired" /* Acquired */) {
             input.busyPollsByProviderLane.delete(
@@ -195693,11 +196223,13 @@ var RunT0ReviewOrchestration = class {
           }
         }
         try {
+          reviewerSignal?.throwIfAborted();
           input.onEvent({
             type: "slot_lease_acquired" /* SlotLeaseAcquired */,
             workSlotId: input.workSlot.workSlotId
           });
           await this.assertRevisionCurrent(input.revision);
+          reviewerSignal?.throwIfAborted();
         } catch (error3) {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
           throw error3;
@@ -195729,7 +196261,14 @@ var RunT0ReviewOrchestration = class {
                 manifest,
                 currentLease,
                 sourceExecutionId: input.execution.executionId,
-                signal,
+                signal: this.laneSignals.has(
+                  input.workSlot.providerVoteIdentityHash
+                ) ? AbortSignal.any([
+                  signal,
+                  this.laneSignals.get(
+                    input.workSlot.providerVoteIdentityHash
+                  )
+                ]) : signal,
                 revision: input.revision
               }) : Promise.resolve(precomputedObservation);
               return activeInvocation;
@@ -195768,7 +196307,11 @@ var RunT0ReviewOrchestration = class {
             observationPayload = error3.currentRevisionObservation;
           } else {
             await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
-            const failureClass = this.dependencies.invocationFailureClassifier.classify(error3);
+            reviewerSignal?.throwIfAborted();
+            const failureClass = this.dependencies.invocationFailureClassifier.classify(
+              error3,
+              this.failureContext(input.workSlot, invocation)
+            );
             try {
               this.dependencies.invocationDiagnostics?.recordFailure({
                 invocation,
@@ -195777,6 +196320,15 @@ var RunT0ReviewOrchestration = class {
                 error: error3
               });
             } catch {
+            }
+            if (this.dependencies.reviewerScheduling) {
+              const context5 = this.failureContext(input.workSlot, invocation);
+              const scope = this.dependencies.invocationFailureClassifier.scope?.(
+                error3,
+                context5
+              ) ?? "reviewer";
+              if (scope !== "reviewer" || failureClass !== "retryable" /* Retryable */)
+                throw new ReviewScopedInvocationFailure(scope, error3);
             }
             if (failureClass === "capacity_unavailable" /* CapacityUnavailable */) {
               throw new ReviewProviderUnavailableSignal(
@@ -195803,11 +196355,8 @@ var RunT0ReviewOrchestration = class {
             }
             const retryDelayMs2 = attemptOrdinal < input.workSlot.attemptBudget ? this.clampProviderDelay(3e4) : 0;
             if (retryDelayMs2 > 0) {
-              if (this.dependencies.signal) {
-                await this.dependencies.delay.sleep(
-                  retryDelayMs2,
-                  this.dependencies.signal
-                );
+              if (waitSignal) {
+                await this.dependencies.delay.sleep(retryDelayMs2, waitSignal);
               } else {
                 await this.dependencies.delay.sleep(retryDelayMs2);
               }
@@ -195824,17 +196373,18 @@ var RunT0ReviewOrchestration = class {
             invocation.manifestFacts.executionProfile,
             observationPayload
           );
-          const committed = await this.dependencies.controlPlane.commitEvidence(
-            {
+          const completedLease = lease;
+          const committed = await this.parentLeaseCommand(
+            () => this.dependencies.controlPlane.commitEvidence({
               authorization: input.authorization,
               idempotencyKey: this.idempotencyKey("evidence-commit", [
-                lease.attemptId,
+                completedLease.attemptId,
                 observationPayload.payloadHash
               ]),
-              lease,
+              lease: completedLease,
               ownerIdHash: input.ownerIdHash,
               observation: observationPayload
-            }
+            })
           );
           await this.assertRevisionCurrent(input.revision);
           const observation = {
@@ -195845,18 +196395,21 @@ var RunT0ReviewOrchestration = class {
             providerInvocationKey: manifest.providerInvocationKey,
             providerVoteIdentityHash: manifest.providerVoteIdentityHash
           };
-          const attached = await this.dependencies.controlPlane.attachObservation({
-            authorization: input.authorization,
-            idempotencyKey: this.idempotencyKey("attach", [
-              input.execution.executionId,
-              input.workSlot.workSlotId,
-              observation.observationId
-            ]),
-            execution: { ...input.execution, streamVersion },
-            workSlot: input.workSlot,
-            observation,
-            attachmentCapability: lease.leaseCapability
-          });
+          const attached = await this.parentCommand(
+            input,
+            (execution) => this.dependencies.controlPlane.attachObservation({
+              authorization: input.authorization,
+              idempotencyKey: this.idempotencyKey("attach", [
+                input.execution.executionId,
+                input.workSlot.workSlotId,
+                observation.observationId
+              ]),
+              execution,
+              workSlot: input.workSlot,
+              observation,
+              attachmentCapability: lease.leaseCapability
+            })
+          );
           streamVersion = attached.streamVersion;
           input.onEvent({
             type: "slot_satisfied" /* SlotSatisfied */,
@@ -195897,29 +196450,38 @@ var RunT0ReviewOrchestration = class {
     };
   }
   async reconcileProviderAttemptExhaustion(input) {
+    const reviewerSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let manifest = input.manifest;
     const busyPollBudget = this.providerLaneBusyPollBudget();
     for (let busyPollCount = 0; busyPollCount < busyPollBudget; busyPollCount += 1) {
+      reviewerSignal?.throwIfAborted();
       await this.assertRevisionCurrent(input.revision);
       const acquireRequestId = this.identity("acquire-request-exhaustion", [
         input.execution.executionId,
         input.workSlot.workSlotId,
         manifest.providerInvocationKey
       ]);
-      const acquire = await this.dependencies.controlPlane.acquireInvocationLease({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey("lease-acquire-exhaustion", [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          acquireRequestId
-        ]),
-        execution: input.execution,
-        workSlot: input.workSlot,
-        manifest,
-        acquireRequestId,
-        ownerIdHash: input.ownerIdHash
+      const acquire = await this.parentLeaseCommand(() => {
+        reviewerSignal?.throwIfAborted();
+        return this.dependencies.controlPlane.acquireInvocationLease({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey("lease-acquire-exhaustion", [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            acquireRequestId
+          ]),
+          execution: input.execution,
+          workSlot: input.workSlot,
+          manifest,
+          acquireRequestId,
+          ownerIdHash: input.ownerIdHash
+        });
       });
       if (acquire.status === "input_stale" /* InputStale */) {
+        reviewerSignal?.throwIfAborted();
         const staleManifest = JSON.parse(manifest.manifestCanonicalJson);
         if (typeof staleManifest.memoryBundleHash !== "string" || !this.dependencies.memoryAdmission) {
           throw new Error("review_memory_stale_without_snapshot");
@@ -195927,7 +196489,8 @@ var RunT0ReviewOrchestration = class {
         this.dependencies.memoryAdmission.discard();
         const invocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
-          attemptOrdinal: input.workSlot.attemptBudget + 1
+          attemptOrdinal: input.workSlot.attemptBudget + 1,
+          ...reviewerSignal ? { signal: reviewerSignal } : {}
         });
         manifest = await this.dependencies.invocationManifestAssembler.assemble(
           invocation
@@ -195953,11 +196516,8 @@ var RunT0ReviewOrchestration = class {
           Math.min(5e3, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        if (this.dependencies.signal) {
-          await this.dependencies.delay.sleep(
-            delayMs,
-            this.dependencies.signal
-          );
+        if (waitSignal) {
+          await this.dependencies.delay.sleep(delayMs, waitSignal);
         } else {
           await this.dependencies.delay.sleep(delayMs);
         }
@@ -196036,20 +196596,23 @@ var RunT0ReviewOrchestration = class {
       await this.assertRevisionCurrent(input.revision);
       if (!isOriginalAcceptedManifest(input, input.manifest))
         await this.assertMemoryEligible(input.invocation);
-      const attached = await this.dependencies.controlPlane.attachObservation({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey("attach-replayed", [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          lookup2.observation.observationId,
-          lookup2.attestationId,
-          input.revision.reviewRevisionHash
-        ]),
-        execution: input.execution,
-        workSlot: input.workSlot,
-        observation: lookup2.observation,
-        attachmentCapability: replayed.attachmentCapability
-      });
+      const attached = await this.parentCommand(
+        input,
+        (execution) => this.dependencies.controlPlane.attachObservation({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey("attach-replayed", [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            lookup2.observation.observationId,
+            lookup2.attestationId,
+            input.revision.reviewRevisionHash
+          ]),
+          execution,
+          workSlot: input.workSlot,
+          observation: lookup2.observation,
+          attachmentCapability: replayed.attachmentCapability
+        })
+      );
       streamVersion = attached.streamVersion;
     } else if (input.restoredSlot.state === "satisfied" /* Satisfied */) {
       if (input.restoredSlot.acceptedObservationRefId !== observationRefId(
@@ -196062,44 +196625,51 @@ var RunT0ReviewOrchestration = class {
         );
       }
     } else if (lookup2.attachment.kind === "exact_revision_reuse") {
-      const attached = await this.dependencies.controlPlane.attachObservation({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey("attach", [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          lookup2.observation.observationId
-        ]),
-        execution: input.execution,
-        workSlot: input.workSlot,
-        observation: lookup2.observation,
-        attachmentCapability: lookup2.attachment.capability
-      });
+      const attachment = lookup2.attachment;
+      const attached = await this.parentCommand(
+        input,
+        (execution) => this.dependencies.controlPlane.attachObservation({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey("attach", [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            lookup2.observation.observationId
+          ]),
+          execution,
+          workSlot: input.workSlot,
+          observation: lookup2.observation,
+          attachmentCapability: attachment.capability
+        })
+      );
       streamVersion = attached.streamVersion;
     } else {
-      const latestExecution = await this.dependencies.controlPlane.restoreExecution({
-        authorization: input.authorization,
-        reviewRevisionHash: input.revision.reviewRevisionHash
-      });
-      const adoptionExecution = refreshExecutionAdmission(
+      const attachment = lookup2.attachment;
+      const adoptionExecution = this.dependencies.reviewerScheduling ? input.execution : refreshExecutionAdmission(
         input.execution,
-        latestExecution
+        await this.dependencies.controlPlane.restoreExecution({
+          authorization: input.authorization,
+          reviewRevisionHash: input.revision.reviewRevisionHash
+        })
       );
-      const adopted = await this.dependencies.controlPlane.adoptObservation({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey("adopt", [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          lookup2.observation.observationId,
-          lookup2.attachment.sourceLeaseId,
-          lookup2.attachment.sourceFencingToken
-        ]),
-        execution: adoptionExecution,
-        workSlot: input.workSlot,
-        planHash: input.planHash,
-        manifest: input.manifest,
-        observation: lookup2.observation,
-        source: lookup2.attachment
-      });
+      const adopted = await this.parentCommand(
+        { ...input, execution: adoptionExecution },
+        (execution) => this.dependencies.controlPlane.adoptObservation({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey("adopt", [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            lookup2.observation.observationId,
+            attachment.sourceLeaseId,
+            attachment.sourceFencingToken
+          ]),
+          execution,
+          workSlot: input.workSlot,
+          planHash: input.planHash,
+          manifest: input.manifest,
+          observation: lookup2.observation,
+          source: attachment
+        })
+      );
       streamVersion = adopted.streamVersion;
     }
     input.onEvent({
@@ -196119,13 +196689,16 @@ var RunT0ReviewOrchestration = class {
       });
       if (!replay) return null;
       await this.assertRevisionCurrent(input.revision);
-      return this.dependencies.contextAttestations.commitContextReplay({
-        authorization: input.authorization,
-        execution: input.execution,
-        workSlot: input.workSlot,
-        candidate: input.candidate,
-        result: replay
-      });
+      return this.parentCommand(
+        input,
+        (execution) => this.dependencies.contextAttestations.commitContextReplay({
+          authorization: input.authorization,
+          execution,
+          workSlot: input.workSlot,
+          candidate: input.candidate,
+          result: replay
+        })
+      );
     } catch {
       return null;
     }
@@ -196146,16 +196719,18 @@ var RunT0ReviewOrchestration = class {
       lease.fencingToken,
       lease.expiresAt
     ]);
-    const renewed = await this.dependencies.controlPlane.renewInvocationLease({
-      idempotencyKey: this.idempotencyKey("lease-renew", [
-        lease.leaseId,
-        lease.fencingToken,
+    const renewed = await this.parentLeaseCommand(
+      () => this.dependencies.controlPlane.renewInvocationLease({
+        idempotencyKey: this.idempotencyKey("lease-renew", [
+          lease.leaseId,
+          lease.fencingToken,
+          renewRequestId
+        ]),
+        lease,
+        ownerIdHash,
         renewRequestId
-      ]),
-      lease,
-      ownerIdHash,
-      renewRequestId
-    });
+      })
+    );
     if (renewed.leaseId !== lease.leaseId || renewed.attemptId !== lease.attemptId || renewed.resultReportUntil !== lease.resultReportUntil || renewed.fencingToken !== lease.fencingToken || (renewed.renewalCeilingReached ? renewed.expiresAt !== lease.expiresAt : Date.parse(renewed.expiresAt) <= Date.parse(lease.expiresAt))) {
       throw new Error("review_orchestration_lease_renewal_drift");
     }
@@ -196247,13 +196822,19 @@ var RunT0ReviewOrchestration = class {
     }
   }
   async prepareInvestigationCandidate(input) {
-    const recording = this.dependencies.investigationRecording;
+    const laneSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const scopedSignal = laneSignal && this.dependencies.signal ? AbortSignal.any([laneSignal, this.dependencies.signal]) : laneSignal ?? this.dependencies.signal;
+    const recording = this.dependencies.resolveInvestigationRecording ? this.dependencies.resolveInvestigationRecording(input.workSlot) : this.dependencies.investigationRecording;
     const invocations = this.dependencies.investigationInvocations;
     if (!recording || !invocations) return null;
     try {
+      laneSignal?.throwIfAborted();
       const invocation = await invocations.prepare({
         workSlot: input.workSlot,
-        attemptOrdinal: input.attemptOrdinal
+        attemptOrdinal: input.attemptOrdinal,
+        ...laneSignal ? { signal: laneSignal } : {}
       });
       const manifest = await this.dependencies.invocationManifestAssembler.assemble(
         invocation
@@ -196266,15 +196847,15 @@ var RunT0ReviewOrchestration = class {
       if (!recording.supports({ workSlot: input.workSlot, invocation })) {
         return null;
       }
-      this.dependencies.signal?.throwIfAborted();
+      scopedSignal?.throwIfAborted();
       const abort = new AbortController();
       const monitorStop = new AbortController();
       const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
-      const cancel3 = () => abort.abort(this.dependencies.signal?.reason);
-      this.dependencies.signal?.addEventListener("abort", cancel3, {
+      const cancel3 = () => abort.abort(scopedSignal?.reason);
+      scopedSignal?.addEventListener("abort", cancel3, {
         once: true
       });
-      if (this.dependencies.signal?.aborted) cancel3();
+      if (scopedSignal?.aborted) cancel3();
       let stopped = false;
       const monitor = async () => {
         while (!stopped && !abort.signal.aborted) {
@@ -196314,7 +196895,7 @@ var RunT0ReviewOrchestration = class {
           sourceReviewRevisionHash: input.revision.reviewRevisionHash,
           signal: abort.signal
         });
-        this.dependencies.signal?.throwIfAborted();
+        scopedSignal?.throwIfAborted();
         if (abort.signal.reason instanceof ReviewExecutionDeadlineReachedSignal) {
           throw abort.signal.reason;
         }
@@ -196328,10 +196909,10 @@ var RunT0ReviewOrchestration = class {
         stopped = true;
         monitorStop.abort();
         await monitorPromise;
-        this.dependencies.signal?.removeEventListener("abort", cancel3);
+        scopedSignal?.removeEventListener("abort", cancel3);
       }
     } catch (error3) {
-      this.dependencies.signal?.throwIfAborted();
+      scopedSignal?.throwIfAborted();
       if (error3 instanceof ReviewExecutionSupersededSignal || error3 instanceof ReviewExecutionCancelledSignal || error3 instanceof ReviewExecutionDeadlineReachedSignal) {
         throw error3;
       }
@@ -196436,17 +197017,19 @@ var RunT0ReviewOrchestration = class {
             return void 0;
           }
         }
-        const acquired = await this.dependencies.controlPlane.acquireInvocationLease({
-          authorization: input.authorization,
-          idempotencyKey: this.idempotencyKey("description-lease-acquire", [
-            acquireRequestId
-          ]),
-          execution: input.execution,
-          workSlot: input.workSlot,
-          manifest,
-          acquireRequestId,
-          ownerIdHash: input.command.ownerIdHash
-        });
+        const acquired = await this.parentLeaseCommand(
+          () => this.dependencies.controlPlane.acquireInvocationLease({
+            authorization: input.authorization,
+            idempotencyKey: this.idempotencyKey("description-lease-acquire", [
+              acquireRequestId
+            ]),
+            execution: input.execution,
+            workSlot: input.workSlot,
+            manifest,
+            acquireRequestId,
+            ownerIdHash: input.command.ownerIdHash
+          })
+        );
         if (acquired.status === "busy" /* Busy */) {
           busyPollCount += 1;
           continue;
@@ -196551,16 +197134,18 @@ var RunT0ReviewOrchestration = class {
       String(attemptOrdinal)
     ]);
     try {
-      await this.dependencies.controlPlane.releaseInvocationLease({
-        idempotencyKey: this.idempotencyKey("lease-release", [
-          lease.leaseId,
-          lease.fencingToken,
+      await this.parentLeaseCommand(
+        () => this.dependencies.controlPlane.releaseInvocationLease({
+          idempotencyKey: this.idempotencyKey("lease-release", [
+            lease.leaseId,
+            lease.fencingToken,
+            releaseRequestId
+          ]),
+          lease,
+          ownerIdHash,
           releaseRequestId
-        ]),
-        lease,
-        ownerIdHash,
-        releaseRequestId
-      });
+        })
+      );
       return true;
     } catch {
       return false;
@@ -196655,14 +197240,14 @@ function validateCommand(command) {
       throw new Error("review_orchestration_commit_sha_invalid");
     }
   }
-  for (const digest5 of [
+  for (const digest6 of [
     command.reviewRevisionHash,
     command.compatibilityKey,
     command.planHash,
     command.assignmentManifestHash,
     command.ownerIdHash
   ]) {
-    if (!/^[a-f0-9]{64}$/.test(digest5)) {
+    if (!/^[a-f0-9]{64}$/.test(digest6)) {
       throw new Error("review_orchestration_digest_invalid");
     }
   }
@@ -196778,7 +197363,7 @@ function validateManifest(manifest) {
     manifest.manifestKey,
     manifest.providerInvocationKey,
     manifest.providerVoteIdentityHash
-  ].every((digest5) => /^[a-f0-9]{64}$/.test(digest5))) {
+  ].every((digest6) => /^[a-f0-9]{64}$/.test(digest6))) {
     throw new Error("review_orchestration_manifest_invalid");
   }
 }
@@ -196888,6 +197473,15 @@ function isOriginalAcceptedManifest(input, manifest) {
   );
   return original !== void 0 && original.manifestCanonicalJson === manifest.manifestCanonicalJson && original.manifestKey === manifest.manifestKey && original.providerInvocationKey === manifest.providerInvocationKey && original.providerVoteIdentityHash === manifest.providerVoteIdentityHash;
 }
+function maxVersion(left, right) {
+  return BigInt(left) >= BigInt(right) ? left : right;
+}
+var ReviewScopedInvocationFailure = class extends Error {
+  constructor(scope, cause) {
+    super("review_invocation_scoped_failure", { cause });
+    this.scope = scope;
+  }
+};
 
 // src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts
 var import_crypto18 = require("crypto");
@@ -199032,7 +199626,7 @@ function parseRawInventory(raw) {
   }
   const entries = [];
   for (let index = 0; index < tokens.length; index += 2) {
-    const record6 = decodeUtf8(
+    const record7 = decodeUtf8(
       tokens[index],
       "canonical_inventory_raw_record_encoding_invalid"
     );
@@ -199040,7 +199634,7 @@ function parseRawInventory(raw) {
       tokens[index + 1],
       "canonical_inventory_path_encoding_invalid"
     );
-    const match2 = RAW_RECORD.exec(record6);
+    const match2 = RAW_RECORD.exec(record7);
     if (!match2 || !path19 || path19.includes("\0")) {
       throw new Error("canonical_inventory_raw_record_invalid");
     }
@@ -202338,7 +202932,7 @@ var ContextAttestationReplayRunner = class {
         ),
         recorder
       });
-      const dependencies = [];
+      const dependencies2 = [];
       let previousEventHash = eventChainSeedHash;
       for (const source of plan.sourceDependencies) {
         await replayOperation(gateway, source);
@@ -202358,7 +202952,7 @@ var ContextAttestationReplayRunner = class {
         const eventHash = sha2562(
           canonicalizeReviewContextReplayEvent(eventWithoutHash)
         );
-        dependencies.push(Object.freeze({ ...eventWithoutHash, eventHash }));
+        dependencies2.push(Object.freeze({ ...eventWithoutHash, eventHash }));
         previousEventHash = eventHash;
       }
       const replayResultCanonicalJson = canonicalJson4({
@@ -202368,7 +202962,7 @@ var ContextAttestationReplayRunner = class {
         checkoutTreeOid: targetCheckoutTreeOid,
         authenticatedChainHash: previousEventHash,
         complete: true,
-        dependencies
+        dependencies: dependencies2
       });
       return Object.freeze({
         targetCheckoutTreeOid,
@@ -202700,7 +203294,7 @@ function parseReplayPlan(candidate) {
   if (parsed.planVersion !== 1 || parsed.attestationId !== candidate.attestationId || parsed.attestationHash !== candidate.attestationHash || !Array.isArray(parsed.sourceDependencies) || parsed.sourceDependencies.length === 0 || parsed.sourceDependencies.length > CONTEXT_GATEWAY_MAX_OPERATIONS) {
     throw new Error("context_replay_plan_scope_invalid");
   }
-  const dependencies = parsed.sourceDependencies.map((value, index) => {
+  const dependencies2 = parsed.sourceDependencies.map((value, index) => {
     if (!isRecord7(value)) throw new Error("context_replay_dependency_invalid");
     requireExactKeys2(value, [
       "operation",
@@ -202739,7 +203333,7 @@ function parseReplayPlan(candidate) {
       stringField(parsed, "gatewayBinaryHash"),
       "source_gateway_binary_hash"
     ),
-    sourceDependencies: Object.freeze(dependencies)
+    sourceDependencies: Object.freeze(dependencies2)
   });
 }
 function parseReplayPlanV4(parsed, candidate) {
@@ -202926,10 +203520,10 @@ function messageFromError(error3) {
   if (typeof error3 === "string") return error3;
   if (typeof error3 === "object" && error3 !== null) {
     try {
-      const record6 = error3;
+      const record7 = error3;
       const serialized = JSON.stringify({
-        ...record6,
-        ..."message" in record6 && typeof record6.message === "string" ? { message: record6.message } : error3 instanceof Error ? { message: error3.message } : {}
+        ...record7,
+        ..."message" in record7 && typeof record7.message === "string" ? { message: record7.message } : error3 instanceof Error ? { message: error3.message } : {}
       });
       if (serialized !== "{}") return serialized;
     } catch {
@@ -202970,11 +203564,11 @@ function collectKnownCapacityFields(value, depth = 0) {
       { values: [], definitive: false }
     );
   }
-  const record6 = value;
+  const record7 = value;
   const fields = [];
   let definitive = false;
   for (const key of ["error", "status", "message", "code"]) {
-    const field = record6[key];
+    const field = record7[key];
     if (typeof field === "string" || typeof field === "number") {
       const normalized = String(field);
       fields.push(normalized);
@@ -203544,8 +204138,15 @@ var ProviderInvocationFailureClassifier = class {
   constructor(gatewayFailureFact = () => void 0) {
     this.gatewayFailureFact = gatewayFailureFact;
   }
-  classify(error3) {
-    const fact = this.gatewayFailureFact();
+  scope(_error, context5) {
+    const fact = this.gatewayFailureFact(context5);
+    if (fact?.failureScope === "allocation") {
+      return fact.concurrencyGroupId === context5.concurrencyGroupId ? "allocation" : "run";
+    }
+    return fact ? fact.failureScope ?? "reviewer" : void 0;
+  }
+  classify(error3, context5) {
+    const fact = this.gatewayFailureFact(context5);
     if (error3 instanceof ContextToolsError || fact?.code === "context_tools_unavailable")
       return "configuration_mismatch" /* ConfigurationMismatch */;
     if (fact?.code === "admission_limited" && (fact.effect === "not_dispatched" || fact.effect === "rejected_before_dispatch")) {
@@ -203664,8 +204265,8 @@ function diagnosticText(error3) {
   if (typeof error3 !== "object" || error3 === null || Array.isArray(error3)) {
     return "";
   }
-  const record6 = error3;
-  return [record6.name, record6.code, record6.message].filter((value) => typeof value === "string").join(" ");
+  const record7 = error3;
+  return [record7.name, record7.code, record7.message].filter((value) => typeof value === "string").join(" ");
 }
 
 // src/review-orchestration/infrastructure/git-review-revision-materializer.ts
@@ -204035,8 +204636,8 @@ function canonicalRevalidationJson(value) {
 function revalidationHash(domain, value) {
   return (0, import_crypto25.createHash)("sha256").update(`${REVALIDATION_POLICY_VERSION}:${domain}\0`).update(canonicalRevalidationJson(value)).digest("hex");
 }
-function byteHash(bytes) {
-  return (0, import_crypto25.createHash)("sha256").update(bytes).digest("hex");
+function byteHash(bytes2) {
+  return (0, import_crypto25.createHash)("sha256").update(bytes2).digest("hex");
 }
 function makeVerifyPacket(input) {
   const unsigned = {
@@ -204509,12 +205110,12 @@ function compareCodeUnits6(left, right) {
 // src/review-projection/domain/comparison-baseline.ts
 var boundedText = external_exports.string().min(1).refine((value) => Buffer.byteLength(value) <= REVIEW_PROJECTION_ABSOLUTE_LIMITS.maxStringBytes);
 var sha = external_exports.string().regex(/^[a-f0-9]{40}$/);
-var digest2 = external_exports.string().regex(/^[a-f0-9]{64}$/);
+var digest3 = external_exports.string().regex(/^[a-f0-9]{64}$/);
 var line = external_exports.number().int().positive().safe();
 var hintSchema = external_exports.object({
   lineageId: external_exports.string().regex(/^rrl_[a-f0-9]{32}$/),
   category: boundedText,
-  normalizedFailureModeHash: digest2,
+  normalizedFailureModeHash: digest3,
   symbolAnchor: boundedText.optional(),
   trustedMarker: external_exports.string().regex(/^(?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64})$/).optional(),
   severity: external_exports.nativeEnum(FindingSeverity),
@@ -204541,7 +205142,7 @@ var appliedResolutionSchema = external_exports.object({
 var baselineSchema = external_exports.object({
   schemaVersion: external_exports.literal("comparison_baseline.v1"),
   sourceReviewedHeadSha: sha,
-  sourceReviewRevisionHash: digest2,
+  sourceReviewRevisionHash: digest3,
   sourceExecutionGeneration: external_exports.string().regex(/^[1-9][0-9]{0,18}$/).refine((value) => BigInt(value) <= 9223372036854775807n),
   snapshotVersion: external_exports.number().int().positive().safe(),
   projectionPolicyVersion: external_exports.enum([
@@ -205433,7 +206034,7 @@ var FreshGitHubLifecycleInventory = class {
       ),
       promptTargets: Object.freeze([
         ...raw.candidates,
-        ...raw.manualAttention.map((record6) => record6.target)
+        ...raw.manualAttention.map((record7) => record7.target)
       ])
     });
   }
@@ -205441,12 +206042,12 @@ var FreshGitHubLifecycleInventory = class {
 function toRevalidationTargets(raw, ledgerWatermark, activeSkips = []) {
   const targets = [
     ...raw.candidates,
-    ...raw.manualAttention.map((record6) => ({
-      ...record6.target,
+    ...raw.manualAttention.map((record7) => ({
+      ...record7.target,
       reasonCodes: [
         .../* @__PURE__ */ new Set([
-          ...record6.target.reasonCodes ?? [],
-          ...record6.reasonCodes
+          ...record7.target.reasonCodes ?? [],
+          ...record7.reasonCodes
         ])
       ]
     }))
@@ -205513,9 +206114,9 @@ function mapFreshInventory(raw, expectedHeadSha, ledger) {
     ...raw.candidates.map((target) => ({ target, manual: false })),
     // Include server-authorized observation-only parents without mutation trust.
     ...raw.manualAttention.filter(
-      (record6) => record6.target.trustedAuthor || record6.target.managedObservation
-    ).map((record6) => ({
-      target: record6.target,
+      (record7) => record7.target.trustedAuthor || record7.target.managedObservation
+    ).map((record7) => ({
+      target: record7.target,
       manual: true
     }))
   ].sort(
@@ -205692,9 +206293,9 @@ function reviewBannerBaseUrlFromEnvironment(env = process.env) {
 
 // src/review-projection/application/build-current-review-projection.ts
 var BuildCurrentReviewProjection = class {
-  constructor(dependencies) {
-    this.dependencies = dependencies;
-    this.limits = validateReviewProjectionLimits(dependencies.limits);
+  constructor(dependencies2) {
+    this.dependencies = dependencies2;
+    this.limits = validateReviewProjectionLimits(dependencies2.limits);
   }
   limits;
   currentReviewProjector = new CurrentReviewProjector();
@@ -206860,33 +207461,33 @@ function normalizeProviderVoteKey(provider, actualModel) {
   return normalizedProvider;
 }
 function getProviderVoteKeys(finding) {
-  const keys4 = /* @__PURE__ */ new Set();
+  const keys5 = /* @__PURE__ */ new Set();
   for (const key of finding.providerVoteKeys || []) {
     const normalized = normalizeProviderVoteKey(key);
-    if (normalized) keys4.add(normalized);
+    if (normalized) keys5.add(normalized);
   }
-  if (keys4.size > 0) return Array.from(keys4);
+  if (keys5.size > 0) return Array.from(keys5);
   const attributedProviders = new Set(
     (finding.providerModels || []).map((item) => item.provider)
   );
   for (const item of finding.providerModels || []) {
     const key = normalizeProviderVoteKey(item.provider, item.actualModel);
-    if (key) keys4.add(key);
+    if (key) keys5.add(key);
   }
   for (const provider of finding.providers || []) {
     if (attributedProviders.has(provider)) continue;
     const key = normalizeProviderVoteKey(provider);
-    if (key) keys4.add(key);
+    if (key) keys5.add(key);
   }
   if (!finding.provider || !attributedProviders.has(finding.provider)) {
     const primaryKey = normalizeProviderVoteKey(
       finding.provider,
       finding.actualModel
     );
-    if (primaryKey) keys4.add(primaryKey);
+    if (primaryKey) keys5.add(primaryKey);
   }
-  if (keys4.size === 0) keys4.add("static");
-  return Array.from(keys4);
+  if (keys5.size === 0) keys5.add("static");
+  return Array.from(keys5);
 }
 function mergeProviderModels(left, right) {
   const merged = /* @__PURE__ */ new Map();
@@ -207075,13 +207676,13 @@ function normalizeFile(file) {
 }
 function uniqueSuggestionsByVoteKey(suggestions) {
   const seen = /* @__PURE__ */ new Set();
-  const unique2 = [];
+  const unique3 = [];
   for (const suggestion of suggestions) {
     if (seen.has(suggestion.voteKey)) continue;
     seen.add(suggestion.voteKey);
-    unique2.push(suggestion);
+    unique3.push(suggestion);
   }
-  return unique2;
+  return unique3;
 }
 
 // src/analysis/deduplicator.ts
@@ -207149,10 +207750,12 @@ function mergeFindings(existing, incoming) {
   return {
     ...existing,
     ...existing.sourceFindingIds || incoming.sourceFindingIds ? {
-      sourceFindingIds: Array.from(/* @__PURE__ */ new Set([
-        ...existing.sourceFindingIds ?? [],
-        ...incoming.sourceFindingIds ?? []
-      ])).sort()
+      sourceFindingIds: Array.from(
+        /* @__PURE__ */ new Set([
+          ...existing.sourceFindingIds ?? [],
+          ...incoming.sourceFindingIds ?? []
+        ])
+      ).sort()
     } : {},
     startLine: mergeStartLine(existing, incoming),
     line: Math.max(existing.line, incoming.line),
@@ -207906,7 +208509,7 @@ var FindingFilter = class {
 // src/analysis/thread-lifecycle.ts
 var ThreadLifecycleAggregator = class {
   aggregate(input) {
-    const plannedProviders = unique(input.plannedProviders);
+    const plannedProviders = unique2(input.plannedProviders);
     const quorumMode = plannedProviders.length >= 2 ? "multi-provider" : "single-provider";
     const thresholds = resolveRevalidationConfidenceThresholds(
       input.config?.reviewThreadLifecycleResolveConfidence
@@ -207921,10 +208524,10 @@ var ThreadLifecycleAggregator = class {
     );
     const votes = this.collectVotes(input, thresholds);
     const assignmentByTarget = new Map(
-      (input.assignmentRecords ?? []).map((record6) => [record6.targetId, record6])
+      (input.assignmentRecords ?? []).map((record7) => [record7.targetId, record7])
     );
     const commandDismissedTargetIds = new Set(
-      (input.skipped ?? []).filter((record6) => record6.reasonCodes.includes("command_dismissed")).map((record6) => record6.target.targetId)
+      (input.skipped ?? []).filter((record7) => record7.reasonCodes.includes("command_dismissed")).map((record7) => record7.target.targetId)
     );
     const result2 = {
       mode: input.mode,
@@ -207935,7 +208538,7 @@ var ThreadLifecycleAggregator = class {
       previousStillValid: [],
       previousUncertain: [],
       manualAttention: (input.initialManualAttention ?? []).filter(
-        (record6) => !commandDismissedTargetIds.has(record6.target.targetId)
+        (record7) => !commandDismissedTargetIds.has(record7.target.targetId)
       ),
       mutationSkipped: [],
       mutationFailed: [],
@@ -207948,7 +208551,7 @@ var ThreadLifecycleAggregator = class {
       for (const target of input.targets) {
         result2.previousUncertain.push({
           target,
-          reasonCodes: unique([
+          reasonCodes: unique2([
             ...target.reasonCodes ?? [],
             "inventory_failed"
           ])
@@ -207960,9 +208563,9 @@ var ThreadLifecycleAggregator = class {
       const targetVotes = Array.from(
         votes.get(target.targetId)?.values() ?? []
       );
-      const record6 = (reasonCodes) => ({
+      const record7 = (reasonCodes) => ({
         target,
-        reasonCodes: unique([
+        reasonCodes: unique2([
           ...target.reasonCodes ?? [],
           ...reasonCodes
         ]),
@@ -207972,20 +208575,20 @@ var ThreadLifecycleAggregator = class {
         const reasonCodes = [];
         if (target.hasHumanReply) reasonCodes.push("human_reply");
         if (!target.trustedAuthor) reasonCodes.push("untrusted_author");
-        result2.manualAttention.push(record6(reasonCodes));
+        result2.manualAttention.push(record7(reasonCodes));
         continue;
       }
       if (currentFingerprints.has(target.fingerprint) || input.currentFindings.some(
         (finding) => currentFindingMatchesTarget(finding, target)
       )) {
-        result2.previousStillValid.push(record6(["current_finding_present"]));
+        result2.previousStillValid.push(record7(["current_finding_present"]));
         continue;
       }
       if (providerCurrentFindings.some(
         (finding) => currentFindingMatchesTarget(finding, target)
       )) {
         result2.previousStillValid.push(
-          record6(["provider_current_finding_present"])
+          record7(["provider_current_finding_present"])
         );
         continue;
       }
@@ -207994,8 +208597,8 @@ var ThreadLifecycleAggregator = class {
       const missingProviderReasons = plannedProviders.filter((provider) => !assignedProviders.includes(provider)).map(() => "outside_review_scope");
       if (assignment && (assignment.scopeStatus !== "in_scope" || assignedProviders.length === 0)) {
         result2.previousUncertain.push(
-          record6(
-            unique([
+          record7(
+            unique2([
               ...missingProviderReasons,
               "outside_review_scope",
               "insufficient_resolved_quorum"
@@ -208008,7 +208611,7 @@ var ThreadLifecycleAggregator = class {
         (vote) => vote.valid && vote.verdict === "still_valid"
       );
       if (stillValidVotes.length > 0) {
-        result2.previousStillValid.push(record6(["still_valid_vote"]));
+        result2.previousStillValid.push(record7(["still_valid_vote"]));
         continue;
       }
       const expectedProviders = plannedProviders.filter(
@@ -208039,15 +208642,15 @@ var ThreadLifecycleAggregator = class {
       const hasResolvedQuorum = quorumMode === "single-provider" ? resolvedVotes.length === 1 && plannedProviders.length === 1 : resolvedVotes.length >= 2;
       if (hasResolvedQuorum) {
         if (input.mode === "report") {
-          result2.mutationSkipped.push(record6(["report_mode"]));
+          result2.mutationSkipped.push(record7(["report_mode"]));
         } else {
-          result2.resolvedCandidates.push(record6([]));
+          result2.resolvedCandidates.push(record7([]));
         }
         continue;
       }
       result2.previousUncertain.push(
-        record6(
-          unique([
+        record7(
+          unique2([
             ...missingOrFailedReasons,
             ...invalidVoteReasons,
             ...uncertainVotes.length > 0 ? ["provider_uncertain"] : [],
@@ -208151,8 +208754,8 @@ var ThreadLifecycleAggregator = class {
     );
   }
 };
-function isLinkedCurrentFinding(record6) {
-  return record6.reasonCodes.includes("current_finding_present");
+function isLinkedCurrentFinding(record7) {
+  return record7.reasonCodes.includes("current_finding_present");
 }
 function hasConcreteEvidence(evidence) {
   return evidence.some(
@@ -208191,7 +208794,7 @@ function safestVote(left, right) {
   };
   return rank(right) > rank(left) ? right : left;
 }
-function unique(values) {
+function unique2(values) {
   return Array.from(new Set(values));
 }
 
@@ -208686,36 +209289,36 @@ function renderReviewSummary(review, language, options = {}) {
   );
   const lifecycle = review.threadLifecycle?.mode === "off" ? void 0 : review.threadLifecycle;
   const stillValid = lifecycle?.previousStillValid.filter(
-    (record6) => !isLinkedCurrentFinding(record6)
+    (record7) => !isLinkedCurrentFinding(record7)
   ) ?? [];
   const appliedResolutions = new Set(
-    lifecycle?.resolvedByLifecycle.map((record6) => record6.target.targetId)
+    lifecycle?.resolvedByLifecycle.map((record7) => record7.target.targetId)
   );
   const attention = lifecycle ? [
     ...lifecycle.resolvedCandidates.filter(
-      (record6) => !appliedResolutions.has(record6.target.targetId)
+      (record7) => !appliedResolutions.has(record7.target.targetId)
     ),
     ...lifecycle.previousUncertain,
     ...lifecycle.manualAttention,
     ...lifecycle.mutationSkipped,
     ...lifecycle.mutationFailed,
     ...lifecycle.skipped.filter(
-      (record6) => !record6.reasonCodes.every(
+      (record7) => !record7.reasonCodes.every(
         (reason) => reason === "command_dismissed"
       )
     )
   ] : [];
   const lifecycleLines = [];
   const add = (records, kind) => {
-    for (const record6 of records)
+    for (const record7 of records)
       lifecycleLines.push({
         kind,
-        title: record6.target.title,
+        title: record7.target.title,
         message: [
-          record6.target.message,
-          ...record6.reasonCodes.map((reason) => reason.replaceAll("_", " "))
+          record7.target.message,
+          ...record7.reasonCodes.map((reason) => reason.replaceAll("_", " "))
         ].join("\n\n"),
-        locationLabel: `${record6.target.currentPath ?? record6.target.originalPath}:${record6.target.currentLine ?? record6.target.originalLine ?? 1}`
+        locationLabel: `${record7.target.currentPath ?? record7.target.originalPath}:${record7.target.currentLine ?? record7.target.originalLine ?? 1}`
       });
   };
   add(stillValid, "active");
@@ -208757,10 +209360,10 @@ function renderReviewSummary(review, language, options = {}) {
     lifecycleAttention: attention.length > 0 || lifecycle?.inventoryFailed === true || (lifecycle?.warnings.length ?? 0) > 0,
     previousCounts: {
       critical: stillValid.filter(
-        (record6) => record6.target.severity === "critical"
+        (record7) => record7.target.severity === "critical"
       ).length,
-      major: stillValid.filter((record6) => record6.target.severity === "major").length,
-      minor: stillValid.filter((record6) => record6.target.severity === "minor").length
+      major: stillValid.filter((record7) => record7.target.severity === "major").length,
+      minor: stillValid.filter((record7) => record7.target.severity === "minor").length
     },
     ...review.metrics.dismissedFindings ? { dismissedFindings: review.metrics.dismissedFindings } : {},
     ...measured ? {
@@ -208790,7 +209393,7 @@ function toReviewerSummaryFinding(finding) {
     ...finding.evidence ? { evidence: finding.evidence } : {},
     attribution: Array.from(
       /* @__PURE__ */ new Set([
-        ...finding.providerModels?.map((model) => model.provider) ?? [],
+        ...finding.providerModels?.map((model2) => model2.provider) ?? [],
         ...finding.providers ?? [],
         ...finding.provider ? [finding.provider] : []
       ])
@@ -210440,9 +211043,9 @@ function getBlockingFindingBreakdown(review, threshold) {
     attributedCarriedForward
   );
   const unclassifiedCurrent = current - fromCurrentReview - carriedForward;
-  const previousStillValid = (review.threadLifecycle?.previousStillValid ?? []).filter((record6) => {
-    if (isLinkedCurrentFinding(record6)) return false;
-    const severity = record6.target.severity;
+  const previousStillValid = (review.threadLifecycle?.previousStillValid ?? []).filter((record7) => {
+    if (isLinkedCurrentFinding(record7)) return false;
+    const severity = record7.target.severity;
     return (severity === "critical" || severity === "major" || severity === "minor") && severityRank[severity] >= minRank;
   }).length;
   return {
@@ -210591,17 +211194,17 @@ var LegacyReviewProjectionPolicyAdapter = class {
     });
     const decisions = /* @__PURE__ */ new Map();
     const collect = (records, verdict) => {
-      for (const record6 of records) {
-        decisions.set(record6.target.targetId, {
-          targetId: record6.target.targetId,
+      for (const record7 of records) {
+        decisions.set(record7.target.targetId, {
+          targetId: record7.target.targetId,
           verdict,
-          reasonCodes: sortedUnique3(record6.reasonCodes),
-          ...verdict === "still_valid" /* StillValid */ && record6.reasonCodes.includes("current_finding_present") ? {
+          reasonCodes: sortedUnique3(record7.reasonCodes),
+          ...verdict === "still_valid" /* StillValid */ && record7.reasonCodes.includes("current_finding_present") ? {
             currentSourceFindingIds: sortedUnique3(
               query.findings.filter(
                 (finding) => currentFindingMatchesTarget(
                   toLegacyFinding(finding),
-                  record6.target
+                  record7.target
                 )
               ).flatMap((finding) => finding.sourceFindingIds)
             )
@@ -211465,9 +212068,9 @@ var ProductionReviewProjectionCommandFactory = class {
       ].sort()
     );
     const providerExecution = providerExecutionSummary(
-      this.input.lifecycleVerification ? this.input.assignments.filter(
+      this.input.assignments.filter(
         (assignment) => assignment.taskKind === "finding_discovery"
-      ) : this.input.assignments,
+      ),
       evidence
     );
     const manifestFiles = Object.freeze(
@@ -211538,7 +212141,7 @@ function validateAcceptedEvidence(input) {
   for (const accepted of input.evidence) {
     const { coverageManifest: manifest, workSlotId } = accepted;
     const assignment = assignments.get(workSlotId);
-    if (manifest.workSlotId !== workSlotId || !assignment || accepted.observation.providerKind !== assignment.providerKind || evidence.has(workSlotId)) {
+    if (manifest.workSlotId !== workSlotId || !assignment || accepted.observation.providerKind !== assignment.providerKind || assignment.providerVoteIdentityHash !== void 0 && accepted.observation.providerVoteIdentityHash !== assignment.providerVoteIdentityHash || evidence.has(workSlotId)) {
       throw new Error("review_projection_coverage_manifest_scope_invalid");
     }
     const rebuilt = createReviewPromptCoverageManifest({
@@ -211557,9 +212160,10 @@ function validateAcceptedEvidence(input) {
 function providerExecutionSummary(assignments, evidence) {
   const byProvider = /* @__PURE__ */ new Map();
   for (const assignment of assignments) {
-    const providerAssignments = byProvider.get(assignment.providerKind) ?? [];
+    const vote = assignment.providerVoteIdentityHash ?? assignment.providerKind;
+    const providerAssignments = byProvider.get(vote) ?? [];
     providerAssignments.push(assignment);
-    byProvider.set(assignment.providerKind, providerAssignments);
+    byProvider.set(vote, providerAssignments);
   }
   const succeededProviders = [...byProvider.values()].filter(
     (providerAssignments) => {
@@ -212022,7 +212626,7 @@ var lifecycleVerificationDescriptorDigestV2 = "sha256:20a13b73ea31192e95c01ad66c
 function parseLifecycleVerificationCapabilityV2(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) invalid4();
   const row = value;
-  const keys4 = [
+  const keys5 = [
     "extensionId",
     "descriptorDigest",
     "executor",
@@ -212040,7 +212644,7 @@ function parseLifecycleVerificationCapabilityV2(value) {
     "deadlineMs",
     "attemptBudget"
   ];
-  if (Object.keys(row).length !== keys4.length || keys4.some((key) => !Object.hasOwn(row, key)) || row.extensionId !== lifecycleVerificationContractV2.extensionId || row.descriptorDigest !== lifecycleVerificationDescriptorDigestV2 || row.executor !== lifecycleVerificationContract.executor || row.version !== 2 || !isReviewModelTransport(row.modelTransport) || typeof row.routeIdentityHash !== "string" || !/^[a-f0-9]{64}$/.test(row.routeIdentityHash) || !isReviewModelWireProtocol(row.protocol) || !reviewModelWireProtocolMatchesTransport(
+  if (Object.keys(row).length !== keys5.length || keys5.some((key) => !Object.hasOwn(row, key)) || row.extensionId !== lifecycleVerificationContractV2.extensionId || row.descriptorDigest !== lifecycleVerificationDescriptorDigestV2 || row.executor !== lifecycleVerificationContract.executor || row.version !== 2 || !isReviewModelTransport(row.modelTransport) || typeof row.routeIdentityHash !== "string" || !/^[a-f0-9]{64}$/.test(row.routeIdentityHash) || !isReviewModelWireProtocol(row.protocol) || !reviewModelWireProtocolMatchesTransport(
     row.modelTransport,
     row.protocol
   ) || row.providerIndex !== 0 || typeof row.providerKind !== "string" || !row.providerKind || row.providerKind.length > 64 || typeof row.model !== "string" || !row.model.trim() || row.model.length > 256 || row.maxDispatches !== lifecycleVerificationContract.maxPackets || row.attemptBudget !== 1)
@@ -212068,19 +212672,19 @@ var invalid5 = () => ({
   valid: false,
   reason: "missing_or_invalid_verdict"
 });
-function exactRecord(value, keys4) {
-  return !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === keys4.length && keys4.every((key) => Object.hasOwn(value, key));
+function exactRecord(value, keys5) {
+  return !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === keys5.length && keys5.every((key) => Object.hasOwn(value, key));
 }
 function boundedText2(value, max = 2048) {
   return typeof value === "string" && Buffer.byteLength(value, "utf8") <= max;
 }
-function validateLifecycleResponse(bytes, prepared, actualModel, requestHash, maxResponseBytes = REVALIDATION_LIMITS.responseBytes) {
-  if (bytes.byteLength > Math.min(maxResponseBytes, REVALIDATION_LIMITS.responseBytes) || actualModel !== prepared.packet.participant.model || requestHash !== prepared.requestHash || byteHash(prepared.requestBytes) !== prepared.requestHash)
+function validateLifecycleResponse(bytes2, prepared, actualModel, requestHash, maxResponseBytes = REVALIDATION_LIMITS.responseBytes) {
+  if (bytes2.byteLength > Math.min(maxResponseBytes, REVALIDATION_LIMITS.responseBytes) || actualModel !== prepared.packet.participant.model || requestHash !== prepared.requestHash || byteHash(prepared.requestBytes) !== prepared.requestHash)
     return invalid5();
   let output;
   try {
     output = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
     );
   } catch {
     return invalid5();
@@ -212525,13 +213129,13 @@ function createGitImmutableSourceReader(input) {
         const size = Number(sizeText);
         if (!Number.isSafeInteger(size) || size > limit)
           return { kind: "oversized" };
-        const bytes = await git(
+        const bytes2 = await git(
           ["cat-file", "blob", blobOid],
           Math.max(1, limit)
         );
-        if (bytes.byteLength !== size || classifyUtf8Content(bytes).kind !== "text")
+        if (bytes2.byteLength !== size || classifyUtf8Content(bytes2).kind !== "text")
           return { kind: "unsupported" };
-        return { kind: "file", headSha, path: path19, blobOid, bytes };
+        return { kind: "file", headSha, path: path19, blobOid, bytes: bytes2 };
       } catch {
         return { kind: "unsupported" };
       }
@@ -212542,18 +213146,18 @@ function createGitImmutableSourceReader(input) {
 // src/review-orchestration/infrastructure/lifecycle-verification-invocation.ts
 var lifecycleTargetWitnesses = (packet) => packet.targets.map((target) => target.witness).sort((left, right) => left.targetId.localeCompare(right.targetId));
 var lifecycleHash = (value) => (0, import_crypto33.createHash)("sha256").update(canonicalRevalidationJson(value)).digest("hex");
-function readLifecycleCapability(json3, model, providerKind, route) {
+function readLifecycleCapability(json3, model2, providerKind, route) {
   if (!json3 || Buffer.byteLength(json3, "utf8") > 4096) return void 0;
   try {
     const raw = JSON.parse(json3);
     if (raw?.extensionId === "lifecycle-verification.v2") {
       const capability = parseLifecycleVerificationCapabilityV2(raw);
-      if (!route || capability.model !== model || capability.providerKind !== providerKind || capability.routeIdentityHash !== route.routeIdentityHash || capability.modelTransport !== route.transport || capability.model !== route.model)
+      if (!route || capability.model !== model2 || capability.providerKind !== providerKind || capability.routeIdentityHash !== route.routeIdentityHash || capability.modelTransport !== route.transport || capability.model !== route.model)
         return void 0;
       return capability;
     }
     const value = raw;
-    if (value.extensionId !== lifecycleVerificationContract.extensionId || value.descriptorDigest !== lifecycleVerificationDescriptorDigest || value.executor !== lifecycleVerificationContract.executor || value.modelTransport !== "account_gateway" || value.providerIndex !== 0 || value.providerKind !== providerKind || value.model !== model || value.maxDispatches !== 2 || value.attemptBudget !== 1)
+    if (value.extensionId !== lifecycleVerificationContract.extensionId || value.descriptorDigest !== lifecycleVerificationDescriptorDigest || value.executor !== lifecycleVerificationContract.executor || value.modelTransport !== "account_gateway" || value.providerIndex !== 0 || value.providerKind !== providerKind || value.model !== model2 || value.maxDispatches !== 2 || value.attemptBudget !== 1)
       return void 0;
     for (const [key, limit] of Object.entries({
       maxPromptBytes: lifecycleVerificationContract.maxPromptBytes,
@@ -213316,8 +213920,8 @@ var import_crypto35 = require("crypto");
 // src/review-orchestration/infrastructure/context-gateway-failed-seal.ts
 var import_crypto34 = require("crypto");
 var emptyCanonicalJson = "{}";
-var emptyCanonicalJsonHash = digest3(emptyCanonicalJson);
-var failedTerminalOutcomeHash = digest3(
+var emptyCanonicalJsonHash = digest4(emptyCanonicalJson);
+var failedTerminalOutcomeHash = digest4(
   "reviewrouter:context-gateway-provider-failed:v1"
 );
 function createFailedContextGatewaySealPayload(input) {
@@ -213338,7 +213942,7 @@ function createFailedContextGatewaySealPayload(input) {
     replayMaterialHash: emptyCanonicalJsonHash
   });
 }
-function digest3(value) {
+function digest4(value) {
   return (0, import_crypto34.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 
@@ -213834,7 +214438,7 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
         result2.contextReplayPlanHash,
         "context_replay_plan_hash"
       );
-      if (digest4(replayPlanCanonicalJson) !== replayPlanHash || observation.contextDependencyAttestationId !== attestationId || observation.contextDependencyAttestationHash !== attestationHash) {
+      if (digest5(replayPlanCanonicalJson) !== replayPlanHash || observation.contextDependencyAttestationId !== attestationId || observation.contextDependencyAttestationHash !== attestationHash) {
         throw new Error("review_action_v2_context_replay_identity_mismatch");
       }
       return {
@@ -214346,7 +214950,7 @@ function parseLookupObservation(result2, input) {
   );
   const payloadHash = requireDigest4(result2.payloadHash, "payload_hash");
   const byteCount = requireNonNegativeInteger3(result2.byteCount, "byte_count");
-  if (payloadHash !== digest4(payloadCanonicalJson) || byteCount !== Buffer.byteLength(payloadCanonicalJson, "utf8")) {
+  if (payloadHash !== digest5(payloadCanonicalJson) || byteCount !== Buffer.byteLength(payloadCanonicalJson, "utf8")) {
     throw new Error("review_action_v2_lookup_payload_identity_mismatch");
   }
   const contextAttestationId = result2.contextDependencyAttestationId ?? null;
@@ -214532,7 +215136,7 @@ function parsePersistedReviewPlan(value, expected) {
     } catch {
       throw new Error("review_action_v2_persisted_manifest_invalid");
     }
-    if (![1, 2].includes(manifest.manifestVersion) || manifest.manifestVersion !== value.assignmentManifestVersion || digest4(
+    if (![1, 2].includes(manifest.manifestVersion) || manifest.manifestVersion !== value.assignmentManifestVersion || digest5(
       `rr.review-assignment-manifest.v${manifest.manifestVersion}\0${json3}`
     ) !== manifestHash)
       throw new Error("review_action_v2_persisted_manifest_invalid");
@@ -214911,9 +215515,9 @@ function parseRolloutCapability(value) {
 }
 function isDependencyClosed(capabilities) {
   const granted = new Set(capabilities);
-  const dependencies = reviewInvestigationRolloutAuthorizationV3Contract.dependencies;
+  const dependencies2 = reviewInvestigationRolloutAuthorizationV3Contract.dependencies;
   return capabilities.every(
-    (capability) => dependencies[capability].every((dependency) => granted.has(dependency))
+    (capability) => dependencies2[capability].every((dependency) => granted.has(dependency))
   );
 }
 function providersAreLaneAuthorized(providerKinds, providerVoteLanes) {
@@ -214959,7 +215563,7 @@ function leaseAcquireRejectedOutcome(reason) {
 }
 function parseProtocolLimits(value) {
   const parsed = parseCanonicalObject(value);
-  const keys4 = [
+  const keys5 = [
     "maxAttemptsPerSlot",
     "maxLeaseDurationMs",
     "maxObservationBytes",
@@ -214974,11 +215578,11 @@ function parseProtocolLimits(value) {
     "maxResultReportDurationMs",
     "maxWorkSlots"
   ];
-  if (Object.keys(parsed).sort().join(",") !== [...keys4].sort().join(",")) {
+  if (Object.keys(parsed).sort().join(",") !== [...keys5].sort().join(",")) {
     throw new Error("review_action_v2_protocol_limits_fields_invalid");
   }
   return Object.fromEntries(
-    keys4.map((key) => [key, requirePositiveInteger3(parsed[key], key)])
+    keys5.map((key) => [key, requirePositiveInteger3(parsed[key], key)])
   );
 }
 function parsePublicationOutcome(value) {
@@ -215171,11 +215775,11 @@ function requireNonNegativeInteger3(value, field) {
 function isRecord9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function digest4(value) {
+function digest5(value) {
   return (0, import_crypto35.createHash)("sha256").update(value).digest("hex");
 }
 function deterministicIdempotencyKey(purpose, parts) {
-  return `rr:${purpose}:${digest4(
+  return `rr:${purpose}:${digest5(
     JSON.stringify({
       parts,
       purpose
@@ -215329,10 +215933,10 @@ function planOcrReviewAssignments(input) {
     compatibilityKey: input.compatibilityKey,
     providers: [
       {
-        providerName: "ocr/managed",
+        providerName: input.reviewerId ? `ocr/managed:${input.reviewerId}` : "ocr/managed",
         providerKind: "ocr" /* Ocr */,
         providerVoteIdentityHash: ocrLanes[0].providerVoteIdentityHash,
-        required: true,
+        required: input.reviewerRequired ?? true,
         attemptBudget: Math.min(
           input.attemptBudget ?? OCR_ATTEMPT_BUDGET,
           Math.max(1, input.authorization.limits.maxAttemptsPerSlot)
@@ -215462,6 +216066,7 @@ var OcrReviewInvocationAdapter = class {
   /** Model-free: deterministic preview and semantic capture only (§5.2). */
   async prepare(input) {
     this.options.signal?.throwIfAborted();
+    input.signal?.throwIfAborted();
     const assignment = this.assignments.get(input.workSlot.workSlotId);
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error("review_action_v2_assignment_missing");
@@ -215528,6 +216133,7 @@ var OcrReviewInvocationAdapter = class {
     }
     const previewSignal = AbortSignal.any([
       ...this.options.signal ? [this.options.signal] : [],
+      ...input.signal ? [input.signal] : [],
       AbortSignal.timeout(timeoutMs)
     ]);
     previewSignal.throwIfAborted();
@@ -215896,9 +216502,9 @@ function assertOcrInvocationLive(input) {
 }
 function readPreviewOutput(outputPath) {
   try {
-    const bytes = fs13.readFileSync(outputPath);
-    if (bytes.length > 4 * 1024 * 1024) return void 0;
-    return JSON.parse(bytes.toString("utf8"));
+    const bytes2 = fs13.readFileSync(outputPath);
+    if (bytes2.length > 4 * 1024 * 1024) return void 0;
+    return JSON.parse(bytes2.toString("utf8"));
   } catch {
     return void 0;
   }
@@ -215952,8 +216558,8 @@ function sha25616(value) {
 
 // src/codex-oauth/ocr-managed-bootstrap.ts
 var import_node_crypto10 = require("node:crypto");
-function readApprovedReviewAgentKind(json3, digest5) {
-  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest5) || (0, import_node_crypto10.createHash)("sha256").update(json3).digest("hex") !== digest5) {
+function readApprovedReviewAgentKind(json3, digest6) {
+  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest6) || (0, import_node_crypto10.createHash)("sha256").update(json3).digest("hex") !== digest6) {
     throw new Error("review_agent_profile_digest_mismatch");
   }
   const row = JSON.parse(json3);
@@ -215963,12 +216569,12 @@ function readApprovedReviewAgentKind(json3, digest5) {
   }
   return kind;
 }
-function readApprovedOcrReviewAgent(json3, digest5) {
-  if (readApprovedReviewAgentKind(json3, digest5) !== "ocr") {
+function readApprovedOcrReviewAgent(json3, digest6) {
+  if (readApprovedReviewAgentKind(json3, digest6) !== "ocr") {
     throw new Error("review_agent_profile_invalid");
   }
   try {
-    const profile = readApprovedReviewAgent(json3, digest5);
+    const profile = readApprovedReviewAgent(json3, digest6);
     if (profile.agentKind !== "ocr") throw new Error();
     return profile;
   } catch {
@@ -216973,8 +217579,8 @@ var CodexAppServerProtocolClient = class {
     requireRequestId(params.requestId);
     this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
   }
-  assertActiveTurnMetadata(params, keys4) {
-    if (!this.threadStarted || this.turnCompleted || !hasOnlyKeys(params, keys4)) {
+  assertActiveTurnMetadata(params, keys5) {
+    if (!this.threadStarted || this.turnCompleted || !hasOnlyKeys(params, keys5)) {
       throw streamFailure();
     }
     this.assertTurnFence(params);
@@ -217226,9 +217832,9 @@ function canonicalProtocolValue(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalProtocolValue).join(",")}]`;
   }
-  const record6 = value;
-  return `{${Object.keys(record6).sort().map(
-    (key) => `${JSON.stringify(key)}:${canonicalProtocolValue(record6[key])}`
+  const record7 = value;
+  return `{${Object.keys(record7).sort().map(
+    (key) => `${JSON.stringify(key)}:${canonicalProtocolValue(record7[key])}`
   ).join(",")}}`;
 }
 function normalizeProtocolFailure(error3) {
@@ -217294,11 +217900,11 @@ function requireIdentifier2(value, field) {
   return result2;
 }
 function requireModel(value) {
-  const model = requireNonEmptyString(value, "model");
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:/+#-]{0,199}$/u.test(model)) {
+  const model2 = requireNonEmptyString(value, "model");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/+#-]{0,199}$/u.test(model2)) {
     throw modelFailure();
   }
-  return model;
+  return model2;
 }
 function requireModelProvider(value) {
   const provider = requireNonEmptyString(value, "model_provider");
@@ -217388,9 +217994,9 @@ function requireTokenCount(value) {
   return value;
 }
 function hasOnlyKeys(value, allowed) {
-  const keys4 = Object.keys(value).sort();
+  const keys5 = Object.keys(value).sort();
   const expected = [...allowed].sort();
-  return keys4.length === expected.length && keys4.every((key, index) => key === expected[index]);
+  return keys5.length === expected.length && keys5.every((key, index) => key === expected[index]);
 }
 function hasRequiredAndOptionalKeys(value, required2, optional2) {
   const allowed = /* @__PURE__ */ new Set([...required2, ...optional2]);
@@ -217863,15 +218469,15 @@ var CodexAppServerChildTurn = class {
       ]);
     }
   }
-  collectEventStreamBytes(bytes) {
-    this.eventStreamBytes += bytes;
+  collectEventStreamBytes(bytes2) {
+    this.eventStreamBytes += bytes2;
     if (this.eventStreamBytes <= this.input.request.maxEventStreamBytes) {
       return true;
     }
     return this.exceedOutputLimit();
   }
-  acceptEvent(bytes) {
-    if (bytes <= this.input.request.maxEventBytes) return true;
+  acceptEvent(bytes2) {
+    if (bytes2 <= this.input.request.maxEventBytes) return true;
     return this.exceedOutputLimit();
   }
   exceedOutputLimit() {
@@ -218084,8 +218690,8 @@ var SystemReviewOrchestrationClock = class {
 
 // src/review-investigation/application/replay-investigation-on-revision.ts
 var ReplayInvestigationOnRevision = class {
-  constructor(dependencies) {
-    this.dependencies = dependencies;
+  constructor(dependencies2) {
+    this.dependencies = dependencies2;
   }
   async execute(input) {
     if (!await this.isCurrent(input)) return null;
@@ -219687,14 +220293,14 @@ function requireRecord3(value, field) {
 function isRecord11(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function requireExactKeys4(value, keys4) {
-  if (!hasExactKeys2(value, keys4)) {
+function requireExactKeys4(value, keys5) {
+  if (!hasExactKeys2(value, keys5)) {
     throw invalidResponse("investigation_shape_invalid");
   }
 }
-function hasExactKeys2(value, keys4) {
+function hasExactKeys2(value, keys5) {
   const actual = Object.keys(value).sort();
-  const expected = [...keys4].sort();
+  const expected = [...keys5].sort();
   return !(actual.length !== expected.length || actual.some((key, index) => key !== expected[index]));
 }
 function requireString4(value, field) {
@@ -219738,9 +220344,9 @@ function nullableCanonicalJson(value, field) {
   return value;
 }
 function requireDigest5(value, field) {
-  const digest5 = requireString4(value, field);
-  if (!/^[a-f0-9]{64}$/.test(digest5)) throw invalidResponse(`${field}_invalid`);
-  return digest5;
+  const digest6 = requireString4(value, field);
+  if (!/^[a-f0-9]{64}$/.test(digest6)) throw invalidResponse(`${field}_invalid`);
+  return digest6;
 }
 function requireNonNegativeInteger4(value, field) {
   if (!Number.isSafeInteger(value) || Number(value) < 0) {
@@ -219963,8 +220569,8 @@ function leaseFromAcquire(input) {
   return lease;
 }
 function deterministicId2(namespace, parts) {
-  const digest5 = (0, import_crypto38.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
-  return `rr:${namespace}:${digest5}`;
+  const digest6 = (0, import_crypto38.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  return `rr:${namespace}:${digest6}`;
 }
 function requireString5(value, field) {
   if (typeof value !== "string" || value.length === 0) {
@@ -221003,9 +221609,9 @@ var RolloutGatedReviewAgentSelector = class {
   }
 };
 function assertCanonicalRolloutDependencies(flags) {
-  const dependencies = reviewInvestigationRolloutAuthorizationV3Contract.dependencies;
+  const dependencies2 = reviewInvestigationRolloutAuthorizationV3Contract.dependencies;
   for (const capability of reviewInvestigationRolloutAuthorizationV3Contract.capabilities) {
-    for (const dependency of dependencies[capability]) {
+    for (const dependency of dependencies2[capability]) {
       const capabilityKey = capability;
       const dependencyKey = dependency;
       assertDependency(
@@ -221186,8 +221792,8 @@ var ReviewActionV2InvestigationContextAttestationAdapter = class {
   }
 };
 function deterministicId3(namespace, parts) {
-  const digest5 = (0, import_crypto39.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
-  return `rr:${namespace}:${digest5}`;
+  const digest6 = (0, import_crypto39.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  return `rr:${namespace}:${digest6}`;
 }
 function requireString6(value, field) {
   if (typeof value !== "string" || value.length === 0) {
@@ -221257,14 +221863,17 @@ var ProductionT0ReviewRunner = class {
     const modelDispatchCapability = dispatchJson ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson)) : void 0;
     if (input.preparedRoute && !modelDispatchCapability)
       throw new Error("review_action_v2_prepared_route_unqualified");
-    if (admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== void 0 && !input.ocr)
+    if (admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== void 0 && !input.ocr && !input.accountGateway?.reviewers)
       throw contextToolsError("agent_unsupported");
+    const primaryEngineIsOcr = input.ocr !== void 0 || input.accountGateway?.reviewers?.find(
+      (lane) => lane.reviewer.reviewerId === input.accountGateway?.reviewerPlan?.primaryReviewerId
+    )?.reviewer.agentProfile.agentKind === "ocr";
     const agentProfile = admittedRuntime ? {
       json: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
       digest: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
     } : void 0;
-    const approvedOcrAgent = input.ocr ? readApprovedOcrReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
-    const approvedAgent = agentProfile && !input.ocr ? readApprovedReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
+    const approvedOcrAgent = primaryEngineIsOcr ? readApprovedOcrReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
+    const approvedAgent = agentProfile && !primaryEngineIsOcr ? readApprovedReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
     if (approvedAgent && approvedAgent.agentKind !== "codex")
       throw new Error("review_investigation_approved_agent_unavailable");
     const authoritativeDeadlineEpochMs = process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
@@ -221296,21 +221905,21 @@ var ProductionT0ReviewRunner = class {
       updatePrDescription: admittedRuntime ? capturedDescriptionFlag !== "false" : loadedConfig.updatePrDescription !== false
     };
     const directProvider = input.providerApi ? readDirectProviderSelection(input.providerApi.runtimeConfig.runtimeEnv) : void 0;
-    const codexProviderName = input.ocr ? "" : input.providerApi ? directProvider.providerName : selectCodexProvider(config2);
-    const model = codexProviderName.slice(codexProviderName.indexOf("/") + 1);
-    const gatewayModelSettings = input.accountGateway && !input.ocr && !isAccountGatewayMiMoModel(model) ? readAdmittedGatewayCodexModelSettings(
+    const codexProviderName = primaryEngineIsOcr ? "" : input.providerApi ? directProvider.providerName : selectCodexProvider(config2);
+    const model2 = codexProviderName.slice(codexProviderName.indexOf("/") + 1);
+    const gatewayModelSettings = input.accountGateway && !primaryEngineIsOcr && !isAccountGatewayMiMoModel(model2) ? readAdmittedGatewayCodexModelSettings(
       input.accountGateway.runtimeConfig,
-      model
+      model2
     ) : void 0;
-    const reasoningEffort = input.ocr ? null : resolveProductionInvestigationReasoningEffort({
-      codexModel: model,
+    const reasoningEffort = primaryEngineIsOcr ? null : resolveProductionInvestigationReasoningEffort({
+      codexModel: model2,
       accountGateway: preparedRoute !== void 0,
       providerApi: input.providerApi !== void 0,
       ...directProvider ? { providerApiAuthMode: directProvider.mode } : {},
       serverReasoningEffort,
       gatewayModelSettings
     });
-    if (input.providerApi || input.accountGateway && model === "mimo-v2.6-pro") {
+    if (input.providerApi || input.accountGateway && model2 === "mimo-v2.6-pro") {
       if (reasoningEffort === null) delete process.env.CODEX_REASONING_EFFORT;
       else process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
@@ -221450,11 +222059,16 @@ var ProductionT0ReviewRunner = class {
         ]
       });
       const admittedAgent = approvedOcrAgent ?? approvedAgent;
-      const skillsMaterialization = admittedAgent?.reviewSkillsVersion === 1 ? await materializeReviewSkillsWithDiagnostics({
+      const skillsMaterialization = admittedAgent?.reviewSkillsVersion === 1 || input.accountGateway?.reviewers?.some(
+        (lane) => lane.reviewer.agentProfile.reviewSkillsVersion === 1
+      ) ? await materializeReviewSkillsWithDiagnostics({
         capture: await fetchCapturedReviewSkills({
           apiUrl: input.apiUrl,
           authorizationToken: authorization.authorizationToken,
           baseSha: authorization.facts.baseSha,
+          reviewerId: input.accountGateway?.reviewers?.find(
+            (lane) => lane.reviewer.agentProfile.reviewSkillsVersion === 1
+          )?.reviewer.reviewerId,
           signal,
           timeoutMs: executionDeadline.clampProviderTimeout(3e4),
           fetchImpl
@@ -221487,11 +222101,6 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           }
         }
       };
-      assertReviewSkillsExecutionInput(
-        reviewSkills,
-        admittedAgent ?? {},
-        authorization.facts.baseSha
-      );
       const lifecycleInventory = new FreshGitHubLifecycleInventory(
         github,
         new ReviewLedger(github, process.env.REVIEW_ROUTER_LEDGER_KEY)
@@ -221501,253 +222110,824 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
         authorization.facts.headSha
       );
       signal?.throwIfAborted();
-      if (input.ocr) {
-        const ocrRuntimeEnv = preparedRoute.runtimeConfig.runtimeEnv;
-        const ocrModel = modelDispatchCapability?.model ?? ocrRuntimeEnv.CODEX_MODEL;
-        if (!ocrModel || !approvedOcrAgent) {
-          throw new Error("review_action_v2_ocr_model_missing");
-        }
-        const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
-        const ocrModelReasoningEffort = input.accountGateway ? resolveAdmittedGatewayOcrReasoningEffort(
-          preparedRoute.runtimeConfig,
-          ocrModel,
-          ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
-        ) : ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
-        const modelTransport = preparedRoute.modelTransport;
-        const capabilityAuthorization = modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
-        if (!capabilityAuthorization) {
-          throw new Error("review_action_v2_ocr_capability_missing");
-        }
-        const contextTools = await prepareOcrContextTools({
-          runtimeEnv: ocrRuntimeEnv,
-          githubJson: process.env[CONTEXT_TOOLS_CREDENTIALS_ENV],
-          apiUrl: input.apiUrl,
-          authorization: () => controlPlane.currentAuthorization(),
-          fetchImpl,
-          mask: setSecret2,
-          checkoutRoot: path18.resolve(input.workspacePath),
-          headSha: authorization.facts.headSha,
-          mergeBaseSha: authorization.facts.mergeBaseSha,
-          deadlineMs: Date.now() + executionDeadline.clampProviderTimeout(providerTimeoutMs),
-          ...signal ? { signal } : {}
-        });
-        try {
-          if (contextTools) {
-            if (!modelTransport.setContextToolsGuard)
-              throw contextToolsError("transport_guard_unavailable");
-            modelTransport.setContextToolsGuard(() => {
-              const receipt = contextTools.receipt();
-              if (!receipt.nativeConnected || receipt.hadFailure)
-                throw contextToolsError("required_context_unavailable");
-            });
-            await (0, import_promises12.writeFile)(
-              input.ocr.run.configPath,
-              buildOcrManagedConfigJson({
-                baseUrl: modelTransport.baseUrl,
-                rawCapability: extractRawLoopbackCapability(
-                  capabilityAuthorization
-                ),
-                model: ocrModel,
-                limits: {
-                  requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
-                },
-                modelReasoningEffort: ocrModelReasoningEffort,
-                ...input.accountGateway ? { admittedRuntimeConfig: preparedRoute.runtimeConfig } : {},
-                protocol: modelDispatchCapability?.transport === "runner_local_anthropic" ? "anthropic-messages" : "openai-responses",
-                language: ocrLanguage,
-                contextTools: contextTools.config
-              }),
-              { mode: 384 }
-            );
-          }
-          const baseOcrCompatibilityKey = hashIncrementalCompatibility(
+      const sharedReviewSkills = reviewSkills;
+      const parentAuthorization = authorization;
+      const parentRestore = preplanningRestore;
+      const parentConfig = config2;
+      const identities = new DeterministicReviewOrchestrationIdentity();
+      const reviewerPlan = input.accountGateway?.reviewerPlan;
+      const commonCompatibilityKey = reviewerPlan ? sha25617(
+        canonicalJson17({
+          policy: hashIncrementalCompatibility(
             config2,
             process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
             reviewSkillsCacheIdentity(reviewSkills)
-          );
-          const contextReceipt = contextTools?.receipt();
-          const ocrCompatibilityKey = contextReceipt ? sha25617(
-            canonicalJson17({
-              baseOcrCompatibilityKey,
-              contextTools: {
-                planDigest: contextReceipt.planDigest,
-                schemaDigest: contextReceipt.schemaDigest
-              }
-            })
-          ) : baseOcrCompatibilityKey;
-          const ocrBackgroundParts = [
-            pr.title,
-            stripOwnedPrDescriptionBlocks(pr.body)
-          ].filter((part) => part.trim().length > 0);
-          const prDescription2 = createPrDescriptionGeneration({
-            enabled: config2.updatePrDescription,
-            scopedCompanionDispatch: !!admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-            capabilityJson: admittedRuntime?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
-            pr,
-            reviewRevisionHash: authorization.facts.reviewRevisionHash,
-            requestedModel: ocrModel,
-            providerKind: "ocr" /* Ocr */,
-            language: config2.outputLanguage,
-            config: config2,
-            transport: modelTransport,
-            memorySnapshot: descriptionMemory.current(),
-            warn: warning2
-          });
-          const lifecycleCapability2 = config2.reviewThreadLifecycle !== "off" && preparedRoute ? readLifecycleCapability(
-            admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-            ocrModel,
-            "ocr" /* Ocr */,
-            modelDispatchCapability
-          ) : void 0;
-          let planned2 = planOcrReviewAssignments({
-            ...modelDispatchCapability ? { attemptBudget: 1 } : {},
-            prDescriptionEnabled: prDescription2 !== void 0,
-            authorization,
-            pr,
-            config: config2,
-            compatibilityKey: ocrCompatibilityKey,
-            lifecycleTargets: selectLegacyLifecycleTargets(
-              config2.reviewThreadLifecycle,
-              admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-              initialLifecycle.promptTargets
-            ),
-            liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
-          });
-          assertLegacyReviewPlanRestorable(preplanningRestore, planned2.plan);
-          const lifecycle2 = preplanningRestore ? restoreProductionLifecycleVerification(
-            preplanningRestore,
-            planned2.plan,
-            config2
-          ) : lifecycleCapability2 ? await planProductionLifecycleVerification({
-            capability: lifecycleCapability2,
-            authorization,
-            plan: planned2.plan,
-            repository: input.repository,
-            checkoutRoot: path18.resolve(input.workspacePath),
-            compatibilityKey: ocrCompatibilityKey,
-            config: config2,
-            inventory: initialLifecycle.inventory,
-            targets: initialLifecycle.revalidationTargets,
-            resolutionHistory,
-            renames: pr.files.filter((file) => !!file.previousFilename).map((file) => ({
-              previousFilename: file.previousFilename,
-              filename: file.filename
-            }))
-          }) : void 0;
-          if (preplanningRestore?.persistedPlan?.compatibilityKey && preplanningRestore.persistedPlan.compatibilityKey !== ocrCompatibilityKey)
-            throw new Error("review_restore_compatibility_changed");
-          const finalPlan2 = restorePersistedWorkPlan(
-            preplanningRestore,
-            lifecycle2?.plan ?? planned2.plan
-          );
-          planned2 = {
-            ...planned2,
-            plan: finalPlan2,
-            assignments: rebindReviewAssignmentsToWorkPlan(
-              planned2.assignments,
-              finalPlan2
+          ),
+          reviewerPlan: {
+            ...reviewerPlan,
+            reviewers: reviewerPlan.reviewers.map(
+              ({
+                modelSettings: _modelCapabilities,
+                unavailableReason: _availability,
+                ...capturedReviewer
+              }) => capturedReviewer
             )
+          }
+        })
+      ) : void 0;
+      const prepareLane = async (input2, reviewer, slotBudget, bootstrapFailure = false) => {
+        const preparedRoute2 = input2.preparedRoute ?? input2.accountGateway ?? input2.providerApi;
+        const admittedRuntime2 = preparedRoute2?.runtimeConfig;
+        const dispatchJson2 = admittedRuntime2?.runtimeEnv[reviewModelDispatchContract.capabilityRuntimeEnvKey];
+        const modelDispatchCapability2 = dispatchJson2 ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson2)) : void 0;
+        const laneConfig = reviewer && admittedRuntime2 ? ConfigLoader.loadRuntimeEnvironment(admittedRuntime2.runtimeEnv, {
+          modelTransport: true
+        }) : parentConfig;
+        const primary = !reviewer || reviewer.reviewerId === reviewerPlan?.primaryReviewerId;
+        const config3 = {
+          ...laneConfig,
+          ...preparedRoute2 ? { providerRetries: 1 } : {},
+          updatePrDescription: primary && parentConfig.updatePrDescription,
+          reviewThreadLifecycle: primary ? parentConfig.reviewThreadLifecycle : "off"
+        };
+        const authorization2 = reviewer ? {
+          ...parentAuthorization,
+          limits: {
+            ...parentAuthorization.limits,
+            maxWorkSlots: slotBudget?.maxSlots ?? parentAuthorization.limits.maxWorkSlots
+          },
+          facts: {
+            ...parentAuthorization.facts,
+            providerVoteLanes: [
+              {
+                providerKind: reviewer.agentProfile.agentKind === "ocr" ? "ocr" /* Ocr */ : "codex" /* Codex */,
+                providerVoteIdentityHash: reviewer.providerVoteIdentityHash
+              }
+            ],
+            reviewInvestigation: reviewer.investigationGrant?.descriptor
+          }
+        } : parentAuthorization;
+        const preplanningRestore2 = reviewer ? null : parentRestore;
+        const laneEngineIsOcr = input2.ocr !== void 0 || reviewer?.agentProfile.agentKind === "ocr";
+        const approvedOcrAgent2 = laneEngineIsOcr && admittedRuntime2 ? readApprovedOcrReviewAgent(
+          admittedRuntime2.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
+          admittedRuntime2.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
+        ) : void 0;
+        const approvedAgent2 = !laneEngineIsOcr && admittedRuntime2 ? readApprovedReviewAgent(
+          admittedRuntime2.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
+          admittedRuntime2.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
+        ) : void 0;
+        const laneProfile = approvedOcrAgent2 ?? approvedAgent2;
+        const reviewSkills2 = laneProfile?.reviewSkillsVersion === 1 ? sharedReviewSkills : LEGACY_REVIEW_SKILLS;
+        if (reviewSkills2.kind === "legacy" && sharedReviewSkills.kind === "captured" && (sharedReviewSkills.capture.gitSources.length > 0 || sharedReviewSkills.capture.webSkills.length > 0))
+          throw new Error("review_skills_agent_incompatible");
+        assertReviewSkillsExecutionInput(
+          reviewSkills2,
+          laneProfile ?? {},
+          authorization2.facts.baseSha
+        );
+        if (admittedRuntime2?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== void 0 && !laneEngineIsOcr)
+          throw contextToolsError("agent_unsupported");
+        if (bootstrapFailure && reviewer) {
+          if (primary)
+            createPrDescriptionGeneration({
+              enabled: config3.updatePrDescription !== false,
+              scopedCompanionDispatch: !!admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+              capabilityJson: admittedRuntime2?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
+              pr,
+              reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+              requestedModel: reviewer.requestedModel,
+              providerKind: laneEngineIsOcr ? "ocr" /* Ocr */ : "codex" /* Codex */,
+              language: config3.outputLanguage,
+              config: config3,
+              transport: input2.accountGateway?.modelTransport,
+              warn: warning2
+            })?.unavailable();
+          const compatibilityKey2 = commonCompatibilityKey;
+          const planInput = {
+            authorization: authorization2,
+            pr,
+            config: config3,
+            compatibilityKey: compatibilityKey2,
+            reviewerId: reviewer.reviewerId,
+            reviewerRequired: reviewer.required,
+            lifecycleTargets: [],
+            liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
           };
-          const bridge = {
-            baseUrl: modelTransport.baseUrl,
-            capabilityAuthorization,
-            actualModel: () => modelTransport.actualModel(),
-            requestCount: () => modelTransport.requestCount?.(),
-            effectFacts: input.ocr.effectFacts,
-            releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true,
-            reopenConsumer: () => modelTransport.reopenConsumer?.() === true
+          const planned2 = laneEngineIsOcr ? planOcrReviewAssignments(planInput) : planAssignments({
+            ...planInput,
+            providerName: selectCodexProvider(config3),
+            accountGateway: true,
+            maxDiscoverySlots: slotBudget?.discoverySlots
+          });
+          const assignments = planned2.assignments.map((assignment) => ({
+            workSlotId: assignment.workSlot.workSlotId,
+            taskKind: assignment.workSlot.taskKind,
+            providerKind: assignment.workSlot.providerKind,
+            providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
+            required: assignment.workSlot.required,
+            filePaths: assignment.context.files.map((file) => file.filename)
+          }));
+          const unavailable = async () => {
+            throw new ReviewInvocationConfigurationMismatchError(
+              "actual_model_evidence_unavailable" /* ActualModelEvidenceUnavailable */
+            );
           };
-          const invocationAdapter2 = new OcrReviewInvocationAdapter(
-            planned2.assignments,
-            {
-              ...signal ? { signal } : {},
-              previewTimeoutMs: () => Math.floor(
-                executionDeadline.clampProviderTimeout(providerTimeoutMs)
+          return {
+            plan: planned2.plan,
+            compatibilityKey: compatibilityKey2,
+            assignments,
+            uncoveredPaths: planned2.uncoveredPaths,
+            uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+            cleanup: async () => {
+            },
+            dependencies: {
+              controlPlane,
+              revisionGuard,
+              oidc: { getToken: () => oidc.requestToken(input2.audience) },
+              invocationManifestAssembler: new GeneratedProviderInvocationManifestAssembler(
+                authorization2,
+                config3,
+                compatibilityKey2
               ),
-              model: ocrModel,
-              binaryPath: input.ocr.run.binaryPath,
-              binarySha256: approvedOcrAgent.binarySha256,
-              packageVersion: approvedOcrAgent.packageVersion,
-              profileRef: approvedOcrAgent.profileRef,
-              run: input.ocr.run,
-              ...contextTools ? {
-                contextTools,
-                contextToolsReceipt: (receipt) => logger7.info("Managed OCR context tools", {
-                  planDigest: receipt.planDigest,
-                  schemaDigest: receipt.schemaDigest,
-                  selectedTools: receipt.availableTools,
-                  nativeConnected: receipt.nativeConnected,
-                  calls: receipt.calls,
-                  hadFailure: receipt.hadFailure,
-                  toolCalls: receipt.toolCalls
+              invocations: { prepare: unavailable, execute: unavailable },
+              invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+                preparedRoute2?.modelTransport.failureFact
+              ),
+              leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+              projectionBuilder: createProductionReviewProjectionBuilder({
+                authorizationFacts: authorization2.facts,
+                pr,
+                config: config3,
+                protocolLimits: authorization2.limits,
+                assignments,
+                uncoveredPaths: planned2.uncoveredPaths,
+                uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+                lifecycleInventory,
+                skillsReceipt
+              }),
+              identities,
+              clock: new SystemReviewOrchestrationClock(),
+              delay: new CancellableReviewOrchestrationDelay(),
+              executionDeadline,
+              signal,
+              ...this.progress ? { progress: this.progress } : {}
+            }
+          };
+        }
+        const directProvider2 = input2.providerApi ? readDirectProviderSelection(
+          input2.providerApi.runtimeConfig.runtimeEnv
+        ) : void 0;
+        const providerName = input2.ocr ? "" : input2.providerApi ? directProvider2.providerName : selectCodexProvider(config3);
+        const model3 = reviewer?.requestedModel ?? providerName.slice(providerName.indexOf("/") + 1);
+        const gatewayModelSettings2 = input2.accountGateway && !input2.ocr && !isAccountGatewayMiMoModel(model3) ? readAdmittedGatewayCodexModelSettings(
+          input2.accountGateway.runtimeConfig,
+          model3
+        ) : void 0;
+        const serverReasoningEffort2 = admittedRuntime2?.runtimeEnv.CODEX_REASONING_EFFORT;
+        const reasoningEffort2 = laneEngineIsOcr ? null : resolveProductionInvestigationReasoningEffort({
+          codexModel: model3,
+          accountGateway: preparedRoute2 !== void 0,
+          providerApi: !!input2.providerApi,
+          ...directProvider2 ? { providerApiAuthMode: directProvider2.mode } : {},
+          serverReasoningEffort: serverReasoningEffort2,
+          gatewayModelSettings: gatewayModelSettings2
+        });
+        if (input2.ocr) {
+          const ocrRuntimeEnv = preparedRoute2.runtimeConfig.runtimeEnv;
+          const ocrModel = modelDispatchCapability2?.model ?? ocrRuntimeEnv.CODEX_MODEL;
+          if (!ocrModel || !approvedOcrAgent2) {
+            throw new Error("review_action_v2_ocr_model_missing");
+          }
+          const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
+          const ocrModelReasoningEffort = input2.accountGateway ? resolveAdmittedGatewayOcrReasoningEffort(
+            preparedRoute2.runtimeConfig,
+            ocrModel,
+            ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null
+          ) : ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
+          const modelTransport = preparedRoute2.modelTransport;
+          const capabilityAuthorization = modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
+          if (!capabilityAuthorization) {
+            throw new Error("review_action_v2_ocr_capability_missing");
+          }
+          const contextTools = await prepareOcrContextTools({
+            runtimeEnv: ocrRuntimeEnv,
+            reviewerId: reviewer?.reviewerId,
+            githubJson: process.env[CONTEXT_TOOLS_CREDENTIALS_ENV],
+            apiUrl: input2.apiUrl,
+            authorization: () => controlPlane.currentAuthorization(),
+            fetchImpl,
+            mask: setSecret2,
+            checkoutRoot: path18.resolve(input2.workspacePath),
+            headSha: authorization2.facts.headSha,
+            mergeBaseSha: authorization2.facts.mergeBaseSha,
+            deadlineMs: Date.now() + executionDeadline.clampProviderTimeout(providerTimeoutMs),
+            ...signal ? { signal } : {}
+          });
+          try {
+            if (contextTools) {
+              if (!modelTransport.setContextToolsGuard)
+                throw contextToolsError("transport_guard_unavailable");
+              modelTransport.setContextToolsGuard(() => {
+                const receipt = contextTools.receipt();
+                if (!receipt.nativeConnected || receipt.hadFailure)
+                  throw contextToolsError("required_context_unavailable");
+              });
+              await (0, import_promises12.writeFile)(
+                input2.ocr.run.configPath,
+                buildOcrManagedConfigJson({
+                  baseUrl: modelTransport.baseUrl,
+                  rawCapability: extractRawLoopbackCapability(
+                    capabilityAuthorization
+                  ),
+                  model: ocrModel,
+                  limits: {
+                    requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
+                  },
+                  modelReasoningEffort: ocrModelReasoningEffort,
+                  ...input2.accountGateway ? { admittedRuntimeConfig: preparedRoute2.runtimeConfig } : {},
+                  protocol: modelDispatchCapability2?.transport === "runner_local_anthropic" ? "anthropic-messages" : "openai-responses",
+                  language: ocrLanguage,
+                  contextTools: contextTools.config
+                }),
+                { mode: 384 }
+              );
+            }
+            const baseOcrCompatibilityKey = hashIncrementalCompatibility(
+              config3,
+              process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+              reviewSkillsCacheIdentity(reviewSkills2)
+            );
+            const contextReceipt = contextTools?.receipt();
+            const ocrCompatibilityKey = commonCompatibilityKey ?? (contextReceipt ? sha25617(
+              canonicalJson17({
+                baseOcrCompatibilityKey,
+                contextTools: {
+                  planDigest: contextReceipt.planDigest,
+                  schemaDigest: contextReceipt.schemaDigest
+                }
+              })
+            ) : baseOcrCompatibilityKey);
+            const ocrBackgroundParts = [
+              pr.title,
+              stripOwnedPrDescriptionBlocks(pr.body)
+            ].filter((part) => part.trim().length > 0);
+            const prDescription2 = createPrDescriptionGeneration({
+              enabled: config3.updatePrDescription !== false,
+              scopedCompanionDispatch: !!admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+              capabilityJson: admittedRuntime2?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
+              pr,
+              reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+              requestedModel: ocrModel,
+              providerKind: "ocr" /* Ocr */,
+              language: config3.outputLanguage,
+              config: config3,
+              transport: modelTransport,
+              memorySnapshot: descriptionMemory.current(),
+              warn: warning2
+            });
+            const lifecycleCapability2 = config3.reviewThreadLifecycle !== "off" && preparedRoute2 ? readLifecycleCapability(
+              admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+              ocrModel,
+              "ocr" /* Ocr */,
+              modelDispatchCapability2
+            ) : void 0;
+            let planned2 = planOcrReviewAssignments({
+              ...modelDispatchCapability2 ? { attemptBudget: 1 } : {},
+              prDescriptionEnabled: prDescription2 !== void 0,
+              reviewerId: reviewer?.reviewerId,
+              reviewerRequired: reviewer?.required,
+              authorization: authorization2,
+              pr,
+              config: config3,
+              compatibilityKey: ocrCompatibilityKey,
+              lifecycleTargets: selectLegacyLifecycleTargets(
+                config3.reviewThreadLifecycle,
+                admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+                initialLifecycle.promptTargets
+              ),
+              liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
+            });
+            assertLegacyReviewPlanRestorable(preplanningRestore2, planned2.plan);
+            const lifecycle2 = preplanningRestore2 ? restoreProductionLifecycleVerification(
+              preplanningRestore2,
+              planned2.plan,
+              config3
+            ) : lifecycleCapability2 ? await planProductionLifecycleVerification({
+              capability: lifecycleCapability2,
+              authorization: authorization2,
+              plan: planned2.plan,
+              repository: input2.repository,
+              checkoutRoot: path18.resolve(input2.workspacePath),
+              compatibilityKey: ocrCompatibilityKey,
+              config: config3,
+              inventory: initialLifecycle.inventory,
+              targets: initialLifecycle.revalidationTargets,
+              resolutionHistory,
+              renames: pr.files.filter((file) => !!file.previousFilename).map((file) => ({
+                previousFilename: file.previousFilename,
+                filename: file.filename
+              }))
+            }) : void 0;
+            if (preplanningRestore2?.persistedPlan?.compatibilityKey && preplanningRestore2.persistedPlan.compatibilityKey !== ocrCompatibilityKey)
+              throw new Error("review_restore_compatibility_changed");
+            const finalPlan2 = restorePersistedWorkPlan(
+              preplanningRestore2,
+              lifecycle2?.plan ?? planned2.plan
+            );
+            planned2 = {
+              ...planned2,
+              plan: finalPlan2,
+              assignments: rebindReviewAssignmentsToWorkPlan(
+                planned2.assignments,
+                finalPlan2
+              )
+            };
+            const bridge = {
+              baseUrl: modelTransport.baseUrl,
+              capabilityAuthorization,
+              actualModel: () => modelTransport.actualModel(),
+              requestCount: () => modelTransport.requestCount?.(),
+              effectFacts: input2.ocr.effectFacts,
+              releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true,
+              reopenConsumer: () => modelTransport.reopenConsumer?.() === true
+            };
+            const invocationAdapter2 = new OcrReviewInvocationAdapter(
+              planned2.assignments,
+              {
+                ...signal ? { signal } : {},
+                previewTimeoutMs: () => Math.floor(
+                  executionDeadline.clampProviderTimeout(providerTimeoutMs)
+                ),
+                model: ocrModel,
+                binaryPath: input2.ocr.run.binaryPath,
+                binarySha256: approvedOcrAgent2.binarySha256,
+                packageVersion: approvedOcrAgent2.packageVersion,
+                profileRef: approvedOcrAgent2.profileRef,
+                run: input2.ocr.run,
+                ...contextTools ? {
+                  contextTools,
+                  contextToolsReceipt: (receipt) => logger7.info("Managed OCR context tools", {
+                    planDigest: receipt.planDigest,
+                    schemaDigest: receipt.schemaDigest,
+                    selectedTools: receipt.availableTools,
+                    nativeConnected: receipt.nativeConnected,
+                    calls: receipt.calls,
+                    hadFailure: receipt.hadFailure,
+                    toolCalls: receipt.toolCalls
+                  })
+                } : {},
+                bridge,
+                limits: {
+                  requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
+                },
+                ocrEffort: "medium",
+                modelReasoningEffort: ocrModelReasoningEffort,
+                language: ocrLanguage,
+                reviewSkills: reviewSkills2,
+                reviewMemory,
+                freshReviewSkillsSupply: (supply) => skillsReceiptCollector.record(supply),
+                ruleText: reviewSkills2.kind === "legacy" ? buildOcrControlledRuleText({
+                  language: ocrLanguage,
+                  assignedPaths: pr.files.map((file) => file.filename).sort()
+                }) : buildOcrSkillsControlledRuleText({
+                  language: ocrLanguage,
+                  assignedPaths: pr.files.map((file) => file.filename).sort(),
+                  reviewSkills: reviewSkills2
+                }),
+                backgroundText: ocrBackgroundParts.length > 0 ? ocrBackgroundParts.join("\n\n") : null,
+                checkoutRoot: path18.resolve(input2.workspacePath),
+                processRunner: runOcrReviewProcess,
+                previewRunner: runOcrReviewProcess,
+                acceptanceDiagnostic: (diagnostic) => logger7.info("Managed OCR acceptance", diagnostic)
+              }
+            );
+            if (prDescription2 && !planned2.plan.assignments.some(
+              (assignment) => assignment.workSlot.taskKind === "pr_description" /* PrDescription */
+            ))
+              warning2(
+                "AI PR description omitted: no optional task budget remains."
+              );
+            const discoveryInvocations = scopedModelInvocations(
+              invocationAdapter2,
+              modelTransport
+            );
+            return {
+              dependencies: {
+                ...prDescription2 ? { prDescription: prDescription2 } : {},
+                controlPlane,
+                revisionGuard,
+                oidc: {
+                  getToken: () => oidc.requestToken(input2.audience)
+                },
+                invocationManifestAssembler: restoredLifecycleManifestAssembler(
+                  preplanningRestore2,
+                  new GeneratedProviderInvocationManifestAssembler(
+                    authorization2,
+                    config3,
+                    ocrCompatibilityKey
+                  )
+                ),
+                invocations: preplanningRestore2?.persistedPlan ? restoredLifecycleInvocations(
+                  preplanningRestore2,
+                  discoveryInvocations
+                ) : lifecycle2 && lifecycleCapability2 ? compositeLifecycleInvocations({
+                  discovery: discoveryInvocations,
+                  packetsByWorkSlotId: lifecycle2.packetsByWorkSlotId,
+                  capability: lifecycleCapability2,
+                  outputCap: lifecycle2.outputCap,
+                  reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+                  liveLifecycleStateHash: lifecycle2.liveLifecycleStateHash,
+                  transport: modelTransport
+                }) : discoveryInvocations,
+                memoryAdmission,
+                invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+                  modelTransport.failureFact
+                ),
+                invocationDiagnostics: new LoggingReviewInvocationDiagnostics(
+                  logger7
+                ),
+                investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(logger7),
+                leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+                projectionBuilder: createProductionReviewProjectionBuilder({
+                  authorizationFacts: authorization2.facts,
+                  pr,
+                  config: config3,
+                  protocolLimits: authorization2.limits,
+                  assignments: planned2.plan.assignments.map((assignment) => ({
+                    workSlotId: assignment.workSlot.workSlotId,
+                    taskKind: assignment.workSlot.taskKind,
+                    providerKind: assignment.workSlot.providerKind,
+                    providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
+                    required: assignment.workSlot.required,
+                    filePaths: planned2.assignments.find(
+                      (item) => item.workSlot.workSlotId === assignment.workSlot.workSlotId
+                    )?.context.files.map((file) => file.filename) ?? []
+                  })),
+                  uncoveredPaths: planned2.uncoveredPaths,
+                  uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+                  lifecycleInventory,
+                  ...lifecycle2?.lifecycleVerification ? { lifecycleVerification: lifecycle2.lifecycleVerification } : {},
+                  skillsReceipt
+                }),
+                identities,
+                clock: new SystemReviewOrchestrationClock(),
+                delay: new CancellableReviewOrchestrationDelay(),
+                executionDeadline,
+                signal,
+                ...this.progress ? { progress: this.progress } : {}
+              },
+              plan: planned2.plan,
+              compatibilityKey: ocrCompatibilityKey,
+              assignments: planned2.plan.assignments.map((assignment) => ({
+                workSlotId: assignment.workSlot.workSlotId,
+                taskKind: assignment.workSlot.taskKind,
+                providerKind: assignment.workSlot.providerKind,
+                providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
+                required: assignment.workSlot.required,
+                filePaths: planned2.assignments.find(
+                  (item) => item.workSlot.workSlotId === assignment.workSlot.workSlotId
+                )?.context.files.map((file) => file.filename) ?? []
+              })),
+              uncoveredPaths: planned2.uncoveredPaths,
+              uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+              lifecycleVerification: lifecycle2?.lifecycleVerification,
+              cleanup: async () => {
+                modelTransport.setContextToolsGuard?.(void 0);
+                await contextTools?.close();
+              }
+            };
+          } catch (error3) {
+            modelTransport.setContextToolsGuard?.(void 0);
+            await contextTools?.close();
+            throw error3;
+          }
+        }
+        const agenticContext = config3.codexAgenticContext ?? true;
+        const investigationRolloutResolution = resolveProductionReviewInvestigationRolloutResolution({
+          flags: readProductionReviewInvestigationRolloutFlags(),
+          agenticContext,
+          authorization: authorization2,
+          primaryProviderKind: "codex" /* Codex */,
+          reviewDepth: config3.reviewDepth
+        });
+        const investigationRollout = investigationRolloutResolution.rollout;
+        emitReviewInvestigationTelemetry(
+          formatProductionReviewInvestigationRolloutTelemetry(
+            investigationRolloutResolution
+          )
+        );
+        const investigationRecordingEnabled = investigationRollout.recordingEnabled;
+        const provider = new CodexProvider(model3, {
+          ...usageDelivery ? {
+            usageDelivery,
+            usageUpstreamBaseUrl: process.env.REVIEW_AUTH_MODE === "openai-api" ? "https://api.openai.com/v1" : input2.providerInstanceId || process.env.REVIEW_AUTH_MODE === "codex-oauth" ? "https://chatgpt.com/backend-api/codex" : void 0
+          } : {},
+          agenticContext,
+          binaryPath: input2.codexBinaryPath,
+          reasoningEffort: reasoningEffort2,
+          waitForProcessClose: true,
+          eventAudit: config3.codexEventAudit,
+          modelProvider: input2.providerApi ? directProvider2.modelProvider : resolveAccountGatewayModelProvider(
+            model3,
+            preparedRoute2?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+            preparedRoute2?.modelTransport
+          ),
+          ...input2.providerApi ? {
+            providerNamePrefix: directProvider2.mode === "kimi-code-api" ? "kimi" : directProvider2.mode === "mimo-token-plan-api" ? "codex-mimo" : "openrouter",
+            providerApiTransport: input2.providerApi.modelTransport,
+            disableBuiltinTools: true,
+            waitForProcessClose: true
+          } : {},
+          ...preparedRoute2 && !input2.providerApi ? {
+            accountGateway: preparedRoute2.modelTransport,
+            ...gatewayModelSettings2 ? {
+              accountGatewayModelSettings: gatewayModelSettings2,
+              accountGatewaySavedReasoningEffort: serverReasoningEffort2
+            } : {}
+          } : {}
+        });
+        const compatibilityKey = commonCompatibilityKey ?? hashIncrementalCompatibility(
+          config3,
+          process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+          reviewSkillsCacheIdentity(reviewSkills2)
+        );
+        const gatewayBundlePath = resolveContextGatewayBundlePath();
+        const requiredContextWitness = new SubprocessRequiredContextWitnessRunner();
+        const contextGatewayOptions = resolveProductionContextGatewaySessionFactoryOptions({
+          agenticContext,
+          investigationRecordingEnabled,
+          checkoutRoot: path18.resolve(input2.workspacePath),
+          gatewayBundlePath
+        });
+        const contextGateway = contextGatewayOptions ? new ContextGatewayInvocationSessionFactory(
+          controlPlane,
+          contextGatewayOptions,
+          requiredContextWitness
+        ) : void 0;
+        const contextReplayRunner = contextGateway ? new ContextAttestationReplayRunner({
+          checkoutRoot: path18.resolve(input2.workspacePath),
+          gatewayBundlePath
+        }) : void 0;
+        const prDescription = createPrDescriptionGeneration({
+          enabled: config3.updatePrDescription !== false,
+          scopedCompanionDispatch: !!admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+          capabilityJson: admittedRuntime2?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
+          pr,
+          reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+          requestedModel: model3,
+          providerKind: "codex" /* Codex */,
+          language: config3.outputLanguage,
+          config: config3,
+          transport: preparedRoute2?.modelTransport,
+          memorySnapshot: descriptionMemory.current(),
+          warn: warning2
+        });
+        const lifecycleCapability = config3.reviewThreadLifecycle !== "off" && preparedRoute2 ? readLifecycleCapability(
+          admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+          model3,
+          "codex" /* Codex */,
+          modelDispatchCapability2
+        ) : void 0;
+        let planned = planAssignments({
+          prDescriptionEnabled: prDescription !== void 0,
+          reviewerId: reviewer?.reviewerId,
+          reviewerRequired: reviewer?.required,
+          maxDiscoverySlots: slotBudget?.discoverySlots,
+          authorization: authorization2,
+          pr,
+          config: config3,
+          providerName: provider.name,
+          compatibilityKey,
+          lifecycleTargets: selectLegacyLifecycleTargets(
+            config3.reviewThreadLifecycle,
+            admittedRuntime2?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
+            initialLifecycle.promptTargets
+          ),
+          liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+          accountGateway: preparedRoute2 !== void 0
+        });
+        assertLegacyReviewPlanRestorable(preplanningRestore2, planned.plan);
+        const lifecycle = preplanningRestore2 ? restoreProductionLifecycleVerification(
+          preplanningRestore2,
+          planned.plan,
+          config3
+        ) : lifecycleCapability ? await planProductionLifecycleVerification({
+          capability: lifecycleCapability,
+          authorization: authorization2,
+          plan: planned.plan,
+          repository: input2.repository,
+          checkoutRoot: path18.resolve(input2.workspacePath),
+          compatibilityKey,
+          config: config3,
+          inventory: initialLifecycle.inventory,
+          targets: initialLifecycle.revalidationTargets,
+          resolutionHistory,
+          renames: pr.files.filter((file) => !!file.previousFilename).map((file) => ({
+            previousFilename: file.previousFilename,
+            filename: file.filename
+          }))
+        }) : void 0;
+        if (preplanningRestore2?.persistedPlan?.compatibilityKey && preplanningRestore2.persistedPlan.compatibilityKey !== compatibilityKey)
+          throw new Error("review_restore_compatibility_changed");
+        const finalPlan = restorePersistedWorkPlan(
+          preplanningRestore2,
+          lifecycle?.plan ?? planned.plan
+        );
+        planned = {
+          ...planned,
+          plan: finalPlan,
+          assignments: rebindReviewAssignmentsToWorkPlan(
+            planned.assignments,
+            finalPlan
+          )
+        };
+        const invocationAdapter = new CodexReviewInvocationAdapter(
+          provider,
+          new PromptBuilder(
+            config3,
+            "standard",
+            void 0,
+            void 0,
+            void 0,
+            reviewSkills2
+          ),
+          planned.assignments,
+          providerTimeoutMs,
+          agenticContext,
+          contextGateway,
+          false,
+          preparedRoute2 ? reasoningEffort2 : "xhigh",
+          input2.providerApi?.credentialLease,
+          gatewayModelSettings2,
+          reviewMemory
+        );
+        const investigationInvocationAdapter = createProductionReviewInvestigationInvocation({
+          rollout: investigationRollout,
+          create: () => new CodexReviewInvocationAdapter(
+            provider,
+            new PromptBuilder(
+              config3,
+              "standard",
+              void 0,
+              void 0,
+              void 0,
+              reviewSkills2
+            ),
+            planned.assignments,
+            providerTimeoutMs,
+            agenticContext,
+            contextGateway,
+            true,
+            reasoningEffort2,
+            input2.providerApi?.credentialLease,
+            gatewayModelSettings2,
+            reviewMemory
+          )
+        });
+        const investigationProtocol = investigationRecordingEnabled ? new ReviewActionV2InvestigationAdapter(reviewActionClient) : void 0;
+        const investigationRecording = investigationProtocol && contextGatewayOptions ? new ReviewInvestigationRecordingAdapter(
+          (recordingInput) => {
+            const legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate();
+            if (preparedRoute2) legacyFallbackGate.close();
+            const investigationControlPlane = new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
+              investigationProtocol,
+              legacyFallbackGate
+            );
+            const currency = new RevisionGuardInvestigationCurrencyAdapter(
+              revisionGuard
+            );
+            const investigationGatewayFactory = createProductionReviewInvestigationGatewayFactory(
+              new ContextGatewayInvocationSessionFactory(
+                new ReviewActionV2InvestigationContextAttestationAdapter(
+                  reviewActionClient,
+                  recordingInput.authorization.authorizationToken
+                ),
+                contextGatewayOptions,
+                requiredContextWitness
+              )
+            );
+            const gateway = new ContextGatewayV4InvestigationAdapter(
+              investigationGatewayFactory,
+              {
+                revision: {
+                  baseSha: authorization2.facts.baseSha,
+                  mergeBaseSha: authorization2.facts.mergeBaseSha,
+                  headSha: authorization2.facts.headSha
+                },
+                preparedManifestKey: recordingInput.manifest.manifestKey,
+                providerKind: recordingInput.invocation.manifestFacts.providerKind,
+                requestedModel: recordingInput.invocation.requestedModel,
+                executionProfile: recordingInput.invocation.manifestFacts.executionProfile,
+                providerInvocationKey: recordingInput.manifest.providerInvocationKey,
+                toolPolicyHash: recordingInput.invocation.manifestFacts.toolPolicyHash
+              }
+            );
+            const agents = createProductionReviewInvestigationAgentSelector({
+              authorization: authorization2,
+              primaryProviderKind: "codex" /* Codex */,
+              contextCriticEnabled: investigationRollout.contextCriticEnabled,
+              agents: createConfiguredProductionInvestigationAgents({
+                approvedAgent: approvedAgent2,
+                ...input2.providerApi ? {
+                  directCredentialLease: input2.providerApi.credentialLease,
+                  directModelProvider: directProvider2.modelProvider
+                } : {},
+                codexModel: model3,
+                codexBinaryPath: input2.codexBinaryPath,
+                executionSessions: gateway,
+                modelTransport: preparedRoute2?.modelTransport,
+                admittedGatewayModel: preparedRoute2?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+                reasoningEffort: reasoningEffort2,
+                gatewayModelSettings: gatewayModelSettings2
+              })
+            });
+            return new RunInvestigationWorkSlot({
+              controlPlane: investigationControlPlane,
+              legacyFallbackGate,
+              delay: new CancellableReviewOrchestrationDelay(),
+              leases: new ReviewActionV2InvestigationLeaseAdapter(
+                reviewActionClient
+              ),
+              ...investigationRollout.crossRevisionReplayEnabled && contextReplayRunner ? {
+                replay: new ReplayInvestigationOnRevision({
+                  controlPlane: investigationControlPlane,
+                  receipts: contextReplayRunner,
+                  currency
                 })
               } : {},
-              bridge,
-              limits: {
-                requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
-              },
-              ocrEffort: "medium",
-              modelReasoningEffort: ocrModelReasoningEffort,
-              language: ocrLanguage,
-              reviewSkills,
-              reviewMemory,
-              freshReviewSkillsSupply: (supply) => skillsReceiptCollector.record(supply),
-              ruleText: reviewSkills.kind === "legacy" ? buildOcrControlledRuleText({
-                language: ocrLanguage,
-                assignedPaths: pr.files.map((file) => file.filename).sort()
-              }) : buildOcrSkillsControlledRuleText({
-                language: ocrLanguage,
-                assignedPaths: pr.files.map((file) => file.filename).sort(),
-                reviewSkills
-              }),
-              backgroundText: ocrBackgroundParts.length > 0 ? ocrBackgroundParts.join("\n\n") : null,
-              checkoutRoot: path18.resolve(input.workspacePath),
-              processRunner: runOcrReviewProcess,
-              previewRunner: runOcrReviewProcess,
-              acceptanceDiagnostic: (diagnostic) => logger7.info("Managed OCR acceptance", diagnostic)
-            }
+              turnRunner: new RunInvestigationTurn({
+                controlPlane: investigationControlPlane,
+                currency,
+                gateway,
+                agents,
+                diagnostics: new LoggingInvestigationOperationalDiagnostics(logger7),
+                now: () => /* @__PURE__ */ new Date()
+              })
+            });
+          },
+          {
+            workingDirectory: path18.resolve(input2.workspacePath),
+            leaseDurationMs: providerTimeoutMs + 5 * 6e4,
+            providerTimeoutMs,
+            certificateTtlMs: 24 * 60 * 6e4,
+            minimumCapacityParkMs: 6e4,
+            actionBudget: reviewInvestigationActionBudgetForDepth(
+              config3.reviewDepth
+            ),
+            policy: REVIEW_INVESTIGATION_PRODUCTION_POLICY
+          },
+          productionReviewInvestigationRecordingMode(
+            investigationRollout
+          ),
+          investigationRollout.verifiedCleanEnabled
+        ) : void 0;
+        if (prDescription && !planned.plan.assignments.some(
+          (assignment) => assignment.workSlot.taskKind === "pr_description" /* PrDescription */
+        ))
+          warning2(
+            "AI PR description omitted: no optional task budget remains."
           );
-          const discoveryInvocations = scopedModelInvocations(
-            invocationAdapter2,
-            modelTransport
-          );
-          const identities2 = new DeterministicReviewOrchestrationIdentity();
-          if (prDescription2 && !planned2.plan.assignments.some(
-            (assignment) => assignment.workSlot.taskKind === "pr_description" /* PrDescription */
-          ))
-            warning2(
-              "AI PR description omitted: no optional task budget remains."
-            );
-          const useCase2 = new RunT0ReviewOrchestration({
-            ...prDescription2 ? { prDescription: prDescription2 } : {},
+        const nativeDiscoveryInvocations = observeNativeReviewSkillsSupply(
+          preparedRoute2 ? scopedModelInvocations(
+            invocationAdapter,
+            preparedRoute2.modelTransport
+          ) : invocationAdapter,
+          skillsReceiptCollector,
+          () => preparedRoute2?.modelTransport.requestCount?.()
+        );
+        return {
+          dependencies: {
+            ...prDescription ? { prDescription } : {},
             controlPlane,
             revisionGuard,
             oidc: {
-              getToken: () => oidc.requestToken(input.audience)
+              getToken: () => oidc.requestToken(input2.audience)
             },
             invocationManifestAssembler: restoredLifecycleManifestAssembler(
-              preplanningRestore,
+              preplanningRestore2,
               new GeneratedProviderInvocationManifestAssembler(
-                authorization,
-                config2,
-                ocrCompatibilityKey
+                authorization2,
+                config3,
+                compatibilityKey
               )
             ),
-            invocations: preplanningRestore?.persistedPlan ? restoredLifecycleInvocations(
-              preplanningRestore,
-              discoveryInvocations
-            ) : lifecycle2 && lifecycleCapability2 ? compositeLifecycleInvocations({
-              discovery: discoveryInvocations,
-              packetsByWorkSlotId: lifecycle2.packetsByWorkSlotId,
-              capability: lifecycleCapability2,
-              outputCap: lifecycle2.outputCap,
-              reviewRevisionHash: authorization.facts.reviewRevisionHash,
-              liveLifecycleStateHash: lifecycle2.liveLifecycleStateHash,
-              transport: modelTransport
-            }) : discoveryInvocations,
+            invocations: preplanningRestore2?.persistedPlan ? restoredLifecycleInvocations(
+              preplanningRestore2,
+              nativeDiscoveryInvocations
+            ) : lifecycle && lifecycleCapability ? compositeLifecycleInvocations({
+              discovery: nativeDiscoveryInvocations,
+              packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
+              capability: lifecycleCapability,
+              outputCap: lifecycle.outputCap,
+              reviewRevisionHash: authorization2.facts.reviewRevisionHash,
+              liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
+              transport: preparedRoute2.modelTransport
+            }) : nativeDiscoveryInvocations,
             memoryAdmission,
+            ...investigationInvocationAdapter ? { investigationInvocations: investigationInvocationAdapter } : {},
             invocationFailureClassifier: new ProviderInvocationFailureClassifier(
-              modelTransport.failureFact
+              preparedRoute2?.modelTransport.failureFact
             ),
             invocationDiagnostics: new LoggingReviewInvocationDiagnostics(
               logger7
@@ -221756,411 +222936,46 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               logger7
             ),
             leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+            ...investigationRecording ? { investigationRecording } : {},
             projectionBuilder: createProductionReviewProjectionBuilder({
-              authorizationFacts: authorization.facts,
+              authorizationFacts: authorization2.facts,
               pr,
-              config: config2,
-              protocolLimits: authorization.limits,
-              assignments: planned2.plan.assignments.map((assignment) => ({
+              config: config3,
+              protocolLimits: authorization2.limits,
+              assignments: planned.plan.assignments.map((assignment) => ({
                 workSlotId: assignment.workSlot.workSlotId,
                 taskKind: assignment.workSlot.taskKind,
                 providerKind: assignment.workSlot.providerKind,
+                providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
                 required: assignment.workSlot.required,
-                filePaths: planned2.assignments.find(
+                filePaths: planned.assignments.find(
                   (item) => item.workSlot.workSlotId === assignment.workSlot.workSlotId
                 )?.context.files.map((file) => file.filename) ?? []
               })),
-              uncoveredPaths: planned2.uncoveredPaths,
-              uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+              uncoveredPaths: planned.uncoveredPaths,
+              uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
               lifecycleInventory,
-              ...lifecycle2?.lifecycleVerification ? { lifecycleVerification: lifecycle2.lifecycleVerification } : {},
+              ...lifecycle?.lifecycleVerification ? { lifecycleVerification: lifecycle.lifecycleVerification } : {},
               skillsReceipt
             }),
-            identities: identities2,
+            ...contextGateway ? {
+              contextReplay: contextReplayRunner,
+              contextAttestations: controlPlane
+            } : {},
+            identities,
             clock: new SystemReviewOrchestrationClock(),
             delay: new CancellableReviewOrchestrationDelay(),
             executionDeadline,
             signal,
             ...this.progress ? { progress: this.progress } : {}
-          });
-          const result3 = await useCase2.executeAuthorized(
-            {
-              executionId: identities2.deterministicId("execution", [
-                authorization.authorizationId,
-                authorization.facts.reviewRevisionHash,
-                planned2.plan.planHash
-              ]),
-              baseSha: authorization.facts.baseSha,
-              mergeBaseSha: authorization.facts.mergeBaseSha,
-              headSha: authorization.facts.headSha,
-              reviewRevisionHash: authorization.facts.reviewRevisionHash,
-              compatibilityKey: ocrCompatibilityKey,
-              planHash: planned2.plan.planHash,
-              workSlotsCanonicalJson: planned2.plan.workSlotsCanonicalJson,
-              assignmentManifestCanonicalJson: planned2.plan.assignmentManifestCanonicalJson,
-              assignmentManifestHash: planned2.plan.assignmentManifestHash,
-              workSlots: planned2.plan.assignments.map(
-                (assignment) => assignment.workSlot
-              ),
-              sourceRunId: authorization.facts.sourceRunId,
-              sourceRunAttempt: authorization.facts.sourceRunAttempt,
-              ownerIdHash: sha25617(
-                canonicalJson17({
-                  authorizationId: authorization.authorizationId,
-                  providerInstanceId: input.providerInstanceId,
-                  sourceRunAttempt: authorization.facts.sourceRunAttempt,
-                  sourceRunId: authorization.facts.sourceRunId
-                })
-              ),
-              allowPartial: true,
-              ...preplanningRestore ? { restoredExecution: preplanningRestore, restoreOnly: true } : {}
-            },
-            authorization
-          );
-          signal?.throwIfAborted();
-          return mapOrchestrationResultToCodexOutcome(result3);
-        } finally {
-          modelTransport.setContextToolsGuard?.(void 0);
-          await contextTools?.close();
-        }
-      }
-      const agenticContext = config2.codexAgenticContext ?? true;
-      const investigationRolloutResolution = resolveProductionReviewInvestigationRolloutResolution({
-        flags: readProductionReviewInvestigationRolloutFlags(),
-        agenticContext,
-        authorization,
-        primaryProviderKind: "codex" /* Codex */,
-        reviewDepth: config2.reviewDepth
-      });
-      const investigationRollout = investigationRolloutResolution.rollout;
-      emitReviewInvestigationTelemetry(
-        formatProductionReviewInvestigationRolloutTelemetry(
-          investigationRolloutResolution
-        )
-      );
-      const investigationRecordingEnabled = investigationRollout.recordingEnabled;
-      const provider = new CodexProvider(model, {
-        ...usageDelivery ? {
-          usageDelivery,
-          usageUpstreamBaseUrl: process.env.REVIEW_AUTH_MODE === "openai-api" ? "https://api.openai.com/v1" : input.providerInstanceId || process.env.REVIEW_AUTH_MODE === "codex-oauth" ? "https://chatgpt.com/backend-api/codex" : void 0
-        } : {},
-        agenticContext,
-        eventAudit: config2.codexEventAudit,
-        modelProvider: input.providerApi ? directProvider.modelProvider : resolveAccountGatewayModelProvider(
-          model,
-          preparedRoute?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-          preparedRoute?.modelTransport
-        ),
-        ...input.providerApi ? {
-          providerNamePrefix: directProvider.mode === "kimi-code-api" ? "kimi" : directProvider.mode === "mimo-token-plan-api" ? "codex-mimo" : "openrouter",
-          providerApiTransport: input.providerApi.modelTransport,
-          disableBuiltinTools: true,
-          waitForProcessClose: true
-        } : {},
-        ...preparedRoute && !input.providerApi ? {
-          accountGateway: preparedRoute.modelTransport,
-          ...gatewayModelSettings ? {
-            accountGatewayModelSettings: gatewayModelSettings,
-            accountGatewaySavedReasoningEffort: serverReasoningEffort
-          } : {}
-        } : {}
-      });
-      const compatibilityKey = hashIncrementalCompatibility(
-        config2,
-        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
-        reviewSkillsCacheIdentity(reviewSkills)
-      );
-      const gatewayBundlePath = resolveContextGatewayBundlePath();
-      const requiredContextWitness = new SubprocessRequiredContextWitnessRunner();
-      const contextGatewayOptions = resolveProductionContextGatewaySessionFactoryOptions({
-        agenticContext,
-        investigationRecordingEnabled,
-        checkoutRoot: path18.resolve(input.workspacePath),
-        gatewayBundlePath
-      });
-      const contextGateway = contextGatewayOptions ? new ContextGatewayInvocationSessionFactory(
-        controlPlane,
-        contextGatewayOptions,
-        requiredContextWitness
-      ) : void 0;
-      const contextReplayRunner = contextGateway ? new ContextAttestationReplayRunner({
-        checkoutRoot: path18.resolve(input.workspacePath),
-        gatewayBundlePath
-      }) : void 0;
-      const prDescription = createPrDescriptionGeneration({
-        enabled: config2.updatePrDescription,
-        scopedCompanionDispatch: !!admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-        capabilityJson: admittedRuntime?.runtimeEnv[prDescriptionContract.capabilityRuntimeEnvKey],
-        pr,
-        reviewRevisionHash: authorization.facts.reviewRevisionHash,
-        requestedModel: model,
-        providerKind: "codex" /* Codex */,
-        language: config2.outputLanguage,
-        config: config2,
-        transport: preparedRoute?.modelTransport,
-        memorySnapshot: descriptionMemory.current(),
-        warn: warning2
-      });
-      const lifecycleCapability = config2.reviewThreadLifecycle !== "off" && preparedRoute ? readLifecycleCapability(
-        admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-        model,
-        "codex" /* Codex */,
-        modelDispatchCapability
-      ) : void 0;
-      let planned = planAssignments({
-        prDescriptionEnabled: prDescription !== void 0,
-        authorization,
-        pr,
-        config: config2,
-        providerName: provider.name,
-        compatibilityKey,
-        lifecycleTargets: selectLegacyLifecycleTargets(
-          config2.reviewThreadLifecycle,
-          admittedRuntime?.runtimeEnv[lifecycleVerificationContract.capabilityRuntimeEnvKey],
-          initialLifecycle.promptTargets
-        ),
-        liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
-        accountGateway: preparedRoute !== void 0
-      });
-      assertLegacyReviewPlanRestorable(preplanningRestore, planned.plan);
-      const lifecycle = preplanningRestore ? restoreProductionLifecycleVerification(
-        preplanningRestore,
-        planned.plan,
-        config2
-      ) : lifecycleCapability ? await planProductionLifecycleVerification({
-        capability: lifecycleCapability,
-        authorization,
-        plan: planned.plan,
-        repository: input.repository,
-        checkoutRoot: path18.resolve(input.workspacePath),
-        compatibilityKey,
-        config: config2,
-        inventory: initialLifecycle.inventory,
-        targets: initialLifecycle.revalidationTargets,
-        resolutionHistory,
-        renames: pr.files.filter((file) => !!file.previousFilename).map((file) => ({
-          previousFilename: file.previousFilename,
-          filename: file.filename
-        }))
-      }) : void 0;
-      if (preplanningRestore?.persistedPlan?.compatibilityKey && preplanningRestore.persistedPlan.compatibilityKey !== compatibilityKey)
-        throw new Error("review_restore_compatibility_changed");
-      const finalPlan = restorePersistedWorkPlan(
-        preplanningRestore,
-        lifecycle?.plan ?? planned.plan
-      );
-      planned = {
-        ...planned,
-        plan: finalPlan,
-        assignments: rebindReviewAssignmentsToWorkPlan(
-          planned.assignments,
-          finalPlan
-        )
-      };
-      const invocationAdapter = new CodexReviewInvocationAdapter(
-        provider,
-        new PromptBuilder(
-          config2,
-          "standard",
-          void 0,
-          void 0,
-          void 0,
-          reviewSkills
-        ),
-        planned.assignments,
-        providerTimeoutMs,
-        agenticContext,
-        contextGateway,
-        false,
-        preparedRoute ? reasoningEffort : "xhigh",
-        input.providerApi?.credentialLease,
-        gatewayModelSettings,
-        reviewMemory
-      );
-      const investigationInvocationAdapter = createProductionReviewInvestigationInvocation({
-        rollout: investigationRollout,
-        create: () => new CodexReviewInvocationAdapter(
-          provider,
-          new PromptBuilder(
-            config2,
-            "standard",
-            void 0,
-            void 0,
-            void 0,
-            reviewSkills
-          ),
-          planned.assignments,
-          providerTimeoutMs,
-          agenticContext,
-          contextGateway,
-          true,
-          reasoningEffort,
-          input.providerApi?.credentialLease,
-          gatewayModelSettings,
-          reviewMemory
-        )
-      });
-      const identities = new DeterministicReviewOrchestrationIdentity();
-      const investigationProtocol = investigationRecordingEnabled ? new ReviewActionV2InvestigationAdapter(reviewActionClient) : void 0;
-      const investigationRecording = investigationProtocol && contextGatewayOptions ? new ReviewInvestigationRecordingAdapter(
-        (recordingInput) => {
-          const legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate();
-          if (preparedRoute) legacyFallbackGate.close();
-          const investigationControlPlane = new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
-            investigationProtocol,
-            legacyFallbackGate
-          );
-          const currency = new RevisionGuardInvestigationCurrencyAdapter(
-            revisionGuard
-          );
-          const investigationGatewayFactory = createProductionReviewInvestigationGatewayFactory(
-            new ContextGatewayInvocationSessionFactory(
-              new ReviewActionV2InvestigationContextAttestationAdapter(
-                reviewActionClient,
-                recordingInput.authorization.authorizationToken
-              ),
-              contextGatewayOptions,
-              requiredContextWitness
-            )
-          );
-          const gateway = new ContextGatewayV4InvestigationAdapter(
-            investigationGatewayFactory,
-            {
-              revision: {
-                baseSha: authorization.facts.baseSha,
-                mergeBaseSha: authorization.facts.mergeBaseSha,
-                headSha: authorization.facts.headSha
-              },
-              preparedManifestKey: recordingInput.manifest.manifestKey,
-              providerKind: recordingInput.invocation.manifestFacts.providerKind,
-              requestedModel: recordingInput.invocation.requestedModel,
-              executionProfile: recordingInput.invocation.manifestFacts.executionProfile,
-              providerInvocationKey: recordingInput.manifest.providerInvocationKey,
-              toolPolicyHash: recordingInput.invocation.manifestFacts.toolPolicyHash
-            }
-          );
-          const agents = createProductionReviewInvestigationAgentSelector(
-            {
-              authorization,
-              primaryProviderKind: "codex" /* Codex */,
-              contextCriticEnabled: investigationRollout.contextCriticEnabled,
-              agents: createConfiguredProductionInvestigationAgents({
-                approvedAgent,
-                ...input.providerApi ? {
-                  directCredentialLease: input.providerApi.credentialLease,
-                  directModelProvider: directProvider.modelProvider
-                } : {},
-                codexModel: model,
-                codexBinaryPath: input.codexBinaryPath,
-                executionSessions: gateway,
-                modelTransport: preparedRoute?.modelTransport,
-                admittedGatewayModel: preparedRoute?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-                reasoningEffort,
-                gatewayModelSettings
-              })
-            }
-          );
-          return new RunInvestigationWorkSlot({
-            controlPlane: investigationControlPlane,
-            legacyFallbackGate,
-            delay: new CancellableReviewOrchestrationDelay(),
-            leases: new ReviewActionV2InvestigationLeaseAdapter(
-              reviewActionClient
-            ),
-            ...investigationRollout.crossRevisionReplayEnabled && contextReplayRunner ? {
-              replay: new ReplayInvestigationOnRevision({
-                controlPlane: investigationControlPlane,
-                receipts: contextReplayRunner,
-                currency
-              })
-            } : {},
-            turnRunner: new RunInvestigationTurn({
-              controlPlane: investigationControlPlane,
-              currency,
-              gateway,
-              agents,
-              diagnostics: new LoggingInvestigationOperationalDiagnostics(
-                logger7
-              ),
-              now: () => /* @__PURE__ */ new Date()
-            })
-          });
-        },
-        {
-          workingDirectory: path18.resolve(input.workspacePath),
-          leaseDurationMs: providerTimeoutMs + 5 * 6e4,
-          providerTimeoutMs,
-          certificateTtlMs: 24 * 60 * 6e4,
-          minimumCapacityParkMs: 6e4,
-          actionBudget: reviewInvestigationActionBudgetForDepth(
-            config2.reviewDepth
-          ),
-          policy: REVIEW_INVESTIGATION_PRODUCTION_POLICY
-        },
-        productionReviewInvestigationRecordingMode(investigationRollout),
-        investigationRollout.verifiedCleanEnabled
-      ) : void 0;
-      if (prDescription && !planned.plan.assignments.some(
-        (assignment) => assignment.workSlot.taskKind === "pr_description" /* PrDescription */
-      ))
-        warning2(
-          "AI PR description omitted: no optional task budget remains."
-        );
-      const nativeDiscoveryInvocations = observeNativeReviewSkillsSupply(
-        preparedRoute ? scopedModelInvocations(
-          invocationAdapter,
-          preparedRoute.modelTransport
-        ) : invocationAdapter,
-        skillsReceiptCollector,
-        () => preparedRoute?.modelTransport.requestCount?.()
-      );
-      const useCase = new RunT0ReviewOrchestration({
-        ...prDescription ? { prDescription } : {},
-        controlPlane,
-        revisionGuard,
-        oidc: {
-          getToken: () => oidc.requestToken(input.audience)
-        },
-        invocationManifestAssembler: restoredLifecycleManifestAssembler(
-          preplanningRestore,
-          new GeneratedProviderInvocationManifestAssembler(
-            authorization,
-            config2,
-            compatibilityKey
-          )
-        ),
-        invocations: preplanningRestore?.persistedPlan ? restoredLifecycleInvocations(
-          preplanningRestore,
-          nativeDiscoveryInvocations
-        ) : lifecycle && lifecycleCapability ? compositeLifecycleInvocations({
-          discovery: nativeDiscoveryInvocations,
-          packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
-          capability: lifecycleCapability,
-          outputCap: lifecycle.outputCap,
-          reviewRevisionHash: authorization.facts.reviewRevisionHash,
-          liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
-          transport: preparedRoute.modelTransport
-        }) : nativeDiscoveryInvocations,
-        memoryAdmission,
-        ...investigationInvocationAdapter ? { investigationInvocations: investigationInvocationAdapter } : {},
-        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
-          preparedRoute?.modelTransport.failureFact
-        ),
-        invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger7),
-        investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
-          logger7
-        ),
-        leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
-        ...investigationRecording ? { investigationRecording } : {},
-        projectionBuilder: createProductionReviewProjectionBuilder({
-          authorizationFacts: authorization.facts,
-          pr,
-          config: config2,
-          protocolLimits: authorization.limits,
+          },
+          plan: planned.plan,
+          compatibilityKey,
           assignments: planned.plan.assignments.map((assignment) => ({
             workSlotId: assignment.workSlot.workSlotId,
             taskKind: assignment.workSlot.taskKind,
             providerKind: assignment.workSlot.providerKind,
+            providerVoteIdentityHash: assignment.workSlot.providerVoteIdentityHash,
             required: assignment.workSlot.required,
             filePaths: planned.assignments.find(
               (item) => item.workSlot.workSlotId === assignment.workSlot.workSlotId
@@ -222168,42 +222983,185 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           })),
           uncoveredPaths: planned.uncoveredPaths,
           uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
-          lifecycleInventory,
-          ...lifecycle?.lifecycleVerification ? { lifecycleVerification: lifecycle.lifecycleVerification } : {},
-          skillsReceipt
-        }),
-        ...contextGateway ? {
-          contextReplay: contextReplayRunner,
-          contextAttestations: controlPlane
-        } : {},
-        identities,
-        clock: new SystemReviewOrchestrationClock(),
-        delay: new CancellableReviewOrchestrationDelay(),
-        executionDeadline,
-        signal,
-        ...this.progress ? { progress: this.progress } : {}
-      });
-      const result2 = await useCase.executeAuthorized(
-        {
+          lifecycleVerification: lifecycle?.lifecycleVerification,
+          cleanup: async () => {
+          }
+        };
+      };
+      const preparedLanes = [];
+      try {
+        const runtimes = input.accountGateway?.reviewers;
+        if (reviewerPlan && runtimes) {
+          if (runtimes.length !== reviewerPlan.reviewers.length || runtimes.some(
+            (runtime, index) => runtime.reviewer.reviewerId !== reviewerPlan.reviewers[index]?.reviewerId
+          ))
+            throw new Error("review_action_v2_reviewer_sessions_mismatch");
+          const budgets = planReviewerSlotBudgets({
+            runtimes,
+            authorization,
+            pr,
+            config: parentConfig,
+            compatibilityKey: commonCompatibilityKey,
+            lifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
+          });
+          for (const runtime of runtimes) {
+            const laneInput = {
+              ...input,
+              codexHome: runtime.codexHome,
+              codexBinaryPath: runtime.codexBinaryPath,
+              ocr: runtime.ocr,
+              accountGateway: {
+                ...input.accountGateway,
+                runtimeConfig: runtime.runtimeConfig,
+                modelTransport: runtime.modelTransport
+              }
+            };
+            preparedLanes.push(
+              await prepareLane(
+                laneInput,
+                runtime.reviewer,
+                budgets.get(runtime.reviewer.reviewerId),
+                runtime.bootstrapFailure === true
+              )
+            );
+          }
+        } else preparedLanes.push(await prepareLane(input));
+        const primaryIndex = reviewerPlan ? reviewerPlan.reviewers.findIndex(
+          (reviewer) => reviewer.reviewerId === reviewerPlan.primaryReviewerId
+        ) : 0;
+        const primary = preparedLanes[primaryIndex];
+        const combined = reviewerPlan ? combineProductionReviewLanes(
+          preparedLanes,
+          commonCompatibilityKey,
+          authorization
+        ) : primary;
+        const plan = restorePersistedWorkPlan(parentRestore, combined.plan);
+        assertLegacyReviewPlanRestorable(parentRestore, plan);
+        const compatibilityKey = combined.compatibilityKey;
+        if (parentRestore?.persistedPlan?.compatibilityKey && parentRestore.persistedPlan.compatibilityKey !== compatibilityKey)
+          throw new Error("review_restore_compatibility_changed");
+        const byVote = new Map(
+          preparedLanes.map((lane, index) => [
+            reviewerPlan?.reviewers[index].providerVoteIdentityHash ?? lane.plan.assignments[0].workSlot.providerVoteIdentityHash,
+            lane
+          ])
+        );
+        const route = (slot) => {
+          const lane = byVote.get(slot.providerVoteIdentityHash);
+          if (!lane) throw new Error("review_action_v2_reviewer_vote_missing");
+          return lane;
+        };
+        const slots = new Map(
+          plan.assignments.map((assignment) => [
+            assignment.workSlot.workSlotId,
+            assignment.workSlot
+          ])
+        );
+        const invocationSlot = (invocation) => {
+          const slot = slots.get(invocation.workSlotId);
+          if (!slot) throw new Error("review_action_v2_reviewer_slot_missing");
+          return slot;
+        };
+        const laneInvocations = {
+          prepare: (request3) => route(request3.workSlot).dependencies.invocations.prepare(request3),
+          execute: (request3) => route(
+            invocationSlot(request3.invocation)
+          ).dependencies.invocations.execute(request3)
+        };
+        const lifecycleVerification = parentRestore ? restoreProductionLifecycleVerification(
+          parentRestore,
+          plan,
+          parentConfig
+        ).lifecycleVerification : primary.lifecycleVerification;
+        const modelTransports = new Map(
+          runtimes?.map((runtime) => [
+            runtime.reviewer.providerVoteIdentityHash,
+            runtime.modelTransport
+          ]) ?? []
+        );
+        const dependencies2 = reviewerPlan ? {
+          ...primary.dependencies,
+          memoryAdmission,
+          invocations: parentRestore?.persistedPlan ? restoredLifecycleInvocations(parentRestore, laneInvocations) : laneInvocations,
+          invocationManifestAssembler: restoredLifecycleManifestAssembler(
+            parentRestore,
+            {
+              assemble: (invocation) => route(
+                invocationSlot(invocation)
+              ).dependencies.invocationManifestAssembler.assemble(
+                invocation
+              )
+            }
+          ),
+          investigationInvocations: {
+            prepare: (request3) => {
+              const port = route(request3.workSlot).dependencies.investigationInvocations;
+              if (!port)
+                throw new Error(
+                  "review_investigation_reviewer_unavailable"
+                );
+              return port.prepare(request3);
+            },
+            execute: (request3) => {
+              const port = route(invocationSlot(request3.invocation)).dependencies.investigationInvocations;
+              if (!port)
+                throw new Error(
+                  "review_investigation_reviewer_unavailable"
+                );
+              return port.execute(request3);
+            }
+          },
+          resolveInvestigationRecording: (slot) => route(slot).dependencies.investigationRecording,
+          ...preparedLanes.some((lane) => lane.dependencies.contextReplay) ? {
+            contextReplay: {
+              replay: (request3) => route(
+                request3.candidate.observation
+              ).dependencies.contextReplay?.replay(request3) ?? Promise.resolve(null)
+            },
+            contextAttestations: controlPlane
+          } : {},
+          invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+            (context5) => context5 ? modelTransports.get(context5.workSlot.providerVoteIdentityHash)?.failureFact() : void 0
+          ),
+          reviewerScheduling: {
+            maxParallelReviewers: reviewerPlan.maxParallelReviewers,
+            reviewers: reviewerPlan.reviewers,
+            concurrencyGroups: reviewerPlan.concurrencyGroups.map(
+              (group) => ({
+                id: group.concurrencyGroupId,
+                maxParallel: group.maxParallel
+              })
+            )
+          },
+          projectionBuilder: createProductionReviewProjectionBuilder({
+            authorizationFacts: authorization.facts,
+            pr,
+            config: {
+              ...parentConfig,
+              inlineMinAgreement: reviewerPlan.inlineMinAgreement
+            },
+            protocolLimits: authorization.limits,
+            assignments: combined.assignments,
+            uncoveredPaths: combined.uncoveredPaths,
+            uncoveredLifecycleTargetIds: combined.uncoveredLifecycleTargetIds,
+            lifecycleInventory,
+            ...lifecycleVerification ? { lifecycleVerification } : {},
+            skillsReceipt
+          })
+        } : primary.dependencies;
+        const command = {
           executionId: identities.deterministicId("execution", [
             authorization.authorizationId,
             authorization.facts.reviewRevisionHash,
-            planned.plan.planHash
+            plan.planHash
           ]),
-          baseSha: authorization.facts.baseSha,
-          mergeBaseSha: authorization.facts.mergeBaseSha,
-          headSha: authorization.facts.headSha,
-          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          ...authorization.facts,
           compatibilityKey,
-          planHash: planned.plan.planHash,
-          workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
-          assignmentManifestCanonicalJson: planned.plan.assignmentManifestCanonicalJson,
-          assignmentManifestHash: planned.plan.assignmentManifestHash,
-          workSlots: planned.plan.assignments.map(
-            (assignment) => assignment.workSlot
-          ),
-          sourceRunId: authorization.facts.sourceRunId,
-          sourceRunAttempt: authorization.facts.sourceRunAttempt,
+          planHash: plan.planHash,
+          workSlotsCanonicalJson: plan.workSlotsCanonicalJson,
+          assignmentManifestCanonicalJson: plan.assignmentManifestCanonicalJson,
+          assignmentManifestHash: plan.assignmentManifestHash,
+          workSlots: plan.assignments.map((assignment) => assignment.workSlot),
           ownerIdHash: sha25617(
             canonicalJson17({
               authorizationId: authorization.authorizationId,
@@ -222213,12 +223171,16 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             })
           ),
           allowPartial: true,
-          ...preplanningRestore ? { restoredExecution: preplanningRestore, restoreOnly: true } : {}
-        },
-        authorization
-      );
-      signal?.throwIfAborted();
-      return mapOrchestrationResultToCodexOutcome(result2);
+          ...parentRestore ? { restoredExecution: parentRestore, restoreOnly: true } : {}
+        };
+        const result2 = await new RunT0ReviewOrchestration(
+          dependencies2
+        ).executeAuthorized(command, authorization);
+        signal?.throwIfAborted();
+        return mapOrchestrationResultToCodexOutcome(result2);
+      } finally {
+        for (const lane of preparedLanes) await lane.cleanup();
+      }
     } finally {
       await usageDelivery?.cleanup();
     }
@@ -222334,10 +223296,10 @@ function resolveProductionInvestigationReasoningEffort(input) {
       return null;
     }
     const mimo = input.providerApiAuthMode === "mimo-token-plan-api";
-    const effort2 = input.serverReasoningEffort ?? (mimo ? "high" : "xhigh");
-    if (effort2 !== "low" && effort2 !== "medium" && effort2 !== "high" && (effort2 !== "xhigh" || mimo))
+    const effort3 = input.serverReasoningEffort ?? (mimo ? "high" : "xhigh");
+    if (effort3 !== "low" && effort3 !== "medium" && effort3 !== "high" && (effort3 !== "xhigh" || mimo))
       throw new Error("provider_api_reasoning_effort_unsupported");
-    return effort2;
+    return effort3;
   }
   if (!input.accountGateway) return "xhigh";
   if (input.codexModel !== "mimo-v2.6-pro") {
@@ -222349,17 +223311,17 @@ function resolveProductionInvestigationReasoningEffort(input) {
         input.serverReasoningEffort
       );
     }
-    const effort2 = input.serverReasoningEffort;
-    if (effort2 === void 0) return "xhigh";
-    if (effort2 !== "minimal" && effort2 !== "low" && effort2 !== "medium" && effort2 !== "high" && effort2 !== "xhigh" && effort2 !== "max" && effort2 !== "ultra")
+    const effort3 = input.serverReasoningEffort;
+    if (effort3 === void 0) return "xhigh";
+    if (effort3 !== "minimal" && effort3 !== "low" && effort3 !== "medium" && effort3 !== "high" && effort3 !== "xhigh" && effort3 !== "max" && effort3 !== "ultra")
       throw new Error("account_gateway_codex_reasoning_effort_unsupported");
-    return effort2;
+    return effort3;
   }
-  const effort = input.serverReasoningEffort ?? "high";
-  if (effort !== "low" && effort !== "medium" && effort !== "high") {
+  const effort2 = input.serverReasoningEffort ?? "high";
+  if (effort2 !== "low" && effort2 !== "medium" && effort2 !== "high") {
     throw new Error("account_gateway_mimo_reasoning_effort_unsupported");
   }
-  return effort;
+  return effort2;
 }
 function resolveAccountGatewayModelProvider(selectedModel, admittedModel, transport) {
   return transport && admittedModel === selectedModel && isAccountGatewayMiMoModel(admittedModel) ? "mimo" : void 0;
@@ -222983,10 +223945,14 @@ function planAssignments(input) {
     input.providerName
   ]);
   const allBatches = tokenSafeBatches.length === 0 ? [[]] : tokenSafeBatches;
-  const batches = allBatches.slice(0, maxSlots);
+  const discoverySlots = Math.min(
+    maxSlots,
+    input.maxDiscoverySlots ?? maxSlots
+  );
+  const batches = allBatches.slice(0, discoverySlots);
   const descriptionEnabled = input.prDescriptionEnabled === true && batches.length < maxSlots;
   const uncoveredPaths = Object.freeze(
-    allBatches.slice(maxSlots).flatMap((batch) => batch.map((file) => file.filename)).sort()
+    allBatches.slice(discoverySlots).flatMap((batch) => batch.map((file) => file.filename)).sort()
   );
   const plannedBatches = batches.map((batch) => {
     const lifecycleTargets = input.lifecycleTargets.filter(
@@ -223031,10 +223997,10 @@ function planAssignments(input) {
     compatibilityKey: input.compatibilityKey,
     providers: [
       {
-        providerName: input.providerName,
+        providerName: input.reviewerId ? `${input.providerName}:${input.reviewerId}` : input.providerName,
         providerKind: "codex" /* Codex */,
         providerVoteIdentityHash: codexLanes[0].providerVoteIdentityHash,
-        required: true,
+        required: input.reviewerRequired ?? true,
         attemptBudget,
         retryPolicyVersion: input.accountGateway ? "account-gateway-no-replay.v1" : CODEX_RETRY_POLICY_VERSION
       }
@@ -223256,11 +224222,11 @@ function runAccountGatewayGit(args, options, signal, timeoutMs = 6e4) {
     signal.addEventListener("abort", cancel3, { once: true });
     if (signal.aborted) cancel3();
     let stdout = "";
-    let bytes = 0;
+    let bytes2 = 0;
     const collect = (chunk, output) => {
       if (failed) return;
-      bytes += chunk.length;
-      if (bytes > 256 * 1024)
+      bytes2 += chunk.length;
+      if (bytes2 > 256 * 1024)
         stop(new Error("account_gateway_git_output_bound"));
       else if (!failed && output) stdout += chunk.toString();
     };
@@ -223290,6 +224256,110 @@ var CancellableReviewOrchestrationDelay = class extends SystemReviewOrchestratio
     });
   }
 };
+function combineProductionReviewLanes(lanes, compatibilityKey, authorization) {
+  const assignments = lanes.flatMap((lane) => lane.plan.assignments);
+  if (assignments.length > authorization.limits.maxWorkSlots)
+    throw new Error("review_work_plan_slot_limit_exceeded");
+  const manifests = lanes.map(
+    (lane) => JSON.parse(lane.plan.assignmentManifestCanonicalJson)
+  );
+  const eligiblePaths = [
+    ...new Set(manifests.flatMap((manifest2) => manifest2.eligiblePaths))
+  ].sort();
+  const assignedPaths = new Set(
+    manifests.flatMap(
+      (manifest2) => manifest2.assignments.flatMap((assignment) => assignment.paths)
+    )
+  );
+  const lifecyclePlan = manifests.find(
+    (manifest2) => manifest2.lifecyclePlan !== void 0
+  )?.lifecyclePlan;
+  const manifest = createStableReviewAssignmentManifest({
+    assignments: manifests.flatMap((manifest2) => manifest2.assignments),
+    eligiblePaths,
+    uncoveredPaths: eligiblePaths.filter((path19) => !assignedPaths.has(path19)),
+    excludedPaths: manifests.flatMap((manifest2) => manifest2.excludedPaths),
+    ...lifecyclePlan !== void 0 ? { lifecyclePlan } : {}
+  });
+  const workSlots = assignments.map((assignment) => assignment.workSlot).sort((left, right) => left.workSlotId < right.workSlotId ? -1 : 1);
+  const workSlotsCanonicalJson = canonicalJson17(workSlots);
+  const planHash = sha25617(
+    `rr.review-work-plan.v2\0${canonicalJson17({
+      assignmentManifestHash: manifest.assignmentManifestHash,
+      compatibilityKey,
+      reviewRevisionHash: authorization.facts.reviewRevisionHash,
+      workSlots
+    })}`
+  );
+  return {
+    ...lanes[0],
+    compatibilityKey,
+    plan: { ...manifest, workSlotsCanonicalJson, planHash, assignments },
+    assignments: lanes.flatMap((lane) => lane.assignments),
+    uncoveredPaths: [
+      ...new Set(lanes.flatMap((lane) => lane.uncoveredPaths))
+    ].sort(),
+    uncoveredLifecycleTargetIds: [
+      ...new Set(lanes.flatMap((lane) => lane.uncoveredLifecycleTargetIds))
+    ].sort()
+  };
+}
+function planReviewerSlotBudgets(input) {
+  const maximum = input.authorization.limits.maxWorkSlots;
+  if (input.runtimes.length > maximum)
+    throw new Error("review_work_plan_required_group_cannot_fit");
+  const counts = input.runtimes.map((runtime) => {
+    if (runtime.reviewer.agentProfile.agentKind === "ocr") return 1;
+    const config2 = ConfigLoader.loadRuntimeEnvironment(
+      runtime.runtimeConfig.runtimeEnv,
+      { modelTransport: true }
+    );
+    const authorization = {
+      ...input.authorization,
+      facts: {
+        ...input.authorization.facts,
+        providerVoteLanes: [
+          {
+            providerKind: "codex" /* Codex */,
+            providerVoteIdentityHash: runtime.reviewer.providerVoteIdentityHash
+          }
+        ]
+      }
+    };
+    return planAssignments({
+      authorization,
+      pr: input.pr,
+      config: config2,
+      providerName: selectCodexProvider(config2),
+      compatibilityKey: input.compatibilityKey,
+      lifecycleTargets: [],
+      liveLifecycleStateHash: input.lifecycleStateHash,
+      accountGateway: true
+    }).plan.assignments.length;
+  });
+  const budgets = input.runtimes.map(() => 1);
+  let remaining = maximum - budgets.length;
+  for (const required2 of [true, false]) {
+    while (remaining > 0) {
+      const nextGroup = input.runtimes.map((runtime, index) => ({ runtime, index })).filter(
+        ({ runtime, index }) => runtime.reviewer.required === required2 && budgets[index] < counts[index]
+      );
+      if (!nextGroup.length || nextGroup.length > remaining) break;
+      for (const { index } of nextGroup) {
+        budgets[index] += 1;
+        remaining -= 1;
+      }
+    }
+  }
+  const discoverySlots = [...budgets];
+  if (remaining > 0) budgets[0] += remaining;
+  return new Map(
+    input.runtimes.map((runtime, index) => [
+      runtime.reviewer.reviewerId,
+      { maxSlots: budgets[index], discoverySlots: discoverySlots[index] }
+    ])
+  );
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ConfigLoader,

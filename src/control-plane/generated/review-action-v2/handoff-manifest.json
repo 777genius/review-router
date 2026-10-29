@@ -1,7 +1,7 @@
 {
   "canonicalizerDigest": "bf61d04d42e158b26e4b651b62700b10212496487d7e20ac6e705272dc1d6a5f",
   "contractExportVersion": 1,
-  "expectedPublicActionBaseCommit": "fa92fcb7e95b0805beccfa3ce53a4f8e3d19cafd",
+  "expectedPublicActionBaseCommit": "cfe2b78fba925e3e7741d8c7f479324aa785d12b",
   "generatedFileDigests": {
     "companion-contracts.ts": "6394d8b5b1b922da6ae6fa6fec7897bb414676dbb847f9ba9e80192ce293749b",
     "conversation.ts": "d31309c5667a8aa37d9ef8e59b055d3ffdfeb59ba6bb7723fad09fb137d1493b",
@@ -11,7 +11,7 @@
     "fixtures/review-action-v2.golden.json": "28c5599d7d7d4b1e9b9fc5dbe9275692afd3355ce18ecf266151d48a59398847",
     "fixtures/review-run-authorize.request.json": "ec54f8df8a2a11788e9619cc799eca00608fe99a84f36ea8d1dd4d22729b1e4c",
     "fixtures/review-run-authorize.unsupported.response.json": "89c4255d0d64ab45bb7368b82b0295e2048b3ec7760da5614a96b6c2889a7bb5",
-    "manifest.json": "81935dccba6d8d58fdb9f679e76b46ad202a3b55f57dbe372e9f2f2b368b2552",
+    "manifest.json": "22603911da62e465b430ed88c1d5ca25e55d5f8bc5ad408695c86f6171a93f18",
     "pr-description-invocation-manifest-v1.ts": "9334ffd700931ea714fac41e0fea04bb8de4b1de3452b4db4aa636365c8864d5",
     "provider-invocation-manifest-v1.ts": "fa61e8baf32eee1e018ef4520b28236c042ae3188ba219ded11a6e045fcb88fa",
     "review-action-v2-legacy.ts": "5be4f58794ec87eb4cf1d127189bdd12ca0df690cd2775ea0e10fd4246bd2e44",
@@ -25,6 +25,7 @@
     "review-lifecycle-verification-v2.ts": "af9d8cc09d9a559daefaf58a683d563358fabc1fa6f75c8a142314aa97b7d3e8",
     "review-model-dispatch-contract.ts": "c9d91addfd46122d095908c42cf416527d438c374e8bb4f65a333d62bf4b1728",
     "review-model-route-policy.ts": "ac13197c14ca384276f96eba7ad85969ff8de47f976f041bd05ef026a5fc829c",
+    "review-reviewer-plan.ts": "bbef9f5bd70778cf7b0858a84e1d866b5d2e8f97c2738c0210ff45705c7cf4c5",
     "review-skills-contract.ts": "621e6430cd84e0c3f8067c509cdc4c62af8e45045451649c4afc1f8fef708acb",
     "schemas/review_context_gateway_open.schema.json": "fa248d09ea4464978408a81911f0f5243c2ab8fee01e6f90e2e06d8be70ffaed",
     "schemas/review_context_gateway_seal.schema.json": "8378b3f6e36ed6fdc470d7696dbc51058ffc0b38b8fc3c0750773175f8159812",
@@ -69,6 +70,6 @@
   },
   "goldenFixtureDigest": "25cbbf9c205d69c8bb9f32d074ce4df8d81a77a3fce070383abbd282245a6b9f",
   "protocolVersion": "2",
-  "saasSourceCommit": "dccf5b628680bd7f3f8c9501e3108e432053495b",
+  "saasSourceCommit": "8080881802d87f3bf700b15faa7cebb02f54ee9b",
   "schemaDigest": "71f316821909667e1b7cc704bed330ef6cfa7ac44cf51d58935ba3238ab92504"
 }

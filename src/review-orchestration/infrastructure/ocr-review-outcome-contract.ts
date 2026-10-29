@@ -150,7 +150,10 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
     throw new OcrManagedContractViolation(issues);
   };
   if (!isRecord(value)) {
-    issues.push({ code: 'outcome_not_an_object', detail: 'reviewrouter_outcome' });
+    issues.push({
+      code: 'outcome_not_an_object',
+      detail: 'reviewrouter_outcome',
+    });
     return violation();
   }
   if (value.schema_version !== OCR_OUTCOME_SCHEMA_VERSION) {
@@ -166,7 +169,10 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
     field: string
   ): OcrRunStopCause | null => {
     if (raw === null || raw === undefined) return null;
-    if (typeof raw === 'string' && OCR_STOP_CAUSES.includes(raw as OcrRunStopCause)) {
+    if (
+      typeof raw === 'string' &&
+      OCR_STOP_CAUSES.includes(raw as OcrRunStopCause)
+    ) {
       return raw as OcrRunStopCause;
     }
     if (typeof raw === 'string' && OCR_STOP_CAUSE_ALIASES[raw] !== undefined) {
@@ -184,7 +190,10 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
   };
 
   const parseState = (raw: unknown, field: string): OcrPhaseState | null => {
-    if (typeof raw === 'string' && OCR_PHASE_STATES.includes(raw as OcrPhaseState)) {
+    if (
+      typeof raw === 'string' &&
+      OCR_PHASE_STATES.includes(raw as OcrPhaseState)
+    ) {
       return raw as OcrPhaseState;
     }
     issues.push({ code: 'outcome_phase_state_unknown', detail: field });
@@ -196,7 +205,10 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
   // stop). A missing key is a contract failure, never a silent null that
   // would read as "the run stopped successfully".
   if (value.run_stop_cause === undefined) {
-    issues.push({ code: 'outcome_stop_cause_missing', detail: 'run_stop_cause' });
+    issues.push({
+      code: 'outcome_stop_cause_missing',
+      detail: 'run_stop_cause',
+    });
     return violation();
   }
   if (
@@ -233,11 +245,17 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
     const pathsRaw = groupRaw.paths;
     const paths: string[] = [];
     if (!Array.isArray(pathsRaw) || pathsRaw.length === 0) {
-      issues.push({ code: 'outcome_group_paths_invalid', detail: field('paths') });
+      issues.push({
+        code: 'outcome_group_paths_invalid',
+        detail: field('paths'),
+      });
     } else {
       for (const path of pathsRaw) {
         if (typeof path !== 'string' || path.length === 0) {
-          issues.push({ code: 'outcome_group_paths_invalid', detail: field('paths') });
+          issues.push({
+            code: 'outcome_group_paths_invalid',
+            detail: field('paths'),
+          });
           continue;
         }
         if (paths.includes(path) || seenPaths.has(path)) {
@@ -268,7 +286,11 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
       });
       return violation();
     }
-    if (groupRaw.stop_cause !== null && groupRaw.stop_cause !== undefined && stopCause === null) {
+    if (
+      groupRaw.stop_cause !== null &&
+      groupRaw.stop_cause !== undefined &&
+      stopCause === null
+    ) {
       return violation();
     }
 
@@ -278,7 +300,9 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
       return violation();
     }
     const roundCount = (raw: unknown): number | null =>
-      Number.isSafeInteger(raw) && (raw as number) >= 0 ? (raw as number) : null;
+      Number.isSafeInteger(raw) && (raw as number) >= 0
+        ? (raw as number)
+        : null;
     const configured = roundCount(roundsRaw.configured);
     const started = roundCount(roundsRaw.started);
     const completed = roundCount(roundsRaw.completed);
@@ -302,7 +326,10 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
     const parsePhase = (name: string): OcrOutcomePhase | null => {
       const raw = phasesRaw[name];
       if (!isRecord(raw)) {
-        issues.push({ code: 'outcome_phase_invalid', detail: field(`phases.${name}`) });
+        issues.push({
+          code: 'outcome_phase_invalid',
+          detail: field(`phases.${name}`),
+        });
         return null;
       }
       const state = parseState(raw.state, field(`phases.${name}.state`));
@@ -335,7 +362,12 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
     } else if (filterDecisionValidRaw !== null) {
       filterDecisionValid = filterDecisionValidRaw;
     }
-    if (plan === null || compression === null || relocation === null || filter === null) {
+    if (
+      plan === null ||
+      compression === null ||
+      relocation === null ||
+      filter === null
+    ) {
       return violation();
     }
 
@@ -453,7 +485,10 @@ export function classifyOcrReviewOutcome(
     reasons.add(STOP_CAUSE_REASONS[outcome.runStopCause]);
     filterCommentsPreserved = false;
   }
-  if (outcome.grouping.state === 'failed' || outcome.grouping.state === 'cancelled') {
+  if (
+    outcome.grouping.state === 'failed' ||
+    outcome.grouping.state === 'cancelled'
+  ) {
     reasons.add('grouping_fallback');
     filterCommentsPreserved = false;
   }
@@ -596,12 +631,19 @@ export function parseOcrNativeReviewResult(
   }
   const manifestInput = isRecord(manifestRaw.input) ? manifestRaw.input : null;
   if (manifestInput === null) {
-    issues.push({ code: 'native_manifest_input_missing', detail: 'manifest.input' });
+    issues.push({
+      code: 'native_manifest_input_missing',
+      detail: 'manifest.input',
+    });
     return violation();
   }
   const manifest: OcrNativeManifest = Object.freeze({
-    schemaVersion: typeof manifestRaw.schema_version === 'string' ? manifestRaw.schema_version : '',
-    operation: typeof manifestRaw.operation === 'string' ? manifestRaw.operation : '',
+    schemaVersion:
+      typeof manifestRaw.schema_version === 'string'
+        ? manifestRaw.schema_version
+        : '',
+    operation:
+      typeof manifestRaw.operation === 'string' ? manifestRaw.operation : '',
     terminalState: optionalText(manifestRaw.terminal_state),
     input: Object.freeze({
       mode: typeof manifestInput.mode === 'string' ? manifestInput.mode : '',
@@ -610,26 +652,41 @@ export function parseOcrNativeReviewResult(
     }),
   });
   if (manifest.schemaVersion !== 'ocr.run-manifest/v1') {
-    issues.push({ code: 'native_manifest_schema_version', detail: manifest.schemaVersion });
+    issues.push({
+      code: 'native_manifest_schema_version',
+      detail: manifest.schemaVersion,
+    });
   }
   if (manifest.operation !== 'review') {
-    issues.push({ code: 'native_manifest_operation', detail: manifest.operation });
+    issues.push({
+      code: 'native_manifest_operation',
+      detail: manifest.operation,
+    });
   }
   if (manifest.input.mode !== 'range') {
     issues.push({ code: 'native_manifest_mode', detail: manifest.input.mode });
   }
   if (!sameSha(manifest.input.resolvedBase, admission.mergeBaseSha)) {
-    issues.push({ code: 'native_manifest_refs_mismatch', detail: 'resolved_base' });
+    issues.push({
+      code: 'native_manifest_refs_mismatch',
+      detail: 'resolved_base',
+    });
   }
   if (!sameSha(manifest.input.resolvedHead, admission.headSha)) {
-    issues.push({ code: 'native_manifest_refs_mismatch', detail: 'resolved_head' });
+    issues.push({
+      code: 'native_manifest_refs_mismatch',
+      detail: 'resolved_head',
+    });
   }
 
   // Managed extension: required; missing/unknown/contradictory is a contract
   // failure and never a "success default".
   const outcomeRaw = raw.reviewrouter_outcome;
   if (outcomeRaw === undefined || outcomeRaw === null) {
-    issues.push({ code: 'managed_outcome_missing', detail: 'reviewrouter_outcome' });
+    issues.push({
+      code: 'managed_outcome_missing',
+      detail: 'reviewrouter_outcome',
+    });
     return violation();
   }
   let outcome: OcrReviewOutcome;

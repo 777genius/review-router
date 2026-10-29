@@ -8,20 +8,39 @@ import {
   ReviewInvocationConfigurationMismatchError,
   ReviewInvocationFailureClass,
   type ReviewInvocationFailureClassifierPort,
+  type ReviewInvocationFailureContext,
+  type ReviewInvocationFailureScope,
 } from '../application';
 import type { GatewayFailureFact } from './account-gateway-model-transport';
 
 export class ProviderInvocationFailureClassifier implements ReviewInvocationFailureClassifierPort {
   constructor(
-    private readonly gatewayFailureFact: () =>
-      | GatewayFailureFact
-      | undefined = () => undefined
+    private readonly gatewayFailureFact: (
+      context?: ReviewInvocationFailureContext
+    ) => GatewayFailureFact | undefined = () => undefined
   ) {}
 
-  classify(error: unknown): ReviewInvocationFailureClass {
+  scope(
+    _error: unknown,
+    context: ReviewInvocationFailureContext
+  ): ReviewInvocationFailureScope | undefined {
+    const fact = this.gatewayFailureFact(context);
+    // A foreign allocation hint cannot cancel a sibling allocation.
+    if (fact?.failureScope === 'allocation') {
+      return fact.concurrencyGroupId === context.concurrencyGroupId
+        ? 'allocation'
+        : 'run';
+    }
+    return fact ? (fact.failureScope ?? 'reviewer') : undefined;
+  }
+
+  classify(
+    error: unknown,
+    context?: ReviewInvocationFailureContext
+  ): ReviewInvocationFailureClass {
     // The gateway fact is authoritative: error text cannot tell a terminal
     // admission refusal apart from an ordinary retryable provider failure.
-    const fact = this.gatewayFailureFact();
+    const fact = this.gatewayFailureFact(context);
     if (
       error instanceof ContextToolsError ||
       fact?.code === 'context_tools_unavailable'

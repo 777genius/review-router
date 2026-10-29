@@ -181,8 +181,24 @@ export type PreparedReviewInvocation = {
     | null;
 };
 
+export type ReviewInvocationFailureScope = 'reviewer' | 'allocation' | 'run';
+
+export type ReviewInvocationFailureContext = Readonly<{
+  workSlot: ReviewWorkSlotPlan;
+  invocation?: PreparedReviewInvocation;
+  reviewerId?: string;
+  concurrencyGroupId?: string;
+}>;
+
 export interface ReviewInvocationFailureClassifierPort {
-  classify(error: unknown): ReviewInvocationFailureClass;
+  classify(
+    error: unknown,
+    context?: ReviewInvocationFailureContext
+  ): ReviewInvocationFailureClass;
+  scope?(
+    error: unknown,
+    context: ReviewInvocationFailureContext
+  ): ReviewInvocationFailureScope | undefined;
 }
 
 export interface ReviewInvocationDiagnosticsPort {
@@ -681,6 +697,7 @@ export interface PreparedReviewInvocationPort {
   prepare(input: {
     readonly workSlot: ReviewWorkSlotPlan;
     readonly attemptOrdinal: number;
+    readonly signal?: AbortSignal;
   }): Promise<PreparedReviewInvocation>;
   execute(input: {
     readonly invocation: PreparedReviewInvocation;

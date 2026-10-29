@@ -1,0 +1,48 @@
+# Temporary preparation for offline local verification; remove after qualification.
+name: Unified OCR local toolchain
+on:
+  push:
+    branches: [feat/unified-ocr-review-20261026]
+    paths: [.github/workflows/unified-ocr-local-toolchain.yml]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.21.0
+      - name: Install the exact lock without changing dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm rebuild tree-sitter tree-sitter-python tree-sitter-typescript tree-sitter-go tree-sitter-rust
+          git diff --exit-code -- package.json package-lock.json
+      - name: Record the audit without hiding its outcome
+        run: |
+          mkdir -p "$RUNNER_TEMP/ocr-toolchain"
+          set +e
+          npm audit --json > "$RUNNER_TEMP/ocr-toolchain/npm-audit.json"
+          result=$?
+          set -e
+          printf '%s\n' "$result" > "$RUNNER_TEMP/ocr-toolchain/npm-audit-exit.txt"
+          test "$result" -le 1
+      - name: Preserve only the pinned public development dependencies and Node executable
+        run: |
+          set -euo pipefail
+          cp "$(command -v node)" "$RUNNER_TEMP/ocr-toolchain/node"
+          tar -czf "$RUNNER_TEMP/ocr-toolchain/node_modules.tar.gz" node_modules
+          git rev-parse HEAD > "$RUNNER_TEMP/ocr-toolchain/source-revision.txt"
+          sha256sum package-lock.json > "$RUNNER_TEMP/ocr-toolchain/package-lock.sha256"
+          cd "$RUNNER_TEMP/ocr-toolchain"
+          sha256sum node node_modules.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unified-ocr-local-toolchain-${{ github.sha }}
+          path: ${{ runner.temp }}/ocr-toolchain/
+          retention-days: 1
+          if-no-files-found: error

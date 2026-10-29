@@ -1,6 +1,7 @@
 # Gateway reviewer execution
 
-Status: research and plan review; implementation is pending.
+Status: implemented in the Action runtime; release activation follows the
+existing producer registration boundary.
 
 The owning implementation plan and review ledger are maintained in
 [ReviewRouter's multi-reviewer plan](https://github.com/777genius/review-router-ai/blob/feat/gateway-multi-reviewers/ai-docs/plans/2026-10-28-gateway-multi-reviewers.md),

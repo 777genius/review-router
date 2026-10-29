@@ -1302,6 +1302,7 @@ export class RunT0ReviewOrchestration {
     const reviewerSignal = this.laneSignals.get(
       input.workSlot.providerVoteIdentityHash
     );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest: ProviderInvocationManifest | null = null;
     let handledInvestigationOrdinal: number | null = null;
@@ -1559,14 +1560,12 @@ export class RunT0ReviewOrchestration {
                   ReviewWorkSlotExhaustionReason.DeadlineReached,
               };
             }
-            if (this.dependencies.signal) {
-              await this.dependencies.delay.sleep(
-                delayMs,
-                this.dependencies.signal
-              );
+            if (waitSignal) {
+              await this.dependencies.delay.sleep(delayMs, waitSignal);
             } else {
               await this.dependencies.delay.sleep(delayMs);
             }
+            reviewerSignal?.throwIfAborted();
             await this.assertRevisionCurrent(input.revision);
             const joined = await this.trySatisfyFromLookup({
               ...input,
@@ -1582,8 +1581,10 @@ export class RunT0ReviewOrchestration {
               };
             }
           }
-          const acquire = await this.parentLeaseCommand(() =>
-            this.dependencies.controlPlane.acquireInvocationLease({
+          const acquire = await this.parentLeaseCommand(() => {
+            // A sibling may stop this lane while its admission is queued.
+            reviewerSignal?.throwIfAborted();
+            return this.dependencies.controlPlane.acquireInvocationLease({
               authorization: input.authorization,
               idempotencyKey: this.idempotencyKey('lease-acquire', [
                 input.execution.executionId,
@@ -1595,8 +1596,8 @@ export class RunT0ReviewOrchestration {
               manifest,
               acquireRequestId,
               ownerIdHash: input.ownerIdHash,
-            })
-          );
+            });
+          });
           if (
             acquire.status ===
             ReviewInvocationLeaseAcquireOutcomeStatus.Acquired
@@ -1668,11 +1669,13 @@ export class RunT0ReviewOrchestration {
           }
         }
         try {
+          reviewerSignal?.throwIfAborted();
           input.onEvent({
             type: ReviewOrchestrationEventType.SlotLeaseAcquired,
             workSlotId: input.workSlot.workSlotId,
           });
           await this.assertRevisionCurrent(input.revision);
+          reviewerSignal?.throwIfAborted();
         } catch (error) {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
           throw error;
@@ -1765,6 +1768,8 @@ export class RunT0ReviewOrchestration {
             observationPayload = error.currentRevisionObservation;
           } else {
             await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
+            // Provider abort errors need not preserve the lane's stop reason.
+            reviewerSignal?.throwIfAborted();
             const failureClass =
               this.dependencies.invocationFailureClassifier.classify(
                 error,
@@ -1837,11 +1842,8 @@ export class RunT0ReviewOrchestration {
                 ? this.clampProviderDelay(30_000)
                 : 0;
             if (retryDelayMs > 0) {
-              if (this.dependencies.signal) {
-                await this.dependencies.delay.sleep(
-                  retryDelayMs,
-                  this.dependencies.signal
-                );
+              if (waitSignal) {
+                await this.dependencies.delay.sleep(retryDelayMs, waitSignal);
               } else {
                 await this.dependencies.delay.sleep(retryDelayMs);
               }
@@ -1949,6 +1951,10 @@ export class RunT0ReviewOrchestration {
     readonly revision: ReviewRevisionFacts;
     readonly workSlot: ReviewWorkSlotPlan;
   }): Promise<string> {
+    const reviewerSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let manifest = input.manifest;
     const busyPollBudget = this.providerLaneBusyPollBudget();
     for (
@@ -1956,14 +1962,16 @@ export class RunT0ReviewOrchestration {
       busyPollCount < busyPollBudget;
       busyPollCount += 1
     ) {
+      reviewerSignal?.throwIfAborted();
       await this.assertRevisionCurrent(input.revision);
       const acquireRequestId = this.identity('acquire-request-exhaustion', [
         input.execution.executionId,
         input.workSlot.workSlotId,
         manifest.providerInvocationKey,
       ]);
-      const acquire = await this.parentLeaseCommand(() =>
-        this.dependencies.controlPlane.acquireInvocationLease({
+      const acquire = await this.parentLeaseCommand(() => {
+        reviewerSignal?.throwIfAborted();
+        return this.dependencies.controlPlane.acquireInvocationLease({
           authorization: input.authorization,
           idempotencyKey: this.idempotencyKey('lease-acquire-exhaustion', [
             input.execution.executionId,
@@ -1975,11 +1983,12 @@ export class RunT0ReviewOrchestration {
           manifest,
           acquireRequestId,
           ownerIdHash: input.ownerIdHash,
-        })
-      );
+        });
+      });
       if (
         acquire.status === ReviewInvocationLeaseAcquireOutcomeStatus.InputStale
       ) {
+        reviewerSignal?.throwIfAborted();
         const staleManifest = JSON.parse(manifest.manifestCanonicalJson) as {
           readonly memoryBundleHash?: unknown;
         };
@@ -1995,6 +2004,7 @@ export class RunT0ReviewOrchestration {
         const invocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
           attemptOrdinal: input.workSlot.attemptBudget + 1,
+          ...(reviewerSignal ? { signal: reviewerSignal } : {}),
         });
         manifest =
           await this.dependencies.invocationManifestAssembler.assemble(
@@ -2035,11 +2045,8 @@ export class RunT0ReviewOrchestration {
           Math.min(5_000, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        if (this.dependencies.signal) {
-          await this.dependencies.delay.sleep(
-            delayMs,
-            this.dependencies.signal
-          );
+        if (waitSignal) {
+          await this.dependencies.delay.sleep(delayMs, waitSignal);
         } else {
           await this.dependencies.delay.sleep(delayMs);
         }

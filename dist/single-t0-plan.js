@@ -195674,6 +195674,7 @@ var RunT0ReviewOrchestration = class {
     const reviewerSignal = this.laneSignals.get(
       input.workSlot.providerVoteIdentityHash
     );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest = null;
     let handledInvestigationOrdinal = null;
@@ -195883,14 +195884,12 @@ var RunT0ReviewOrchestration = class {
                 exhaustionReason: "deadline_reached" /* DeadlineReached */
               };
             }
-            if (this.dependencies.signal) {
-              await this.dependencies.delay.sleep(
-                delayMs,
-                this.dependencies.signal
-              );
+            if (waitSignal) {
+              await this.dependencies.delay.sleep(delayMs, waitSignal);
             } else {
               await this.dependencies.delay.sleep(delayMs);
             }
+            reviewerSignal?.throwIfAborted();
             await this.assertRevisionCurrent(input.revision);
             const joined = await this.trySatisfyFromLookup({
               ...input,
@@ -195906,8 +195905,9 @@ var RunT0ReviewOrchestration = class {
               };
             }
           }
-          const acquire = await this.parentLeaseCommand(
-            () => this.dependencies.controlPlane.acquireInvocationLease({
+          const acquire = await this.parentLeaseCommand(() => {
+            reviewerSignal?.throwIfAborted();
+            return this.dependencies.controlPlane.acquireInvocationLease({
               authorization: input.authorization,
               idempotencyKey: this.idempotencyKey("lease-acquire", [
                 input.execution.executionId,
@@ -195919,8 +195919,8 @@ var RunT0ReviewOrchestration = class {
               manifest,
               acquireRequestId,
               ownerIdHash: input.ownerIdHash
-            })
-          );
+            });
+          });
           if (acquire.status === "acquired" /* Acquired */) {
             input.busyPollsByProviderLane.delete(
               input.workSlot.providerVoteIdentityHash
@@ -195972,11 +195972,13 @@ var RunT0ReviewOrchestration = class {
           }
         }
         try {
+          reviewerSignal?.throwIfAborted();
           input.onEvent({
             type: "slot_lease_acquired" /* SlotLeaseAcquired */,
             workSlotId: input.workSlot.workSlotId
           });
           await this.assertRevisionCurrent(input.revision);
+          reviewerSignal?.throwIfAborted();
         } catch (error3) {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
           throw error3;
@@ -196054,6 +196056,7 @@ var RunT0ReviewOrchestration = class {
             observationPayload = error3.currentRevisionObservation;
           } else {
             await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
+            reviewerSignal?.throwIfAborted();
             const failureClass = this.dependencies.invocationFailureClassifier.classify(
               error3,
               this.failureContext(input.workSlot, invocation)
@@ -196101,11 +196104,8 @@ var RunT0ReviewOrchestration = class {
             }
             const retryDelayMs2 = attemptOrdinal < input.workSlot.attemptBudget ? this.clampProviderDelay(3e4) : 0;
             if (retryDelayMs2 > 0) {
-              if (this.dependencies.signal) {
-                await this.dependencies.delay.sleep(
-                  retryDelayMs2,
-                  this.dependencies.signal
-                );
+              if (waitSignal) {
+                await this.dependencies.delay.sleep(retryDelayMs2, waitSignal);
               } else {
                 await this.dependencies.delay.sleep(retryDelayMs2);
               }
@@ -196199,17 +196199,23 @@ var RunT0ReviewOrchestration = class {
     };
   }
   async reconcileProviderAttemptExhaustion(input) {
+    const reviewerSignal = this.laneSignals.get(
+      input.workSlot.providerVoteIdentityHash
+    );
+    const waitSignal = reviewerSignal ?? this.dependencies.signal;
     let manifest = input.manifest;
     const busyPollBudget = this.providerLaneBusyPollBudget();
     for (let busyPollCount = 0; busyPollCount < busyPollBudget; busyPollCount += 1) {
+      reviewerSignal?.throwIfAborted();
       await this.assertRevisionCurrent(input.revision);
       const acquireRequestId = this.identity("acquire-request-exhaustion", [
         input.execution.executionId,
         input.workSlot.workSlotId,
         manifest.providerInvocationKey
       ]);
-      const acquire = await this.parentLeaseCommand(
-        () => this.dependencies.controlPlane.acquireInvocationLease({
+      const acquire = await this.parentLeaseCommand(() => {
+        reviewerSignal?.throwIfAborted();
+        return this.dependencies.controlPlane.acquireInvocationLease({
           authorization: input.authorization,
           idempotencyKey: this.idempotencyKey("lease-acquire-exhaustion", [
             input.execution.executionId,
@@ -196221,9 +196227,10 @@ var RunT0ReviewOrchestration = class {
           manifest,
           acquireRequestId,
           ownerIdHash: input.ownerIdHash
-        })
-      );
+        });
+      });
       if (acquire.status === "input_stale" /* InputStale */) {
+        reviewerSignal?.throwIfAborted();
         const staleManifest = JSON.parse(manifest.manifestCanonicalJson);
         if (typeof staleManifest.memoryBundleHash !== "string" || !this.dependencies.memoryAdmission) {
           throw new Error("review_memory_stale_without_snapshot");
@@ -196231,7 +196238,8 @@ var RunT0ReviewOrchestration = class {
         this.dependencies.memoryAdmission.discard();
         const invocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
-          attemptOrdinal: input.workSlot.attemptBudget + 1
+          attemptOrdinal: input.workSlot.attemptBudget + 1,
+          ...reviewerSignal ? { signal: reviewerSignal } : {}
         });
         manifest = await this.dependencies.invocationManifestAssembler.assemble(
           invocation
@@ -196257,11 +196265,8 @@ var RunT0ReviewOrchestration = class {
           Math.min(5e3, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        if (this.dependencies.signal) {
-          await this.dependencies.delay.sleep(
-            delayMs,
-            this.dependencies.signal
-          );
+        if (waitSignal) {
+          await this.dependencies.delay.sleep(delayMs, waitSignal);
         } else {
           await this.dependencies.delay.sleep(delayMs);
         }

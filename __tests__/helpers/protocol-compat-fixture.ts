@@ -27,7 +27,9 @@ export interface ContractTriple {
 }
 
 /** Synthetic manifest in the shipped shape (protocolVersion is a JSON number). */
-export function manifestSource(contract: ContractTriple = SUPPORTED_CONTRACT): string {
+export function manifestSource(
+  contract: ContractTriple = SUPPORTED_CONTRACT
+): string {
   return (
     JSON.stringify(
       {
@@ -188,8 +190,10 @@ export function createScratchChannel(
 }
 
 export function remoteTagSha(remoteDir: string, tag: string): string {
-  return git(['ls-remote', '--exit-code', remoteDir, `refs/tags/${tag}`], remoteDir)
-    .split('\t')[0];
+  return git(
+    ['ls-remote', '--exit-code', remoteDir, `refs/tags/${tag}`],
+    remoteDir
+  ).split('\t')[0];
 }
 
 export function runScript(

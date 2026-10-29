@@ -1061,7 +1061,9 @@ describe('ReviewActionV2Client', () => {
   });
 
   it('keeps a version mismatch without a well-formed minimal envelope on the invalid-response path', async () => {
-    const versionOnly = jest.fn(async () => jsonResponse({ protocolVersion: '1' }));
+    const versionOnly = jest.fn(async () =>
+      jsonResponse({ protocolVersion: '1' })
+    );
     await expect(
       createClient(versionOnly, 1).execute(
         ReviewActionV2OperationId.ReviewRunAuthorize,

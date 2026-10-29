@@ -410,6 +410,8 @@ export function buildOcrSemanticInvocationPreimage(input: {
  * instead of revalidated.
  */
 export function planOcrReviewAssignments(input: {
+  readonly reviewerId?: string;
+  readonly reviewerRequired?: boolean;
   readonly prDescriptionEnabled?: boolean;
   readonly authorization: ReviewRunAuthorization;
   readonly pr: PRContext;
@@ -443,10 +445,12 @@ export function planOcrReviewAssignments(input: {
     compatibilityKey: input.compatibilityKey,
     providers: [
       {
-        providerName: 'ocr/managed',
+        providerName: input.reviewerId
+          ? `ocr/managed:${input.reviewerId}`
+          : 'ocr/managed',
         providerKind: ReviewExecutionProviderKind.Ocr,
         providerVoteIdentityHash: ocrLanes[0].providerVoteIdentityHash,
-        required: true,
+        required: input.reviewerRequired ?? true,
         attemptBudget: Math.min(
           OCR_ATTEMPT_BUDGET,
           Math.max(1, input.authorization.limits.maxAttemptsPerSlot)
@@ -601,8 +605,10 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
   async prepare(input: {
     readonly workSlot: ReviewWorkSlotPlan;
     readonly attemptOrdinal: number;
+    readonly signal?: AbortSignal;
   }): Promise<OcrPreparedReviewInvocation> {
     this.options.signal?.throwIfAborted();
+    input.signal?.throwIfAborted();
     const assignment = this.assignments.get(input.workSlot.workSlotId);
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error('review_action_v2_assignment_missing');
@@ -683,6 +689,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     }
     const previewSignal = AbortSignal.any([
       ...(this.options.signal ? [this.options.signal] : []),
+      ...(input.signal ? [input.signal] : []),
       AbortSignal.timeout(timeoutMs),
     ]);
     previewSignal.throwIfAborted();

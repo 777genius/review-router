@@ -10,6 +10,7 @@ export async function fetchCapturedReviewSkills(input: {
   apiUrl: string;
   authorizationToken: string;
   baseSha: string;
+  reviewerId?: string;
   signal?: AbortSignal;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
@@ -34,6 +35,9 @@ export async function fetchCapturedReviewSkills(input: {
         method: 'POST',
         headers: {
           authorization: `Bearer ${input.authorizationToken}`,
+          ...(input.reviewerId
+            ? { 'x-reviewrouter-reviewer-id': input.reviewerId }
+            : {}),
           'content-type': 'application/json',
           accept: 'application/json',
         },

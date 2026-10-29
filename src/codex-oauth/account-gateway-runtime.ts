@@ -1,3 +1,9 @@
+import { canonicalJson } from '../review-investigation/domain/canonical-json';
+import {
+  parseReviewReviewerPlan,
+  reviewerPlanContract,
+} from '../control-plane/generated/review-action-v2/review-reviewer-plan';
+import { prepareAccountGatewayReviewerSession } from './account-gateway-reviewer-session';
 import {
   parseAdmittedRuntimeConfig,
   type AdmittedRuntimeConfig,
@@ -161,11 +167,14 @@ async function runAccountGatewayRuntimeInternal(
   let ocrBinary:
     | Awaited<ReturnType<typeof resolveApprovedOcrBinary>>
     | undefined;
+  const childCleanups: Array<() => Promise<void>> = [];
+  const childTransports: AccountGatewayModelTransport[] = [];
   let reason: GatewayCloseReason = 'failed';
   const onSignal = () => {
     reason = 'cancelled';
     run.abort(new Error('account_gateway_cancelled'));
     transport.cancelInference();
+    for (const child of childTransports) child.cancelInference();
   };
   process.on('SIGTERM', onSignal);
   process.on('SIGINT', onSignal);
@@ -198,191 +207,272 @@ async function runAccountGatewayRuntimeInternal(
           authorization.facts.headSha
         );
         if (admittedRuntimeConfig) {
-          const canonicalEnv = (config: AdmittedRuntimeConfig) =>
-            JSON.stringify(
-              Object.entries(config.runtimeEnv).sort(([a], [b]) =>
-                a < b ? -1 : a > b ? 1 : 0
-              )
-            );
-          if (
-            capability.runtimeConfig.configVersion !==
-              admittedRuntimeConfig.configVersion ||
-            canonicalEnv(capability.runtimeConfig) !==
-              canonicalEnv(admittedRuntimeConfig)
-          ) {
-            throw new Error('account_gateway_runtime_config_changed');
-          }
+          assertAccountGatewayRuntimeConfigContinuity(
+            admittedRuntimeConfig,
+            capability.runtimeConfig
+          );
         } else {
           admittedRuntimeConfig = capability.runtimeConfig;
         }
-        return capability;
+        // Token refresh never changes the invocation plan captured at checkout.
+        return Object.freeze({
+          ...capability,
+          runtimeConfig: admittedRuntimeConfig,
+        });
       };
     phase = 'checkout_capability';
     const capability = await readCapability();
     run.signal.throwIfAborted();
-    const agentProfileJson =
-      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!;
-    const agentProfileDigest =
-      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST!;
-    // Captured agentKind decides the engine before any CLI effect (plan 56 §5.2).
-    const agentKind = readApprovedReviewAgentKind(
-      agentProfileJson,
-      agentProfileDigest
-    );
-    let ocrAgent: ApprovedOcrReviewAgent | undefined;
-    if (agentKind === 'ocr') {
-      // OCR dispatch happens before phase=prepare_cli: no Codex install,
-      // probe, negotiate, health check or exec exists on this path.
-      ocrAgent = readApprovedOcrReviewAgent(
-        agentProfileJson,
-        agentProfileDigest
-      );
-      phase = 'prepare_ocr';
-      ocrBinary = await resolveApprovedOcrBinary({
-        approvedAgent: ocrAgent,
-        signal: run.signal,
-      });
-    } else {
-      const agentProfile = readApprovedReviewAgent(
-        agentProfileJson,
-        agentProfileDigest
-      );
-      phase = 'prepare_cli';
-      cli = await prepareCodexCliBeforeAuthRead({
-        signal: run.signal,
-        approvedAgent: agentProfile,
-        logger: { info: core.info, warn: core.warning },
-      });
-      // A binary-only version check; alternate installed versions do not inherit retry qualification.
-      phase = 'version';
-      const version = await promisify(execFile)(cli.binaryPath, ['--version'], {
-        signal: run.signal,
-        killSignal: 'SIGKILL',
-        timeout: 10_000,
-        maxBuffer: 16_384,
-        env: { PATH: process.env.PATH, HOME: os.tmpdir() },
-      });
-      assertApprovedReviewAgentVersion(
-        agentProfile,
-        version.stdout.trim().replace(/^codex-cli /, '')
-      );
-      phase = 'negotiate';
-      // Use the execution adapter's existing capability contract. No PR session
-      // exists yet: negotiation must not resolve one or launch an agent turn.
-      await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
-        binary: cli.binaryPath,
-        executionSessions: {
-          resolve: () => {
-            throw new Error('review_agent_precheckout_session_unavailable');
-          },
-        },
-      }).negotiate({
-        providerKind: ReviewAgentProviderKind.Codex,
-        executionProfile: ReviewAgentExecutionProfile.GatewayAttestedAgentV1,
-        minimumConfinement: ReviewAgentConfinementStrength.GatewayOnly,
-        requireActualModelAttribution: true,
-        requireUsageAttribution: true,
-        requireFencedCancellation: true,
-        minimumMaxTurns: 1,
-      });
-    }
-    run.signal.throwIfAborted();
-    phase = 'create_workspace';
-    workspacePath = await createIsolatedCheckoutWorkspace({
-      runnerTempPath: process.env.RUNNER_TEMP,
-      githubWorkspacePath: input.workspacePath,
-    });
-    phase = 'checkout';
-    await safeCheckoutRepository({
-      repository: capability.repository,
-      headSha: capability.headSha,
-      ...(ocrAgent ? { mergeBaseSha: authorization.facts.mergeBaseSha } : {}),
-      workspacePath,
-      token: capability.token,
-      signal: run.signal,
-    });
-    run.signal.throwIfAborted();
-    phase = 'local_transport';
-    bridge = await startLocalGatewayModelTransport(transport, observeTransport);
-    if (ocrAgent) {
-      // Managed OCR run layout (§5.2): private run dir, HOME 0700 and
-      // HOME/.opencodereview/config.json 0600 with the controlled provider.
-      const model = capability.runtimeConfig.runtimeEnv.CODEX_MODEL;
-      if (!model) throw new Error('review_action_v2_ocr_model_missing');
-      ocrRun = await prepareOcrManagedRun({
-        approvedAgent: ocrAgent,
-        baseUrl: bridge.baseUrl,
-        rawCapability: extractRawLoopbackCapability(
-          bridge.environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ''
-        ),
-        model,
-        requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
-        modelReasoningEffort:
-          capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
-        admittedRuntimeConfig: capability.runtimeConfig,
-        language:
-          capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
-        signal: run.signal,
-        env: {
-          ...process.env,
-          REVIEWROUTER_OCR_BINARY: ocrBinary!.binaryPath,
-        },
-      });
-    } else {
-      codexHome = await fs.mkdtemp(
-        path.join(
-          process.env.RUNNER_TEMP || os.tmpdir(),
-          'reviewrouter-keyless-codex-'
+    const planJson =
+      capability.runtimeConfig.runtimeEnv[reviewerPlanContract.runtimeEnvKey];
+    const reviewerPlan =
+      planJson === undefined ? undefined : parseReviewReviewerPlan(planJson);
+    let review: CodexOAuthV2ReviewResult;
+    if (reviewerPlan) {
+      if (
+        authorization.facts.providerVoteLanes.length !==
+          reviewerPlan.reviewers.length ||
+        reviewerPlan.reviewers.some(
+          (reviewer) =>
+            !authorization.facts.providerVoteLanes.some(
+              (lane) =>
+                lane.providerVoteIdentityHash ===
+                  reviewer.providerVoteIdentityHash &&
+                lane.providerKind ===
+                  (reviewer.agentProfile.agentKind === 'ocr' ? 'ocr' : 'codex')
+            )
         )
-      );
-      await fs.chmod(codexHome, 0o700);
-      // App-server uses generated isolated config; exec also receives pinned -c values.
-      // Empty fresh home; never auth.json, including dummy credentials.
-      await fs.writeFile(
-        path.join(codexHome, 'config.toml'),
-        bridge.configuration.join('\n') + '\n',
-        { mode: 0o600 }
-      );
-    }
-    run.signal.throwIfAborted();
-    phase = 'runner';
-    const review = await ports.review.run({
-      ...input,
-      repository: capability.repository,
-      headSha: capability.headSha,
-      workspacePath,
-      ...(codexHome ? { codexHome } : {}),
-      ...(cli ? { codexBinaryPath: cli.binaryPath } : {}),
-      scmReadToken: capability.token,
-      scmReadTokenExpiresAt: capability.expiresAt,
-      refreshScmReadToken: readCapability,
-      accountGateway: {
-        runtimeConfig: capability.runtimeConfig,
-        controlPlane,
-        modelTransport:
-          codexHome !== undefined
-            ? {
-                ...bridge,
-                environment: Object.freeze({
-                  ...bridge.environment,
-                  CODEX_HOME: codexHome,
-                }),
-              }
-            : bridge,
+      )
+        throw new Error('account_gateway_reviewer_plan_authority_mismatch');
+      // The complete roster is parsed before any binary/provider effect.
+      phase = 'create_workspace';
+      workspacePath = await createIsolatedCheckoutWorkspace({
+        runnerTempPath: process.env.RUNNER_TEMP,
+        githubWorkspacePath: input.workspacePath,
+      });
+      phase = 'checkout';
+      await safeCheckoutRepository({
+        repository: capability.repository,
+        headSha: capability.headSha,
+        mergeBaseSha: authorization.facts.mergeBaseSha,
+        workspacePath,
+        token: capability.token,
         signal: run.signal,
-      },
-      ...(ocrRun
-        ? {
-            ocr: {
-              run: ocrRun,
-              effectFacts: (): Readonly<{ effect: string }> | undefined => {
-                const failure = transport.lastFailure;
-                return failure ? { effect: failure.effect } : undefined;
-              },
-            },
+      });
+      phase = 'local_transport';
+      const reviewers = [];
+      for (const reviewer of reviewerPlan.reviewers)
+        reviewers.push(
+          await prepareAccountGatewayReviewerSession({
+            apiUrl: input.apiUrl,
+            authorization: () =>
+              controlPlane.currentAuthorization().authorizationToken,
+            runtimeConfig: capability.runtimeConfig,
+            reviewer,
+            signal: run.signal,
+            registerCleanup: (cleanup) => childCleanups.push(cleanup),
+            registerTransport: (child) => childTransports.push(child),
+          })
+        );
+      const primary = reviewers.find(
+        (reviewer) =>
+          reviewer.reviewer.reviewerId === reviewerPlan.primaryReviewerId
+      )!;
+      phase = 'runner';
+      review = await ports.review.run({
+        ...input,
+        repository: capability.repository,
+        headSha: capability.headSha,
+        workspacePath,
+        ...(primary.codexHome ? { codexHome: primary.codexHome } : {}),
+        ...(primary.codexBinaryPath
+          ? { codexBinaryPath: primary.codexBinaryPath }
+          : {}),
+        ...(primary.ocr ? { ocr: primary.ocr } : {}),
+        scmReadToken: capability.token,
+        scmReadTokenExpiresAt: capability.expiresAt,
+        refreshScmReadToken: readCapability,
+        accountGateway: {
+          runtimeConfig: capability.runtimeConfig,
+          controlPlane,
+          modelTransport: primary.modelTransport,
+          signal: run.signal,
+          reviewerPlan,
+          reviewers,
+        },
+      });
+    } else {
+      const agentProfileJson =
+        capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!;
+      const agentProfileDigest =
+        capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST!;
+      // Captured agentKind decides the engine before any CLI effect (plan 56 §5.2).
+      const agentKind = readApprovedReviewAgentKind(
+        agentProfileJson,
+        agentProfileDigest
+      );
+      let ocrAgent: ApprovedOcrReviewAgent | undefined;
+      if (agentKind === 'ocr') {
+        // OCR dispatch happens before phase=prepare_cli: no Codex install,
+        // probe, negotiate, health check or exec exists on this path.
+        ocrAgent = readApprovedOcrReviewAgent(
+          agentProfileJson,
+          agentProfileDigest
+        );
+        phase = 'prepare_ocr';
+        ocrBinary = await resolveApprovedOcrBinary({
+          approvedAgent: ocrAgent,
+          signal: run.signal,
+        });
+      } else {
+        const agentProfile = readApprovedReviewAgent(
+          agentProfileJson,
+          agentProfileDigest
+        );
+        phase = 'prepare_cli';
+        cli = await prepareCodexCliBeforeAuthRead({
+          signal: run.signal,
+          approvedAgent: agentProfile,
+          logger: { info: core.info, warn: core.warning },
+        });
+        // A binary-only version check; alternate installed versions do not inherit retry qualification.
+        phase = 'version';
+        const version = await promisify(execFile)(
+          cli.binaryPath,
+          ['--version'],
+          {
+            signal: run.signal,
+            killSignal: 'SIGKILL',
+            timeout: 10_000,
+            maxBuffer: 16_384,
+            env: { PATH: process.env.PATH, HOME: os.tmpdir() },
           }
-        : {}),
-    });
+        );
+        assertApprovedReviewAgentVersion(
+          agentProfile,
+          version.stdout.trim().replace(/^codex-cli /, '')
+        );
+        phase = 'negotiate';
+        // Use the execution adapter's existing capability contract. No PR session
+        // exists yet: negotiation must not resolve one or launch an agent turn.
+        await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
+          binary: cli.binaryPath,
+          executionSessions: {
+            resolve: () => {
+              throw new Error('review_agent_precheckout_session_unavailable');
+            },
+          },
+        }).negotiate({
+          providerKind: ReviewAgentProviderKind.Codex,
+          executionProfile: ReviewAgentExecutionProfile.GatewayAttestedAgentV1,
+          minimumConfinement: ReviewAgentConfinementStrength.GatewayOnly,
+          requireActualModelAttribution: true,
+          requireUsageAttribution: true,
+          requireFencedCancellation: true,
+          minimumMaxTurns: 1,
+        });
+      }
+      run.signal.throwIfAborted();
+      phase = 'create_workspace';
+      workspacePath = await createIsolatedCheckoutWorkspace({
+        runnerTempPath: process.env.RUNNER_TEMP,
+        githubWorkspacePath: input.workspacePath,
+      });
+      phase = 'checkout';
+      await safeCheckoutRepository({
+        repository: capability.repository,
+        headSha: capability.headSha,
+        ...(ocrAgent ? { mergeBaseSha: authorization.facts.mergeBaseSha } : {}),
+        workspacePath,
+        token: capability.token,
+        signal: run.signal,
+      });
+      run.signal.throwIfAborted();
+      phase = 'local_transport';
+      bridge = await startLocalGatewayModelTransport(
+        transport,
+        observeTransport
+      );
+      if (ocrAgent) {
+        // Managed OCR run layout (§5.2): private run dir, HOME 0700 and
+        // HOME/.opencodereview/config.json 0600 with the controlled provider.
+        const model = capability.runtimeConfig.runtimeEnv.CODEX_MODEL;
+        if (!model) throw new Error('review_action_v2_ocr_model_missing');
+        ocrRun = await prepareOcrManagedRun({
+          approvedAgent: ocrAgent,
+          baseUrl: bridge.baseUrl,
+          rawCapability: extractRawLoopbackCapability(
+            bridge.environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ''
+          ),
+          model,
+          requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
+          modelReasoningEffort:
+            capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
+          admittedRuntimeConfig: capability.runtimeConfig,
+          language:
+            capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
+          signal: run.signal,
+          env: {
+            ...process.env,
+            REVIEWROUTER_OCR_BINARY: ocrBinary!.binaryPath,
+          },
+        });
+      } else {
+        codexHome = await fs.mkdtemp(
+          path.join(
+            process.env.RUNNER_TEMP || os.tmpdir(),
+            'reviewrouter-keyless-codex-'
+          )
+        );
+        await fs.chmod(codexHome, 0o700);
+        // App-server uses generated isolated config; exec also receives pinned -c values.
+        // Empty fresh home; never auth.json, including dummy credentials.
+        await fs.writeFile(
+          path.join(codexHome, 'config.toml'),
+          bridge.configuration.join('\n') + '\n',
+          { mode: 0o600 }
+        );
+      }
+      run.signal.throwIfAborted();
+      phase = 'runner';
+      review = await ports.review.run({
+        ...input,
+        repository: capability.repository,
+        headSha: capability.headSha,
+        workspacePath,
+        ...(codexHome ? { codexHome } : {}),
+        ...(cli ? { codexBinaryPath: cli.binaryPath } : {}),
+        scmReadToken: capability.token,
+        scmReadTokenExpiresAt: capability.expiresAt,
+        refreshScmReadToken: readCapability,
+        accountGateway: {
+          runtimeConfig: capability.runtimeConfig,
+          controlPlane,
+          modelTransport:
+            codexHome !== undefined
+              ? {
+                  ...bridge,
+                  environment: Object.freeze({
+                    ...bridge.environment,
+                    CODEX_HOME: codexHome,
+                  }),
+                }
+              : bridge,
+          signal: run.signal,
+        },
+        ...(ocrRun
+          ? {
+              ocr: {
+                run: ocrRun,
+                effectFacts: (): Readonly<{ effect: string }> | undefined => {
+                  const failure = transport.lastFailure;
+                  return failure ? { effect: failure.effect } : undefined;
+                },
+              },
+            }
+          : {}),
+      });
+    }
     phase = 'terminal';
     // Runner has awaited App publication. Terminal status/advisory finishes before close.
     ports.observeRelay(transport.lastFailure);
@@ -407,6 +497,7 @@ async function runAccountGatewayRuntimeInternal(
     );
   } finally {
     transport.cancelInference();
+    for (const child of childTransports) child.cancelInference();
     // Every post-authorization exit (bootstrap failure/early return included).
     try {
       if (authorized) {
@@ -422,6 +513,18 @@ async function runAccountGatewayRuntimeInternal(
               }))
             );
         } finally {
+          for (const child of childTransports) {
+            ports.observeRelay(child.lastFailure);
+            const requestRef = child.lastRequestRef;
+            if (requestRef)
+              ports.observeReadback(
+                requestRef,
+                await child.readRequest(requestRef).catch(() => ({
+                  httpStatus: 0,
+                  value: { effect: 'effect_unknown' },
+                }))
+              );
+          }
           ports.observeClose(await transport.close(reason));
         }
       }
@@ -443,6 +546,8 @@ async function runAccountGatewayRuntimeInternal(
             if (!failed) core.setFailed('account_gateway_cleanup_failed');
           }
         };
+        for (const childCleanup of childCleanups)
+          await cleanup('reviewer', childCleanup);
         await cleanup('bridge', async () => bridge?.dispose());
         // Private OCR run dir removal also covers cache-hit/early-exit paths.
         await cleanup('OCR run', async () => ocrRun?.cleanup());
@@ -508,4 +613,98 @@ export function validateAccountGatewayCheckout(
     permissions: Object.freeze({ contents: 'read', pullRequests: 'read' }),
     runtimeConfig: parseAdmittedRuntimeConfig(body.runtimeConfig),
   });
+}
+
+/** A refreshed SCM capability may report lost/recovered allocation availability.
+ * It never changes the initially admitted invocation inputs or revives a slot. */
+export function assertAccountGatewayRuntimeConfigContinuity(
+  initial: AdmittedRuntimeConfig,
+  current: AdmittedRuntimeConfig
+): void {
+  const fail = () => {
+    throw new Error('account_gateway_runtime_config_changed');
+  };
+  if (initial.configVersion !== current.configVersion) fail();
+  const canonicalEnv = (env: Readonly<Record<string, string>>) =>
+    canonicalJson(env);
+  const firstJson = initial.runtimeEnv[reviewerPlanContract.runtimeEnvKey];
+  const nextJson = current.runtimeEnv[reviewerPlanContract.runtimeEnvKey];
+  if (firstJson === undefined || nextJson === undefined) {
+    if (canonicalEnv(initial.runtimeEnv) !== canonicalEnv(current.runtimeEnv))
+      fail();
+    return;
+  }
+  const first = parseReviewReviewerPlan(firstJson);
+  const next = parseReviewReviewerPlan(nextJson);
+  const { reviewers: firstReviewers, ...firstPlan } = first;
+  const { reviewers: nextReviewers, ...nextPlan } = next;
+  if (
+    canonicalJson(firstPlan) !== canonicalJson(nextPlan) ||
+    firstReviewers.length !== nextReviewers.length
+  )
+    fail();
+  firstReviewers.forEach((reviewer, index) => {
+    const currentReviewer = nextReviewers[index]!;
+    const {
+      unavailableReason: _firstAvailability,
+      modelSettings: firstSettings,
+      ...firstStable
+    } = reviewer;
+    const {
+      unavailableReason: _nextAvailability,
+      modelSettings: nextSettings,
+      ...nextStable
+    } = currentReviewer;
+    if (
+      canonicalJson(firstStable) !== canonicalJson(nextStable) ||
+      (firstSettings !== undefined &&
+        nextSettings !== undefined &&
+        canonicalJson(firstSettings) !== canonicalJson(nextSettings)) ||
+      (firstSettings !== undefined &&
+        nextSettings === undefined &&
+        currentReviewer.unavailableReason === undefined) ||
+      (firstSettings === undefined &&
+        nextSettings !== undefined &&
+        reviewer.unavailableReason === undefined)
+    )
+      fail();
+  });
+  const normalized: Record<string, string> = {
+    ...current.runtimeEnv,
+    [reviewerPlanContract.runtimeEnvKey]: firstJson,
+  };
+  const modelSettingsKey = 'REVIEW_ROUTER_GATEWAY_MODEL_SETTINGS_JSON';
+  const firstSettings = initial.runtimeEnv[modelSettingsKey];
+  const nextSettings = current.runtimeEnv[modelSettingsKey];
+  if (firstSettings !== nextSettings) {
+    const firstPrimary = firstReviewers.find(
+      (reviewer) => reviewer.reviewerId === first.primaryReviewerId
+    )!;
+    const nextPrimary = nextReviewers.find(
+      (reviewer) => reviewer.reviewerId === next.primaryReviewerId
+    )!;
+    if (
+      (firstSettings !== undefined &&
+        nextSettings === undefined &&
+        nextPrimary.unavailableReason === undefined) ||
+      (firstSettings === undefined &&
+        nextSettings !== undefined &&
+        firstPrimary.unavailableReason === undefined)
+    )
+      fail();
+    if (firstSettings !== undefined && nextSettings !== undefined) {
+      try {
+        if (
+          canonicalJson(JSON.parse(firstSettings)) !==
+          canonicalJson(JSON.parse(nextSettings))
+        )
+          fail();
+      } catch {
+        fail();
+      }
+    }
+    if (firstSettings === undefined) delete normalized[modelSettingsKey];
+    else normalized[modelSettingsKey] = firstSettings;
+  }
+  if (canonicalEnv(initial.runtimeEnv) !== canonicalEnv(normalized)) fail();
 }

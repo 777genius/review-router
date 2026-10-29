@@ -690,10 +690,11 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(three.semanticIdentityHash).not.toBe(one.semanticIdentityHash);
   });
 
-  it.each(['root', 'deadline'] as const)(
+  it.each(['root', 'reviewer', 'deadline'] as const)(
     'closes the real preview process on %s cancellation without inference',
     async (source) => {
       const root = new AbortController();
+      const reviewer = new AbortController();
       let started!: () => void;
       const ready = new Promise<void>((resolve) => {
         started = resolve;
@@ -723,15 +724,27 @@ describe('OcrReviewInvocationAdapter', () => {
           return result;
         },
       });
-      const result = adapter.prepare({ workSlot, attemptOrdinal: 1 }).then(
-        () => null,
-        (error: unknown) => error as Error
-      );
+      const result = adapter
+        .prepare({
+          workSlot,
+          attemptOrdinal: 1,
+          ...(source === 'reviewer' ? { signal: reviewer.signal } : {}),
+        })
+        .then(
+          () => null,
+          (error: unknown) => error as Error
+        );
       await ready;
       if (source === 'root') root.abort(new Error('fixture_root_cancelled'));
+      if (source === 'reviewer')
+        reviewer.abort(new Error('fixture_reviewer_cancelled'));
       const failure = await result;
       expect(failure?.message).toMatch(
-        source === 'root' ? /fixture_root_cancelled/ : /timeout/i
+        source === 'root'
+          ? /fixture_root_cancelled/
+          : source === 'reviewer'
+            ? /fixture_reviewer_cancelled/
+            : /timeout/i
       );
       expect(closedSignal).toBe('SIGKILL');
       expect(processRunner.calls).toHaveLength(0);

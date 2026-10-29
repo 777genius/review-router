@@ -31,7 +31,8 @@ export interface RejectedBatchExecution<TItem> {
 }
 
 export type CompletedBatchExecution<TItem, TResult> =
-  FulfilledBatchExecution<TItem, TResult> | RejectedBatchExecution<TItem>;
+  | FulfilledBatchExecution<TItem, TResult>
+  | RejectedBatchExecution<TItem>;
 
 export interface DeferredBatchExecution<TItem> {
   readonly index: number;

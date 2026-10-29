@@ -49,8 +49,10 @@ export function hashReviewLifecycleThreadState(input: {
         commentId,
         normalizeAuthorLogin(comment.authorLogin),
         sha256(comment.body ?? ''),
-        normalizeTimestamp(comment.createdAt),
-        normalizeTimestamp(comment.updatedAt ?? comment.createdAt),
+        normalizeReviewLifecycleTimestamp(comment.createdAt),
+        normalizeReviewLifecycleTimestamp(
+          comment.updatedAt ?? comment.createdAt
+        ),
       ] as const;
     });
   const preimage = JSON.stringify([
@@ -76,7 +78,7 @@ function normalizeAuthorLogin(value?: string | null): string | null {
   return value.toLowerCase();
 }
 
-function normalizeTimestamp(value: string): string {
+export function normalizeReviewLifecycleTimestamp(value: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error('review_lifecycle_thread_state_timestamp_invalid');
   }

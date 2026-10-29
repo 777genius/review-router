@@ -111,6 +111,39 @@ inactive until the SaaS release registry, attestation registry, safety policy,
 worker lane, workflow inventory, and mutation epoch all agree on the same full
 Action commit SHA.
 
+## Several Account Gateway reviewers
+
+Snapshot v4 checkout supplies the generated `ReviewReviewerPlanV1` contract in
+`REVIEW_ROUTER_REVIEWER_PLAN_JSON`. Validate the complete plan before preparing
+an engine. Reviewer vote identity selects the invocation adapter; engine kind is
+metadata and cannot select a same-kind sibling. Child model and auxiliary
+requests carry `x-reviewrouter-reviewer-id`. The parent alone checks out SCM,
+finalizes and publishes the aggregate result, and closes captured allocations.
+Child disposal removes local resources only.
+
+Each reviewer owns its private HOME, loopback capability, model transport and
+captured execution settings. The parent bounds reviewer concurrency and captured
+allocation-group concurrency before starting work, while keeping batches within
+a reviewer serial. Parent mutations that can change execution versions share a
+serialized command boundary. Paid or uncertain requests retain the existing
+no-replay fences; an allocation failure stops its dependents and leaves an
+independent allocation eligible to finish.
+
+Availability is a safe checkout hint, never execution authority. SCM token
+refresh may report a changed availability hint or its associated absence of
+model metadata, while every captured identity and selected setting remains
+fixed. Execution keeps the first admitted plan, including unavailable reviewers;
+refresh cannot revive one. Live availability/model metadata is excluded from
+the durable common compatibility identity, and actual provider request facts
+remain bound in each invocation manifest.
+
+The encoded v4 checkout response has a 128 KiB limit. Legacy checkout retains
+its 64 KiB limit, and other Gateway control responses retain their existing
+bounds. Native OCR context tools are projected only to OCR children; skills and
+investigation access still resolve the exact eligible reviewer. Producer plan
+support is an immutable compatibility capability, with source implementation
+and runtime activation governed by the existing release boundary above.
+
 ## Rotating Codex authorization
 
 Never write `REVIEWROUTER_CODEX_AUTH_JSON` directly with `gh secret set` for a

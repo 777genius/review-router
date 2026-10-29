@@ -18,6 +18,7 @@ const executeFile = promisify(execFile);
 /** Fixed SaaS read ports use the current run bearer; GitHub workflow values never cross this port. */
 export async function prepareOcrContextTools(input: {
   runtimeEnv: Readonly<Record<string, string>>;
+  reviewerId?: string;
   githubJson?: string;
   apiUrl: string;
   authorization: () => Readonly<{
@@ -55,6 +56,9 @@ export async function prepareOcrContextTools(input: {
           cache: 'no-store',
           headers: {
             authorization: `Bearer ${authorization.authorizationToken}`,
+            ...(input.reviewerId
+              ? { 'x-reviewrouter-reviewer-id': input.reviewerId }
+              : {}),
             'content-type': 'application/json',
           },
           body: JSON.stringify({

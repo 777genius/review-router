@@ -70,6 +70,7 @@ export type ProductionWorkAssignmentFacts = {
   readonly workSlotId: string;
   readonly taskKind: ReviewTaskKind;
   readonly providerKind: ReviewExecutionProviderKind;
+  readonly providerVoteIdentityHash?: string;
   readonly required: boolean;
   readonly filePaths: readonly string[];
 };
@@ -411,11 +412,9 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       ].sort()
     );
     const providerExecution = providerExecutionSummary(
-      this.input.lifecycleVerification
-        ? this.input.assignments.filter(
-            (assignment) => assignment.taskKind === 'finding_discovery'
-          )
-        : this.input.assignments,
+      this.input.assignments.filter(
+        (assignment) => assignment.taskKind === 'finding_discovery'
+      ),
       evidence
     );
     const manifestFiles = Object.freeze(
@@ -514,6 +513,9 @@ function validateAcceptedEvidence(input: {
       manifest.workSlotId !== workSlotId ||
       !assignment ||
       accepted.observation.providerKind !== assignment.providerKind ||
+      (assignment.providerVoteIdentityHash !== undefined &&
+        accepted.observation.providerVoteIdentityHash !==
+          assignment.providerVoteIdentityHash) ||
       evidence.has(workSlotId)
     ) {
       throw new Error('review_projection_coverage_manifest_scope_invalid');
@@ -539,14 +541,12 @@ function providerExecutionSummary(
   assignments: readonly ProductionWorkAssignmentFacts[],
   evidence: ReadonlyMap<string, AcceptedReviewWorkSlotEvidence>
 ) {
-  const byProvider = new Map<
-    ProductionWorkAssignmentFacts['providerKind'],
-    ProductionWorkAssignmentFacts[]
-  >();
+  const byProvider = new Map<string, ProductionWorkAssignmentFacts[]>();
   for (const assignment of assignments) {
-    const providerAssignments = byProvider.get(assignment.providerKind) ?? [];
+    const vote = assignment.providerVoteIdentityHash ?? assignment.providerKind;
+    const providerAssignments = byProvider.get(vote) ?? [];
     providerAssignments.push(assignment);
-    byProvider.set(assignment.providerKind, providerAssignments);
+    byProvider.set(vote, providerAssignments);
   }
   const succeededProviders = [...byProvider.values()].filter(
     (providerAssignments) => {

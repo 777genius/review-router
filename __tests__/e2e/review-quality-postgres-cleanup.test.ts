@@ -9,6 +9,8 @@ test('pure native PostgreSQL cleanup regression checks', () => {
   );
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`Cleanup checks failed: ${result.stdout}\n${result.stderr}`);
+    throw new Error(
+      `Cleanup checks failed: ${result.stdout}\n${result.stderr}`
+    );
   }
 }, 20_000);

@@ -1,3 +1,7 @@
+import {
+  parseReviewReviewerPlan,
+  reviewerPlanContract,
+} from './generated/review-action-v2/review-reviewer-plan';
 import { tmpdir } from 'os';
 import { UsageDelivery, type UsageGrant } from '../provider-usage/delivery';
 import { uploadUsageArtifact } from '../provider-usage/github-artifact';
@@ -59,6 +63,8 @@ export function parseAdmittedRuntimeConfig(
   if (!profileJson || !profileDigest)
     throw new Error('runtime_config_agent_profile_required');
   readApprovedReviewAgent(profileJson, profileDigest);
+  const reviewerPlan = parsed.runtimeEnv[reviewerPlanContract.runtimeEnvKey];
+  if (reviewerPlan !== undefined) parseReviewReviewerPlan(reviewerPlan);
   return Object.freeze({
     protocolVersion: 1,
     configVersion: parsed.configVersion,

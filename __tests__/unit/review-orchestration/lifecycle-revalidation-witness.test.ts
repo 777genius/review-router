@@ -43,6 +43,8 @@ function thread(
           createdAt,
           updatedAt:
             options.updatedAt === undefined ? createdAt : options.updatedAt,
+          publishedAt: null,
+          lastEditedAt: null,
           path: 'src/outside-diff.ts',
           originalLine: 5,
           line: 7,

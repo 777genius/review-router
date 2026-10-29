@@ -142847,8 +142847,10 @@ function hashReviewLifecycleThreadState(input) {
       commentId,
       normalizeAuthorLogin(comment.authorLogin),
       sha2564(comment.body ?? ""),
-      normalizeTimestamp(comment.createdAt),
-      normalizeTimestamp(comment.updatedAt ?? comment.createdAt)
+      normalizeReviewLifecycleTimestamp(comment.createdAt),
+      normalizeReviewLifecycleTimestamp(
+        comment.updatedAt ?? comment.createdAt
+      )
     ];
   });
   const preimage = JSON.stringify([
@@ -142871,7 +142873,7 @@ function normalizeAuthorLogin(value) {
   }
   return value.toLowerCase();
 }
-function normalizeTimestamp(value) {
+function normalizeReviewLifecycleTimestamp(value) {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error("review_lifecycle_thread_state_timestamp_invalid");
   }
@@ -153637,6 +153639,8 @@ query ReviewRouterThreadInventory(
               body
               createdAt
               updatedAt
+              publishedAt
+              lastEditedAt
               path
               line
               originalLine
@@ -153663,6 +153667,8 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
           body
           createdAt
           updatedAt
+          publishedAt
+          lastEditedAt
           path
           line
           originalLine
@@ -153832,7 +153838,7 @@ var ReviewThreadInventoryLoader = class {
       inventory.resolvedObservations?.push({
         lineageId: matching[0].lineageId,
         trustedMarker: marker2.fingerprint,
-        confirmed: resolvedAt !== void 0 && !humanInteraction && normalizeCommentTimestamp(
+        confirmed: resolvedAt !== void 0 && !humanInteraction && normalizeReviewLifecycleTimestamp(
           parent.updatedAt ?? requireCommentTimestamp(parent.createdAt)
         ) <= resolvedAt
       });
@@ -153888,7 +153894,7 @@ var ReviewThreadInventoryLoader = class {
       diffHunk: parent.diffHunk ?? void 0,
       parentCommentId: parent.id,
       parentCommentDatabaseId: parent.databaseId ?? void 0,
-      parentCommentCreatedAt: normalizeCommentTimestamp(
+      parentCommentCreatedAt: normalizeReviewLifecycleTimestamp(
         requireCommentTimestamp(parent.createdAt)
       ),
       parentCommentBodyHash: (0, import_crypto17.createHash)("sha256").update(body2, "utf8").digest("hex"),
@@ -153897,14 +153903,10 @@ var ReviewThreadInventoryLoader = class {
         message,
         diffHunk: parent.diffHunk ?? null
       }),
-      ...parent.updatedAt ? {
-        parentCommentEdited: normalizeCommentTimestamp(parent.updatedAt) !== normalizeCommentTimestamp(
-          requireCommentTimestamp(parent.createdAt)
-        )
-      } : {},
+      parentCommentEdited: parentCommentWasEdited(parent),
       // Only the valid-marker branch can construct this target.
       findingMarkerAmbiguous: false,
-      parentCommentUpdatedAt: normalizeCommentTimestamp(
+      parentCommentUpdatedAt: normalizeReviewLifecycleTimestamp(
         parent.updatedAt ?? requireCommentTimestamp(parent.createdAt)
       ),
       threadCommentCount: comments.length,
@@ -154057,7 +154059,7 @@ function findTrustedResolutionMarker(input) {
       targetId: marker2.targetId,
       fingerprint: marker2.fingerprint,
       commentId: comment.id,
-      commentUpdatedAt: normalizeCommentTimestamp(
+      commentUpdatedAt: normalizeReviewLifecycleTimestamp(
         comment.updatedAt ?? requireCommentTimestamp(comment.createdAt)
       )
     };
@@ -154080,18 +154082,32 @@ function normalizeLifecycleSeverity(value) {
   }
   return "unknown";
 }
+function parentCommentWasEdited(parent) {
+  if (parent.updatedAt == null || parent.publishedAt === void 0 || parent.lastEditedAt === void 0)
+    return void 0;
+  const createdAt = new Date(
+    normalizeReviewLifecycleTimestamp(requireCommentTimestamp(parent.createdAt))
+  );
+  const updatedAt = new Date(
+    normalizeReviewLifecycleTimestamp(requireCommentTimestamp(parent.updatedAt))
+  );
+  const publishedAt = parent.publishedAt === null ? null : new Date(
+    normalizeReviewLifecycleTimestamp(requireCommentTimestamp(parent.publishedAt))
+  );
+  const lastEditedAt = parent.lastEditedAt === null ? null : new Date(
+    normalizeReviewLifecycleTimestamp(
+      requireCommentTimestamp(parent.lastEditedAt)
+    )
+  );
+  if (updatedAt < createdAt || publishedAt !== null && (publishedAt < createdAt || updatedAt < publishedAt) || lastEditedAt !== null && (lastEditedAt < createdAt || lastEditedAt > updatedAt))
+    throw new Error("review thread comment timestamp order was invalid");
+  return lastEditedAt !== null || publishedAt === null && updatedAt.getTime() !== createdAt.getTime();
+}
 function requireCommentTimestamp(value) {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error("review thread comment timestamp was missing");
   }
   return value;
-}
-function normalizeCommentTimestamp(value) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error("review thread comment timestamp was invalid");
-  }
-  return parsed.toISOString();
 }
 function stripLifecycleCommentBody(body2) {
   return stripInlineFingerprintMarkers(body2).replace(/<sub><!--\s*review-router-skip-help\s*-->[\s\S]*?<\/sub>/gi, "").replace(/<sub>\s*Models?:[\s\S]*?<\/sub>/gi, "").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, "").trim();
@@ -164224,7 +164240,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.218",
+  version: "1.0.220",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -239894,6 +239910,21 @@ function compositeLifecycleInvocations(input) {
     }
   };
 }
+function rebindReviewAssignmentsToWorkPlan(assignments, plan) {
+  const slots = new Map(
+    plan.assignments.map(({ workSlot }) => [workSlot.workSlotId, workSlot])
+  );
+  if (slots.size !== plan.assignments.length)
+    throw new Error("review_action_v2_assignment_duplicate");
+  return Object.freeze(
+    assignments.map((assignment) => {
+      const workSlot = slots.get(assignment.workSlot.workSlotId);
+      if (!workSlot || canonicalRevalidationJson(workSlot) !== canonicalRevalidationJson(assignment.workSlot))
+        throw new Error("review_action_v2_assignment_plan_mismatch");
+      return Object.freeze({ ...assignment, workSlot });
+    })
+  );
+}
 function restorePersistedWorkPlan(restored, planned) {
   const persisted = restored?.persistedPlan;
   if (!persisted) return planned;
@@ -244261,11 +244292,16 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           }) : void 0;
           if (preplanningRestore?.persistedPlan?.compatibilityKey && preplanningRestore.persistedPlan.compatibilityKey !== ocrCompatibilityKey)
             throw new Error("review_restore_compatibility_changed");
+          const finalPlan2 = restorePersistedWorkPlan(
+            preplanningRestore,
+            lifecycle2?.plan ?? planned2.plan
+          );
           planned2 = {
             ...planned2,
-            plan: restorePersistedWorkPlan(
-              preplanningRestore,
-              lifecycle2?.plan ?? planned2.plan
+            plan: finalPlan2,
+            assignments: rebindReviewAssignmentsToWorkPlan(
+              planned2.assignments,
+              finalPlan2
             )
           };
           const bridge = {
@@ -244559,11 +244595,16 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
       }) : void 0;
       if (preplanningRestore?.persistedPlan?.compatibilityKey && preplanningRestore.persistedPlan.compatibilityKey !== compatibilityKey)
         throw new Error("review_restore_compatibility_changed");
+      const finalPlan = restorePersistedWorkPlan(
+        preplanningRestore,
+        lifecycle?.plan ?? planned.plan
+      );
       planned = {
         ...planned,
-        plan: restorePersistedWorkPlan(
-          preplanningRestore,
-          lifecycle?.plan ?? planned.plan
+        plan: finalPlan,
+        assignments: rebindReviewAssignmentsToWorkPlan(
+          planned.assignments,
+          finalPlan
         )
       };
       const invocationAdapter = new CodexReviewInvocationAdapter(

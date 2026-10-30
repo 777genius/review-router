@@ -60,6 +60,40 @@ profile supports the existing `account_gateway` and `provider_api` transport
 values; local subscription routes remain internal descriptors. Local executable
 qualification does not publish, register or activate this candidate.
 
+The existing **Native runtime candidate** workflow can publish its qualified
+bytes after its changes are merged to main:
+
+```bash
+gh workflow run native-runtime-candidate.yml \
+  --repo 777genius/review-router --ref main \
+  -f expected_source_sha=FULL_CURRENT_MAIN_SHA
+```
+
+The dispatch rejects a different source SHA or a main ref that has advanced.
+Its existing read-only qualification builds the exact v3 manifest and runs real
+OCR and official auth-helper executables against synthetic local wires. The
+separate publisher downloads only that run's SHA-named artifact and verifies
+the committed manifest/catalog, binary digest, Linux amd64 format and version.
+The selected Claude snapshot IDs are exercised by this native fixture; these
+tests do not establish live subscription entitlement or provider acceptance.
+
+Publication refuses an existing `ocr-v1.13.1-rr.6` tag or release. It creates that
+lightweight tag once at the qualified commit, then creates a draft with
+`--verify-tag`. The fixed binary `opencodereview-linux-amd64`, its matching
+checksum sidecar and original `MANIFEST` must all match authenticated remote
+downloads before the draft can become a prerelease with `latest=false`.
+Published tag, release state and remote bytes are read back before success is
+reported. Only the publication job receives repository-write permission; the
+native version subprocess receives no GitHub token.
+
+Any partial or uncertain write stops with `inspection_required`. Inspect the
+remote tag, draft/release and assets before deciding the next operator action;
+an unchanged rerun refuses existing identities and never replaces them. This
+workflow does not move Action/workflow channels, register or activate a producer,
+or deploy the SaaS. Ordinary Action release separately restores committed
+`dist` after dependency installation so its artifact smoke executes HEAD bytes,
+then retains the rebuild and clean-artifact gate before tag publication.
+
 ### Managed conversation interaction
 
 The reusable interaction workflow has an explicit `interaction_backend:

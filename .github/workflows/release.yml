@@ -121,6 +121,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Restore committed runtime artifacts after install
+        run: git restore --worktree -- dist
+
       - name: Lint
         run: npm run lint
 

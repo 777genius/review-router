@@ -1,0 +1,34 @@
+{
+  "extensionId": "review-model-dispatch.v2",
+  "descriptorDigest": "sha256:be55241ba86af0788b6a60973ac7c55e6aa33244d18bba52a230cbc195ba4a2d",
+  "policyVersion": "model-dispatch-policy.v2",
+  "transports": [
+    "runner_local_responses",
+    "runner_local_anthropic",
+    "account_gateway",
+    "hosted_pool"
+  ],
+  "wireProtocols": [
+    "openai-responses",
+    "codex-responses",
+    "anthropic-messages"
+  ],
+  "anthropicModelAliases": {
+    "sonnet": "claude-sonnet-4-6",
+    "opus": "claude-opus-4-6",
+    "haiku": "claude-haiku-4-5-20251001"
+  },
+  "defaultAgentProfileRefs": {
+    "runner_local_responses": "ocr-managed-v5",
+    "runner_local_anthropic": "ocr-managed-v5",
+    "account_gateway": "ocr-managed-v5",
+    "hosted_pool": "ocr-managed-v5"
+  },
+  "limits": {
+    "maxRequests": 32,
+    "maxConcurrentRequests": 1,
+    "maxRequestBytes": 16777216,
+    "maxResponseBytes": 8388608,
+    "maxOutputTokens": 32768
+  }
+}

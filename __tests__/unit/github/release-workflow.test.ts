@@ -14,10 +14,10 @@ const auditedActionShas: Readonly<Record<string, string>> = {
   'actions/upload-artifact': 'ea165f8d65b6e75b540449e92b4886f43607fa02',
 };
 const auditedExternalUseCounts: Readonly<Record<string, number>> = {
-  [checkoutActionReference]: 18,
+  [checkoutActionReference]: 19,
   'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1': 2,
   'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e': 2,
-  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 15,
+  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 16,
   'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02': 2,
 };
 const checkoutCredentialException = {
@@ -33,6 +33,34 @@ interface WorkflowUse {
 
 interface LocatedWorkflowUse extends WorkflowUse {
   readonly workflow: string;
+}
+
+interface ParsedWorkflow {
+  on: Record<string, unknown>;
+  permissions: Record<string, string>;
+  jobs: Record<
+    string,
+    {
+      if?: string;
+      needs?: string;
+      permissions?: Record<string, string>;
+      steps: Array<{
+        name?: string;
+        run?: string;
+        with?: Record<string, unknown>;
+        env?: Record<string, string>;
+      }>;
+    }
+  >;
+}
+
+function readWorkflow(name: string): ParsedWorkflow {
+  return yaml.load(
+    fs.readFileSync(path.join(workflowDirectory, name), 'utf8'),
+    {
+      schema: yaml.JSON_SCHEMA,
+    }
+  ) as ParsedWorkflow;
 }
 
 function collectUses(
@@ -144,7 +172,7 @@ describe('workflow security and release', () => {
         (total, count) => total + count,
         0
       )
-    ).toBe(39);
+    ).toBe(41);
   });
 
   it('finds semantic uses keys without scanning block scalar text', () => {
@@ -240,5 +268,83 @@ jobs:
     expect(publishStep).toMatch(
       /git push --atomic origin \\\n\s+"refs\/tags\/\$VERSION" \\\n\s+"\+refs\/tags\/\$MAJOR_TAG"/
     );
+  });
+
+  it('tests committed release bytes after install and rebuilds them before tag publication', () => {
+    const steps = readWorkflow('release.yml').jobs.release.steps;
+    const index = (name: string) =>
+      steps.findIndex((step) => step.name === name);
+    const install = index('Install dependencies');
+    const restore = index('Restore committed runtime artifacts after install');
+    const test = index('Test');
+    const build = index('Build committed bundles');
+    const verify = index('Verify committed release artifacts');
+    const publish = index('Publish exact and stable tags');
+    expect(install).toBeGreaterThan(-1);
+    expect(steps[install].run).toBe('npm ci');
+    expect(restore).toBe(install + 1);
+    expect(steps[restore].run).toBe('git restore --worktree -- dist');
+    expect(test).toBeGreaterThan(restore);
+    expect(build).toBeGreaterThan(test);
+    expect(verify).toBeGreaterThan(build);
+    expect(publish).toBeGreaterThan(verify);
+    expect(steps[verify].run).toContain('git status --short');
+  });
+
+  it('keeps native qualification read-only and publishes only its successful exact dispatch artifact', () => {
+    const workflow = readWorkflow('native-runtime-candidate.yml');
+    expect(workflow.on.workflow_dispatch).toEqual({
+      inputs: {
+        expected_source_sha: {
+          description: expect.any(String),
+          required: true,
+          type: 'string',
+        },
+      },
+    });
+    expect(workflow.permissions).toEqual({ contents: 'read' });
+    const qualify = workflow.jobs.qualify;
+    expect(qualify.permissions).toBeUndefined();
+    expect(qualify.if).toContain("github.event_name == 'workflow_dispatch'");
+    expect(qualify.if).toContain(
+      'github.event.pull_request.head.repo.full_name == github.repository'
+    );
+    const validation = qualify.steps.find(
+      (step) => step.name === 'Validate manual publication source'
+    )!;
+    expect(validation.env).toEqual({
+      EXPECTED_SOURCE_SHA: '${{ inputs.expected_source_sha }}',
+    });
+    expect(validation.run).toContain('test "$GITHUB_REF" = refs/heads/main');
+    expect(validation.run).toContain(
+      'test "$GITHUB_SHA" = "$EXPECTED_SOURCE_SHA"'
+    );
+    expect(validation.run).toContain('git rev-parse HEAD');
+    expect(validation.run).toContain(
+      'git ls-remote --exit-code origin refs/heads/main'
+    );
+    const artifact = qualify.steps.find(
+      (step) => step.name === 'Preserve candidate bytes and exact build recipe'
+    )!;
+    expect(artifact.with?.name).toBe(
+      'native-runtime-candidate-${{ github.event.pull_request.head.sha || github.sha }}'
+    );
+    const publish = workflow.jobs.publish;
+    expect(publish.needs).toBe('qualify');
+    expect(publish.if).toBe(
+      "github.event_name == 'workflow_dispatch' && needs.qualify.result == 'success'"
+    );
+    expect(publish.permissions).toEqual({ contents: 'write', actions: 'read' });
+    expect(publish.steps[0].with).toEqual({
+      ref: '${{ github.sha }}',
+      'persist-credentials': false,
+    });
+    expect(publish.steps.at(-1)).toMatchObject({
+      run: 'node scripts/publish-native-ocr.mts',
+      env: {
+        GH_TOKEN: '${{ github.token }}',
+        EXPECTED_SOURCE_SHA: '${{ inputs.expected_source_sha }}',
+      },
+    });
   });
 });

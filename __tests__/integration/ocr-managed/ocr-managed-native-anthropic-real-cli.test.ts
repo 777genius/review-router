@@ -1,4 +1,4 @@
-/** Real rr.5 binary against native Messages fixtures, never a paid provider. */
+/** Real rr.6 binary against native Messages fixtures, never a paid provider. */
 import { execFileSync } from 'child_process';
 import { createServer } from 'http';
 import * as fs from 'fs';
@@ -34,7 +34,11 @@ if (!available && process.env.REVIEWROUTER_OCR_REQUIRED === '1')
   throw new Error('required_managed_native_ocr_binary_unavailable');
 const describeNative = available ? describe : describe.skip;
 const capability = 'c'.repeat(64);
-const model = 'claude-native-fixture';
+const qualifiedModels = [
+  'claude-sonnet-4-6',
+  'claude-opus-4-6',
+  'claude-haiku-4-5-20251001',
+] as const;
 
 function git(repo: string, ...args: string[]) {
   return execFileSync(
@@ -63,7 +67,7 @@ function git(repo: string, ...args: string[]) {
   ).trim();
 }
 
-async function scenario(malformed: boolean) {
+async function scenario(malformed: boolean, model: string) {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-ocr-native-'));
   const repo = path.join(workspace, 'repo');
   fs.mkdirSync(repo);
@@ -234,36 +238,40 @@ async function scenario(malformed: boolean) {
 }
 
 describeNative('managed native Anthropic real OCR binary', () => {
-  it('emits a real managed finding from native tools, with the selected model and effort', async () => {
-    const proof = await scenario(false);
-    expect(proof.result.closed).toBe(true);
-    expect(proof.result.exitCode).toBe(0);
-    expect(proof.requests.length).toBeGreaterThanOrEqual(3);
-    for (const request of proof.requests) {
-      expect(request.path).toBe('/v1/messages');
-      expect(request.authorization).toBe(`Bearer ${capability}`);
-      expect(request.apiKey).toBeUndefined();
-      expect(request.body).toMatchObject({
-        model,
-        output_config: { effort: 'high' },
+  it.each(qualifiedModels)(
+    'emits a real managed finding with exact qualified model %s and effort',
+    async (model) => {
+      const proof = await scenario(false, model);
+      expect(proof.result.closed).toBe(true);
+      expect(proof.result.exitCode).toBe(0);
+      expect(proof.requests.length).toBeGreaterThanOrEqual(3);
+      for (const request of proof.requests) {
+        expect(request.path).toBe('/v1/messages');
+        expect(request.authorization).toBe(`Bearer ${capability}`);
+        expect(request.apiKey).toBeUndefined();
+        expect(request.body).toMatchObject({
+          model,
+          output_config: { effort: 'high' },
+        });
+        expect(request.body).not.toHaveProperty('input');
+        expect(request.body).not.toHaveProperty('service_tier');
+        expect(request.body.stream).not.toBe(true);
+      }
+      const native = parseOcrNativeReviewResult(proof.raw, proof.admission);
+      expect(native.comments).toHaveLength(1);
+      expect(native.comments[0]).toMatchObject({
+        path: 'calc.ts',
+        severity: 'high',
       });
-      expect(request.body).not.toHaveProperty('input');
-      expect(request.body).not.toHaveProperty('service_tier');
-      expect(request.body.stream).not.toBe(true);
-    }
-    const native = parseOcrNativeReviewResult(proof.raw, proof.admission);
-    expect(native.comments).toHaveLength(1);
-    expect(native.comments[0]).toMatchObject({
-      path: 'calc.ts',
-      severity: 'high',
-    });
-    expect(native.comments[0].content).toContain('add() subtracts b');
-    expect(classifyOcrReviewOutcome(native.outcome).partial).toBe(false);
-    expect(native.usage.inputTokens).toBeGreaterThan(0);
-  }, 90_000);
+      expect(native.comments[0].content).toContain('add() subtracts b');
+      expect(classifyOcrReviewOutcome(native.outcome).partial).toBe(false);
+      expect(native.usage.inputTokens).toBeGreaterThan(0);
+    },
+    90_000
+  );
 
   it('rejects a missing native terminal without replaying the provider request', async () => {
-    const proof = await scenario(true);
+    const proof = await scenario(true, qualifiedModels[0]);
     expect(proof.result.closed).toBe(true);
     expect(proof.requests).toHaveLength(1);
     if (proof.raw) {

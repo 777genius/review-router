@@ -242,10 +242,10 @@ function publish(): void {
       const release = record(api(`repos/${repository}/releases/${releaseId}`));
       need(
         release.tag_name === tag &&
-          release.target_commitish === expected &&
           release.draft === draft &&
           release.prerelease === true
       );
+      // Existing tags are authoritative; target_commitish is unused by GitHub.
       need(remoteTag() === expected);
     };
     verifyRelease(true);

@@ -33,7 +33,7 @@ function output(value, options) {
   return options && options.encoding ? bytes.toString(options.encoding) : bytes;
 }
 function release() {
-  return {id: 71, tag_name: 'ocr-v1.13.1-rr.6', target_commitish: sha,
+  return {id: 71, tag_name: 'ocr-v1.13.1-rr.6', target_commitish: scenario === 'metadata-default-branch' ? 'main' : sha,
     draft: !published, prerelease: true};
 }
 cp.spawnSync = (command, args) => {
@@ -277,6 +277,16 @@ describe('native OCR publication entrypoint', () => {
         .readdirSync(directory)
         .some((name) => name.startsWith('reviewrouter-native-release-'))
     ).toBe(false);
+  });
+
+  it('accepts default-branch release metadata when the actual remote tag matches', async () => {
+    const { result } = await run('metadata-default-branch');
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      tag,
+      sourceSha,
+      published: true,
+    });
   });
 
   it.each([

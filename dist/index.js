@@ -150927,9 +150927,6 @@ var REVIEW_ROUTER_WEB_ORIGIN = review_router_endpoints_default.webOrigin;
 var REVIEW_ROUTER_API_ORIGIN = review_router_endpoints_default.apiOrigin;
 var CODEX_SEED_SCRIPT_URL = `${REVIEW_ROUTER_WEB_ORIGIN}/install/codex`;
 var NEWTEST_V4_ROOT_URL = `${REVIEW_ROUTER_API_ORIGIN}/__newtest_v4/`;
-function reviewBannerBaseUrlFromEnvironment(env = process.env) {
-  return env.REVIEW_ROUTER_REVIEW_BANNER === "1" ? REVIEW_ROUTER_WEB_ORIGIN : void 0;
-}
 
 // src/learning/feedback-tracker.ts
 var FeedbackTracker = class _FeedbackTracker {
@@ -157226,7 +157223,7 @@ async function createComponents(config2, githubToken, options = {}) {
     config2.dryRun
   );
   const formatter = new MarkdownFormatterV2({
-    bannerBaseUrl: reviewBannerBaseUrlFromEnvironment()
+    bannerBaseUrl: REVIEW_ROUTER_WEB_ORIGIN
   });
   const trustedReviewThreadAuthors = trustedReviewThreadAuthorsFromEnv();
   const reviewThreadInventory = new ReviewThreadInventoryLoader(
@@ -240509,7 +240506,7 @@ var productionReviewProjectionPolicyVersion = "review-projection-policy.v6-compa
 function createProductionReviewProjectionBuilder(input) {
   const limits = projectionLimits(input.config, input.protocolLimits);
   const policy = new LegacyReviewProjectionPolicyAdapter(input.config, {
-    bannerBaseUrl: reviewBannerBaseUrlFromEnvironment(),
+    bannerBaseUrl: REVIEW_ROUTER_WEB_ORIGIN,
     source: reviewerSummarySourceFromPr(input.pr)
   });
   const projection = new BuildCurrentReviewProjection({

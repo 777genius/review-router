@@ -202,7 +202,6 @@ describe('production reusable workflows', () => {
     ).jobs?.review?.steps?.find((step) => step.name === 'Run ReviewRouter');
     expect(runtimeStep?.env).toMatchObject({
       REVIEW_ROUTER_MODE: 'account-gateway',
-      REVIEW_ROUTER_REVIEW_BANNER: '${{ vars.REVIEW_ROUTER_REVIEW_BANNER }}',
     });
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-channel-abi-'));
     try {

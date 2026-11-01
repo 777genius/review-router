@@ -329,7 +329,7 @@ This token is not used to post comments. Review comments and summaries still use
 - Agentic context is read-only. Codex may inspect related files, but should not install dependencies, run tests, run builds, access network resources, or write files.
 - Large generated files, lockfiles, and migrations are compacted to protect prompt budget. This is intentional, but it means those files may receive less detailed review.
 
-To include the optional English review image in hosted review comments, set the repository Actions variable `REVIEW_ROUTER_REVIEW_BANNER` to `1`. Leave it unset for text-only comments; full findings and links remain available in Markdown.
+Hosted review comments include the English review image automatically; no repository Actions variable is required. Full findings and links remain available in Markdown if the image cannot load.
 
 ## Comment Deduplication
 

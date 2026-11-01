@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { reviewBannerBaseUrlFromEnvironment } from '../../config/review-router-endpoints';
+import { REVIEW_ROUTER_WEB_ORIGIN } from '../../config/review-router-endpoints';
 import type { PRContext, ReviewConfig } from '../../types';
 import { PullRequestLoadStatus } from '../../types';
 import { trimDiff } from '../../utils/diff';
@@ -94,7 +94,7 @@ export function createProductionReviewProjectionBuilder(input: {
 }) {
   const limits = projectionLimits(input.config, input.protocolLimits);
   const policy = new LegacyReviewProjectionPolicyAdapter(input.config, {
-    bannerBaseUrl: reviewBannerBaseUrlFromEnvironment(),
+    bannerBaseUrl: REVIEW_ROUTER_WEB_ORIGIN,
     source: reviewerSummarySourceFromPr(input.pr),
   });
   const projection = new BuildCurrentReviewProjection({

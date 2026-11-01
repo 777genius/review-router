@@ -242634,6 +242634,7 @@ var GATEWAY_CODES = [
   "relay_unknown",
   "request_reviewer_mismatch",
   "reviewer_selector_invalid",
+  "same_operation_recovery_required",
   "codex_subscription_authentication_failed"
 ];
 var GATE_REASONS = [

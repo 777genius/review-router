@@ -1,6 +1,18 @@
 import { ocrReviewFailureDiagnostic } from '../../../src/review-orchestration/infrastructure/ocr-review-failure-diagnostic';
 import { OcrReviewAcceptanceError } from '../../../src/review-orchestration/infrastructure/ocr-review-managed-run';
 
+it('preserves the known RR same-operation recovery denial without changing its effect', () => {
+  expect(
+    ocrReviewFailureDiagnostic(new Error('not diagnostic text'), undefined, {
+      code: 'same_operation_recovery_required',
+      effect: 'effect_unknown',
+    }).gateway
+  ).toEqual({
+    code: 'same_operation_recovery_required',
+    effect: 'effect_unknown',
+  });
+});
+
 it('retains the closed SDK denial codes, including admission limits and invalid input', () => {
   // SDK SafeError.errorCode and GatewayError.code, plus the SaaS safe_error fallback.
   const codes = [

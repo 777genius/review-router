@@ -215789,13 +215789,29 @@ function deterministicIdempotencyKey(purpose, parts) {
 
 // src/review-orchestration/infrastructure/ocr-review-failure-diagnostic.ts
 var import_node_os3 = require("node:os");
+var SDK_GATEWAY_CODES = [
+  "invalid_request",
+  "unauthenticated",
+  "forbidden",
+  "not_found",
+  "conflict",
+  "admission_limited",
+  "upstream_failure",
+  "internal_error",
+  "invalid_input",
+  "transport",
+  "invalid_response",
+  "cancelled",
+  "safe_error",
+  "gateway_error"
+];
 var GATEWAY_CODES = [
+  ...SDK_GATEWAY_CODES,
   "authorization_denied",
   "close_pending",
   "context_tools_unavailable",
   "envelope_not_normalized",
   "gateway_unavailable",
-  "invalid_request",
   "lane_saturated",
   "model_dispatch_claim_required",
   "model_dispatch_headers_invalid",
@@ -215808,7 +215824,6 @@ var GATEWAY_CODES = [
   "relay_unknown",
   "request_reviewer_mismatch",
   "reviewer_selector_invalid",
-  "transport",
   "codex_subscription_authentication_failed"
 ];
 var GATE_REASONS = [
@@ -215817,10 +215832,14 @@ var GATE_REASONS = [
   "replay_fenced"
 ];
 var EFFECTS = [
+  // Action-local initial state, followed by the exact SDK effectState values.
   "none",
   "not_dispatched",
+  "dispatch_started",
+  "response_started",
+  "completed",
   "effect_unknown",
-  "dispatched"
+  "rejected_before_dispatch"
 ];
 function ocrReviewFailureDiagnostic(error3, process5, gateway) {
   const gate = error3 instanceof Error ? GATE_REASONS.find(

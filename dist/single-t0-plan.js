@@ -5947,7 +5947,7 @@ var require_client_h1 = __commonJS({
       kResume,
       kHTTPContext
     } = require_symbols();
-    var constants4 = require_constants2();
+    var constants5 = require_constants2();
     var EMPTY_BUF = Buffer.alloc(0);
     var FastBuffer = Buffer[Symbol.species];
     var addListener = util4.addListener;
@@ -6022,7 +6022,7 @@ var require_client_h1 = __commonJS({
       constructor(client2, socket, { exports: exports3 }) {
         assert2(Number.isFinite(client2[kMaxHeadersSize]) && client2[kMaxHeadersSize] > 0);
         this.llhttp = exports3;
-        this.ptr = this.llhttp.llhttp_alloc(constants4.TYPE.RESPONSE);
+        this.ptr = this.llhttp.llhttp_alloc(constants5.TYPE.RESPONSE);
         this.client = client2;
         this.socket = socket;
         this.timeout = null;
@@ -6117,11 +6117,11 @@ var require_client_h1 = __commonJS({
             currentBufferRef = null;
           }
           const offset = llhttp.llhttp_get_error_pos(this.ptr) - currentBufferPtr;
-          if (ret !== constants4.ERROR.OK) {
+          if (ret !== constants5.ERROR.OK) {
             const body2 = data.subarray(offset);
-            if (ret === constants4.ERROR.PAUSED_UPGRADE) {
+            if (ret === constants5.ERROR.PAUSED_UPGRADE) {
               this.onUpgrade(body2);
-            } else if (ret === constants4.ERROR.PAUSED) {
+            } else if (ret === constants5.ERROR.PAUSED) {
               this.paused = true;
               socket.unshift(body2);
             } else {
@@ -6144,10 +6144,10 @@ var require_client_h1 = __commonJS({
         } finally {
           currentParser = null;
         }
-        if (ret === constants4.ERROR.OK) {
+        if (ret === constants5.ERROR.OK) {
           return null;
         }
-        if (ret === constants4.ERROR.PAUSED || ret === constants4.ERROR.PAUSED_UPGRADE) {
+        if (ret === constants5.ERROR.PAUSED || ret === constants5.ERROR.PAUSED_UPGRADE) {
           this.paused = true;
           return null;
         }
@@ -6164,7 +6164,7 @@ var require_client_h1 = __commonJS({
           const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0);
           message = "Response does not match the HTTP/1.1 protocol (" + Buffer.from(llhttp.memory.buffer, ptr, len).toString() + ")";
         }
-        return new HTTPParserError(message, constants4.ERROR[ret], data);
+        return new HTTPParserError(message, constants5.ERROR[ret], data);
       }
       destroy() {
         assert2(this.ptr != null);
@@ -6344,7 +6344,7 @@ var require_client_h1 = __commonJS({
           socket[kBlocking] = false;
           client2[kResume]();
         }
-        return pause ? constants4.ERROR.PAUSED : 0;
+        return pause ? constants5.ERROR.PAUSED : 0;
       }
       onBody(buf) {
         const { client: client2, socket, statusCode, maxResponseSize } = this;
@@ -6366,7 +6366,7 @@ var require_client_h1 = __commonJS({
         }
         this.bytesRead += buf.length;
         if (request3.onData(buf) === false) {
-          return constants4.ERROR.PAUSED;
+          return constants5.ERROR.PAUSED;
         }
       }
       onMessageComplete() {
@@ -6402,13 +6402,13 @@ var require_client_h1 = __commonJS({
         if (socket[kWriting]) {
           assert2(client2[kRunning] === 0);
           util4.destroy(socket, new InformationalError("reset"));
-          return constants4.ERROR.PAUSED;
+          return constants5.ERROR.PAUSED;
         } else if (!shouldKeepAlive) {
           util4.destroy(socket, new InformationalError("reset"));
-          return constants4.ERROR.PAUSED;
+          return constants5.ERROR.PAUSED;
         } else if (socket[kReset] && client2[kRunning] === 0) {
           util4.destroy(socket, new InformationalError("reset"));
-          return constants4.ERROR.PAUSED;
+          return constants5.ERROR.PAUSED;
         } else if (client2[kPipelining] == null || client2[kPipelining] === 1) {
           setImmediate(() => client2[kResume]());
         } else {
@@ -69330,7 +69330,7 @@ var require_async = __commonJS({
 // node_modules/graceful-fs/polyfills.js
 var require_polyfills = __commonJS({
   "node_modules/graceful-fs/polyfills.js"(exports2, module2) {
-    var constants4 = require("constants");
+    var constants5 = require("constants");
     var origCwd = process.cwd;
     var cwd = null;
     var platform2 = process.env.GRACEFUL_FS_PLATFORM || process.platform;
@@ -69354,7 +69354,7 @@ var require_polyfills = __commonJS({
     var chdir;
     module2.exports = patch;
     function patch(fs14) {
-      if (constants4.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
+      if (constants5.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
         patchLchmod(fs14);
       }
       if (!fs14.lutimes) {
@@ -69456,7 +69456,7 @@ var require_polyfills = __commonJS({
         fs15.lchmod = function(path19, mode, callback) {
           fs15.open(
             path19,
-            constants4.O_WRONLY | constants4.O_SYMLINK,
+            constants5.O_WRONLY | constants5.O_SYMLINK,
             mode,
             function(err, fd) {
               if (err) {
@@ -69472,7 +69472,7 @@ var require_polyfills = __commonJS({
           );
         };
         fs15.lchmodSync = function(path19, mode) {
-          var fd = fs15.openSync(path19, constants4.O_WRONLY | constants4.O_SYMLINK, mode);
+          var fd = fs15.openSync(path19, constants5.O_WRONLY | constants5.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -69492,9 +69492,9 @@ var require_polyfills = __commonJS({
         };
       }
       function patchLutimes(fs15) {
-        if (constants4.hasOwnProperty("O_SYMLINK") && fs15.futimes) {
+        if (constants5.hasOwnProperty("O_SYMLINK") && fs15.futimes) {
           fs15.lutimes = function(path19, at, mt, cb) {
-            fs15.open(path19, constants4.O_SYMLINK, function(er, fd) {
+            fs15.open(path19, constants5.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
@@ -69507,7 +69507,7 @@ var require_polyfills = __commonJS({
             });
           };
           fs15.lutimesSync = function(path19, at, mt) {
-            var fd = fs15.openSync(path19, constants4.O_SYMLINK);
+            var fd = fs15.openSync(path19, constants5.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -88343,14 +88343,14 @@ var require_zip_archive_entry = __commonJS({
     var ArchiveEntry = require_archive_entry();
     var GeneralPurposeBit = require_general_purpose_bit();
     var UnixStat = require_unix_stat();
-    var constants4 = require_constants6();
+    var constants5 = require_constants6();
     var zipUtil = require_util11();
     var ZipArchiveEntry = module2.exports = function(name) {
       if (!(this instanceof ZipArchiveEntry)) {
         return new ZipArchiveEntry(name);
       }
       ArchiveEntry.call(this);
-      this.platform = constants4.PLATFORM_FAT;
+      this.platform = constants5.PLATFORM_FAT;
       this.method = -1;
       this.name = null;
       this.size = 0;
@@ -88358,7 +88358,7 @@ var require_zip_archive_entry = __commonJS({
       this.gpb = new GeneralPurposeBit();
       this.crc = 0;
       this.time = -1;
-      this.minver = constants4.MIN_VERSION_INITIAL;
+      this.minver = constants5.MIN_VERSION_INITIAL;
       this.mode = -1;
       this.extra = null;
       this.exattr = 0;
@@ -88385,7 +88385,7 @@ var require_zip_archive_entry = __commonJS({
       return this.exattr;
     };
     ZipArchiveEntry.prototype.getExtra = function() {
-      return this.extra !== null ? this.extra : constants4.EMPTY;
+      return this.extra !== null ? this.extra : constants5.EMPTY;
     };
     ZipArchiveEntry.prototype.getGeneralPurposeBit = function() {
       return this.gpb;
@@ -88418,7 +88418,7 @@ var require_zip_archive_entry = __commonJS({
       return this.time !== -1 ? this.time : 0;
     };
     ZipArchiveEntry.prototype.getUnixMode = function() {
-      return this.platform !== constants4.PLATFORM_UNIX ? 0 : this.getExternalAttributes() >> constants4.SHORT_SHIFT & constants4.SHORT_MASK;
+      return this.platform !== constants5.PLATFORM_UNIX ? 0 : this.getExternalAttributes() >> constants5.SHORT_SHIFT & constants5.SHORT_MASK;
     };
     ZipArchiveEntry.prototype.getVersionNeededToExtract = function() {
       return this.minver;
@@ -88488,12 +88488,12 @@ var require_zip_archive_entry = __commonJS({
       this.time = zipUtil.dateToDos(time3, forceLocalTime);
     };
     ZipArchiveEntry.prototype.setUnixMode = function(mode) {
-      mode |= this.isDirectory() ? constants4.S_IFDIR : constants4.S_IFREG;
+      mode |= this.isDirectory() ? constants5.S_IFDIR : constants5.S_IFREG;
       var extattr = 0;
-      extattr |= mode << constants4.SHORT_SHIFT | (this.isDirectory() ? constants4.S_DOS_D : constants4.S_DOS_A);
+      extattr |= mode << constants5.SHORT_SHIFT | (this.isDirectory() ? constants5.S_DOS_D : constants5.S_DOS_A);
       this.setExternalAttributes(extattr);
-      this.mode = mode & constants4.MODE_MASK;
-      this.platform = constants4.PLATFORM_UNIX;
+      this.mode = mode & constants5.MODE_MASK;
+      this.platform = constants5.PLATFORM_UNIX;
     };
     ZipArchiveEntry.prototype.setVersionNeededToExtract = function(minver) {
       this.minver = minver;
@@ -88505,7 +88505,7 @@ var require_zip_archive_entry = __commonJS({
       return (this.getUnixMode() & UnixStat.FILE_TYPE_FLAG) === UnixStat.LINK_FLAG;
     };
     ZipArchiveEntry.prototype.isZip64 = function() {
-      return this.csize > constants4.ZIP64_MAGIC || this.size > constants4.ZIP64_MAGIC;
+      return this.csize > constants5.ZIP64_MAGIC || this.size > constants5.ZIP64_MAGIC;
     };
   }
 });
@@ -88822,7 +88822,7 @@ var require_zip_archive_output_stream = __commonJS({
     var ArchiveOutputStream = require_archive_output_stream();
     var ZipArchiveEntry = require_zip_archive_entry();
     var GeneralPurposeBit = require_general_purpose_bit();
-    var constants4 = require_constants6();
+    var constants5 = require_constants6();
     var util4 = require_util12();
     var zipUtil = require_util11();
     var ZipArchiveOutputStream = module2.exports = function(options) {
@@ -88858,21 +88858,21 @@ var require_zip_archive_output_stream = __commonJS({
     };
     ZipArchiveOutputStream.prototype._appendBuffer = function(ae, source, callback) {
       if (source.length === 0) {
-        ae.setMethod(constants4.METHOD_STORED);
+        ae.setMethod(constants5.METHOD_STORED);
       }
       var method = ae.getMethod();
-      if (method === constants4.METHOD_STORED) {
+      if (method === constants5.METHOD_STORED) {
         ae.setSize(source.length);
         ae.setCompressedSize(source.length);
         ae.setCrc(crc32.buf(source) >>> 0);
       }
       this._writeLocalFileHeader(ae);
-      if (method === constants4.METHOD_STORED) {
+      if (method === constants5.METHOD_STORED) {
         this.write(source);
         this._afterAppend(ae);
         callback(null, ae);
         return;
-      } else if (method === constants4.METHOD_DEFLATED) {
+      } else if (method === constants5.METHOD_DEFLATED) {
         this._smartStream(ae, callback).end(source);
         return;
       } else {
@@ -88882,7 +88882,7 @@ var require_zip_archive_output_stream = __commonJS({
     };
     ZipArchiveOutputStream.prototype._appendStream = function(ae, source, callback) {
       ae.getGeneralPurposeBit().useDataDescriptor(true);
-      ae.setVersionNeededToExtract(constants4.MIN_VERSION_DATA_DESCRIPTOR);
+      ae.setVersionNeededToExtract(constants5.MIN_VERSION_DATA_DESCRIPTOR);
       this._writeLocalFileHeader(ae);
       var smart = this._smartStream(ae, callback);
       source.once("error", function(err) {
@@ -88899,7 +88899,7 @@ var require_zip_archive_output_stream = __commonJS({
         o.zlib = {};
       }
       if (typeof o.zlib.level !== "number") {
-        o.zlib.level = constants4.ZLIB_BEST_SPEED;
+        o.zlib.level = constants5.ZLIB_BEST_SPEED;
       }
       o.forceZip64 = !!o.forceZip64;
       o.forceLocalTime = !!o.forceLocalTime;
@@ -88922,11 +88922,11 @@ var require_zip_archive_output_stream = __commonJS({
     };
     ZipArchiveOutputStream.prototype._normalizeEntry = function(ae) {
       if (ae.getMethod() === -1) {
-        ae.setMethod(constants4.METHOD_DEFLATED);
+        ae.setMethod(constants5.METHOD_DEFLATED);
       }
-      if (ae.getMethod() === constants4.METHOD_DEFLATED) {
+      if (ae.getMethod() === constants5.METHOD_DEFLATED) {
         ae.getGeneralPurposeBit().useDataDescriptor(true);
-        ae.setVersionNeededToExtract(constants4.MIN_VERSION_DATA_DESCRIPTOR);
+        ae.setVersionNeededToExtract(constants5.MIN_VERSION_DATA_DESCRIPTOR);
       }
       if (ae.getTime() === -1) {
         ae.setTime(/* @__PURE__ */ new Date(), this._archive.forceLocalTime);
@@ -88938,7 +88938,7 @@ var require_zip_archive_output_stream = __commonJS({
       };
     };
     ZipArchiveOutputStream.prototype._smartStream = function(ae, callback) {
-      var deflate = ae.getMethod() === constants4.METHOD_DEFLATED;
+      var deflate = ae.getMethod() === constants5.METHOD_DEFLATED;
       var process5 = deflate ? new DeflateCRC32Stream(this.options.zlib) : new CRC32Stream();
       var error3 = null;
       function handleStuff() {
@@ -88961,13 +88961,13 @@ var require_zip_archive_output_stream = __commonJS({
       var size = this._archive.centralLength;
       var offset = this._archive.centralOffset;
       if (this.isZip64()) {
-        records = constants4.ZIP64_MAGIC_SHORT;
-        size = constants4.ZIP64_MAGIC;
-        offset = constants4.ZIP64_MAGIC;
+        records = constants5.ZIP64_MAGIC_SHORT;
+        size = constants5.ZIP64_MAGIC;
+        offset = constants5.ZIP64_MAGIC;
       }
-      this.write(zipUtil.getLongBytes(constants4.SIG_EOCD));
-      this.write(constants4.SHORT_ZERO);
-      this.write(constants4.SHORT_ZERO);
+      this.write(zipUtil.getLongBytes(constants5.SIG_EOCD));
+      this.write(constants5.SHORT_ZERO);
+      this.write(constants5.SHORT_ZERO);
       this.write(zipUtil.getShortBytes(records));
       this.write(zipUtil.getShortBytes(records));
       this.write(zipUtil.getLongBytes(size));
@@ -88978,18 +88978,18 @@ var require_zip_archive_output_stream = __commonJS({
       this.write(comment);
     };
     ZipArchiveOutputStream.prototype._writeCentralDirectoryZip64 = function() {
-      this.write(zipUtil.getLongBytes(constants4.SIG_ZIP64_EOCD));
+      this.write(zipUtil.getLongBytes(constants5.SIG_ZIP64_EOCD));
       this.write(zipUtil.getEightBytes(44));
-      this.write(zipUtil.getShortBytes(constants4.MIN_VERSION_ZIP64));
-      this.write(zipUtil.getShortBytes(constants4.MIN_VERSION_ZIP64));
-      this.write(constants4.LONG_ZERO);
-      this.write(constants4.LONG_ZERO);
+      this.write(zipUtil.getShortBytes(constants5.MIN_VERSION_ZIP64));
+      this.write(zipUtil.getShortBytes(constants5.MIN_VERSION_ZIP64));
+      this.write(constants5.LONG_ZERO);
+      this.write(constants5.LONG_ZERO);
       this.write(zipUtil.getEightBytes(this._entries.length));
       this.write(zipUtil.getEightBytes(this._entries.length));
       this.write(zipUtil.getEightBytes(this._archive.centralLength));
       this.write(zipUtil.getEightBytes(this._archive.centralOffset));
-      this.write(zipUtil.getLongBytes(constants4.SIG_ZIP64_EOCD_LOC));
-      this.write(constants4.LONG_ZERO);
+      this.write(zipUtil.getLongBytes(constants5.SIG_ZIP64_EOCD_LOC));
+      this.write(constants5.LONG_ZERO);
       this.write(zipUtil.getEightBytes(this._archive.centralOffset + this._archive.centralLength));
       this.write(zipUtil.getLongBytes(1));
     };
@@ -88999,13 +88999,13 @@ var require_zip_archive_output_stream = __commonJS({
       var fileOffset = ae._offsets.file;
       var size = ae.getSize();
       var compressedSize = ae.getCompressedSize();
-      if (ae.isZip64() || fileOffset > constants4.ZIP64_MAGIC) {
-        size = constants4.ZIP64_MAGIC;
-        compressedSize = constants4.ZIP64_MAGIC;
-        fileOffset = constants4.ZIP64_MAGIC;
-        ae.setVersionNeededToExtract(constants4.MIN_VERSION_ZIP64);
+      if (ae.isZip64() || fileOffset > constants5.ZIP64_MAGIC) {
+        size = constants5.ZIP64_MAGIC;
+        compressedSize = constants5.ZIP64_MAGIC;
+        fileOffset = constants5.ZIP64_MAGIC;
+        ae.setVersionNeededToExtract(constants5.MIN_VERSION_ZIP64);
         var extraBuf = Buffer.concat([
-          zipUtil.getShortBytes(constants4.ZIP64_EXTRA_ID),
+          zipUtil.getShortBytes(constants5.ZIP64_EXTRA_ID),
           zipUtil.getShortBytes(24),
           zipUtil.getEightBytes(ae.getSize()),
           zipUtil.getEightBytes(ae.getCompressedSize()),
@@ -89013,8 +89013,8 @@ var require_zip_archive_output_stream = __commonJS({
         ], 28);
         ae.setExtra(extraBuf);
       }
-      this.write(zipUtil.getLongBytes(constants4.SIG_CFH));
-      this.write(zipUtil.getShortBytes(ae.getPlatform() << 8 | constants4.VERSION_MADEBY));
+      this.write(zipUtil.getLongBytes(constants5.SIG_CFH));
+      this.write(zipUtil.getShortBytes(ae.getPlatform() << 8 | constants5.VERSION_MADEBY));
       this.write(zipUtil.getShortBytes(ae.getVersionNeededToExtract()));
       this.write(gpb.encode());
       this.write(zipUtil.getShortBytes(method));
@@ -89032,7 +89032,7 @@ var require_zip_archive_output_stream = __commonJS({
       this.write(zipUtil.getShortBytes(name.length));
       this.write(zipUtil.getShortBytes(extra.length));
       this.write(zipUtil.getShortBytes(comment.length));
-      this.write(constants4.SHORT_ZERO);
+      this.write(constants5.SHORT_ZERO);
       this.write(zipUtil.getShortBytes(ae.getInternalAttributes()));
       this.write(zipUtil.getLongBytes(ae.getExternalAttributes()));
       this.write(zipUtil.getLongBytes(fileOffset));
@@ -89041,7 +89041,7 @@ var require_zip_archive_output_stream = __commonJS({
       this.write(comment);
     };
     ZipArchiveOutputStream.prototype._writeDataDescriptor = function(ae) {
-      this.write(zipUtil.getLongBytes(constants4.SIG_DD));
+      this.write(zipUtil.getLongBytes(constants5.SIG_DD));
       this.write(zipUtil.getLongBytes(ae.getCrc()));
       if (ae.isZip64()) {
         this.write(zipUtil.getEightBytes(ae.getCompressedSize()));
@@ -89058,22 +89058,22 @@ var require_zip_archive_output_stream = __commonJS({
       var extra = ae.getLocalFileDataExtra();
       if (ae.isZip64()) {
         gpb.useDataDescriptor(true);
-        ae.setVersionNeededToExtract(constants4.MIN_VERSION_ZIP64);
+        ae.setVersionNeededToExtract(constants5.MIN_VERSION_ZIP64);
       }
       if (gpb.usesUTF8ForNames()) {
         name = Buffer.from(name);
       }
       ae._offsets.file = this.offset;
-      this.write(zipUtil.getLongBytes(constants4.SIG_LFH));
+      this.write(zipUtil.getLongBytes(constants5.SIG_LFH));
       this.write(zipUtil.getShortBytes(ae.getVersionNeededToExtract()));
       this.write(gpb.encode());
       this.write(zipUtil.getShortBytes(method));
       this.write(zipUtil.getLongBytes(ae.getTimeDos()));
       ae._offsets.data = this.offset;
       if (gpb.usesDataDescriptor()) {
-        this.write(constants4.LONG_ZERO);
-        this.write(constants4.LONG_ZERO);
-        this.write(constants4.LONG_ZERO);
+        this.write(constants5.LONG_ZERO);
+        this.write(constants5.LONG_ZERO);
+        this.write(constants5.LONG_ZERO);
       } else {
         this.write(zipUtil.getLongBytes(ae.getCrc()));
         this.write(zipUtil.getLongBytes(ae.getCompressedSize()));
@@ -89089,7 +89089,7 @@ var require_zip_archive_output_stream = __commonJS({
       return this._archive.comment !== null ? this._archive.comment : "";
     };
     ZipArchiveOutputStream.prototype.isZip64 = function() {
-      return this._archive.forceZip64 || this._entries.length > constants4.ZIP64_MAGIC_SHORT || this._archive.centralLength > constants4.ZIP64_MAGIC || this._archive.centralOffset > constants4.ZIP64_MAGIC;
+      return this._archive.forceZip64 || this._entries.length > constants5.ZIP64_MAGIC_SHORT || this._archive.centralLength > constants5.ZIP64_MAGIC || this._archive.centralOffset > constants5.ZIP64_MAGIC;
     };
     ZipArchiveOutputStream.prototype.setComment = function(comment) {
       this._archive.comment = comment;
@@ -91419,7 +91419,7 @@ var require_extract = __commonJS({
 // node_modules/tar-stream/constants.js
 var require_constants7 = __commonJS({
   "node_modules/tar-stream/constants.js"(exports2, module2) {
-    var constants4 = {
+    var constants5 = {
       // just for envs without fs
       S_IFMT: 61440,
       S_IFDIR: 16384,
@@ -91429,9 +91429,9 @@ var require_constants7 = __commonJS({
       S_IFLNK: 40960
     };
     try {
-      module2.exports = require("fs").constants || constants4;
+      module2.exports = require("fs").constants || constants5;
     } catch {
-      module2.exports = constants4;
+      module2.exports = constants5;
     }
   }
 });
@@ -91441,7 +91441,7 @@ var require_pack = __commonJS({
   "node_modules/tar-stream/pack.js"(exports2, module2) {
     var { Readable: Readable8, Writable, getStreamError } = require_streamx();
     var b4a = require_b4a();
-    var constants4 = require_constants7();
+    var constants5 = require_constants7();
     var headers = require_headers2();
     var DMODE = 493;
     var FMODE = 420;
@@ -91644,16 +91644,16 @@ var require_pack = __commonJS({
       return new Pack(opts);
     };
     function modeToType(mode) {
-      switch (mode & constants4.S_IFMT) {
-        case constants4.S_IFBLK:
+      switch (mode & constants5.S_IFMT) {
+        case constants5.S_IFBLK:
           return "block-device";
-        case constants4.S_IFCHR:
+        case constants5.S_IFCHR:
           return "character-device";
-        case constants4.S_IFDIR:
+        case constants5.S_IFDIR:
           return "directory";
-        case constants4.S_IFIFO:
+        case constants5.S_IFIFO:
           return "fifo";
-        case constants4.S_IFLNK:
+        case constants5.S_IFLNK:
           return "symlink";
       }
       return "file";
@@ -108328,11 +108328,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         if (!names[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants4);
+          this.rhs = optimizeExpr(this.rhs, names, constants5);
         return this;
       }
       get names() {
@@ -108349,10 +108349,10 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants4);
+        this.rhs = optimizeExpr(this.rhs, names, constants5);
         return this;
       }
       get names() {
@@ -108413,8 +108413,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants4) {
-        this.code = optimizeExpr(this.code, names, constants4);
+      optimizeNames(names, constants5) {
+        this.code = optimizeExpr(this.code, names, constants5);
         return this;
       }
       get names() {
@@ -108443,12 +108443,12 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         const { nodes } = this;
         let i = nodes.length;
         while (i--) {
           const n = nodes[i];
-          if (n.optimizeNames(names, constants4))
+          if (n.optimizeNames(names, constants5))
             continue;
           subtractNames(names, n.names);
           nodes.splice(i, 1);
@@ -108501,12 +108501,12 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         var _a2;
-        this.else = (_a2 = this.else) === null || _a2 === void 0 ? void 0 : _a2.optimizeNames(names, constants4);
-        if (!(super.optimizeNames(names, constants4) || this.else))
+        this.else = (_a2 = this.else) === null || _a2 === void 0 ? void 0 : _a2.optimizeNames(names, constants5);
+        if (!(super.optimizeNames(names, constants5) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants4);
+        this.condition = optimizeExpr(this.condition, names, constants5);
         return this;
       }
       get names() {
@@ -108529,10 +108529,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants4) {
-        if (!super.optimizeNames(names, constants4))
+      optimizeNames(names, constants5) {
+        if (!super.optimizeNames(names, constants5))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants4);
+        this.iteration = optimizeExpr(this.iteration, names, constants5);
         return this;
       }
       get names() {
@@ -108568,10 +108568,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants4) {
-        if (!super.optimizeNames(names, constants4))
+      optimizeNames(names, constants5) {
+        if (!super.optimizeNames(names, constants5))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants4);
+        this.iterable = optimizeExpr(this.iterable, names, constants5);
         return this;
       }
       get names() {
@@ -108613,11 +108613,11 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         var _a2, _b;
-        super.optimizeNames(names, constants4);
-        (_a2 = this.catch) === null || _a2 === void 0 ? void 0 : _a2.optimizeNames(names, constants4);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants4);
+        super.optimizeNames(names, constants5);
+        (_a2 = this.catch) === null || _a2 === void 0 ? void 0 : _a2.optimizeNames(names, constants5);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants5);
         return this;
       }
       get names() {
@@ -108918,7 +108918,7 @@ var require_codegen = __commonJS({
     function addExprNames(names, from) {
       return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
     }
-    function optimizeExpr(expr, names, constants4) {
+    function optimizeExpr(expr, names, constants5) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -108933,14 +108933,14 @@ var require_codegen = __commonJS({
         return items;
       }, []));
       function replaceName(n) {
-        const c = constants4[n.str];
+        const c = constants5[n.str];
         if (c === void 0 || names[n.str] !== 1)
           return n;
         delete names[n.str];
         return c;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants4[c.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants5[c.str] !== void 0);
       }
     }
     function subtractNames(names, from) {
@@ -215787,6 +215787,64 @@ function deterministicIdempotencyKey(purpose, parts) {
   )}`;
 }
 
+// src/review-orchestration/infrastructure/ocr-review-failure-diagnostic.ts
+var import_node_os3 = require("node:os");
+var GATEWAY_CODES = [
+  "authorization_denied",
+  "close_pending",
+  "context_tools_unavailable",
+  "envelope_not_normalized",
+  "gateway_unavailable",
+  "invalid_request",
+  "lane_saturated",
+  "model_dispatch_claim_required",
+  "model_dispatch_headers_invalid",
+  "model_dispatch_readback_required",
+  "model_dispatch_reservation_required",
+  "model_dispatch_unavailable",
+  "pending",
+  "preparation_denied",
+  "relay_saturated",
+  "relay_unknown",
+  "request_reviewer_mismatch",
+  "reviewer_selector_invalid",
+  "transport",
+  "codex_subscription_authentication_failed"
+];
+var GATE_REASONS = [
+  "not_dispatched",
+  "gateway_effect_unknown",
+  "replay_fenced"
+];
+var EFFECTS = [
+  "none",
+  "not_dispatched",
+  "effect_unknown",
+  "dispatched"
+];
+function ocrReviewFailureDiagnostic(error3, process5, gateway) {
+  const gate = error3 instanceof Error ? GATE_REASONS.find(
+    (reason) => error3.message === `review_action_v2_ocr_${reason}`
+  ) : void 0;
+  return {
+    reason: error3 instanceof OcrReviewAcceptanceError ? error3.code : gate ?? "invocation_failed",
+    ...process5 ? {
+      process: {
+        closed: process5.closed,
+        exitCode: Number.isInteger(process5.exitCode) && process5.exitCode >= 0 && process5.exitCode <= 255 ? process5.exitCode : null,
+        signal: process5.signal !== null && Object.hasOwn(import_node_os3.constants.signals, process5.signal) ? process5.signal : null,
+        spawnError: process5.spawnError !== void 0
+      }
+    } : {},
+    ...gateway ? {
+      gateway: {
+        code: GATEWAY_CODES.find((code) => code === gateway.code) ?? "unrecognized",
+        effect: EFFECTS.find((effect) => effect === gateway.effect) ?? "unrecognized"
+      }
+    } : {}
+  };
+}
+
 // src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts
 var import_crypto36 = require("crypto");
 var import_child_process10 = require("child_process");
@@ -216324,8 +216382,25 @@ var OcrReviewInvocationAdapter = class {
     }
     assertOcrInvocationLive(input);
     const run2 = this.gate(async () => {
-      this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-      return await this.runInvocation(input, assignment);
+      let processResult2;
+      try {
+        this.assertDispatchPermitted(assignment.workSlot.workSlotId);
+        return await this.runInvocation(input, assignment, (result2) => {
+          processResult2 = result2;
+        });
+      } catch (error3) {
+        try {
+          this.options.failureDiagnostic?.(
+            ocrReviewFailureDiagnostic(
+              error3,
+              processResult2,
+              this.options.bridge.diagnosticFailureFact?.() ?? this.options.bridge.effectFacts?.()
+            )
+          );
+        } catch {
+        }
+        throw error3;
+      }
     });
     return await run2;
   }
@@ -216356,7 +216431,7 @@ var OcrReviewInvocationAdapter = class {
     this.inFlight = next.catch(() => void 0);
     return next;
   }
-  async runInvocation(input, assignment) {
+  async runInvocation(input, assignment, observeProcess) {
     assertOcrInvocationLive(input);
     const outputPath = path16.join(this.options.run.runDirectory, "result.json");
     const argv = buildOcrReviewArgv({
@@ -216389,6 +216464,7 @@ var OcrReviewInvocationAdapter = class {
         cwd: this.options.run.runDirectory,
         signal: input.signal
       });
+      observeProcess(processResult2);
       requestsAfter = this.options.bridge.requestCount();
     } finally {
       const receipt = this.options.contextTools?.receipt();
@@ -222449,6 +222525,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               actualModel: () => modelTransport.actualModel(),
               requestCount: () => modelTransport.requestCount?.(),
               effectFacts: input2.ocr.effectFacts,
+              diagnosticFailureFact: () => modelTransport.failureFact(),
               releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true,
               reopenConsumer: () => modelTransport.reopenConsumer?.() === true
             };
@@ -222468,6 +222545,8 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 ...contextTools ? {
                   contextTools,
                   contextToolsReceipt: (receipt) => logger7.info("Managed OCR context tools", {
+                    reviewerId: reviewer?.reviewerId,
+                    profileRef: approvedOcrAgent2.profileRef,
                     planDigest: receipt.planDigest,
                     schemaDigest: receipt.schemaDigest,
                     selectedTools: receipt.availableTools,
@@ -222499,7 +222578,16 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 checkoutRoot: path18.resolve(input2.workspacePath),
                 processRunner: runOcrReviewProcess,
                 previewRunner: runOcrReviewProcess,
-                acceptanceDiagnostic: (diagnostic) => logger7.info("Managed OCR acceptance", diagnostic)
+                acceptanceDiagnostic: (diagnostic) => logger7.info("Managed OCR acceptance", {
+                  reviewerId: reviewer?.reviewerId,
+                  profileRef: approvedOcrAgent2.profileRef,
+                  ...diagnostic
+                }),
+                failureDiagnostic: (diagnostic) => logger7.warn("Managed OCR failure", {
+                  reviewerId: reviewer?.reviewerId,
+                  profileRef: approvedOcrAgent2.profileRef,
+                  ...diagnostic
+                })
               }
             );
             if (prDescription2 && !planned2.plan.assignments.some(

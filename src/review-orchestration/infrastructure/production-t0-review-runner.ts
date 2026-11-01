@@ -1108,6 +1108,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               actualModel: () => modelTransport.actualModel(),
               requestCount: () => modelTransport.requestCount?.(),
               effectFacts: input.ocr.effectFacts,
+              diagnosticFailureFact: () => modelTransport.failureFact(),
               releaseRetrySafeFailure: () =>
                 modelTransport.releaseRetrySafeFailure?.() === true,
               reopenConsumer: () => modelTransport.reopenConsumer?.() === true,
@@ -1133,6 +1134,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                         receipt: import('../../context-tools/broker').ContextToolsReceipt
                       ) =>
                         logger.info('Managed OCR context tools', {
+                          reviewerId: reviewer?.reviewerId,
+                          profileRef: approvedOcrAgent.profileRef,
                           planDigest: receipt.planDigest,
                           schemaDigest: receipt.schemaDigest,
                           selectedTools: receipt.availableTools,
@@ -1177,7 +1180,17 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 processRunner: runOcrReviewProcess,
                 previewRunner: runOcrReviewProcess,
                 acceptanceDiagnostic: (diagnostic) =>
-                  logger.info('Managed OCR acceptance', diagnostic),
+                  logger.info('Managed OCR acceptance', {
+                    reviewerId: reviewer?.reviewerId,
+                    profileRef: approvedOcrAgent.profileRef,
+                    ...diagnostic,
+                  }),
+                failureDiagnostic: (diagnostic) =>
+                  logger.warn('Managed OCR failure', {
+                    reviewerId: reviewer?.reviewerId,
+                    profileRef: approvedOcrAgent.profileRef,
+                    ...diagnostic,
+                  }),
               }
             );
             if (

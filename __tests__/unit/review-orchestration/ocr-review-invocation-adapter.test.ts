@@ -1,3 +1,4 @@
+import type { OcrReviewFailureDiagnostic } from '../../../src/review-orchestration/infrastructure/ocr-review-failure-diagnostic';
 import { restoredLifecycleInvocations } from '../../../src/review-orchestration/infrastructure/restored-lifecycle-invocations';
 import { canonicalJson } from '../../../src/context-gateway/context-gateway-contract';
 import {
@@ -400,6 +401,9 @@ describe('OcrReviewInvocationAdapter', () => {
     readonly acceptanceDiagnostic?: (
       diagnostic: OcrReviewAcceptanceDiagnostic
     ) => void;
+    readonly failureDiagnostic?: (
+      diagnostic: OcrReviewFailureDiagnostic
+    ) => void;
     readonly planInputOverrides?: Record<string, unknown>;
     /** Adds a second, distinct FindingDiscovery slot to the same adapter. */
     readonly secondSlotPlanInputOverrides?: Record<string, unknown>;
@@ -451,6 +455,7 @@ describe('OcrReviewInvocationAdapter', () => {
       processRunner: options.processRunner,
       previewRunner: options.previewRunner,
       acceptanceDiagnostic: options.acceptanceDiagnostic,
+      failureDiagnostic: options.failureDiagnostic,
       freshReviewSkillsSupply: options.freshReviewSkillsSupply,
     });
     return {
@@ -1174,6 +1179,88 @@ describe('OcrReviewInvocationAdapter', () => {
       /review_action_v2_ocr_process_failed/u
     );
     expect(processRunner.calls).toHaveLength(1);
+  });
+
+  it('reports failed process and closed Gateway facts without native or provider text; diagnostic failure preserves the fence', async () => {
+    const secret = 'PRIVATE_NATIVE_BODY_TOKEN_AND_PROMPT';
+    const seen: OcrReviewFailureDiagnostic[] = [];
+    const { bridge, requests } = bridgeFixture({
+      effectFacts: () => ({ effect: 'effect_unknown' }),
+      diagnosticFailureFact: () => ({
+        effect: 'effect_unknown',
+        code: 'reviewer_selector_invalid',
+      }),
+    });
+    // No earlier effect: dispatch is permitted; the process then observes a denial.
+    let failed = false;
+    const runner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge: {
+        ...bridge,
+        effectFacts: () => (failed ? bridge.effectFacts?.() : undefined),
+      },
+      processRunner: async (input) => {
+        const result = await runner.runner(input);
+        requests.count++;
+        failed = true;
+        return {
+          ...result,
+          exitCode: 3,
+          stderrTail: secret,
+          stdoutTail: secret,
+        };
+      },
+      previewRunner: previewRunner().runner,
+      failureDiagnostic: (diagnostic) => {
+        seen.push(diagnostic);
+        throw new Error(secret);
+      },
+    });
+    const first = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.execute(executionInput(first))).rejects.toThrow(
+      /review_action_v2_ocr_gateway_effect_unknown/u
+    );
+    expect(seen[0]).toEqual({
+      reason: 'gateway_effect_unknown',
+      process: { closed: true, exitCode: 3, signal: null, spawnError: false },
+      gateway: { code: 'reviewer_selector_invalid', effect: 'effect_unknown' },
+    });
+    const second = await adapter.prepare({ workSlot, attemptOrdinal: 2 });
+    await expect(adapter.execute(executionInput(second))).rejects.toThrow(
+      /review_action_v2_ocr_gateway_effect_unknown/u
+    );
+    expect(seen[1]).toEqual({
+      reason: 'gateway_effect_unknown',
+      gateway: { code: 'reviewer_selector_invalid', effect: 'effect_unknown' },
+    });
+    expect(runner.calls).toHaveLength(1);
+    expect(JSON.stringify(seen)).not.toContain(secret);
+  });
+
+  it('preserves the finite acceptance rejection reason and exit code', async () => {
+    const seen: OcrReviewFailureDiagnostic[] = [];
+    const { bridge } = bridgeFixture();
+    const runner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: async (input) => ({
+        ...(await runner.runner(input)),
+        exitCode: 7,
+      }),
+      previewRunner: previewRunner().runner,
+      failureDiagnostic: (diagnostic) => seen.push(diagnostic),
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.execute(executionInput(prepared))).rejects.toThrow(
+      /review_action_v2_ocr_process_failed/u
+    );
+    expect(seen).toEqual([
+      {
+        reason: 'process_failed',
+        process: { closed: true, exitCode: 7, signal: null, spawnError: false },
+        gateway: { code: 'unrecognized', effect: 'none' },
+      },
+    ]);
   });
 
   it('reports a proven not_dispatched effect as retry-safe, not gateway_effect_unknown', async () => {

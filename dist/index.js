@@ -409,11 +409,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         if (!names[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants4);
+          this.rhs = optimizeExpr(this.rhs, names, constants5);
         return this;
       }
       get names() {
@@ -430,10 +430,10 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants4);
+        this.rhs = optimizeExpr(this.rhs, names, constants5);
         return this;
       }
       get names() {
@@ -494,8 +494,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants4) {
-        this.code = optimizeExpr(this.code, names, constants4);
+      optimizeNames(names, constants5) {
+        this.code = optimizeExpr(this.code, names, constants5);
         return this;
       }
       get names() {
@@ -524,12 +524,12 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         const { nodes } = this;
         let i2 = nodes.length;
         while (i2--) {
           const n2 = nodes[i2];
-          if (n2.optimizeNames(names, constants4))
+          if (n2.optimizeNames(names, constants5))
             continue;
           subtractNames(names, n2.names);
           nodes.splice(i2, 1);
@@ -582,12 +582,12 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         var _a3;
-        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants4);
-        if (!(super.optimizeNames(names, constants4) || this.else))
+        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants5);
+        if (!(super.optimizeNames(names, constants5) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants4);
+        this.condition = optimizeExpr(this.condition, names, constants5);
         return this;
       }
       get names() {
@@ -610,10 +610,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants4) {
-        if (!super.optimizeNames(names, constants4))
+      optimizeNames(names, constants5) {
+        if (!super.optimizeNames(names, constants5))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants4);
+        this.iteration = optimizeExpr(this.iteration, names, constants5);
         return this;
       }
       get names() {
@@ -649,10 +649,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants4) {
-        if (!super.optimizeNames(names, constants4))
+      optimizeNames(names, constants5) {
+        if (!super.optimizeNames(names, constants5))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants4);
+        this.iterable = optimizeExpr(this.iterable, names, constants5);
         return this;
       }
       get names() {
@@ -694,11 +694,11 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         var _a3, _b;
-        super.optimizeNames(names, constants4);
-        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants4);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants4);
+        super.optimizeNames(names, constants5);
+        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants5);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants5);
         return this;
       }
       get names() {
@@ -999,7 +999,7 @@ var require_codegen = __commonJS({
     function addExprNames(names, from) {
       return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
     }
-    function optimizeExpr(expr, names, constants4) {
+    function optimizeExpr(expr, names, constants5) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -1014,14 +1014,14 @@ var require_codegen = __commonJS({
         return items;
       }, []));
       function replaceName(n2) {
-        const c2 = constants4[n2.str];
+        const c2 = constants5[n2.str];
         if (c2 === void 0 || names[n2.str] !== 1)
           return n2;
         delete names[n2.str];
         return c2;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c2) => c2 instanceof code_1.Name && names[c2.str] === 1 && constants4[c2.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c2) => c2 instanceof code_1.Name && names[c2.str] === 1 && constants5[c2.str] !== void 0);
       }
     }
     function subtractNames(names, from) {
@@ -17580,7 +17580,7 @@ var require_client_h1 = __commonJS({
       kResume,
       kHTTPContext
     } = require_symbols();
-    var constants4 = require_constants2();
+    var constants5 = require_constants2();
     var EMPTY_BUF = Buffer.alloc(0);
     var FastBuffer = Buffer[Symbol.species];
     var addListener = util4.addListener;
@@ -17655,7 +17655,7 @@ var require_client_h1 = __commonJS({
       constructor(client2, socket, { exports: exports3 }) {
         assert2(Number.isFinite(client2[kMaxHeadersSize]) && client2[kMaxHeadersSize] > 0);
         this.llhttp = exports3;
-        this.ptr = this.llhttp.llhttp_alloc(constants4.TYPE.RESPONSE);
+        this.ptr = this.llhttp.llhttp_alloc(constants5.TYPE.RESPONSE);
         this.client = client2;
         this.socket = socket;
         this.timeout = null;
@@ -17750,11 +17750,11 @@ var require_client_h1 = __commonJS({
             currentBufferRef = null;
           }
           const offset = llhttp.llhttp_get_error_pos(this.ptr) - currentBufferPtr;
-          if (ret !== constants4.ERROR.OK) {
+          if (ret !== constants5.ERROR.OK) {
             const body2 = data.subarray(offset);
-            if (ret === constants4.ERROR.PAUSED_UPGRADE) {
+            if (ret === constants5.ERROR.PAUSED_UPGRADE) {
               this.onUpgrade(body2);
-            } else if (ret === constants4.ERROR.PAUSED) {
+            } else if (ret === constants5.ERROR.PAUSED) {
               this.paused = true;
               socket.unshift(body2);
             } else {
@@ -17777,10 +17777,10 @@ var require_client_h1 = __commonJS({
         } finally {
           currentParser = null;
         }
-        if (ret === constants4.ERROR.OK) {
+        if (ret === constants5.ERROR.OK) {
           return null;
         }
-        if (ret === constants4.ERROR.PAUSED || ret === constants4.ERROR.PAUSED_UPGRADE) {
+        if (ret === constants5.ERROR.PAUSED || ret === constants5.ERROR.PAUSED_UPGRADE) {
           this.paused = true;
           return null;
         }
@@ -17797,7 +17797,7 @@ var require_client_h1 = __commonJS({
           const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0);
           message = "Response does not match the HTTP/1.1 protocol (" + Buffer.from(llhttp.memory.buffer, ptr, len).toString() + ")";
         }
-        return new HTTPParserError(message, constants4.ERROR[ret], data);
+        return new HTTPParserError(message, constants5.ERROR[ret], data);
       }
       destroy() {
         assert2(this.ptr != null);
@@ -17977,7 +17977,7 @@ var require_client_h1 = __commonJS({
           socket[kBlocking] = false;
           client2[kResume]();
         }
-        return pause ? constants4.ERROR.PAUSED : 0;
+        return pause ? constants5.ERROR.PAUSED : 0;
       }
       onBody(buf) {
         const { client: client2, socket, statusCode, maxResponseSize } = this;
@@ -17999,7 +17999,7 @@ var require_client_h1 = __commonJS({
         }
         this.bytesRead += buf.length;
         if (request3.onData(buf) === false) {
-          return constants4.ERROR.PAUSED;
+          return constants5.ERROR.PAUSED;
         }
       }
       onMessageComplete() {
@@ -18035,13 +18035,13 @@ var require_client_h1 = __commonJS({
         if (socket[kWriting]) {
           assert2(client2[kRunning] === 0);
           util4.destroy(socket, new InformationalError("reset"));
-          return constants4.ERROR.PAUSED;
+          return constants5.ERROR.PAUSED;
         } else if (!shouldKeepAlive) {
           util4.destroy(socket, new InformationalError("reset"));
-          return constants4.ERROR.PAUSED;
+          return constants5.ERROR.PAUSED;
         } else if (socket[kReset] && client2[kRunning] === 0) {
           util4.destroy(socket, new InformationalError("reset"));
-          return constants4.ERROR.PAUSED;
+          return constants5.ERROR.PAUSED;
         } else if (client2[kPipelining] == null || client2[kPipelining] === 1) {
           setImmediate(() => client2[kResume]());
         } else {
@@ -80963,7 +80963,7 @@ var require_async = __commonJS({
 // node_modules/graceful-fs/polyfills.js
 var require_polyfills = __commonJS({
   "node_modules/graceful-fs/polyfills.js"(exports2, module2) {
-    var constants4 = require("constants");
+    var constants5 = require("constants");
     var origCwd = process.cwd;
     var cwd = null;
     var platform2 = process.env.GRACEFUL_FS_PLATFORM || process.platform;
@@ -80987,7 +80987,7 @@ var require_polyfills = __commonJS({
     var chdir;
     module2.exports = patch;
     function patch(fs37) {
-      if (constants4.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
+      if (constants5.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
         patchLchmod(fs37);
       }
       if (!fs37.lutimes) {
@@ -81089,7 +81089,7 @@ var require_polyfills = __commonJS({
         fs38.lchmod = function(path40, mode, callback) {
           fs38.open(
             path40,
-            constants4.O_WRONLY | constants4.O_SYMLINK,
+            constants5.O_WRONLY | constants5.O_SYMLINK,
             mode,
             function(err, fd) {
               if (err) {
@@ -81105,7 +81105,7 @@ var require_polyfills = __commonJS({
           );
         };
         fs38.lchmodSync = function(path40, mode) {
-          var fd = fs38.openSync(path40, constants4.O_WRONLY | constants4.O_SYMLINK, mode);
+          var fd = fs38.openSync(path40, constants5.O_WRONLY | constants5.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -81125,9 +81125,9 @@ var require_polyfills = __commonJS({
         };
       }
       function patchLutimes(fs38) {
-        if (constants4.hasOwnProperty("O_SYMLINK") && fs38.futimes) {
+        if (constants5.hasOwnProperty("O_SYMLINK") && fs38.futimes) {
           fs38.lutimes = function(path40, at2, mt2, cb) {
-            fs38.open(path40, constants4.O_SYMLINK, function(er2, fd) {
+            fs38.open(path40, constants5.O_SYMLINK, function(er2, fd) {
               if (er2) {
                 if (cb) cb(er2);
                 return;
@@ -81140,7 +81140,7 @@ var require_polyfills = __commonJS({
             });
           };
           fs38.lutimesSync = function(path40, at2, mt2) {
-            var fd = fs38.openSync(path40, constants4.O_SYMLINK);
+            var fd = fs38.openSync(path40, constants5.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -99976,14 +99976,14 @@ var require_zip_archive_entry = __commonJS({
     var ArchiveEntry = require_archive_entry();
     var GeneralPurposeBit = require_general_purpose_bit();
     var UnixStat = require_unix_stat();
-    var constants4 = require_constants6();
+    var constants5 = require_constants6();
     var zipUtil = require_util12();
     var ZipArchiveEntry = module2.exports = function(name) {
       if (!(this instanceof ZipArchiveEntry)) {
         return new ZipArchiveEntry(name);
       }
       ArchiveEntry.call(this);
-      this.platform = constants4.PLATFORM_FAT;
+      this.platform = constants5.PLATFORM_FAT;
       this.method = -1;
       this.name = null;
       this.size = 0;
@@ -99991,7 +99991,7 @@ var require_zip_archive_entry = __commonJS({
       this.gpb = new GeneralPurposeBit();
       this.crc = 0;
       this.time = -1;
-      this.minver = constants4.MIN_VERSION_INITIAL;
+      this.minver = constants5.MIN_VERSION_INITIAL;
       this.mode = -1;
       this.extra = null;
       this.exattr = 0;
@@ -100018,7 +100018,7 @@ var require_zip_archive_entry = __commonJS({
       return this.exattr;
     };
     ZipArchiveEntry.prototype.getExtra = function() {
-      return this.extra !== null ? this.extra : constants4.EMPTY;
+      return this.extra !== null ? this.extra : constants5.EMPTY;
     };
     ZipArchiveEntry.prototype.getGeneralPurposeBit = function() {
       return this.gpb;
@@ -100051,7 +100051,7 @@ var require_zip_archive_entry = __commonJS({
       return this.time !== -1 ? this.time : 0;
     };
     ZipArchiveEntry.prototype.getUnixMode = function() {
-      return this.platform !== constants4.PLATFORM_UNIX ? 0 : this.getExternalAttributes() >> constants4.SHORT_SHIFT & constants4.SHORT_MASK;
+      return this.platform !== constants5.PLATFORM_UNIX ? 0 : this.getExternalAttributes() >> constants5.SHORT_SHIFT & constants5.SHORT_MASK;
     };
     ZipArchiveEntry.prototype.getVersionNeededToExtract = function() {
       return this.minver;
@@ -100121,12 +100121,12 @@ var require_zip_archive_entry = __commonJS({
       this.time = zipUtil.dateToDos(time3, forceLocalTime);
     };
     ZipArchiveEntry.prototype.setUnixMode = function(mode) {
-      mode |= this.isDirectory() ? constants4.S_IFDIR : constants4.S_IFREG;
+      mode |= this.isDirectory() ? constants5.S_IFDIR : constants5.S_IFREG;
       var extattr = 0;
-      extattr |= mode << constants4.SHORT_SHIFT | (this.isDirectory() ? constants4.S_DOS_D : constants4.S_DOS_A);
+      extattr |= mode << constants5.SHORT_SHIFT | (this.isDirectory() ? constants5.S_DOS_D : constants5.S_DOS_A);
       this.setExternalAttributes(extattr);
-      this.mode = mode & constants4.MODE_MASK;
-      this.platform = constants4.PLATFORM_UNIX;
+      this.mode = mode & constants5.MODE_MASK;
+      this.platform = constants5.PLATFORM_UNIX;
     };
     ZipArchiveEntry.prototype.setVersionNeededToExtract = function(minver) {
       this.minver = minver;
@@ -100138,7 +100138,7 @@ var require_zip_archive_entry = __commonJS({
       return (this.getUnixMode() & UnixStat.FILE_TYPE_FLAG) === UnixStat.LINK_FLAG;
     };
     ZipArchiveEntry.prototype.isZip64 = function() {
-      return this.csize > constants4.ZIP64_MAGIC || this.size > constants4.ZIP64_MAGIC;
+      return this.csize > constants5.ZIP64_MAGIC || this.size > constants5.ZIP64_MAGIC;
     };
   }
 });
@@ -100455,7 +100455,7 @@ var require_zip_archive_output_stream = __commonJS({
     var ArchiveOutputStream = require_archive_output_stream();
     var ZipArchiveEntry = require_zip_archive_entry();
     var GeneralPurposeBit = require_general_purpose_bit();
-    var constants4 = require_constants6();
+    var constants5 = require_constants6();
     var util4 = require_util13();
     var zipUtil = require_util12();
     var ZipArchiveOutputStream = module2.exports = function(options) {
@@ -100491,21 +100491,21 @@ var require_zip_archive_output_stream = __commonJS({
     };
     ZipArchiveOutputStream.prototype._appendBuffer = function(ae2, source, callback) {
       if (source.length === 0) {
-        ae2.setMethod(constants4.METHOD_STORED);
+        ae2.setMethod(constants5.METHOD_STORED);
       }
       var method = ae2.getMethod();
-      if (method === constants4.METHOD_STORED) {
+      if (method === constants5.METHOD_STORED) {
         ae2.setSize(source.length);
         ae2.setCompressedSize(source.length);
         ae2.setCrc(crc32.buf(source) >>> 0);
       }
       this._writeLocalFileHeader(ae2);
-      if (method === constants4.METHOD_STORED) {
+      if (method === constants5.METHOD_STORED) {
         this.write(source);
         this._afterAppend(ae2);
         callback(null, ae2);
         return;
-      } else if (method === constants4.METHOD_DEFLATED) {
+      } else if (method === constants5.METHOD_DEFLATED) {
         this._smartStream(ae2, callback).end(source);
         return;
       } else {
@@ -100515,7 +100515,7 @@ var require_zip_archive_output_stream = __commonJS({
     };
     ZipArchiveOutputStream.prototype._appendStream = function(ae2, source, callback) {
       ae2.getGeneralPurposeBit().useDataDescriptor(true);
-      ae2.setVersionNeededToExtract(constants4.MIN_VERSION_DATA_DESCRIPTOR);
+      ae2.setVersionNeededToExtract(constants5.MIN_VERSION_DATA_DESCRIPTOR);
       this._writeLocalFileHeader(ae2);
       var smart = this._smartStream(ae2, callback);
       source.once("error", function(err) {
@@ -100532,7 +100532,7 @@ var require_zip_archive_output_stream = __commonJS({
         o2.zlib = {};
       }
       if (typeof o2.zlib.level !== "number") {
-        o2.zlib.level = constants4.ZLIB_BEST_SPEED;
+        o2.zlib.level = constants5.ZLIB_BEST_SPEED;
       }
       o2.forceZip64 = !!o2.forceZip64;
       o2.forceLocalTime = !!o2.forceLocalTime;
@@ -100555,11 +100555,11 @@ var require_zip_archive_output_stream = __commonJS({
     };
     ZipArchiveOutputStream.prototype._normalizeEntry = function(ae2) {
       if (ae2.getMethod() === -1) {
-        ae2.setMethod(constants4.METHOD_DEFLATED);
+        ae2.setMethod(constants5.METHOD_DEFLATED);
       }
-      if (ae2.getMethod() === constants4.METHOD_DEFLATED) {
+      if (ae2.getMethod() === constants5.METHOD_DEFLATED) {
         ae2.getGeneralPurposeBit().useDataDescriptor(true);
-        ae2.setVersionNeededToExtract(constants4.MIN_VERSION_DATA_DESCRIPTOR);
+        ae2.setVersionNeededToExtract(constants5.MIN_VERSION_DATA_DESCRIPTOR);
       }
       if (ae2.getTime() === -1) {
         ae2.setTime(/* @__PURE__ */ new Date(), this._archive.forceLocalTime);
@@ -100571,7 +100571,7 @@ var require_zip_archive_output_stream = __commonJS({
       };
     };
     ZipArchiveOutputStream.prototype._smartStream = function(ae2, callback) {
-      var deflate = ae2.getMethod() === constants4.METHOD_DEFLATED;
+      var deflate = ae2.getMethod() === constants5.METHOD_DEFLATED;
       var process5 = deflate ? new DeflateCRC32Stream(this.options.zlib) : new CRC32Stream();
       var error4 = null;
       function handleStuff() {
@@ -100594,13 +100594,13 @@ var require_zip_archive_output_stream = __commonJS({
       var size = this._archive.centralLength;
       var offset = this._archive.centralOffset;
       if (this.isZip64()) {
-        records = constants4.ZIP64_MAGIC_SHORT;
-        size = constants4.ZIP64_MAGIC;
-        offset = constants4.ZIP64_MAGIC;
+        records = constants5.ZIP64_MAGIC_SHORT;
+        size = constants5.ZIP64_MAGIC;
+        offset = constants5.ZIP64_MAGIC;
       }
-      this.write(zipUtil.getLongBytes(constants4.SIG_EOCD));
-      this.write(constants4.SHORT_ZERO);
-      this.write(constants4.SHORT_ZERO);
+      this.write(zipUtil.getLongBytes(constants5.SIG_EOCD));
+      this.write(constants5.SHORT_ZERO);
+      this.write(constants5.SHORT_ZERO);
       this.write(zipUtil.getShortBytes(records));
       this.write(zipUtil.getShortBytes(records));
       this.write(zipUtil.getLongBytes(size));
@@ -100611,18 +100611,18 @@ var require_zip_archive_output_stream = __commonJS({
       this.write(comment);
     };
     ZipArchiveOutputStream.prototype._writeCentralDirectoryZip64 = function() {
-      this.write(zipUtil.getLongBytes(constants4.SIG_ZIP64_EOCD));
+      this.write(zipUtil.getLongBytes(constants5.SIG_ZIP64_EOCD));
       this.write(zipUtil.getEightBytes(44));
-      this.write(zipUtil.getShortBytes(constants4.MIN_VERSION_ZIP64));
-      this.write(zipUtil.getShortBytes(constants4.MIN_VERSION_ZIP64));
-      this.write(constants4.LONG_ZERO);
-      this.write(constants4.LONG_ZERO);
+      this.write(zipUtil.getShortBytes(constants5.MIN_VERSION_ZIP64));
+      this.write(zipUtil.getShortBytes(constants5.MIN_VERSION_ZIP64));
+      this.write(constants5.LONG_ZERO);
+      this.write(constants5.LONG_ZERO);
       this.write(zipUtil.getEightBytes(this._entries.length));
       this.write(zipUtil.getEightBytes(this._entries.length));
       this.write(zipUtil.getEightBytes(this._archive.centralLength));
       this.write(zipUtil.getEightBytes(this._archive.centralOffset));
-      this.write(zipUtil.getLongBytes(constants4.SIG_ZIP64_EOCD_LOC));
-      this.write(constants4.LONG_ZERO);
+      this.write(zipUtil.getLongBytes(constants5.SIG_ZIP64_EOCD_LOC));
+      this.write(constants5.LONG_ZERO);
       this.write(zipUtil.getEightBytes(this._archive.centralOffset + this._archive.centralLength));
       this.write(zipUtil.getLongBytes(1));
     };
@@ -100632,13 +100632,13 @@ var require_zip_archive_output_stream = __commonJS({
       var fileOffset = ae2._offsets.file;
       var size = ae2.getSize();
       var compressedSize = ae2.getCompressedSize();
-      if (ae2.isZip64() || fileOffset > constants4.ZIP64_MAGIC) {
-        size = constants4.ZIP64_MAGIC;
-        compressedSize = constants4.ZIP64_MAGIC;
-        fileOffset = constants4.ZIP64_MAGIC;
-        ae2.setVersionNeededToExtract(constants4.MIN_VERSION_ZIP64);
+      if (ae2.isZip64() || fileOffset > constants5.ZIP64_MAGIC) {
+        size = constants5.ZIP64_MAGIC;
+        compressedSize = constants5.ZIP64_MAGIC;
+        fileOffset = constants5.ZIP64_MAGIC;
+        ae2.setVersionNeededToExtract(constants5.MIN_VERSION_ZIP64);
         var extraBuf = Buffer.concat([
-          zipUtil.getShortBytes(constants4.ZIP64_EXTRA_ID),
+          zipUtil.getShortBytes(constants5.ZIP64_EXTRA_ID),
           zipUtil.getShortBytes(24),
           zipUtil.getEightBytes(ae2.getSize()),
           zipUtil.getEightBytes(ae2.getCompressedSize()),
@@ -100646,8 +100646,8 @@ var require_zip_archive_output_stream = __commonJS({
         ], 28);
         ae2.setExtra(extraBuf);
       }
-      this.write(zipUtil.getLongBytes(constants4.SIG_CFH));
-      this.write(zipUtil.getShortBytes(ae2.getPlatform() << 8 | constants4.VERSION_MADEBY));
+      this.write(zipUtil.getLongBytes(constants5.SIG_CFH));
+      this.write(zipUtil.getShortBytes(ae2.getPlatform() << 8 | constants5.VERSION_MADEBY));
       this.write(zipUtil.getShortBytes(ae2.getVersionNeededToExtract()));
       this.write(gpb.encode());
       this.write(zipUtil.getShortBytes(method));
@@ -100665,7 +100665,7 @@ var require_zip_archive_output_stream = __commonJS({
       this.write(zipUtil.getShortBytes(name.length));
       this.write(zipUtil.getShortBytes(extra.length));
       this.write(zipUtil.getShortBytes(comment.length));
-      this.write(constants4.SHORT_ZERO);
+      this.write(constants5.SHORT_ZERO);
       this.write(zipUtil.getShortBytes(ae2.getInternalAttributes()));
       this.write(zipUtil.getLongBytes(ae2.getExternalAttributes()));
       this.write(zipUtil.getLongBytes(fileOffset));
@@ -100674,7 +100674,7 @@ var require_zip_archive_output_stream = __commonJS({
       this.write(comment);
     };
     ZipArchiveOutputStream.prototype._writeDataDescriptor = function(ae2) {
-      this.write(zipUtil.getLongBytes(constants4.SIG_DD));
+      this.write(zipUtil.getLongBytes(constants5.SIG_DD));
       this.write(zipUtil.getLongBytes(ae2.getCrc()));
       if (ae2.isZip64()) {
         this.write(zipUtil.getEightBytes(ae2.getCompressedSize()));
@@ -100691,22 +100691,22 @@ var require_zip_archive_output_stream = __commonJS({
       var extra = ae2.getLocalFileDataExtra();
       if (ae2.isZip64()) {
         gpb.useDataDescriptor(true);
-        ae2.setVersionNeededToExtract(constants4.MIN_VERSION_ZIP64);
+        ae2.setVersionNeededToExtract(constants5.MIN_VERSION_ZIP64);
       }
       if (gpb.usesUTF8ForNames()) {
         name = Buffer.from(name);
       }
       ae2._offsets.file = this.offset;
-      this.write(zipUtil.getLongBytes(constants4.SIG_LFH));
+      this.write(zipUtil.getLongBytes(constants5.SIG_LFH));
       this.write(zipUtil.getShortBytes(ae2.getVersionNeededToExtract()));
       this.write(gpb.encode());
       this.write(zipUtil.getShortBytes(method));
       this.write(zipUtil.getLongBytes(ae2.getTimeDos()));
       ae2._offsets.data = this.offset;
       if (gpb.usesDataDescriptor()) {
-        this.write(constants4.LONG_ZERO);
-        this.write(constants4.LONG_ZERO);
-        this.write(constants4.LONG_ZERO);
+        this.write(constants5.LONG_ZERO);
+        this.write(constants5.LONG_ZERO);
+        this.write(constants5.LONG_ZERO);
       } else {
         this.write(zipUtil.getLongBytes(ae2.getCrc()));
         this.write(zipUtil.getLongBytes(ae2.getCompressedSize()));
@@ -100722,7 +100722,7 @@ var require_zip_archive_output_stream = __commonJS({
       return this._archive.comment !== null ? this._archive.comment : "";
     };
     ZipArchiveOutputStream.prototype.isZip64 = function() {
-      return this._archive.forceZip64 || this._entries.length > constants4.ZIP64_MAGIC_SHORT || this._archive.centralLength > constants4.ZIP64_MAGIC || this._archive.centralOffset > constants4.ZIP64_MAGIC;
+      return this._archive.forceZip64 || this._entries.length > constants5.ZIP64_MAGIC_SHORT || this._archive.centralLength > constants5.ZIP64_MAGIC || this._archive.centralOffset > constants5.ZIP64_MAGIC;
     };
     ZipArchiveOutputStream.prototype.setComment = function(comment) {
       this._archive.comment = comment;
@@ -103052,7 +103052,7 @@ var require_extract = __commonJS({
 // node_modules/tar-stream/constants.js
 var require_constants7 = __commonJS({
   "node_modules/tar-stream/constants.js"(exports2, module2) {
-    var constants4 = {
+    var constants5 = {
       // just for envs without fs
       S_IFMT: 61440,
       S_IFDIR: 16384,
@@ -103062,9 +103062,9 @@ var require_constants7 = __commonJS({
       S_IFLNK: 40960
     };
     try {
-      module2.exports = require("fs").constants || constants4;
+      module2.exports = require("fs").constants || constants5;
     } catch {
-      module2.exports = constants4;
+      module2.exports = constants5;
     }
   }
 });
@@ -103074,7 +103074,7 @@ var require_pack = __commonJS({
   "node_modules/tar-stream/pack.js"(exports2, module2) {
     var { Readable: Readable9, Writable, getStreamError } = require_streamx();
     var b4a = require_b4a();
-    var constants4 = require_constants7();
+    var constants5 = require_constants7();
     var headers = require_headers2();
     var DMODE = 493;
     var FMODE = 420;
@@ -103277,16 +103277,16 @@ var require_pack = __commonJS({
       return new Pack(opts);
     };
     function modeToType(mode) {
-      switch (mode & constants4.S_IFMT) {
-        case constants4.S_IFBLK:
+      switch (mode & constants5.S_IFMT) {
+        case constants5.S_IFBLK:
           return "block-device";
-        case constants4.S_IFCHR:
+        case constants5.S_IFCHR:
           return "character-device";
-        case constants4.S_IFDIR:
+        case constants5.S_IFDIR:
           return "directory";
-        case constants4.S_IFIFO:
+        case constants5.S_IFIFO:
           return "fifo";
-        case constants4.S_IFLNK:
+        case constants5.S_IFLNK:
           return "symlink";
       }
       return "file";
@@ -144517,7 +144517,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${englishFindingWord(counts.total)} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Why the review is incomplete:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "The review provider exhausted its retry attempts without returning evidence.",
+      attempt_budget_exhausted: "The review provider did not produce accepted evidence.",
       not_runnable: "A required review unit could not be run at all.",
       provider_lane_busy: "The review provider stayed unavailable (busy or at capacity) for the entire run.",
       investigation_deferred: "A context investigation was deferred, so the review could not cover everything.",
@@ -144549,7 +144549,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**\u041F\u043E\u0447\u0435\u043C\u0443 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432\u044C\u044E \u0438\u0441\u0447\u0435\u0440\u043F\u0430\u043B \u043F\u043E\u043F\u044B\u0442\u043A\u0438, \u043D\u0435 \u043F\u043E\u043B\u0443\u0447\u0438\u0432 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u0432.",
+      attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u043F\u0440\u0435\u0434\u043E\u0441\u0442\u0430\u0432\u0438\u043B \u043F\u0440\u0438\u043D\u044F\u0442\u044B\u0445 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u0432.",
       not_runnable: "\u041E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u0439 \u0431\u043B\u043E\u043A \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u0432\u043E\u043E\u0431\u0449\u0435.",
       provider_lane_busy: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432\u044C\u044E \u0431\u044B\u043B \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D (\u0437\u0430\u043D\u044F\u0442 \u0438\u043B\u0438 \u043D\u0430 \u043F\u0440\u0435\u0434\u0435\u043B\u0435 \u043C\u043E\u0449\u043D\u043E\u0441\u0442\u0438) \u0432\u0435\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u043A.",
       investigation_deferred: "\u0420\u0430\u0441\u0441\u043B\u0435\u0434\u043E\u0432\u0430\u043D\u0438\u0435 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442\u0430 \u0431\u044B\u043B\u043E \u043E\u0442\u043B\u043E\u0436\u0435\u043D\u043E, \u043F\u043E\u044D\u0442\u043E\u043C\u0443 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0441\u043C\u043E\u0433\u043B\u043E \u043F\u043E\u043A\u0440\u044B\u0442\u044C \u0432\u0441\u0451.",
@@ -144581,7 +144581,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**\u0427\u043E\u043C\u0443 \u0440\u0435\u0432'\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432'\u044E \u0432\u0438\u0447\u0435\u0440\u043F\u0430\u0432 \u0441\u043F\u0440\u043E\u0431\u0438, \u043D\u0435 \u043E\u0442\u0440\u0438\u043C\u0430\u0432\u0448\u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0456\u0432.",
+      attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432'\u044E \u043D\u0435 \u043D\u0430\u0434\u0430\u0432 \u043F\u0440\u0438\u0439\u043D\u044F\u0442\u0438\u0445 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0456\u0432.",
       not_runnable: "\u041E\u0431\u043E\u0432'\u044F\u0437\u043A\u043E\u0432\u0438\u0439 \u0431\u043B\u043E\u043A \u0440\u0435\u0432'\u044E \u043D\u0435 \u0432\u0434\u0430\u043B\u043E\u0441\u044F \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0438 \u0432\u0437\u0430\u0433\u0430\u043B\u0456.",
       provider_lane_busy: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432'\u044E \u0431\u0443\u0432 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0438\u0439 (\u0437\u0430\u0439\u043D\u044F\u0442\u0438\u0439 \u0430\u0431\u043E \u043D\u0430 \u043C\u0435\u0436\u0456 \u043F\u043E\u0442\u0443\u0436\u043D\u043E\u0441\u0442\u0456) \u0432\u0435\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u043A.",
       investigation_deferred: "\u0414\u043E\u0441\u043B\u0456\u0434\u0436\u0435\u043D\u043D\u044F \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442\u0443 \u0431\u0443\u043B\u043E \u0432\u0456\u0434\u043A\u043B\u0430\u0434\u0435\u043D\u043E, \u0442\u043E\u043C\u0443 \u0440\u0435\u0432'\u044E \u043D\u0435 \u0437\u043C\u043E\u0433\u043B\u043E \u043E\u0445\u043E\u043F\u0438\u0442\u0438 \u0432\u0441\u0435.",
@@ -144613,7 +144613,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "hallazgo" : "hallazgos"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Por qu\xE9 la revisi\xF3n no est\xE1 completa:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "El proveedor de revisi\xF3n agot\xF3 sus intentos sin devolver evidencia.",
+      attempt_budget_exhausted: "El proveedor de revisi\xF3n no produjo evidencia aceptada.",
       not_runnable: "No se pudo ejecutar en absoluto una unidad de revisi\xF3n obligatoria.",
       provider_lane_busy: "El proveedor de revisi\xF3n estuvo indisponible (ocupado o al l\xEDmite de capacidad) durante toda la ejecuci\xF3n.",
       investigation_deferred: "Se aplaz\xF3 una investigaci\xF3n de contexto, as\xED que la revisi\xF3n no pudo cubrirlo todo.",
@@ -144645,7 +144645,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "achado" : "achados"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Por que a revis\xE3o n\xE3o est\xE1 completa:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "O provedor de revis\xE3o esgotou suas tentativas sem retornar evid\xEAncia.",
+      attempt_budget_exhausted: "O provedor de revis\xE3o n\xE3o produziu evid\xEAncia aceita.",
       not_runnable: "N\xE3o foi poss\xEDvel executar uma unidade de revis\xE3o obrigat\xF3ria.",
       provider_lane_busy: "O provedor de revis\xE3o ficou indispon\xEDvel (ocupado ou no limite de capacidade) durante toda a execu\xE7\xE3o.",
       investigation_deferred: "Uma investiga\xE7\xE3o de contexto foi adiada, ent\xE3o a revis\xE3o n\xE3o conseguiu cobrir tudo.",
@@ -144677,7 +144677,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "anomalie" : "anomalies"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Pourquoi la revue est incompl\xE8te :**",
     incompleteCauses: {
-      attempt_budget_exhausted: "Le fournisseur de revue a \xE9puis\xE9 ses tentatives sans renvoyer de preuve.",
+      attempt_budget_exhausted: "Le fournisseur de revue n'a pas produit de preuve accept\xE9e.",
       not_runnable: "Une unit\xE9 de revue obligatoire n'a pas pu \xEAtre ex\xE9cut\xE9e du tout.",
       provider_lane_busy: "Le fournisseur de revue est rest\xE9 indisponible (occup\xE9 ou \xE0 saturation) pendant toute l'ex\xE9cution.",
       investigation_deferred: "Une investigation de contexte a \xE9t\xE9 report\xE9e, la revue n'a donc pas pu tout couvrir.",
@@ -144709,7 +144709,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "Befund" : "Befunde"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Warum die Pr\xFCfung unvollst\xE4ndig ist:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "Der Pr\xFCfanbieter hat seine Versuche aufgebraucht, ohne Ergebnisse zur\xFCckzugeben.",
+      attempt_budget_exhausted: "Der Pr\xFCfanbieter hat keine akzeptierten Ergebnisse geliefert.",
       not_runnable: "Eine erforderliche Pr\xFCfeinheit konnte \xFCberhaupt nicht ausgef\xFChrt werden.",
       provider_lane_busy: "Der Pr\xFCfanbieter war w\xE4hrend des gesamten Laufs nicht verf\xFCgbar (ausgelastet oder an der Kapazit\xE4tsgrenze).",
       investigation_deferred: "Eine Kontextuntersuchung wurde verschoben, daher konnte die Pr\xFCfung nicht alles abdecken.",
@@ -144741,7 +144741,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "rilievo" : "rilievi"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Perch\xE9 la revisione \xE8 incompleta:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "Il fornitore della revisione ha esaurito i tentativi senza restituire evidenze.",
+      attempt_budget_exhausted: "Il fornitore della revisione non ha prodotto evidenze accettate.",
       not_runnable: "Non \xE8 stato possibile eseguire affatto un'unit\xE0 di revisione obbligatoria.",
       provider_lane_busy: "Il fornitore della revisione \xE8 rimasto non disponibile (occupato o al limite della capacit\xE0) per tutta l'esecuzione.",
       investigation_deferred: "Un'indagine sul contesto \xE8 stata rinviata, quindi la revisione non ha potuto coprire tutto.",
@@ -144773,7 +144773,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} \u4E2A\u95EE\u9898\uFF08${formatSeverityCounts(counts)}\uFF09`,
     incompleteCauseHeading: "**\u4E3A\u4EC0\u4E48\u672C\u6B21\u5BA1\u67E5\u672A\u5B8C\u6210\uFF1A**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\u5BA1\u67E5\u63D0\u4F9B\u65B9\u7528\u5C3D\u4E86\u91CD\u8BD5\u6B21\u6570\u4ECD\u672A\u8FD4\u56DE\u8BC1\u636E\u3002",
+      attempt_budget_exhausted: "\u5BA1\u67E5\u63D0\u4F9B\u65B9\u672A\u4EA7\u51FA\u88AB\u63A5\u53D7\u7684\u8BC1\u636E\u3002",
       not_runnable: "\u4E00\u4E2A\u5FC5\u9700\u7684\u5BA1\u67E5\u5355\u5143\u6839\u672C\u65E0\u6CD5\u8FD0\u884C\u3002",
       provider_lane_busy: "\u6574\u4E2A\u8FD0\u884C\u671F\u95F4\u5BA1\u67E5\u63D0\u4F9B\u65B9\u4E00\u76F4\u4E0D\u53EF\u7528\uFF08\u7E41\u5FD9\u6216\u8FBE\u5230\u5BB9\u91CF\u4E0A\u9650\uFF09\u3002",
       investigation_deferred: "\u4E0A\u4E0B\u6587\u8C03\u67E5\u88AB\u63A8\u8FDF\uFF0C\u56E0\u6B64\u5BA1\u67E5\u65E0\u6CD5\u8986\u76D6\u5168\u90E8\u5185\u5BB9\u3002",
@@ -144805,7 +144805,7 @@ var copies = {
     findingsHeading: (counts) => `## \u6307\u6458 ${counts.total} \u4EF6\uFF08${formatSeverityCounts(counts)}\uFF09`,
     incompleteCauseHeading: "**\u30EC\u30D3\u30E5\u30FC\u304C\u5B8C\u4E86\u3057\u306A\u304B\u3063\u305F\u7406\u7531:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\u30EC\u30D3\u30E5\u30FC\u63D0\u4F9B\u8005\u304C\u8A3C\u62E0\u3092\u8FD4\u3055\u305A\u306B\u518D\u8A66\u884C\u3092\u4F7F\u3044\u5207\u308A\u307E\u3057\u305F\u3002",
+      attempt_budget_exhausted: "\u30EC\u30D3\u30E5\u30FC\u63D0\u4F9B\u8005\u306F\u53D7\u7406\u3055\u308C\u305F\u8A3C\u62E0\u3092\u751F\u6210\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
       not_runnable: "\u5FC5\u9808\u306E\u30EC\u30D3\u30E5\u30FC\u5358\u5143\u3092\u307E\u3063\u305F\u304F\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
       provider_lane_busy: "\u5B9F\u884C\u5168\u4F53\u3092\u901A\u3058\u3066\u30EC\u30D3\u30E5\u30FC\u63D0\u4F9B\u8005\u304C\u5229\u7528\u4E0D\u80FD\u3067\u3057\u305F\uFF08\u6DF7\u96D1\u307E\u305F\u306F\u5BB9\u91CF\u4E0A\u9650\uFF09\u3002",
       investigation_deferred: "\u30B3\u30F3\u30C6\u30AD\u30B9\u30C8\u8ABF\u67FB\u304C\u5148\u9001\u308A\u3055\u308C\u305F\u305F\u3081\u3001\u30EC\u30D3\u30E5\u30FC\u304C\u5168\u4F53\u3092\u30AB\u30D0\u30FC\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
@@ -144837,7 +144837,7 @@ var copies = {
     findingsHeading: (counts) => `## \uC774\uC288 ${counts.total}\uAC1C (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**\uB9AC\uBDF0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC740 \uC774\uC720:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\uB9AC\uBDF0 \uC81C\uACF5\uC790\uAC00 \uC99D\uAC70\uB97C \uBC18\uD658\uD558\uC9C0 \uBABB\uD55C \uCC44 \uC7AC\uC2DC\uB3C4\uB97C \uBAA8\uB450 \uC18C\uC9C4\uD588\uC2B5\uB2C8\uB2E4.",
+      attempt_budget_exhausted: "\uB9AC\uBDF0 \uC81C\uACF5\uC790\uAC00 \uC218\uB77D\uB41C \uC99D\uAC70\uB97C \uC0DD\uC131\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
       not_runnable: "\uD544\uC218 \uB9AC\uBDF0 \uB2E8\uC704\uB97C \uC804\uD600 \uC2E4\uD589\uD560 \uC218 \uC5C6\uC5C8\uC2B5\uB2C8\uB2E4.",
       provider_lane_busy: "\uC2E4\uD589 \uB0B4\uB0B4 \uB9AC\uBDF0 \uC81C\uACF5\uC790\uB97C \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC5C8\uC2B5\uB2C8\uB2E4(\uD63C\uC7A1 \uB610\uB294 \uC6A9\uB7C9 \uD55C\uACC4).",
       investigation_deferred: "\uCEE8\uD14D\uC2A4\uD2B8 \uC870\uC0AC\uAC00 \uC5F0\uAE30\uB418\uC5B4 \uB9AC\uBDF0\uAC00 \uC804\uCCB4\uB97C \uB2E4\uB8E8\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
@@ -155291,7 +155291,8 @@ var REVIEW_MEMORY_V2 = Object.freeze({
   bundlePath: "/api/action/v2/memory/bundle",
   admitPath: "/api/action/v2/memory/admit",
   retrievalTimeoutMs: 2e3,
-  admissionTimeoutMs: 500,
+  // Transport budget includes the network round trip; server admission stays bounded separately.
+  admissionTimeoutMs: 2e3,
   responseMaxBytes: 64 * 1024,
   maxItems: 12
 });
@@ -155300,6 +155301,28 @@ function memorySnapshotForTask(snapshot2, task) {
   if (task === "review" && !snapshot2.bundle.contextPolicy) return snapshot2;
   return snapshot2.bundle.contextPolicy?.allowedTasks.includes(task) ? snapshot2 : null;
 }
+var memoryAdmissionFailureCauses = [
+  "timeout",
+  "parent_aborted",
+  "transport_failed",
+  "http_rejected",
+  "response_content_type_invalid",
+  "response_body_missing",
+  "response_size_invalid",
+  "response_json_invalid",
+  "response_schema_invalid",
+  "server_ineligible",
+  "snapshot_expired",
+  "snapshot_changed",
+  "snapshot_missing",
+  "snapshot_hash_mismatch"
+];
+var MemoryTransportFailure = class extends Error {
+  constructor(code) {
+    super("review_memory_transport_unavailable");
+    this.code = code;
+  }
+};
 var ReviewMemorySession = class _ReviewMemorySession {
   constructor(options) {
     this.options = options;
@@ -155352,10 +155375,20 @@ var ReviewMemorySession = class _ReviewMemorySession {
   /** A rejected or unavailable admission permanently drops this run's snapshot. */
   async isEligible(memoryBundleHash) {
     if (memoryBundleHash == null) return true;
+    const startedAt = performance.now();
+    const previous = this.snapshot;
     const snapshot2 = this.current();
-    if (!snapshot2 || snapshot2.hash !== memoryBundleHash) return false;
+    if (!snapshot2 || snapshot2.hash !== memoryBundleHash) {
+      this.warnAdmissionFailure(
+        snapshot2 ? "snapshot_hash_mismatch" : previous ? "snapshot_expired" : "snapshot_missing",
+        startedAt,
+        snapshot2?.hash ?? previous?.hash
+      );
+      return false;
+    }
     if (this.admission) return this.admission;
     const check2 = async () => {
+      let failureCause = "transport_failed";
       try {
         const value = await this.post(
           REVIEW_MEMORY_V2.admitPath,
@@ -155369,17 +155402,38 @@ var ReviewMemorySession = class _ReviewMemorySession {
           },
           REVIEW_MEMORY_V2.admissionTimeoutMs
         );
+        this.options.signal?.throwIfAborted();
+        failureCause = "response_schema_invalid";
         const result2 = record3(value);
         if (result2.protocolVersion !== 2 || typeof result2.eligible !== "boolean") {
           throw new Error("review_memory_admission_invalid");
         }
-        if (!result2.eligible || this.current() !== snapshot2) {
+        if (!result2.eligible) {
           this.snapshot = null;
+          this.warnAdmissionFailure(
+            "server_ineligible",
+            startedAt,
+            snapshot2.hash
+          );
+          return false;
+        }
+        if (this.current() !== snapshot2) {
+          this.snapshot = null;
+          this.warnAdmissionFailure(
+            Date.parse(snapshot2.bundle.expiresAt) <= Date.now() ? "snapshot_expired" : "snapshot_changed",
+            startedAt,
+            snapshot2.hash
+          );
           return false;
         }
         return true;
-      } catch {
+      } catch (error4) {
         this.snapshot = null;
+        this.warnAdmissionFailure(
+          this.options.signal?.aborted ? "parent_aborted" : error4 instanceof MemoryTransportFailure ? error4.code : failureCause,
+          startedAt,
+          snapshot2.hash
+        );
         this.options.signal?.throwIfAborted();
         return false;
       }
@@ -155389,6 +155443,18 @@ var ReviewMemorySession = class _ReviewMemorySession {
       return await this.admission;
     } finally {
       this.admission = void 0;
+    }
+  }
+  warnAdmissionFailure(cause, startedAt, snapshotHash) {
+    try {
+      this.options.warn?.(
+        `ReviewRouter memory admission unavailable: ${JSON.stringify({
+          cause: memoryAdmissionFailureCauses.includes(cause) ? cause : "transport_failed",
+          elapsedMs: Math.max(0, Math.round(performance.now() - startedAt)),
+          ...snapshotHash && /^[a-f0-9]{64}$/.test(snapshotHash) ? { snapshotHashPrefix: snapshotHash.slice(0, 12) } : {}
+        })}`
+      );
+    } catch {
     }
   }
   post(path40, body2, timeoutMs) {
@@ -155592,18 +155658,26 @@ function parseContextPolicy(value) {
 }
 async function postBoundedMemoryJson(input) {
   const controller = new AbortController();
+  let timedOut = false;
   const abort = () => controller.abort(input.signal?.reason);
   input.signal?.addEventListener("abort", abort, { once: true });
   if (input.signal?.aborted) abort();
   const timer = setTimeout(
-    () => controller.abort(),
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
     Math.max(1, input.timeoutMs)
   );
   let reader;
   let rejectAbort = () => {
   };
   const aborted2 = new Promise((_3, reject) => {
-    rejectAbort = () => reject(new Error("review_memory_transport_unavailable"));
+    rejectAbort = () => reject(
+      new MemoryTransportFailure(
+        input.signal?.aborted ? "parent_aborted" : "timeout"
+      )
+    );
     controller.signal.addEventListener("abort", rejectAbort, { once: true });
     if (controller.signal.aborted) rejectAbort();
   });
@@ -155622,16 +155696,21 @@ async function postBoundedMemoryJson(input) {
     });
     if (controller.signal.aborted) {
       void response.body?.cancel().catch(() => void 0);
-      throw new Error("review_memory_transport_unavailable");
+      throw new MemoryTransportFailure(
+        input.signal?.aborted ? "parent_aborted" : "timeout"
+      );
     }
-    if (!response.ok || !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+    if (!response.ok) throw new MemoryTransportFailure("http_rejected");
+    if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
       response.headers.get("content-type") ?? ""
-    ) || !response.body) {
-      throw new Error("review_memory_transport_unavailable");
+    )) {
+      throw new MemoryTransportFailure("response_content_type_invalid");
     }
+    if (!response.body)
+      throw new MemoryTransportFailure("response_body_missing");
     const length = response.headers.get("content-length");
     if (length !== null && (!/^\d+$/.test(length) || Number(length) > input.maxBytes)) {
-      throw new Error("review_memory_response_invalid");
+      throw new MemoryTransportFailure("response_size_invalid");
     }
     reader = response.body.getReader();
     const chunks = [];
@@ -155642,7 +155721,7 @@ async function postBoundedMemoryJson(input) {
       if (next.done) break;
       bytes2 += next.value.byteLength;
       if (bytes2 > input.maxBytes)
-        throw new Error("review_memory_response_invalid");
+        throw new MemoryTransportFailure("response_size_invalid");
       chunks.push(next.value);
     }
     controller.signal.throwIfAborted();
@@ -155651,13 +155730,17 @@ async function postBoundedMemoryJson(input) {
         new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))
       );
     } catch {
-      throw new Error("review_memory_response_invalid");
+      throw new MemoryTransportFailure("response_json_invalid");
     }
   };
   try {
     return await Promise.race([read(), aborted2]);
-  } catch {
-    throw new Error("review_memory_transport_unavailable");
+  } catch (error4) {
+    if (input.signal?.aborted)
+      throw new MemoryTransportFailure("parent_aborted");
+    if (timedOut) throw new MemoryTransportFailure("timeout");
+    if (error4 instanceof MemoryTransportFailure) throw error4;
+    throw new MemoryTransportFailure("transport_failed");
   } finally {
     clearTimeout(timer);
     input.signal?.removeEventListener("abort", abort);
@@ -165120,7 +165203,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.224",
+  version: "1.0.227",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -242594,6 +242677,84 @@ function canonicalJson15(value) {
   return JSON.stringify(value);
 }
 
+// src/review-orchestration/infrastructure/ocr-review-failure-diagnostic.ts
+var import_node_os3 = require("node:os");
+var SDK_GATEWAY_CODES = [
+  "invalid_request",
+  "unauthenticated",
+  "forbidden",
+  "not_found",
+  "conflict",
+  "admission_limited",
+  "upstream_failure",
+  "internal_error",
+  "invalid_input",
+  "transport",
+  "invalid_response",
+  "cancelled",
+  "safe_error",
+  "gateway_error"
+];
+var GATEWAY_CODES = [
+  ...SDK_GATEWAY_CODES,
+  "authorization_denied",
+  "close_pending",
+  "context_tools_unavailable",
+  "envelope_not_normalized",
+  "gateway_unavailable",
+  "lane_saturated",
+  "model_dispatch_claim_required",
+  "model_dispatch_headers_invalid",
+  "model_dispatch_readback_required",
+  "model_dispatch_reservation_required",
+  "model_dispatch_unavailable",
+  "pending",
+  "preparation_denied",
+  "relay_saturated",
+  "relay_unknown",
+  "request_reviewer_mismatch",
+  "reviewer_selector_invalid",
+  "same_operation_recovery_required",
+  "codex_subscription_authentication_failed"
+];
+var GATE_REASONS = [
+  "not_dispatched",
+  "gateway_effect_unknown",
+  "replay_fenced"
+];
+var EFFECTS = [
+  // Action-local initial state, followed by the exact SDK effectState values.
+  "none",
+  "not_dispatched",
+  "dispatch_started",
+  "response_started",
+  "completed",
+  "effect_unknown",
+  "rejected_before_dispatch"
+];
+function ocrReviewFailureDiagnostic(error4, process5, gateway) {
+  const gate = error4 instanceof Error ? GATE_REASONS.find(
+    (reason) => error4.message === `review_action_v2_ocr_${reason}`
+  ) : void 0;
+  return {
+    reason: error4 instanceof OcrReviewAcceptanceError ? error4.code : gate ?? "invocation_failed",
+    ...process5 ? {
+      process: {
+        closed: process5.closed,
+        exitCode: Number.isInteger(process5.exitCode) && process5.exitCode >= 0 && process5.exitCode <= 255 ? process5.exitCode : null,
+        signal: process5.signal !== null && Object.hasOwn(import_node_os3.constants.signals, process5.signal) ? process5.signal : null,
+        spawnError: process5.spawnError !== void 0
+      }
+    } : {},
+    ...gateway ? {
+      gateway: {
+        code: GATEWAY_CODES.find((code) => code === gateway.code) ?? "unrecognized",
+        effect: EFFECTS.find((effect) => effect === gateway.effect) ?? "unrecognized"
+      }
+    } : {}
+  };
+}
+
 // src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts
 var import_crypto50 = require("crypto");
 var import_child_process19 = require("child_process");
@@ -243131,8 +243292,25 @@ var OcrReviewInvocationAdapter = class {
     }
     assertOcrInvocationLive(input);
     const run3 = this.gate(async () => {
-      this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-      return await this.runInvocation(input, assignment);
+      let processResult2;
+      try {
+        this.assertDispatchPermitted(assignment.workSlot.workSlotId);
+        return await this.runInvocation(input, assignment, (result2) => {
+          processResult2 = result2;
+        });
+      } catch (error4) {
+        try {
+          this.options.failureDiagnostic?.(
+            ocrReviewFailureDiagnostic(
+              error4,
+              processResult2,
+              this.options.bridge.diagnosticFailureFact?.() ?? this.options.bridge.effectFacts?.()
+            )
+          );
+        } catch {
+        }
+        throw error4;
+      }
     });
     return await run3;
   }
@@ -243163,7 +243341,7 @@ var OcrReviewInvocationAdapter = class {
     this.inFlight = next.catch(() => void 0);
     return next;
   }
-  async runInvocation(input, assignment) {
+  async runInvocation(input, assignment, observeProcess) {
     assertOcrInvocationLive(input);
     const outputPath = path29.join(this.options.run.runDirectory, "result.json");
     const argv = buildOcrReviewArgv({
@@ -243196,6 +243374,7 @@ var OcrReviewInvocationAdapter = class {
         cwd: this.options.run.runDirectory,
         signal: input.signal
       });
+      observeProcess(processResult2);
       requestsAfter = this.options.bridge.requestCount();
     } finally {
       const receipt = this.options.contextTools?.receipt();
@@ -246525,6 +246704,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               actualModel: () => modelTransport.actualModel(),
               requestCount: () => modelTransport.requestCount?.(),
               effectFacts: input2.ocr.effectFacts,
+              diagnosticFailureFact: () => modelTransport.failureFact(),
               releaseRetrySafeFailure: () => modelTransport.releaseRetrySafeFailure?.() === true,
               reopenConsumer: () => modelTransport.reopenConsumer?.() === true
             };
@@ -246544,6 +246724,8 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 ...contextTools ? {
                   contextTools,
                   contextToolsReceipt: (receipt) => logger.info("Managed OCR context tools", {
+                    reviewerId: reviewer?.reviewerId,
+                    profileRef: approvedOcrAgent2.profileRef,
                     planDigest: receipt.planDigest,
                     schemaDigest: receipt.schemaDigest,
                     selectedTools: receipt.availableTools,
@@ -246575,7 +246757,16 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 checkoutRoot: path30.resolve(input2.workspacePath),
                 processRunner: runOcrReviewProcess,
                 previewRunner: runOcrReviewProcess,
-                acceptanceDiagnostic: (diagnostic) => logger.info("Managed OCR acceptance", diagnostic)
+                acceptanceDiagnostic: (diagnostic) => logger.info("Managed OCR acceptance", {
+                  reviewerId: reviewer?.reviewerId,
+                  profileRef: approvedOcrAgent2.profileRef,
+                  ...diagnostic
+                }),
+                failureDiagnostic: (diagnostic) => logger.warn("Managed OCR failure", {
+                  reviewerId: reviewer?.reviewerId,
+                  profileRef: approvedOcrAgent2.profileRef,
+                  ...diagnostic
+                })
               }
             );
             if (prDescription2 && !planned2.plan.assignments.some(
@@ -248182,10 +248373,16 @@ function reviewerRuntimeConfig(parent, reviewer) {
 async function prepareAccountGatewayReviewerSession(input) {
   const { reviewer, signal } = input;
   const runtimeConfig = reviewerRuntimeConfig(input.runtimeConfig, reviewer);
+  const observeTransport2 = (diagnostic) => warning(
+    `Account gateway reviewer model transport: ${JSON.stringify({
+      reviewerId: reviewer.reviewerId,
+      ...diagnostic
+    })}`
+  );
   const transport = new AccountGatewayModelTransport(
     input.apiUrl,
     input.authorization,
-    void 0,
+    observeTransport2,
     void 0,
     false,
     void 0,
@@ -248194,7 +248391,10 @@ async function prepareAccountGatewayReviewerSession(input) {
   );
   input.registerTransport(transport);
   signal.throwIfAborted();
-  const bridge = await startLocalGatewayModelTransport(transport);
+  const bridge = await startLocalGatewayModelTransport(
+    transport,
+    observeTransport2
+  );
   let privateHome;
   let cli;
   let ocrRun;

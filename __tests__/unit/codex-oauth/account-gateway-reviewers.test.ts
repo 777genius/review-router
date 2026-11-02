@@ -1,3 +1,8 @@
+import * as core from '../../../src/actions/core';
+import {
+  ACCOUNT_GATEWAY_BOUNDS,
+  type AccountGatewayModelTransport,
+} from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 import { CONTEXT_TOOLS_PLAN_ENV } from '../../../src/context-tools/contract';
 import { assertAccountGatewayRuntimeConfigContinuity } from '../../../src/codex-oauth/account-gateway-runtime';
 import { createScmReadTokenProvider } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
@@ -110,6 +115,70 @@ describe('isolated Gateway reviewer sessions', () => {
     await cleanups[0]();
     expect((await fs.stat(second.codexHome!)).isDirectory()).toBe(true);
     expect(second.modelTransport.failureFact()).toBeUndefined();
+  });
+
+  it('attributes both transport and local bridge diagnostics to the captured reviewer without body or capability text', async () => {
+    const selected = reviewer('diagnostic-reviewer', 'captured-model', 'high');
+    let transport: AccountGatewayModelTransport | undefined;
+    const warning = jest.spyOn(core, 'warning').mockImplementation(() => {});
+    try {
+      const session = await prepareAccountGatewayReviewerSession({
+        apiUrl: 'https://api.reviewrouter.invalid',
+        authorization: () => 'synthetic-run-token',
+        runtimeConfig: parentRuntime(),
+        reviewer: selected,
+        signal: new AbortController().signal,
+        registerCleanup: (cleanup) => cleanups.push(cleanup),
+        registerTransport: (value) => {
+          transport = value;
+        },
+      });
+      const secret = 'PRIVATE_NATIVE_REQUEST_CONTENT';
+      await fetch(`${session.modelTransport.baseUrl}/responses`, {
+        method: 'POST',
+        headers: {
+          authorization:
+            session.modelTransport.environment.REVIEWROUTER_LOCAL_MODEL_TOKEN!,
+          'content-type': 'application/json',
+        },
+        body: secret.padEnd(ACCOUNT_GATEWAY_BOUNDS.requestBytes + 1, 'x'),
+      })
+        // The HTTP client may observe the rejected upload as an early socket close.
+        .then(
+          (response) => response.arrayBuffer(),
+          () => undefined
+        );
+      transport!.cancelInference();
+      await expect(transport!.responses(Buffer.from('{}'))).rejects.toThrow(
+        'account_gateway_inference_denied'
+      );
+      const diagnostics = warning.mock.calls
+        .filter(([text]) =>
+          String(text).startsWith('Account gateway reviewer model transport: ')
+        )
+        .map(
+          ([text]) =>
+            JSON.parse(String(text).split('model transport: ')[1]!) as Record<
+              string,
+              unknown
+            >
+        );
+      expect(diagnostics.map((item) => item.stage)).toEqual([
+        'request_body',
+        'upstream_request',
+      ]);
+      expect(
+        diagnostics.every((item) => item.reviewerId === selected.reviewerId)
+      ).toBe(true);
+      const serialized = JSON.stringify(warning.mock.calls);
+      expect(serialized).not.toContain(secret);
+      expect(serialized).not.toContain('synthetic-run-token');
+      expect(serialized).not.toContain(
+        session.modelTransport.environment.REVIEWROUTER_LOCAL_MODEL_TOKEN!
+      );
+    } finally {
+      warning.mockRestore();
+    }
   });
 
   it('retains the exact reviewer when its engine bootstrap fails and cleans only local resources', async () => {

@@ -6,7 +6,8 @@ export const REVIEW_MEMORY_V2 = Object.freeze({
   bundlePath: '/api/action/v2/memory/bundle',
   admitPath: '/api/action/v2/memory/admit',
   retrievalTimeoutMs: 2_000,
-  admissionTimeoutMs: 500,
+  // Transport budget includes the network round trip; server admission stays bounded separately.
+  admissionTimeoutMs: 2_000,
   responseMaxBytes: 64 * 1_024,
   maxItems: 12,
 });
@@ -92,6 +93,32 @@ export type ReviewMemorySessionOptions = Readonly<{
   warn?: (message: string) => void;
 }>;
 
+const memoryAdmissionFailureCauses = [
+  'timeout',
+  'parent_aborted',
+  'transport_failed',
+  'http_rejected',
+  'response_content_type_invalid',
+  'response_body_missing',
+  'response_size_invalid',
+  'response_json_invalid',
+  'response_schema_invalid',
+  'server_ineligible',
+  'snapshot_expired',
+  'snapshot_changed',
+  'snapshot_missing',
+  'snapshot_hash_mismatch',
+] as const;
+type MemoryAdmissionFailureCause =
+  (typeof memoryAdmissionFailureCauses)[number];
+
+/** Contains only a locally selected code, never a transport's error or response. */
+class MemoryTransportFailure extends Error {
+  constructor(readonly code: MemoryAdmissionFailureCause) {
+    super('review_memory_transport_unavailable');
+  }
+}
+
 /** One bounded read, no retries/refetches under an old snapshot identity. */
 export class ReviewMemorySession {
   private snapshot: ReviewMemorySnapshot | null = null;
@@ -156,10 +183,24 @@ export class ReviewMemorySession {
     memoryBundleHash: string | null | undefined
   ): Promise<boolean> {
     if (memoryBundleHash == null) return true;
+    const startedAt = performance.now();
+    const previous = this.snapshot;
     const snapshot = this.current();
-    if (!snapshot || snapshot.hash !== memoryBundleHash) return false;
+    if (!snapshot || snapshot.hash !== memoryBundleHash) {
+      this.warnAdmissionFailure(
+        snapshot
+          ? 'snapshot_hash_mismatch'
+          : previous
+            ? 'snapshot_expired'
+            : 'snapshot_missing',
+        startedAt,
+        snapshot?.hash ?? previous?.hash
+      );
+      return false;
+    }
     if (this.admission) return this.admission;
     const check = async () => {
+      let failureCause: MemoryAdmissionFailureCause = 'transport_failed';
       try {
         const value = await this.post(
           REVIEW_MEMORY_V2.admitPath,
@@ -173,6 +214,8 @@ export class ReviewMemorySession {
           },
           REVIEW_MEMORY_V2.admissionTimeoutMs
         );
+        this.options.signal?.throwIfAborted();
+        failureCause = 'response_schema_invalid';
         const result = record(value);
         if (
           result.protocolVersion !== 2 ||
@@ -180,13 +223,38 @@ export class ReviewMemorySession {
         ) {
           throw new Error('review_memory_admission_invalid');
         }
-        if (!result.eligible || this.current() !== snapshot) {
+        if (!result.eligible) {
           this.snapshot = null;
+          this.warnAdmissionFailure(
+            'server_ineligible',
+            startedAt,
+            snapshot.hash
+          );
+          return false;
+        }
+        if (this.current() !== snapshot) {
+          this.snapshot = null;
+          this.warnAdmissionFailure(
+            Date.parse(snapshot.bundle.expiresAt) <= Date.now()
+              ? 'snapshot_expired'
+              : 'snapshot_changed',
+            startedAt,
+            snapshot.hash
+          );
           return false;
         }
         return true;
-      } catch {
+      } catch (error) {
         this.snapshot = null;
+        this.warnAdmissionFailure(
+          this.options.signal?.aborted
+            ? 'parent_aborted'
+            : error instanceof MemoryTransportFailure
+              ? error.code
+              : failureCause,
+          startedAt,
+          snapshot.hash
+        );
         this.options.signal?.throwIfAborted();
         return false;
       }
@@ -196,6 +264,28 @@ export class ReviewMemorySession {
       return await this.admission;
     } finally {
       this.admission = undefined;
+    }
+  }
+
+  private warnAdmissionFailure(
+    cause: MemoryAdmissionFailureCause,
+    startedAt: number,
+    snapshotHash?: string
+  ): void {
+    try {
+      this.options.warn?.(
+        `ReviewRouter memory admission unavailable: ${JSON.stringify({
+          cause: memoryAdmissionFailureCauses.includes(cause)
+            ? cause
+            : 'transport_failed',
+          elapsedMs: Math.max(0, Math.round(performance.now() - startedAt)),
+          ...(snapshotHash && /^[a-f0-9]{64}$/.test(snapshotHash)
+            ? { snapshotHashPrefix: snapshotHash.slice(0, 12) }
+            : {}),
+        })}`
+      );
+    } catch {
+      // Diagnostics cannot change eligibility, cancellation or snapshot ownership.
     }
   }
 
@@ -492,18 +582,26 @@ export async function postBoundedMemoryJson(input: {
   fetchImpl?: typeof fetch;
 }): Promise<unknown> {
   const controller = new AbortController();
+  let timedOut = false;
   const abort = () => controller.abort(input.signal?.reason);
   input.signal?.addEventListener('abort', abort, { once: true });
   if (input.signal?.aborted) abort();
   const timer = setTimeout(
-    () => controller.abort(),
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
     Math.max(1, input.timeoutMs)
   );
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let rejectAbort: () => void = () => {};
   const aborted = new Promise<never>((_, reject) => {
     rejectAbort = () =>
-      reject(new Error('review_memory_transport_unavailable'));
+      reject(
+        new MemoryTransportFailure(
+          input.signal?.aborted ? 'parent_aborted' : 'timeout'
+        )
+      );
     controller.signal.addEventListener('abort', rejectAbort, { once: true });
     if (controller.signal.aborted) rejectAbort();
   });
@@ -522,23 +620,26 @@ export async function postBoundedMemoryJson(input: {
     });
     if (controller.signal.aborted) {
       void response.body?.cancel().catch(() => undefined);
-      throw new Error('review_memory_transport_unavailable');
+      throw new MemoryTransportFailure(
+        input.signal?.aborted ? 'parent_aborted' : 'timeout'
+      );
     }
+    if (!response.ok) throw new MemoryTransportFailure('http_rejected');
     if (
-      !response.ok ||
       !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
         response.headers.get('content-type') ?? ''
-      ) ||
-      !response.body
+      )
     ) {
-      throw new Error('review_memory_transport_unavailable');
+      throw new MemoryTransportFailure('response_content_type_invalid');
     }
+    if (!response.body)
+      throw new MemoryTransportFailure('response_body_missing');
     const length = response.headers.get('content-length');
     if (
       length !== null &&
       (!/^\d+$/.test(length) || Number(length) > input.maxBytes)
     ) {
-      throw new Error('review_memory_response_invalid');
+      throw new MemoryTransportFailure('response_size_invalid');
     }
     reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
@@ -549,7 +650,7 @@ export async function postBoundedMemoryJson(input: {
       if (next.done) break;
       bytes += next.value.byteLength;
       if (bytes > input.maxBytes)
-        throw new Error('review_memory_response_invalid');
+        throw new MemoryTransportFailure('response_size_invalid');
       chunks.push(next.value);
     }
     controller.signal.throwIfAborted();
@@ -558,14 +659,18 @@ export async function postBoundedMemoryJson(input: {
         new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))
       ) as unknown;
     } catch {
-      throw new Error('review_memory_response_invalid');
+      throw new MemoryTransportFailure('response_json_invalid');
     }
   };
   try {
     return await Promise.race([read(), aborted]);
-  } catch {
+  } catch (error) {
     // Fetch/JSON diagnostics may contain provider bodies or credentials.
-    throw new Error('review_memory_transport_unavailable');
+    if (input.signal?.aborted)
+      throw new MemoryTransportFailure('parent_aborted');
+    if (timedOut) throw new MemoryTransportFailure('timeout');
+    if (error instanceof MemoryTransportFailure) throw error;
+    throw new MemoryTransportFailure('transport_failed');
   } finally {
     clearTimeout(timer);
     input.signal?.removeEventListener('abort', abort);

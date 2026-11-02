@@ -3,6 +3,10 @@ import {
   type ReviewSkillsExecutionInput,
 } from '../../review-skills/review-skills';
 import type { FreshReviewSkillsSupply } from '../../review-skills/review-skills-receipt';
+import {
+  ocrReviewFailureDiagnostic,
+  type OcrReviewFailureDiagnostic,
+} from './ocr-review-failure-diagnostic';
 import { CONTEXT_TOOLS_PROFILE } from '../../context-tools/contract';
 import type { ReviewMemorySession } from '../../control-plane/review-memory-v2';
 import {
@@ -100,6 +104,10 @@ export type OcrLoopbackBridge = Readonly<{
   requestCount(): number | undefined;
   /** Terminal Gateway effect facts; `effect: 'none'` is the safe state. */
   effectFacts?(): Readonly<{ effect: string }> | undefined;
+  /** Diagnostics only; never participates in dispatch or acceptance gates. */
+  diagnosticFailureFact?():
+    | Readonly<{ effect: string; code?: string }>
+    | undefined;
   /** Releases only positively proven unpaid pre-dispatch denials (§8.4 step 2);
    * false for unknown/paid effects. */
   releaseRetrySafeFailure?(): boolean;
@@ -178,6 +186,7 @@ export type OcrReviewInvocationOptions = Readonly<{
   processRunner: OcrReviewProcessRunner;
   previewRunner: OcrPreviewRunner;
   acceptanceDiagnostic?: (diagnostic: OcrReviewAcceptanceDiagnostic) => void;
+  failureDiagnostic?: (diagnostic: OcrReviewFailureDiagnostic) => void;
   contextTools?: Pick<ContextToolsBroker, 'receipt' | 'beginNativeSession'>;
   contextToolsReceipt?: (receipt: ContextToolsReceipt) => void;
 }>;
@@ -921,8 +930,27 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     // One engine invocation in flight; aborting callers never dispatch late.
     // The effect fence runs inside the gate so no check outlives a dispatch.
     const run = this.gate(async () => {
-      this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-      return await this.runInvocation(input, assignment);
+      let processResult: OcrReviewProcessResult | undefined;
+      try {
+        this.assertDispatchPermitted(assignment.workSlot.workSlotId);
+        return await this.runInvocation(input, assignment, (result) => {
+          processResult = result;
+        });
+      } catch (error) {
+        try {
+          this.options.failureDiagnostic?.(
+            ocrReviewFailureDiagnostic(
+              error,
+              processResult,
+              this.options.bridge.diagnosticFailureFact?.() ??
+                this.options.bridge.effectFacts?.()
+            )
+          );
+        } catch {
+          // Diagnostics cannot change failure settlement or replay fences.
+        }
+        throw error;
+      }
     });
     return await run;
   }
@@ -973,7 +1001,8 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       readonly lease: ReviewInvocationLease;
       readonly currentLease?: () => ReviewInvocationLease;
     },
-    assignment: OcrReviewAssignment
+    assignment: OcrReviewAssignment,
+    observeProcess: (result: OcrReviewProcessResult) => void
   ): Promise<ReviewObservationPayload> {
     assertOcrInvocationLive(input);
     const outputPath = path.join(this.options.run.runDirectory, 'result.json');
@@ -1010,6 +1039,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         cwd: this.options.run.runDirectory,
         signal: input.signal,
       });
+      observeProcess(processResult);
       requestsAfter = this.options.bridge.requestCount();
     } finally {
       const receipt = this.options.contextTools?.receipt();

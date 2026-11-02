@@ -1158,7 +1158,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Why the review is incomplete:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'The review provider exhausted its retry attempts without returning evidence.',
+        'The review provider did not produce accepted evidence.',
       not_runnable: 'A required review unit could not be run at all.',
       provider_lane_busy:
         'The review provider stayed unavailable (busy or at capacity) for the entire run.',
@@ -1202,7 +1202,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Почему ревью не завершено:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'Провайдер ревью исчерпал попытки, не получив результатов.',
+        'Провайдер ревью не предоставил принятых результатов.',
       not_runnable: 'Обязательный блок ревью не удалось запустить вообще.',
       provider_lane_busy:
         'Провайдер ревью был недоступен (занят или на пределе мощности) весь запуск.',
@@ -1246,7 +1246,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: "**Чому рев'ю не завершено:**",
     incompleteCauses: {
       attempt_budget_exhausted:
-        "Провайдер рев'ю вичерпав спроби, не отримавши результатів.",
+        "Провайдер рев'ю не надав прийнятих результатів.",
       not_runnable: "Обов'язковий блок рев'ю не вдалося запустити взагалі.",
       provider_lane_busy:
         "Провайдер рев'ю був недоступний (зайнятий або на межі потужності) весь запуск.",
@@ -1290,7 +1290,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Por qué la revisión no está completa:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'El proveedor de revisión agotó sus intentos sin devolver evidencia.',
+        'El proveedor de revisión no produjo evidencia aceptada.',
       not_runnable:
         'No se pudo ejecutar en absoluto una unidad de revisión obligatoria.',
       provider_lane_busy:
@@ -1336,7 +1336,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Por que a revisão não está completa:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'O provedor de revisão esgotou suas tentativas sem retornar evidência.',
+        'O provedor de revisão não produziu evidência aceita.',
       not_runnable:
         'Não foi possível executar uma unidade de revisão obrigatória.',
       provider_lane_busy:
@@ -1381,7 +1381,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Pourquoi la revue est incomplète :**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'Le fournisseur de revue a épuisé ses tentatives sans renvoyer de preuve.',
+        "Le fournisseur de revue n'a pas produit de preuve acceptée.",
       not_runnable:
         "Une unité de revue obligatoire n'a pas pu être exécutée du tout.",
       provider_lane_busy:
@@ -1426,7 +1426,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Warum die Prüfung unvollständig ist:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'Der Prüfanbieter hat seine Versuche aufgebraucht, ohne Ergebnisse zurückzugeben.',
+        'Der Prüfanbieter hat keine akzeptierten Ergebnisse geliefert.',
       not_runnable:
         'Eine erforderliche Prüfeinheit konnte überhaupt nicht ausgeführt werden.',
       provider_lane_busy:
@@ -1474,7 +1474,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Perché la revisione è incompleta:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'Il fornitore della revisione ha esaurito i tentativi senza restituire evidenze.',
+        'Il fornitore della revisione non ha prodotto evidenze accettate.',
       not_runnable:
         "Non è stato possibile eseguire affatto un'unità di revisione obbligatoria.",
       provider_lane_busy:
@@ -1519,7 +1519,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} 个问题（${formatSeverityCounts(counts)}）`,
     incompleteCauseHeading: '**为什么本次审查未完成：**',
     incompleteCauses: {
-      attempt_budget_exhausted: '审查提供方用尽了重试次数仍未返回证据。',
+      attempt_budget_exhausted: '审查提供方未产出被接受的证据。',
       not_runnable: '一个必需的审查单元根本无法运行。',
       provider_lane_busy:
         '整个运行期间审查提供方一直不可用（繁忙或达到容量上限）。',
@@ -1556,7 +1556,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**レビューが完了しなかった理由:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'レビュー提供者が証拠を返さずに再試行を使い切りました。',
+        'レビュー提供者は受理された証拠を生成しませんでした。',
       not_runnable: '必須のレビュー単元をまったく実行できませんでした。',
       provider_lane_busy:
         '実行全体を通じてレビュー提供者が利用不能でした（混雑または容量上限）。',
@@ -1599,7 +1599,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**리뷰가 완료되지 않은 이유:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        '리뷰 제공자가 증거를 반환하지 못한 채 재시도를 모두 소진했습니다.',
+        '리뷰 제공자가 수락된 증거를 생성하지 못했습니다.',
       not_runnable: '필수 리뷰 단위를 전혀 실행할 수 없었습니다.',
       provider_lane_busy:
         '실행 내내 리뷰 제공자를 사용할 수 없었습니다(혼잡 또는 용량 한계).',

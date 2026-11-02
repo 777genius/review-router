@@ -17,6 +17,7 @@ import {
   ACCOUNT_GATEWAY_BOUNDS,
   LOCAL_MODEL_CAPABILITY_ENV,
   type LocalGatewayModelTransport,
+  type GatewayTransportDiagnostic,
 } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import { extractRawLoopbackCapability } from '../review-orchestration/infrastructure/ocr-review-managed-run';
 import {
@@ -92,10 +93,17 @@ export async function prepareAccountGatewayReviewerSession(input: {
 }): Promise<AccountGatewayReviewerRuntime> {
   const { reviewer, signal } = input;
   const runtimeConfig = reviewerRuntimeConfig(input.runtimeConfig, reviewer);
+  const observeTransport = (diagnostic: GatewayTransportDiagnostic) =>
+    core.warning(
+      `Account gateway reviewer model transport: ${JSON.stringify({
+        reviewerId: reviewer.reviewerId,
+        ...diagnostic,
+      })}`
+    );
   const transport = new AccountGatewayModelTransport(
     input.apiUrl,
     input.authorization,
-    undefined,
+    observeTransport,
     undefined,
     false,
     undefined,
@@ -104,7 +112,10 @@ export async function prepareAccountGatewayReviewerSession(input: {
   );
   input.registerTransport(transport);
   signal.throwIfAborted();
-  const bridge = await startLocalGatewayModelTransport(transport);
+  const bridge = await startLocalGatewayModelTransport(
+    transport,
+    observeTransport
+  );
   let privateHome: string | undefined;
   let cli: PreparedCodexCli | undefined;
   let ocrRun: OcrManagedRunHandle | undefined;

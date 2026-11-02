@@ -41,6 +41,13 @@ The required real-CLI fixture verifies memory in actual main model requests
 with and without Skills. Deterministic model responses prove input delivery,
 not that a real model follows every remembered convention.
 
+Admission uses a two-second client transport deadline around the separately
+bounded server decision. Failed checks discard the frozen snapshot without retry
+or refetch. Warnings contain only a closed failure cause, elapsed milliseconds
+and a validated snapshot hash prefix. They exclude transport errors, responses
+and credentials. Parent cancellation and the original snapshot expiry remain
+authoritative.
+
 ### Native template integrity
 
 `1.13.1-rr.5` / `ocr-managed-v4` adds one-pass original-template substitution.

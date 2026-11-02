@@ -989,7 +989,7 @@ describe('production review projection coverage', () => {
     );
   });
 
-  it('explains the exhausted required slot cause in plain language', async () => {
+  it('explains missing accepted evidence without claiming retries', async () => {
     const builder = projectionBuilder([assignment('required-slot', true)]);
 
     const projection = await builder.build({
@@ -1005,8 +1005,9 @@ describe('production review projection coverage', () => {
 
     expect(summary).toContain('**Why the review is incomplete:**');
     expect(summary).toContain(
-      'The review provider exhausted its retry attempts without returning evidence'
+      'The review provider did not produce accepted evidence.'
     );
+    expect(summary).not.toContain('retry attempts');
     expect(summary).not.toContain('attempt_budget_exhausted');
   });
 

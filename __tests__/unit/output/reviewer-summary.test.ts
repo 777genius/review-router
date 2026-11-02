@@ -220,7 +220,7 @@ describe('reviewer summary markdown', () => {
 
     expect(markdown).toContain('**Why the review is incomplete:**');
     expect(markdown).toContain(
-      'The review provider exhausted its retry attempts without returning evidence'
+      'The review provider did not produce accepted evidence'
     );
     expect(markdown).toContain(
       'The review ran out of its execution time budget'
@@ -228,7 +228,7 @@ describe('reviewer summary markdown', () => {
     expect(markdown).not.toContain('attempt_budget_exhausted');
   });
 
-  it('keeps the attempt-budget explanation cause-neutral in every locale', () => {
+  it('keeps the attempt-budget explanation cause-neutral without claiming retries in every locale', () => {
     for (const language of [
       'en',
       'ru',
@@ -245,6 +245,9 @@ describe('reviewer summary markdown', () => {
       const copy = reviewerSummaryCopy(language);
       expect(copy.incompleteCauses.attempt_budget_exhausted).not.toMatch(
         /usually|обычно|зазвичай|normalmente|général|normalerweise|di solito|通常|보통/i
+      );
+      expect(copy.incompleteCauses.attempt_budget_exhausted).not.toMatch(
+        /retr(?:y|ies)|исчерп|вичерп|agotó|esgotou|épuis|aufgebraucht|esaurito|重试|再試行|재시도/i
       );
     }
   });

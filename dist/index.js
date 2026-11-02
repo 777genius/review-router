@@ -155294,7 +155294,8 @@ var REVIEW_MEMORY_V2 = Object.freeze({
   bundlePath: "/api/action/v2/memory/bundle",
   admitPath: "/api/action/v2/memory/admit",
   retrievalTimeoutMs: 2e3,
-  admissionTimeoutMs: 500,
+  // Transport budget includes the network round trip; server admission stays bounded separately.
+  admissionTimeoutMs: 2e3,
   responseMaxBytes: 64 * 1024,
   maxItems: 12
 });
@@ -155303,6 +155304,28 @@ function memorySnapshotForTask(snapshot2, task) {
   if (task === "review" && !snapshot2.bundle.contextPolicy) return snapshot2;
   return snapshot2.bundle.contextPolicy?.allowedTasks.includes(task) ? snapshot2 : null;
 }
+var memoryAdmissionFailureCauses = [
+  "timeout",
+  "parent_aborted",
+  "transport_failed",
+  "http_rejected",
+  "response_content_type_invalid",
+  "response_body_missing",
+  "response_size_invalid",
+  "response_json_invalid",
+  "response_schema_invalid",
+  "server_ineligible",
+  "snapshot_expired",
+  "snapshot_changed",
+  "snapshot_missing",
+  "snapshot_hash_mismatch"
+];
+var MemoryTransportFailure = class extends Error {
+  constructor(code) {
+    super("review_memory_transport_unavailable");
+    this.code = code;
+  }
+};
 var ReviewMemorySession = class _ReviewMemorySession {
   constructor(options) {
     this.options = options;
@@ -155355,10 +155378,20 @@ var ReviewMemorySession = class _ReviewMemorySession {
   /** A rejected or unavailable admission permanently drops this run's snapshot. */
   async isEligible(memoryBundleHash) {
     if (memoryBundleHash == null) return true;
+    const startedAt = performance.now();
+    const previous = this.snapshot;
     const snapshot2 = this.current();
-    if (!snapshot2 || snapshot2.hash !== memoryBundleHash) return false;
+    if (!snapshot2 || snapshot2.hash !== memoryBundleHash) {
+      this.warnAdmissionFailure(
+        snapshot2 ? "snapshot_hash_mismatch" : previous ? "snapshot_expired" : "snapshot_missing",
+        startedAt,
+        snapshot2?.hash ?? previous?.hash
+      );
+      return false;
+    }
     if (this.admission) return this.admission;
     const check2 = async () => {
+      let failureCause = "transport_failed";
       try {
         const value = await this.post(
           REVIEW_MEMORY_V2.admitPath,
@@ -155372,17 +155405,38 @@ var ReviewMemorySession = class _ReviewMemorySession {
           },
           REVIEW_MEMORY_V2.admissionTimeoutMs
         );
+        this.options.signal?.throwIfAborted();
+        failureCause = "response_schema_invalid";
         const result2 = record3(value);
         if (result2.protocolVersion !== 2 || typeof result2.eligible !== "boolean") {
           throw new Error("review_memory_admission_invalid");
         }
-        if (!result2.eligible || this.current() !== snapshot2) {
+        if (!result2.eligible) {
           this.snapshot = null;
+          this.warnAdmissionFailure(
+            "server_ineligible",
+            startedAt,
+            snapshot2.hash
+          );
+          return false;
+        }
+        if (this.current() !== snapshot2) {
+          this.snapshot = null;
+          this.warnAdmissionFailure(
+            Date.parse(snapshot2.bundle.expiresAt) <= Date.now() ? "snapshot_expired" : "snapshot_changed",
+            startedAt,
+            snapshot2.hash
+          );
           return false;
         }
         return true;
-      } catch {
+      } catch (error4) {
         this.snapshot = null;
+        this.warnAdmissionFailure(
+          this.options.signal?.aborted ? "parent_aborted" : error4 instanceof MemoryTransportFailure ? error4.code : failureCause,
+          startedAt,
+          snapshot2.hash
+        );
         this.options.signal?.throwIfAborted();
         return false;
       }
@@ -155392,6 +155446,18 @@ var ReviewMemorySession = class _ReviewMemorySession {
       return await this.admission;
     } finally {
       this.admission = void 0;
+    }
+  }
+  warnAdmissionFailure(cause, startedAt, snapshotHash) {
+    try {
+      this.options.warn?.(
+        `ReviewRouter memory admission unavailable: ${JSON.stringify({
+          cause: memoryAdmissionFailureCauses.includes(cause) ? cause : "transport_failed",
+          elapsedMs: Math.max(0, Math.round(performance.now() - startedAt)),
+          ...snapshotHash && /^[a-f0-9]{64}$/.test(snapshotHash) ? { snapshotHashPrefix: snapshotHash.slice(0, 12) } : {}
+        })}`
+      );
+    } catch {
     }
   }
   post(path40, body2, timeoutMs) {
@@ -155595,18 +155661,26 @@ function parseContextPolicy(value) {
 }
 async function postBoundedMemoryJson(input) {
   const controller = new AbortController();
+  let timedOut = false;
   const abort = () => controller.abort(input.signal?.reason);
   input.signal?.addEventListener("abort", abort, { once: true });
   if (input.signal?.aborted) abort();
   const timer = setTimeout(
-    () => controller.abort(),
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
     Math.max(1, input.timeoutMs)
   );
   let reader;
   let rejectAbort = () => {
   };
   const aborted2 = new Promise((_3, reject) => {
-    rejectAbort = () => reject(new Error("review_memory_transport_unavailable"));
+    rejectAbort = () => reject(
+      new MemoryTransportFailure(
+        input.signal?.aborted ? "parent_aborted" : "timeout"
+      )
+    );
     controller.signal.addEventListener("abort", rejectAbort, { once: true });
     if (controller.signal.aborted) rejectAbort();
   });
@@ -155625,16 +155699,21 @@ async function postBoundedMemoryJson(input) {
     });
     if (controller.signal.aborted) {
       void response.body?.cancel().catch(() => void 0);
-      throw new Error("review_memory_transport_unavailable");
+      throw new MemoryTransportFailure(
+        input.signal?.aborted ? "parent_aborted" : "timeout"
+      );
     }
-    if (!response.ok || !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+    if (!response.ok) throw new MemoryTransportFailure("http_rejected");
+    if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
       response.headers.get("content-type") ?? ""
-    ) || !response.body) {
-      throw new Error("review_memory_transport_unavailable");
+    )) {
+      throw new MemoryTransportFailure("response_content_type_invalid");
     }
+    if (!response.body)
+      throw new MemoryTransportFailure("response_body_missing");
     const length = response.headers.get("content-length");
     if (length !== null && (!/^\d+$/.test(length) || Number(length) > input.maxBytes)) {
-      throw new Error("review_memory_response_invalid");
+      throw new MemoryTransportFailure("response_size_invalid");
     }
     reader = response.body.getReader();
     const chunks = [];
@@ -155645,7 +155724,7 @@ async function postBoundedMemoryJson(input) {
       if (next.done) break;
       bytes2 += next.value.byteLength;
       if (bytes2 > input.maxBytes)
-        throw new Error("review_memory_response_invalid");
+        throw new MemoryTransportFailure("response_size_invalid");
       chunks.push(next.value);
     }
     controller.signal.throwIfAborted();
@@ -155654,13 +155733,17 @@ async function postBoundedMemoryJson(input) {
         new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))
       );
     } catch {
-      throw new Error("review_memory_response_invalid");
+      throw new MemoryTransportFailure("response_json_invalid");
     }
   };
   try {
     return await Promise.race([read(), aborted2]);
-  } catch {
-    throw new Error("review_memory_transport_unavailable");
+  } catch (error4) {
+    if (input.signal?.aborted)
+      throw new MemoryTransportFailure("parent_aborted");
+    if (timedOut) throw new MemoryTransportFailure("timeout");
+    if (error4 instanceof MemoryTransportFailure) throw error4;
+    throw new MemoryTransportFailure("transport_failed");
   } finally {
     clearTimeout(timer);
     input.signal?.removeEventListener("abort", abort);
@@ -165123,7 +165206,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.224",
+  version: "1.0.225",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

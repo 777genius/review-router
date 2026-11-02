@@ -71,6 +71,12 @@ describe('production review projection coverage', () => {
       JSON.parse(complete.projectionEnvelopeCanonicalJson).publishing.summary
         .body
     ).toContain('2/2');
+    const completeSummary = JSON.parse(complete.projectionEnvelopeCanonicalJson)
+      .publishing.summary.body;
+    expect(completeSummary).toContain('<picture>');
+    expect(completeSummary).toContain(
+      'https://reviewrouter.org/review-banner/v1.svg?'
+    );
     const partial = await builder.build({
       acceptedEvidence: [evidence[0]],
       exhaustedWorkSlotIds: ['second'],

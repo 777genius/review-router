@@ -1,3 +1,4 @@
+import { confirmedProviderQuota } from '../../review-execution/domain/provider-quota';
 import { ContextToolsError } from '../../context-tools/contract';
 import { normalizeReviewError } from '../../errors/review-router-error';
 import {
@@ -52,6 +53,10 @@ export class ProviderInvocationFailureClassifier implements ReviewInvocationFail
         fact.effect === 'rejected_before_dispatch')
     ) {
       return ReviewInvocationFailureClass.AdmissionLimited;
+    }
+
+    if (confirmedProviderQuota(fact)) {
+      return ReviewInvocationFailureClass.CapacityUnavailable;
     }
 
     if (

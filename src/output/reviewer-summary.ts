@@ -1,3 +1,8 @@
+import {
+  parseProviderQuota,
+  providerQuotaMessage,
+} from '../review-execution/domain/provider-quota';
+import type { ProviderQuota } from '../review-execution/domain/provider-quota';
 import { Finding, PRContext, Review, ReviewMetrics, Severity } from '../types';
 import { isLinkedCurrentFinding } from '../analysis/thread-lifecycle';
 import { coverageManifestFileStatusRank } from '../review-projection/domain';
@@ -243,6 +248,7 @@ export type ReviewerSummaryInput = ReviewerSummaryOptions & {
   >;
   readonly incomplete?: boolean;
   readonly incompleteCauses?: readonly string[];
+  readonly providerQuota?: ProviderQuota;
   readonly coverage?: {
     readonly complete: boolean;
     readonly totalFiles: number;
@@ -366,6 +372,8 @@ export function renderReviewerSummaryMarkdown(
       lines.push(`- ${copy.incompleteCauses[code]}`);
     }
   }
+  const quota = parseProviderQuota(input.providerQuota);
+  if (incomplete && quota) lines.push('', providerQuotaMessage(quota));
   if (incomplete && severityLine) lines.push('', severityLine);
   const chrome = compactCopy[locale];
   const banner = renderReviewerBanner(input, incomplete, counts);

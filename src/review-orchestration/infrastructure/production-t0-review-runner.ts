@@ -1,3 +1,4 @@
+import { confirmedProviderQuota } from '../../review-execution/domain/provider-quota';
 import type { AccountGatewayReviewerRuntime } from '../../codex-oauth/account-gateway-reviewer-session';
 import type { ReviewReviewerPlanReviewerV1 } from '../../control-plane/generated/review-action-v2/review-reviewer-plan';
 import type {
@@ -852,6 +853,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 ),
               leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
               projectionBuilder: createProductionReviewProjectionBuilder({
+                providerQuota: () =>
+                  confirmedProviderQuota(
+                    preparedRoute?.modelTransport.failureFact()
+                  ),
                 authorizationFacts: authorization.facts,
                 pr,
                 config,
@@ -1253,6 +1258,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                   new LoggingReviewInvestigationDiagnostics(logger),
                 leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
                 projectionBuilder: createProductionReviewProjectionBuilder({
+                  providerQuota: () =>
+                    confirmedProviderQuota(modelTransport.failureFact()),
                   authorizationFacts: authorization.facts,
                   pr,
                   config,
@@ -1751,6 +1758,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
             ...(investigationRecording ? { investigationRecording } : {}),
             projectionBuilder: createProductionReviewProjectionBuilder({
+              providerQuota: () =>
+                confirmedProviderQuota(
+                  preparedRoute?.modelTransport.failureFact()
+                ),
               authorizationFacts: authorization.facts,
               pr,
               config,
@@ -1996,6 +2007,13 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 ),
               },
               projectionBuilder: createProductionReviewProjectionBuilder({
+                providerQuota: () =>
+                  [...modelTransports.values()]
+                    .map((transport) =>
+                      confirmedProviderQuota(transport.failureFact())
+                    )
+                    .filter((quota) => quota !== undefined)
+                    .sort((a, b) => b.resetAt.localeCompare(a.resetAt))[0],
                 authorizationFacts: authorization.facts,
                 pr,
                 config: {

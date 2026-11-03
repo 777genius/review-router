@@ -104,6 +104,39 @@ describe('production review projection coverage', () => {
     ).rejects.toThrow('review_projection_coverage_manifest_scope_invalid');
   });
 
+  it('publishes confirmed quota reset only for incomplete coverage', async () => {
+    const builder = projectionBuilder([assignment('slot', true)], {
+      providerQuota: () => ({
+        provider: 'openrouter',
+        limit: 1000,
+        remaining: 0,
+        resetAt: '2026-11-05T00:00:00.000Z',
+      }),
+    });
+    const partial = await builder.build({
+      acceptedEvidence: [],
+      exhaustedWorkSlotIds: ['slot'],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const partialSummary = JSON.parse(partial.projectionEnvelopeCanonicalJson)
+      .publishing.summary.body;
+    expect(partialSummary).toContain(
+      'Provider request quota exhausted; try after 2026-11-05T00:00:00.000Z.'
+    );
+    expect(partial.coverageComplete).toBe(false);
+    const complete = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence('slot', fullCoverageManifest('slot')),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    expect(
+      JSON.parse(complete.projectionEnvelopeCanonicalJson).publishing.summary
+        .body
+    ).not.toContain('quota exhausted');
+  });
+
   it('freezes a private-safe receipt into the real canonical publication before hashing', async () => {
     const collector = new ReviewSkillsReceiptCollector();
     const skills = createMaterializedReviewSkills(

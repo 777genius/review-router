@@ -1,3 +1,7 @@
+import {
+  confirmedProviderQuota,
+  type ProviderQuota,
+} from '../../review-execution/domain/provider-quota';
 import { createResponsesUsageObserver } from '../../provider-usage/responses-observer';
 import type { UsageDelivery } from '../../provider-usage/delivery';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
@@ -76,6 +80,7 @@ export type GatewayFailureFact = Readonly<{
   code: string;
   effect: string;
   requestRef?: string;
+  providerQuota?: ProviderQuota;
   failureScope?: 'reviewer' | 'allocation' | 'run';
   concurrencyGroupId?: string;
 }>;
@@ -1852,6 +1857,9 @@ function failureFact(
       ? {
           code,
           effect,
+          ...(confirmedProviderQuota(error)
+            ? { providerQuota: confirmedProviderQuota(error)! }
+            : {}),
           ...(requestRef ? { requestRef } : {}),
           ...('failureScope' in error &&
           ['reviewer', 'allocation', 'run'].includes(String(error.failureScope))

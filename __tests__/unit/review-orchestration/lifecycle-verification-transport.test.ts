@@ -245,3 +245,92 @@ test.each([
     }
   }
 );
+
+test.each([
+  [
+    {
+      provider: 'openrouter',
+      limit: 1000,
+      remaining: 0,
+      resetAt: '2026-11-05T00:00:00.000Z',
+      secret: 'must-not-survive',
+    },
+    true,
+  ],
+  [
+    {
+      provider: 'openrouter',
+      limit: 1000,
+      remaining: 1,
+      resetAt: '2026-11-05T00:00:00.000Z',
+    },
+    false,
+  ],
+  [
+    {
+      provider: 'openrouter',
+      limit: 1000,
+      remaining: 0,
+      resetAt: '2026-02-30T00:00:00.000Z',
+    },
+    false,
+  ],
+  [
+    {
+      provider: 'openrouter',
+      limit: 0,
+      remaining: 0,
+      resetAt: '2026-11-05T00:00:00.000Z',
+    },
+    false,
+  ],
+  [
+    {
+      provider: 'other',
+      limit: 1000,
+      remaining: 0,
+      resetAt: '2026-11-05T00:00:00.000Z',
+    },
+    false,
+  ],
+])(
+  'retains only confirmed safe quota DTO from one failed HTTP attempt: %j',
+  async (providerQuota, confirmed) => {
+    const upstream = mockUpstream(
+      502,
+      JSON.stringify({
+        error: {
+          code: 'provider_quota_exhausted',
+          effect: 'effect_unknown',
+          providerQuota,
+        },
+      }),
+      'application/json'
+    );
+    try {
+      const transport = new AccountGatewayModelTransport(
+        'https://fixture.invalid',
+        () => 'synthetic'
+      );
+      const response = await transport.responses(
+        bytes,
+        new AbortController().signal
+      );
+      for await (const _chunk of response.body) {
+        /* Drain failure facts. */
+      }
+      expect(upstream.seen).toHaveLength(1);
+      expect(transport.lastFailure?.effect).toBe('effect_unknown');
+      if (confirmed)
+        expect(transport.lastFailure?.providerQuota).toEqual({
+          provider: 'openrouter',
+          limit: 1000,
+          remaining: 0,
+          resetAt: '2026-11-05T00:00:00.000Z',
+        });
+      else expect(transport.lastFailure?.providerQuota).toBeUndefined();
+    } finally {
+      upstream.restore();
+    }
+  }
+);

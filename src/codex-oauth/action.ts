@@ -1,3 +1,7 @@
+import {
+  confirmedProviderQuota,
+  providerQuotaMessage,
+} from '../review-execution/domain/provider-quota';
 import { MODEL_DISPATCH_CLAIM_DENIAL_CODES } from '../review-orchestration/infrastructure/prepared-model-dispatch';
 import * as fs from 'fs';
 import {
@@ -577,6 +581,7 @@ async function runAccountGatewayActionInternal(
         'invalid_response',
         'cancelled',
         'safe_error',
+        'provider_quota_exhausted',
         'invalid_request',
         'unauthenticated',
         'forbidden',
@@ -608,6 +613,8 @@ async function runAccountGatewayActionInternal(
         ? fact.effect
         : 'unclassified';
       core.warning(`Gateway result: ${code}; effect: ${effect}.`);
+      const quota = confirmedProviderQuota(fact);
+      if (quota) core.warning(providerQuotaMessage(quota));
       core.setOutput('reviewrouter_gateway_code', fact.code);
       core.setOutput('reviewrouter_gateway_effect', fact.effect);
       if (fact.requestRef)
@@ -617,7 +624,7 @@ async function runAccountGatewayActionInternal(
         try {
           fs.appendFileSync(
             summaryPath,
-            `\nGateway result: ${fact.code}; effect: ${fact.effect}.\n`,
+            `\nGateway result: ${fact.code}; effect: ${fact.effect}.\n${quota ? providerQuotaMessage(quota) + '\n' : ''}`,
             'utf8'
           );
         } catch {

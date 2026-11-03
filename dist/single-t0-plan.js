@@ -119949,6 +119949,28 @@ __export(production_t0_review_runner_exports, {
 });
 module.exports = __toCommonJS(production_t0_review_runner_exports);
 
+// src/review-execution/domain/provider-quota.ts
+function parseProviderQuota(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const quota = value;
+  if (quota.provider !== "openrouter" || !Number.isSafeInteger(quota.limit) || quota.limit <= 0 || quota.remaining !== 0 || typeof quota.resetAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(quota.resetAt) || !Number.isFinite(Date.parse(quota.resetAt)) || new Date(quota.resetAt).toISOString() !== quota.resetAt)
+    return void 0;
+  return {
+    provider: "openrouter",
+    limit: quota.limit,
+    remaining: 0,
+    resetAt: quota.resetAt
+  };
+}
+function confirmedProviderQuota(fact) {
+  if (!fact || typeof fact !== "object") return void 0;
+  const value = fact;
+  return value.code === "provider_quota_exhausted" ? parseProviderQuota(value.providerQuota) : void 0;
+}
+function providerQuotaMessage(quota) {
+  return `Provider request quota exhausted; try after ${quota.resetAt}.`;
+}
+
 // src/control-plane/generated/review-action-v2/review-model-dispatch-contract.ts
 var reviewModelWireProtocols = [
   "openai-responses",
@@ -204262,6 +204284,9 @@ var ProviderInvocationFailureClassifier = class {
     if (fact?.code === "admission_limited" && (fact.effect === "not_dispatched" || fact.effect === "rejected_before_dispatch")) {
       return "admission_limited" /* AdmissionLimited */;
     }
+    if (confirmedProviderQuota(fact)) {
+      return "capacity_unavailable" /* CapacityUnavailable */;
+    }
     if (classifyProviderCapacitySignal({ error: error3 }) === "capacity_pressure" /* CapacityPressure */) {
       return "capacity_unavailable" /* CapacityUnavailable */;
     }
@@ -206531,6 +206556,7 @@ var BuildCurrentReviewProjection = class {
       providerExecution: command.providerExecution,
       coverage,
       incompleteCauses: command.incompleteCauses,
+      providerQuota: command.providerQuota,
       occurrences,
       lifecycle: { targets: inventory.targets, facts: lifecycleFacts },
       revisionFiles: command.revisionFiles,
@@ -209100,6 +209126,8 @@ function renderReviewerSummaryMarkdown(input) {
       lines.push(`- ${copy.incompleteCauses[code]}`);
     }
   }
+  const quota = parseProviderQuota(input.providerQuota);
+  if (incomplete && quota) lines.push("", providerQuotaMessage(quota));
   if (incomplete && severityLine) lines.push("", severityLine);
   const chrome = compactCopy[locale];
   const banner = renderReviewerBanner(input, incomplete, counts);
@@ -211398,6 +211426,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
         metrics: review.metrics,
         incomplete,
         incompleteCauses: query.incompleteCauses,
+        providerQuota: query.providerQuota,
         coverage: {
           complete: query.coverage.state === "complete" /* Complete */,
           totalFiles: query.coverage.totalFiles,
@@ -212203,6 +212232,7 @@ var ProductionReviewProjectionCommandFactory = class {
       },
       providerExecution,
       incompleteCauses,
+      ...!complete && this.input.providerQuota?.() ? { providerQuota: this.input.providerQuota() } : {},
       currentFindings: Object.freeze(
         findings.sort(
           (left, right) => compareCodeUnits8(left.sourceFindingId, right.sourceFindingId)
@@ -215910,6 +215940,7 @@ var SDK_GATEWAY_CODES = [
   "invalid_response",
   "cancelled",
   "safe_error",
+  "provider_quota_exhausted",
   "gateway_error"
 ];
 var GATEWAY_CODES = [
@@ -222460,6 +222491,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               ),
               leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
               projectionBuilder: createProductionReviewProjectionBuilder({
+                providerQuota: () => confirmedProviderQuota(
+                  preparedRoute2?.modelTransport.failureFact()
+                ),
                 authorizationFacts: authorization2.facts,
                 pr,
                 config: config3,
@@ -222766,6 +222800,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(logger7),
                 leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
                 projectionBuilder: createProductionReviewProjectionBuilder({
+                  providerQuota: () => confirmedProviderQuota(modelTransport.failureFact()),
                   authorizationFacts: authorization2.facts,
                   pr,
                   config: config3,
@@ -223154,6 +223189,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
             ...investigationRecording ? { investigationRecording } : {},
             projectionBuilder: createProductionReviewProjectionBuilder({
+              providerQuota: () => confirmedProviderQuota(
+                preparedRoute2?.modelTransport.failureFact()
+              ),
               authorizationFacts: authorization2.facts,
               pr,
               config: config3,
@@ -223350,6 +223388,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             )
           },
           projectionBuilder: createProductionReviewProjectionBuilder({
+            providerQuota: () => [...modelTransports.values()].map(
+              (transport) => confirmedProviderQuota(transport.failureFact())
+            ).filter((quota) => quota !== void 0).sort((a, b) => b.resetAt.localeCompare(a.resetAt))[0],
             authorizationFacts: authorization.facts,
             pr,
             config: {

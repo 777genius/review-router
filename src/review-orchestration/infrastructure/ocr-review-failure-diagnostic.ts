@@ -21,6 +21,7 @@ const SDK_GATEWAY_CODES = [
   'invalid_response',
   'cancelled',
   'safe_error',
+  'provider_quota_exhausted',
   'gateway_error',
 ] as const;
 // Fixed RR-local protocol codes only. Unknown values are not diagnostic text.

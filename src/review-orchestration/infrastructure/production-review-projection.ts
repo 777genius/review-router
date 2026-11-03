@@ -1,3 +1,4 @@
+import type { ProviderQuota } from '../../review-execution/domain/provider-quota';
 import { createHash } from 'crypto';
 import { REVIEW_ROUTER_WEB_ORIGIN } from '../../config/review-router-endpoints';
 import type { PRContext, ReviewConfig } from '../../types';
@@ -76,6 +77,7 @@ export type ProductionWorkAssignmentFacts = {
 };
 
 export function createProductionReviewProjectionBuilder(input: {
+  readonly providerQuota?: () => ProviderQuota | undefined;
   readonly authorizationFacts: ReviewRunAuthorizationFacts;
   readonly pr: PRContext;
   readonly config: ReviewConfig;
@@ -139,6 +141,7 @@ export function createProductionReviewProjectionBuilder(input: {
 class ProductionReviewProjectionCommandFactory implements ReviewProjectionCommandFactoryPort {
   constructor(
     private readonly input: {
+      readonly providerQuota?: () => ProviderQuota | undefined;
       readonly authorizationFacts: ReviewRunAuthorizationFacts;
       readonly pr: PRContext;
       readonly config: ReviewConfig;
@@ -450,6 +453,9 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       },
       providerExecution,
       incompleteCauses,
+      ...(!complete && this.input.providerQuota?.()
+        ? { providerQuota: this.input.providerQuota() }
+        : {}),
       currentFindings: Object.freeze(
         findings.sort((left, right) =>
           compareCodeUnits(left.sourceFindingId, right.sourceFindingId)

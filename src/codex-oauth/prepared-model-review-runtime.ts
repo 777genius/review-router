@@ -7,7 +7,7 @@ import { readApprovedReviewAgent } from '../control-plane/approved-review-agent'
 import { ReviewActionV2Client } from '../control-plane/review-action-v2-client';
 import type { AdmittedRuntimeConfig } from '../control-plane/runtime-config';
 import {
-  parseReviewModelDispatchCapabilityV2,
+  parseReviewModelDispatchCapability,
   reviewModelDispatchContract,
   type ReviewModelTransport,
 } from '../control-plane/generated/review-action-v2/review-model-dispatch-contract';
@@ -124,7 +124,7 @@ export async function runPreparedModelReview(
       input.repository,
       authorization.facts.headSha
     );
-    const cap = parseReviewModelDispatchCapabilityV2(
+    const cap = parseReviewModelDispatchCapability(
       JSON.parse(
         capability.runtimeConfig.runtimeEnv[
           reviewModelDispatchContract.capabilityRuntimeEnvKey

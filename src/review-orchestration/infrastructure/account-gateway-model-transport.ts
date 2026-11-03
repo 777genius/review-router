@@ -23,6 +23,7 @@ import { setTimeout as wait } from 'timers/promises';
 import type { LifecycleRequestEncoder } from '../../finding-revalidation/domain/packet';
 import {
   PreparedModelDispatch,
+  ModelDispatchClaimDeniedError,
   type PreparedModelDispatchTicket,
   type PreparedModelInvocationScope,
 } from './prepared-model-dispatch';
@@ -88,6 +89,7 @@ export type GatewayResponses = Readonly<{
 }>;
 export type GatewayTransportDiagnostic = Readonly<{
   stage:
+    | 'model_dispatch_claim'
     | 'request_body'
     | 'upstream_request'
     | 'upstream_headers'
@@ -1061,20 +1063,32 @@ export class AccountGatewayModelTransport {
       usage?.finish(true, controller.signal.aborted);
       observeTransport(
         this.observe,
-        responseReceived ? 'upstream_headers' : 'upstream_request',
-        responseReceived,
-        httpStatus,
+        error instanceof ModelDispatchClaimDeniedError
+          ? 'model_dispatch_claim'
+          : responseReceived
+            ? 'upstream_headers'
+            : 'upstream_request',
+        error instanceof ModelDispatchClaimDeniedError
+          ? error.source === 'api_denial'
+          : responseReceived,
+        error instanceof ModelDispatchClaimDeniedError
+          ? (error.httpStatus ?? null)
+          : httpStatus,
         error
       );
       this.inferenceDenied = true;
       this.mayHaveDispatched = true;
       this.failure ??= {
-        code: 'transport',
+        code:
+          error instanceof ModelDispatchClaimDeniedError
+            ? error.code
+            : 'transport',
         effect: 'effect_unknown',
         ...(currentRequestRef ? { requestRef: currentRequestRef } : {}),
       };
       controller.abort();
       dispose();
+      if (error instanceof ModelDispatchClaimDeniedError) throw error;
       throw new Error('account_gateway_transport_unknown');
     }
   }

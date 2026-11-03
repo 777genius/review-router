@@ -12,7 +12,7 @@ import type { ReviewAgentProfile } from '../../control-plane/generated/review-ac
 import { scopedModelInvocations } from './prepared-model-dispatch';
 import {
   reviewModelDispatchContract,
-  parseReviewModelDispatchCapabilityV2,
+  parseReviewModelDispatchCapability,
 } from '../../control-plane/generated/review-action-v2/review-model-dispatch-contract';
 import {
   ReviewMemorySession,
@@ -313,7 +313,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         reviewModelDispatchContract.capabilityRuntimeEnvKey
       ];
     const modelDispatchCapability = dispatchJson
-      ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson))
+      ? parseReviewModelDispatchCapability(JSON.parse(dispatchJson))
       : undefined;
     if (input.preparedRoute && !modelDispatchCapability)
       throw new Error('review_action_v2_prepared_route_unqualified');
@@ -689,7 +689,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             reviewModelDispatchContract.capabilityRuntimeEnvKey
           ];
         const modelDispatchCapability = dispatchJson
-          ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson))
+          ? parseReviewModelDispatchCapability(JSON.parse(dispatchJson))
           : undefined;
         const laneConfig =
           reviewer && admittedRuntime

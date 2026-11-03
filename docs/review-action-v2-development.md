@@ -222,6 +222,31 @@ inactive until the SaaS release registry, attestation registry, safety policy,
 worker lane, workflow inventory, and mutation epoch all agree on the same full
 Action commit SHA.
 
+## Model dispatch request capacity
+
+The legacy `model-dispatch-policy.v2` profile and capability parser retain their
+32-request limit. The explicit successor `model-dispatch-policy.capacity128.v1`
+approves up to 128 requests through its producer profile and authenticated frozen
+capability. Its capability carries the exact `capacityPolicy` discriminator;
+mutable defaults and an unrecognized policy cannot expand an admitted allowance.
+The allowance is shared across paid roles, and every reservation consumes it,
+including a positively unpaid reservation.
+
+The Action checks each next local request ordinal against the validated frozen
+capability before incrementing the counter or claiming a request. Closed,
+bounded API claim-denial codes remain distinguishable from upstream network
+failures; diagnostics retain only finite codes and HTTP statuses. A denied new
+claim does not prove that an earlier request or the whole invocation had no
+effect. Existing unknown-effect custody, fences, settlement and no-replay rules
+remain authoritative: a capacity denial never refunds reservations, reopens the
+consumer, retries a claim, or authorizes recovery of unknown work.
+
+Deploy the server parser for the explicit successor before registering or
+selecting its producer. Export the canonical handoff, qualify and rebuild the
+Action, then register and promote the exact producer/channel identity through
+the existing release process. Source changes and a larger profile alone do not
+activate the new capacity; frozen legacy runs keep their original allowance.
+
 ## Several Account Gateway reviewers
 
 Snapshot v4 checkout supplies the generated `ReviewReviewerPlanV1` contract in

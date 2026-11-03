@@ -1,3 +1,4 @@
+import { MODEL_DISPATCH_CLAIM_DENIAL_CODES } from '../review-orchestration/infrastructure/prepared-model-dispatch';
 import * as fs from 'fs';
 import {
   ReviewSkillsMaterializationError,
@@ -569,7 +570,8 @@ async function runAccountGatewayActionInternal(
       if (!fact) return;
       // GITHUB_STEP_SUMMARY is not available through Actions log readback.
       // Emit only the closed protocol vocabulary, never IDs or upstream text.
-      const code = new Set([
+      const code = new Set<string>([
+        ...MODEL_DISPATCH_CLAIM_DENIAL_CODES,
         'invalid_input',
         'transport',
         'invalid_response',

@@ -8,7 +8,7 @@ import {
   parseLifecycleVerificationCapabilityV2,
   type LifecycleVerificationCapability,
 } from '../../control-plane/generated/review-action-v2/review-lifecycle-verification-v2';
-import type { ReviewModelDispatchCapabilityV2 } from '../../control-plane/generated/review-action-v2/review-model-dispatch-contract';
+import type { ReviewModelDispatchCapability } from '../../control-plane/generated/review-action-v2/review-model-dispatch-contract';
 import {
   canonicalRevalidationJson as canonicalJson,
   prepareLifecycleRequest,
@@ -44,7 +44,7 @@ export function readLifecycleCapability(
   json: string | undefined,
   model: string,
   providerKind: ReviewExecutionProviderKind,
-  route?: ReviewModelDispatchCapabilityV2
+  route?: ReviewModelDispatchCapability
 ): LifecycleVerificationCapability | undefined {
   if (!json || Buffer.byteLength(json, 'utf8') > 4096) return undefined;
   try {

@@ -93,3 +93,16 @@ it('never projects arbitrary error details, gateway codes/effects or process tai
     reason: 'invocation_failed',
   });
 });
+
+it.each(['model_dispatch_request_invalid', 'model_dispatch_budget_exhausted'])(
+  'preserves the closed claim denial %s without erasing earlier uncertain effects',
+  (code) => {
+    expect(
+      ocrReviewFailureDiagnostic(
+        new Error('private upstream text'),
+        undefined,
+        { code, effect: 'effect_unknown' }
+      ).gateway
+    ).toEqual({ code, effect: 'effect_unknown' });
+  }
+);

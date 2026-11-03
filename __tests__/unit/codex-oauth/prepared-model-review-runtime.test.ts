@@ -146,68 +146,82 @@ describe('one admitted prepared model bootstrap', () => {
     await fs.rm(fixture, { recursive: true, force: true });
   });
 
-  it('binds one admitted model and exact revision while withholding parent credentials from the common runner', async () => {
-    const value = checkout();
-    const fetchImpl = jest.fn(async () => response(value));
-    const dispose = jest.fn(async () => {});
-    const prepareTransport = jest.fn(async () => ({
-      baseUrl: 'http://127.0.0.1:4567',
-      configuration: [],
-      environment: { [LOCAL_MODEL_CAPABILITY_ENV]: `Bearer ${'1'.repeat(64)}` },
-      actualModel: () => 'gpt-5.4',
-      failureFact: () => undefined,
-      dispose,
-    }));
-    let workspace = '';
-    const review: CodexOAuthV2ReviewRunnerPort = {
-      run: jest.fn(async (request) => {
-        workspace = request.workspacePath;
-        expect(request).not.toHaveProperty('codexHome');
-        expect(request).not.toHaveProperty('privateCredential');
-        expect(request.scmReadToken).toBe(value.token);
-        expect(request.preparedRoute!.runtimeConfig).toEqual(
-          value.runtimeConfig
-        );
-        expect(request.ocr!.run.binaryPath).toBe('/verified/immutable-ocr');
-        const refreshed = await request.refreshScmReadToken();
-        expect(refreshed.token).toBe(value.token);
-        expect(dispose).not.toHaveBeenCalled();
-        return { outcome: 'completed' } as never;
-      }),
-    };
-    await expect(
-      runPreparedModelReview(input(), {
-        transport: 'runner_local_responses',
-        signal: new AbortController().signal,
-        fetchImpl,
-        prepareTransport,
-        review,
-      })
-    ).resolves.toEqual({ outcome: 'completed' });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(prepareTransport).toHaveBeenCalledTimes(1);
-    expect(
-      jest.mocked(resolveApprovedOcrBinary).mock.invocationCallOrder[0]
-    ).toBeLessThan(prepareTransport.mock.invocationCallOrder[0]!);
-    expect(safeCheckoutRepository).toHaveBeenCalledWith(
-      expect.objectContaining({
-        headSha: head,
-        mergeBaseSha: mergeBase,
-        token: value.token,
-        workspacePath: workspace,
-      })
-    );
-    expect(prepareOcrManagedRun).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: 'gpt-5.4',
-        protocol: 'openai-responses',
-        rawCapability: '1'.repeat(64),
-        modelReasoningEffort: 'high',
-      })
-    );
-    expect(dispose).toHaveBeenCalledTimes(1);
-    await expect(fs.access(workspace)).rejects.toThrow();
-  });
+  it.each([32, 128])(
+    'binds frozen allowance %s, one model and exact revision while withholding parent credentials',
+    async (maxRequests) => {
+      const value = checkout();
+      value.runtimeConfig.runtimeEnv[
+        reviewModelDispatchContract.capabilityRuntimeEnvKey
+      ] = JSON.stringify({
+        ...cap(),
+        maxRequests,
+        ...(maxRequests === 128
+          ? { capacityPolicy: 'model-dispatch-policy.capacity128.v1' }
+          : {}),
+      });
+      const fetchImpl = jest.fn(async () => response(value));
+      const dispose = jest.fn(async () => {});
+      const prepareTransport = jest.fn(async () => ({
+        baseUrl: 'http://127.0.0.1:4567',
+        configuration: [],
+        environment: {
+          [LOCAL_MODEL_CAPABILITY_ENV]: `Bearer ${'1'.repeat(64)}`,
+        },
+        actualModel: () => 'gpt-5.4',
+        failureFact: () => undefined,
+        dispose,
+      }));
+      let workspace = '';
+      const review: CodexOAuthV2ReviewRunnerPort = {
+        run: jest.fn(async (request) => {
+          workspace = request.workspacePath;
+          expect(request).not.toHaveProperty('codexHome');
+          expect(request).not.toHaveProperty('privateCredential');
+          expect(request.scmReadToken).toBe(value.token);
+          expect(request.preparedRoute!.runtimeConfig).toEqual(
+            value.runtimeConfig
+          );
+          expect(request.ocr!.run.binaryPath).toBe('/verified/immutable-ocr');
+          const refreshed = await request.refreshScmReadToken();
+          expect(refreshed.token).toBe(value.token);
+          expect(dispose).not.toHaveBeenCalled();
+          return { outcome: 'completed' } as never;
+        }),
+      };
+      await expect(
+        runPreparedModelReview(input(), {
+          transport: 'runner_local_responses',
+          signal: new AbortController().signal,
+          fetchImpl,
+          prepareTransport,
+          review,
+        })
+      ).resolves.toEqual({ outcome: 'completed' });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(prepareTransport).toHaveBeenCalledTimes(1);
+      expect(
+        jest.mocked(resolveApprovedOcrBinary).mock.invocationCallOrder[0]
+      ).toBeLessThan(prepareTransport.mock.invocationCallOrder[0]!);
+      expect(safeCheckoutRepository).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headSha: head,
+          mergeBaseSha: mergeBase,
+          token: value.token,
+          workspacePath: workspace,
+        })
+      );
+      expect(prepareOcrManagedRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gpt-5.4',
+          protocol: 'openai-responses',
+          rawCapability: '1'.repeat(64),
+          modelReasoningEffort: 'high',
+        })
+      );
+      expect(dispose).toHaveBeenCalledTimes(1);
+      await expect(fs.access(workspace)).rejects.toThrow();
+    }
+  );
 
   it('runs the actual rotating schema 5 adapter with the separate schema 2 checkout contract and private refreshed auth', async () => {
     const request = input();

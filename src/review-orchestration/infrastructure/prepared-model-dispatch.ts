@@ -1,10 +1,10 @@
 import { createHash } from 'crypto';
 import {
-  parseReviewModelDispatchCapabilityV2,
+  parseReviewModelDispatchCapability,
   reviewModelDispatchContract as contract,
   reviewModelDispatchIdPreimage,
   reviewModelDispatchOutputUsageIsWithinLimit,
-  type ReviewModelDispatchCapabilityV2,
+  type ReviewModelDispatchCapability,
   type ReviewModelDispatchClaimV2,
   type ReviewModelDispatchClaimResultV2,
   type ReviewModelDispatchReadbackV2,
@@ -14,6 +14,26 @@ import {
 import type { ReviewCompanionDispatchContextV1 } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import { canonicalJson } from '../../review-investigation/domain/canonical-json';
 import type { PreparedReviewInvocationPort } from '../application';
+
+/** Closed control-plane claim reasons; arbitrary response text is never retained. */
+export const MODEL_DISPATCH_CLAIM_DENIAL_CODES = [
+  'model_dispatch_request_invalid',
+  'model_dispatch_budget_exhausted',
+  'model_dispatch_effect_unresolved',
+  'model_dispatch_authority_changed',
+  'model_dispatch_ordinal_invalid',
+  'model_dispatch_authorization_denied',
+] as const;
+export class ModelDispatchClaimDeniedError extends Error {
+  constructor(
+    readonly code: (typeof MODEL_DISPATCH_CLAIM_DENIAL_CODES)[number],
+    readonly httpStatus: 400 | 401 | 409 | undefined,
+    readonly source: 'local_bound' | 'api_denial'
+  ) {
+    super(code);
+    this.name = 'ModelDispatchClaimDeniedError';
+  }
+}
 
 /** One scope adapter for either approved engine. Restored observations never
  * enter execute, and therefore never obtain a fresh model-dispatch scope. */
@@ -74,7 +94,7 @@ export type PreparedModelDispatchTicket = Readonly<{
  * engine or finding rules. Reservations are permanent, including local failures.
  * A restored reservation never authorizes another upstream request. */
 export class PreparedModelDispatch {
-  readonly capability: ReviewModelDispatchCapabilityV2;
+  readonly capability: ReviewModelDispatchCapability;
   private readonly origin: URL;
   private scope?: () => PreparedModelInvocationScope;
   private readonly ordinals = new Map<string, number>();
@@ -92,7 +112,7 @@ export class PreparedModelDispatch {
       fetchImpl?: typeof fetch;
     }>
   ) {
-    this.capability = parseReviewModelDispatchCapabilityV2(input.capability);
+    this.capability = parseReviewModelDispatchCapability(input.capability);
     this.origin = new URL(input.apiUrl);
     if (
       this.origin.username ||
@@ -202,6 +222,16 @@ export class PreparedModelDispatch {
       throw new Error('model_dispatch_route_mismatch');
     const authorization = this.input.authorization();
     const requestOrdinal = (this.ordinals.get(scope.workSlotId) ?? 0) + 1;
+    if (requestOrdinal > cap.maxRequests) {
+      // This request has no claim, but earlier calls may have paid. Keep the
+      // invocation fenced; never turn this local bound into a whole-run refund.
+      this.fenced = true;
+      throw new ModelDispatchClaimDeniedError(
+        'model_dispatch_budget_exhausted',
+        undefined,
+        'local_bound'
+      );
+    }
     this.ordinals.set(scope.workSlotId, requestOrdinal);
     this.active = true;
     const claim: ReviewModelDispatchClaimV2 = {
@@ -244,9 +274,10 @@ export class PreparedModelDispatch {
         Date.parse(result.notAfter) > Date.parse(cap.deadline)
       )
         throw new Error('model_dispatch_claim_unavailable');
-    } catch {
+    } catch (error) {
       this.active = false;
       this.fenced = true;
+      if (error instanceof ModelDispatchClaimDeniedError) throw error;
       throw new Error('model_dispatch_claim_unavailable');
     }
     let forwarded = false;
@@ -358,8 +389,13 @@ export class PreparedModelDispatch {
           : AbortSignal.timeout(30_000),
       }
     );
+    const claimDenial =
+      path === contract.claimPath &&
+      (response.status === 400 ||
+        response.status === 401 ||
+        response.status === 409);
     if (
-      !response.ok ||
+      (!response.ok && !claimDenial) ||
       !response.body ||
       !/^application\/json(?:\s*;.*)?$/i.test(
         response.headers.get('content-type') ?? ''
@@ -376,9 +412,35 @@ export class PreparedModelDispatch {
         throw new Error('model_dispatch_control_bound');
       chunks.push(chunk);
     }
-    return JSON.parse(
+    const value: unknown = JSON.parse(
       new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))
     );
+    if (!response.ok) {
+      if (
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 1 &&
+        Object.hasOwn(value, 'code')
+      ) {
+        const code = MODEL_DISPATCH_CLAIM_DENIAL_CODES.find(
+          (candidate) => candidate === (value as { code: unknown }).code
+        );
+        if (
+          code &&
+          (response.status === 400 ||
+            response.status === 401 ||
+            response.status === 409)
+        )
+          throw new ModelDispatchClaimDeniedError(
+            code,
+            response.status,
+            'api_denial'
+          );
+      }
+      throw new Error('model_dispatch_control_unavailable');
+    }
+    return value;
   }
 }
 

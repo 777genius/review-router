@@ -18,6 +18,15 @@ calls. The SaaS owns authorization, mutation epochs, evidence acceptance,
 publication policy, and durable state. Provider processes never receive GitHub
 mutation credentials.
 
+## Qualification toolchain scope
+
+The repository's `AGENTS.md` explicitly retains its pinned toolchain adoption.
+Existing Jest/ts-jest and ESLint parser gates continue to use the lockfile's
+TypeScript 5.9.3 dependency; they do not establish TypeScript 7 compiler/API
+conformance. Changed maintained source also receives a strict TypeScript 7.0.2
+project check. This bounded runtime fix does not migrate those embedded tools
+or change the required assertions, coverage, or committed-artifact checks.
+
 ## Memory inputs
 
 Fresh T0 reviews capture one bounded, authorized memory snapshot and bind its

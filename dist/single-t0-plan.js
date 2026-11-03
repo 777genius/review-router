@@ -119977,6 +119977,12 @@ var reviewModelDispatchContract = Object.freeze({
   maxOutputTokens: 32768,
   maxReceiptBytes: 8 * 1024
 });
+var reviewModelDispatchCapacity128Contract = Object.freeze({
+  ...reviewModelDispatchContract,
+  policyVersion: "model-dispatch-policy.capacity128.v1",
+  capacityPolicy: "model-dispatch-policy.capacity128.v1",
+  maxRequests: 128
+});
 var reviewModelDispatchHeaders = Object.freeze({
   dispatchVersion: "x-reviewrouter-model-dispatch-version",
   requestOrdinal: "x-reviewrouter-model-request-ordinal",
@@ -119988,7 +119994,7 @@ var reviewModelTransports = [
   "account_gateway",
   "hosted_pool"
 ];
-function parseReviewModelDispatchLimitsV2(value) {
+function parseLimits(value, contract) {
   const names = [
     "maxRequests",
     "maxConcurrentRequests",
@@ -119998,15 +120004,25 @@ function parseReviewModelDispatchLimitsV2(value) {
   ];
   if (!record(value) || !keys(value, names)) invalid();
   for (const name of names)
-    if (!positive(value[name]) || value[name] > reviewModelDispatchContract[name])
-      invalid();
+    if (!positive(value[name]) || value[name] > contract[name]) invalid();
   if (value.maxConcurrentRequests !== 1) invalid();
   return Object.freeze({ ...value });
 }
 function parseReviewModelDispatchCapabilityV2(value) {
+  return parseCapability(
+    value,
+    reviewModelDispatchContract
+  );
+}
+function parseReviewModelDispatchCapability(value) {
+  return record(value) && Object.hasOwn(value, "capacityPolicy") ? parseCapability(value, reviewModelDispatchCapacity128Contract) : parseReviewModelDispatchCapabilityV2(value);
+}
+function parseCapability(value, contract) {
+  const capacity128 = contract === reviewModelDispatchCapacity128Contract;
   if (!record(value) || !keys(value, [
     "extensionId",
     "version",
+    ...capacity128 ? ["capacityPolicy"] : [],
     "routeIdentityHash",
     "transport",
     "wireProtocol",
@@ -120020,7 +120036,7 @@ function parseReviewModelDispatchCapabilityV2(value) {
     "maxRequestBytes",
     "maxResponseBytes",
     "maxOutputTokens"
-  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
+  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || capacity128 && value.capacityPolicy !== reviewModelDispatchCapacity128Contract.capacityPolicy || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
     value.transport,
     value.wireProtocol
   ) || !Number.isSafeInteger(value.providerIndex) || Number(value.providerIndex) < 0 || Number(value.providerIndex) > 15 || typeof value.model !== "string" || !value.model.trim() || value.model.length > 256 || Object.hasOwn(value, "configuredModel") && (value.transport !== "runner_local_anthropic" || !anthropicModelAliases.includes(
@@ -120034,13 +120050,16 @@ function parseReviewModelDispatchCapabilityV2(value) {
     maxResponseBytes,
     maxOutputTokens
   } = value;
-  const limits = parseReviewModelDispatchLimitsV2({
-    maxRequests,
-    maxConcurrentRequests,
-    maxRequestBytes,
-    maxResponseBytes,
-    maxOutputTokens
-  });
+  const limits = parseLimits(
+    {
+      maxRequests,
+      maxConcurrentRequests,
+      maxRequestBytes,
+      maxResponseBytes,
+      maxOutputTokens
+    },
+    contract
+  );
   return Object.freeze({
     ...value,
     ...limits
@@ -120100,6 +120119,14 @@ function sha256(value) {
 }
 
 // src/review-orchestration/infrastructure/prepared-model-dispatch.ts
+var MODEL_DISPATCH_CLAIM_DENIAL_CODES = [
+  "model_dispatch_request_invalid",
+  "model_dispatch_budget_exhausted",
+  "model_dispatch_effect_unresolved",
+  "model_dispatch_authority_changed",
+  "model_dispatch_ordinal_invalid",
+  "model_dispatch_authorization_denied"
+];
 function scopedModelInvocations(invocations, transport) {
   return {
     prepare: (input) => invocations.prepare(input),
@@ -215887,6 +215914,7 @@ var SDK_GATEWAY_CODES = [
 ];
 var GATEWAY_CODES = [
   ...SDK_GATEWAY_CODES,
+  ...MODEL_DISPATCH_CLAIM_DENIAL_CODES,
   "authorization_denied",
   "close_pending",
   "context_tools_unavailable",
@@ -222036,7 +222064,7 @@ var ProductionT0ReviewRunner = class {
     }
     const admittedRuntime = preparedRoute?.runtimeConfig;
     const dispatchJson = admittedRuntime?.runtimeEnv[reviewModelDispatchContract.capabilityRuntimeEnvKey];
-    const modelDispatchCapability = dispatchJson ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson)) : void 0;
+    const modelDispatchCapability = dispatchJson ? parseReviewModelDispatchCapability(JSON.parse(dispatchJson)) : void 0;
     if (input.preparedRoute && !modelDispatchCapability)
       throw new Error("review_action_v2_prepared_route_unqualified");
     if (admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== void 0 && !input.ocr && !input.accountGateway?.reviewers)
@@ -222315,7 +222343,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
         const preparedRoute2 = input2.preparedRoute ?? input2.accountGateway ?? input2.providerApi;
         const admittedRuntime2 = preparedRoute2?.runtimeConfig;
         const dispatchJson2 = admittedRuntime2?.runtimeEnv[reviewModelDispatchContract.capabilityRuntimeEnvKey];
-        const modelDispatchCapability2 = dispatchJson2 ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson2)) : void 0;
+        const modelDispatchCapability2 = dispatchJson2 ? parseReviewModelDispatchCapability(JSON.parse(dispatchJson2)) : void 0;
         const laneConfig = reviewer && admittedRuntime2 ? ConfigLoader.loadRuntimeEnvironment(admittedRuntime2.runtimeEnv, {
           modelTransport: true
         }) : parentConfig;

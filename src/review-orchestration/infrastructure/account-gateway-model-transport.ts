@@ -1849,6 +1849,7 @@ function failureFact(
       !('effect' in error)
     )
       return undefined;
+    const quota = confirmedProviderQuota(error);
     const code = safeReference(error.code);
     const effect = safeReference(error.effect);
     const requestRef =
@@ -1857,9 +1858,7 @@ function failureFact(
       ? {
           code,
           effect,
-          ...(confirmedProviderQuota(error)
-            ? { providerQuota: confirmedProviderQuota(error)! }
-            : {}),
+          ...(quota ? { providerQuota: quota } : {}),
           ...(requestRef ? { requestRef } : {}),
           ...('failureScope' in error &&
           ['reviewer', 'allocation', 'run'].includes(String(error.failureScope))

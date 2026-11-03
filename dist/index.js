@@ -131267,7 +131267,8 @@ function confirmedProviderQuota(fact) {
   return value.code === "provider_quota_exhausted" ? parseProviderQuota(value.providerQuota) : void 0;
 }
 function providerQuotaMessage(quota) {
-  return `Provider request quota exhausted; try after ${quota.resetAt}.`;
+  const resetAt = quota.resetAt.replace("T", " ").replace(/:00\.000Z$/, " UTC").replace(/Z$/, " UTC");
+  return `OpenRouter request quota exhausted (0 of ${quota.limit} requests remaining). Try again after ${resetAt}.`;
 }
 
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
@@ -133288,13 +133289,14 @@ function failureFact(bytes2, ref) {
     const error4 = raw.error;
     if (!error4 || typeof error4 !== "object" || !("code" in error4) || !("effect" in error4))
       return void 0;
+    const quota = confirmedProviderQuota(error4);
     const code = safeReference(error4.code);
     const effect = safeReference(error4.effect);
     const requestRef = "requestRef" in error4 ? safeReference(error4.requestRef) : ref;
     return code && effect ? {
       code,
       effect,
-      ...confirmedProviderQuota(error4) ? { providerQuota: confirmedProviderQuota(error4) } : {},
+      ...quota ? { providerQuota: quota } : {},
       ...requestRef ? { requestRef } : {},
       ..."failureScope" in error4 && ["reviewer", "allocation", "run"].includes(String(error4.failureScope)) ? {
         failureScope: error4.failureScope

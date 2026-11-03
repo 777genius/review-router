@@ -121,7 +121,7 @@ describe('production review projection coverage', () => {
     const partialSummary = JSON.parse(partial.projectionEnvelopeCanonicalJson)
       .publishing.summary.body;
     expect(partialSummary).toContain(
-      'Provider request quota exhausted; try after 2026-11-05T00:00:00.000Z.'
+      'OpenRouter request quota exhausted (0 of 1000 requests remaining). Try again after 2026-11-05 00:00 UTC.'
     );
     expect(partial.coverageComplete).toBe(false);
     const complete = await builder.build({

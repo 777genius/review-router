@@ -119968,7 +119968,8 @@ function confirmedProviderQuota(fact) {
   return value.code === "provider_quota_exhausted" ? parseProviderQuota(value.providerQuota) : void 0;
 }
 function providerQuotaMessage(quota) {
-  return `Provider request quota exhausted; try after ${quota.resetAt}.`;
+  const resetAt = quota.resetAt.replace("T", " ").replace(/:00\.000Z$/, " UTC").replace(/Z$/, " UTC");
+  return `OpenRouter request quota exhausted (0 of ${quota.limit} requests remaining). Try again after ${resetAt}.`;
 }
 
 // src/control-plane/generated/review-action-v2/review-model-dispatch-contract.ts

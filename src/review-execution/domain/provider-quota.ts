@@ -39,5 +39,9 @@ export function confirmedProviderQuota(
 }
 
 export function providerQuotaMessage(quota: ProviderQuota): string {
-  return `Provider request quota exhausted; try after ${quota.resetAt}.`;
+  const resetAt = quota.resetAt
+    .replace('T', ' ')
+    .replace(/:00\.000Z$/, ' UTC')
+    .replace(/Z$/, ' UTC');
+  return `OpenRouter request quota exhausted (0 of ${quota.limit} requests remaining). Try again after ${resetAt}.`;
 }

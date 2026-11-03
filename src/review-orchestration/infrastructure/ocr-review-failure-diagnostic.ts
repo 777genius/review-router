@@ -1,3 +1,4 @@
+import { MODEL_DISPATCH_CLAIM_DENIAL_CODES } from './prepared-model-dispatch';
 import { constants } from 'node:os';
 import {
   OcrReviewAcceptanceError,
@@ -25,6 +26,7 @@ const SDK_GATEWAY_CODES = [
 // Fixed RR-local protocol codes only. Unknown values are not diagnostic text.
 const GATEWAY_CODES = [
   ...SDK_GATEWAY_CODES,
+  ...MODEL_DISPATCH_CLAIM_DENIAL_CODES,
   'authorization_denied',
   'close_pending',
   'context_tools_unavailable',

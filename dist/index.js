@@ -131249,7 +131249,7 @@ function hasKeys(value, keys5) {
 }
 
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
-var import_crypto4 = require("crypto");
+var import_crypto5 = require("crypto");
 var import_http = require("http");
 var import_https = require("https");
 var import_perf_hooks2 = require("perf_hooks");
@@ -131425,9 +131425,170 @@ var contextToolsContract = Object.freeze({
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
 var import_promises2 = require("timers/promises");
 
-// src/review-orchestration/infrastructure/codex-subscription-responses-codec.ts
+// src/review-orchestration/infrastructure/prepared-model-dispatch.ts
 var import_crypto3 = require("crypto");
-var import_util4 = require("util");
+
+// src/control-plane/generated/review-action-v2/review-model-dispatch-contract.ts
+var reviewModelWireProtocols = [
+  "openai-responses",
+  "codex-responses",
+  "anthropic-messages"
+];
+var anthropicModelAliases = ["sonnet", "opus", "haiku"];
+var reviewModelDispatchContract = Object.freeze({
+  extensionId: "review-model-dispatch.v2",
+  version: 2,
+  policyVersion: "model-dispatch-policy.v2",
+  capabilityRuntimeEnvKey: "REVIEW_ROUTER_MODEL_DISPATCH_CAPABILITY_JSON",
+  basePath: "/api/action/v2/model-dispatch",
+  claimPath: "/api/action/v2/model-dispatch/claim",
+  receiptHeader: "x-reviewrouter-dispatch-receipt",
+  wireProtocols: Object.freeze(reviewModelWireProtocols),
+  anthropicModelAliases: Object.freeze(anthropicModelAliases),
+  outputTokenLimits: Object.freeze([
+    "upstream_request",
+    "terminal_acceptance"
+  ]),
+  maxRequests: 32,
+  maxConcurrentRequests: 1,
+  maxRequestBytes: 16 * 1024 * 1024,
+  maxResponseBytes: 8 * 1024 * 1024,
+  maxOutputTokens: 32768,
+  maxReceiptBytes: 8 * 1024
+});
+var reviewModelDispatchCapacity128Contract = Object.freeze({
+  ...reviewModelDispatchContract,
+  policyVersion: "model-dispatch-policy.capacity128.v1",
+  capacityPolicy: "model-dispatch-policy.capacity128.v1",
+  maxRequests: 128
+});
+var reviewModelDispatchHeaders = Object.freeze({
+  dispatchVersion: "x-reviewrouter-model-dispatch-version",
+  requestOrdinal: "x-reviewrouter-model-request-ordinal",
+  routeIdentityHash: "x-reviewrouter-model-route-identity-hash"
+});
+var reviewModelTransports = [
+  "runner_local_responses",
+  "runner_local_anthropic",
+  "account_gateway",
+  "hosted_pool"
+];
+function reviewModelDispatchIdPreimage(input) {
+  return JSON.stringify([
+    reviewModelDispatchContract.extensionId,
+    input.authorizationId,
+    input.workSlotId,
+    input.attemptOrdinal,
+    input.requestOrdinal
+  ]);
+}
+function parseLimits(value, contract) {
+  const names = [
+    "maxRequests",
+    "maxConcurrentRequests",
+    "maxRequestBytes",
+    "maxResponseBytes",
+    "maxOutputTokens"
+  ];
+  if (!record(value) || !keys(value, names)) invalid2();
+  for (const name of names)
+    if (!positive(value[name]) || value[name] > contract[name]) invalid2();
+  if (value.maxConcurrentRequests !== 1) invalid2();
+  return Object.freeze({ ...value });
+}
+function parseReviewModelDispatchCapabilityV2(value) {
+  return parseCapability(
+    value,
+    reviewModelDispatchContract
+  );
+}
+function parseReviewModelDispatchCapability(value) {
+  return record(value) && Object.hasOwn(value, "capacityPolicy") ? parseCapability(value, reviewModelDispatchCapacity128Contract) : parseReviewModelDispatchCapabilityV2(value);
+}
+function parseCapability(value, contract) {
+  const capacity128 = contract === reviewModelDispatchCapacity128Contract;
+  if (!record(value) || !keys(value, [
+    "extensionId",
+    "version",
+    ...capacity128 ? ["capacityPolicy"] : [],
+    "routeIdentityHash",
+    "transport",
+    "wireProtocol",
+    "outputTokenLimit",
+    "providerIndex",
+    "model",
+    ...Object.hasOwn(value, "configuredModel") ? ["configuredModel"] : [],
+    "deadline",
+    "maxRequests",
+    "maxConcurrentRequests",
+    "maxRequestBytes",
+    "maxResponseBytes",
+    "maxOutputTokens"
+  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || capacity128 && value.capacityPolicy !== reviewModelDispatchCapacity128Contract.capacityPolicy || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
+    value.transport,
+    value.wireProtocol
+  ) || !Number.isSafeInteger(value.providerIndex) || Number(value.providerIndex) < 0 || Number(value.providerIndex) > 15 || typeof value.model !== "string" || !value.model.trim() || value.model.length > 256 || Object.hasOwn(value, "configuredModel") && (value.transport !== "runner_local_anthropic" || !anthropicModelAliases.includes(
+    value.configuredModel
+  ) || value.configuredModel === value.model) || typeof value.deadline !== "string" || !Number.isFinite(Date.parse(value.deadline)) || new Date(value.deadline).toISOString() !== value.deadline)
+    invalid2();
+  const {
+    maxRequests,
+    maxConcurrentRequests,
+    maxRequestBytes,
+    maxResponseBytes,
+    maxOutputTokens
+  } = value;
+  const limits = parseLimits(
+    {
+      maxRequests,
+      maxConcurrentRequests,
+      maxRequestBytes,
+      maxResponseBytes,
+      maxOutputTokens
+    },
+    contract
+  );
+  return Object.freeze({
+    ...value,
+    ...limits
+  });
+}
+function isReviewModelTransport(value) {
+  return typeof value === "string" && reviewModelTransports.includes(value);
+}
+function isReviewModelWireProtocol(value) {
+  return typeof value === "string" && reviewModelWireProtocols.includes(value);
+}
+function reviewModelWireProtocolMatchesTransport(transport, protocol) {
+  switch (transport) {
+    case "runner_local_anthropic":
+      return protocol === "anthropic-messages";
+    case "hosted_pool":
+      return protocol === "codex-responses";
+    case "account_gateway":
+      return protocol === "openai-responses";
+    case "runner_local_responses":
+      return protocol === "openai-responses" || protocol === "codex-responses";
+  }
+}
+function reviewModelDispatchOutputUsageIsWithinLimit(usage, maxOutputTokens) {
+  return typeof usage.outputTokens === "number" && Number.isSafeInteger(usage.outputTokens) && usage.outputTokens >= 0 && Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 && usage.outputTokens <= maxOutputTokens;
+}
+function record(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function keys(value, names) {
+  return Object.keys(value).length === names.length && names.every((name) => Object.hasOwn(value, name));
+}
+function positive(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+function hash(value) {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+function invalid2() {
+  throw new Error("review_model_dispatch_contract_invalid");
+}
 
 // src/review-investigation/domain/canonical-json.ts
 var import_crypto2 = require("crypto");
@@ -131448,7 +131609,305 @@ function sha256(value) {
   return (0, import_crypto2.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 
+// src/review-orchestration/infrastructure/prepared-model-dispatch.ts
+var MODEL_DISPATCH_CLAIM_DENIAL_CODES = [
+  "model_dispatch_request_invalid",
+  "model_dispatch_budget_exhausted",
+  "model_dispatch_effect_unresolved",
+  "model_dispatch_authority_changed",
+  "model_dispatch_ordinal_invalid",
+  "model_dispatch_authorization_denied"
+];
+var ModelDispatchClaimDeniedError = class extends Error {
+  constructor(code, httpStatus, source) {
+    super(code);
+    this.code = code;
+    this.httpStatus = httpStatus;
+    this.source = source;
+    this.name = "ModelDispatchClaimDeniedError";
+  }
+};
+function scopedModelInvocations(invocations, transport) {
+  return {
+    prepare: (input) => invocations.prepare(input),
+    async execute(input) {
+      const release = transport.beginInvocation?.(() => {
+        input.signal.throwIfAborted();
+        const lease = input.currentLease?.() ?? input.lease;
+        return {
+          executionId: input.sourceExecutionId,
+          workSlotId: input.invocation.workSlotId,
+          attemptOrdinal: input.invocation.attemptOrdinal,
+          leaseId: lease.leaseId,
+          leaseCapability: lease.leaseCapability,
+          fencingToken: lease.fencingToken,
+          preparedManifestKey: input.manifest.manifestKey
+        };
+      });
+      try {
+        return await invocations.execute(input);
+      } finally {
+        release?.();
+      }
+    }
+  };
+}
+var PreparedModelDispatch = class {
+  constructor(input) {
+    this.input = input;
+    this.capability = parseReviewModelDispatchCapability(input.capability);
+    this.origin = new URL(input.apiUrl);
+    if (this.origin.username || this.origin.password || this.origin.protocol !== "https:" && !(this.origin.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(this.origin.hostname)))
+      throw new Error("model_dispatch_origin_invalid");
+  }
+  capability;
+  origin;
+  scope;
+  ordinals = /* @__PURE__ */ new Map();
+  active = false;
+  fenced = false;
+  /** The runner installs a live lease getter only while its leased invocation
+   * runs. An engine cannot submit its own scope or mint a new ordinal. */
+  beginInvocation(scope) {
+    if (this.scope || this.active || this.fenced)
+      throw new Error("model_dispatch_scope_unavailable");
+    this.scope = scope;
+    return () => {
+      if (this.scope === scope) this.scope = void 0;
+      if (this.active) this.fenced = true;
+    };
+  }
+  normalizeResponsesRequest(input) {
+    const cap = this.capability;
+    if (cap.wireProtocol !== "openai-responses")
+      throw new Error("model_dispatch_wire_protocol_mismatch");
+    if (input.byteLength > cap.maxRequestBytes)
+      throw new Error("model_dispatch_request_bound");
+    const request3 = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(input)
+    );
+    if (!request3 || typeof request3 !== "object" || Array.isArray(request3))
+      throw new Error("model_dispatch_request_invalid");
+    const row = request3;
+    if (row.model !== cap.model || row.stream !== true)
+      throw new Error("model_dispatch_route_mismatch");
+    if (cap.transport === "account_gateway") {
+      if (row.store !== void 0 && row.store !== false || row.service_tier !== void 0 && row.service_tier !== "default" || Object.hasOwn(row, "previous_response_id"))
+        throw new Error("model_dispatch_route_mismatch");
+      if (row.reasoning === null) delete row.reasoning;
+      row.store = false;
+      row.service_tier = "default";
+    }
+    const requested = row.max_output_tokens ?? cap.maxOutputTokens;
+    if (typeof requested !== "number" || !Number.isSafeInteger(requested) || requested <= 0)
+      throw new Error("model_dispatch_output_bound");
+    row.max_output_tokens = Math.min(requested, cap.maxOutputTokens);
+    const normalized = Buffer.from(JSON.stringify(row));
+    if (normalized.byteLength > cap.maxRequestBytes)
+      throw new Error("model_dispatch_request_bound");
+    return normalized;
+  }
+  async reserve(bytes2, signal, explicitScope, outputAcceptanceCap) {
+    signal.throwIfAborted();
+    const cap = this.capability;
+    if (this.fenced || this.active || Date.now() >= Date.parse(cap.deadline))
+      throw new Error("model_dispatch_fenced");
+    const scope = explicitScope ?? this.scope?.();
+    if (!scope || scope.attemptOrdinal !== 1)
+      throw new Error("model_dispatch_scope_unavailable");
+    const raw = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
+    );
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+      throw new Error("model_dispatch_request_invalid");
+    const wire = raw;
+    const output = cap.wireProtocol === "codex-responses" ? outputAcceptanceCap : wire[cap.wireProtocol === "anthropic-messages" ? "max_tokens" : "max_output_tokens"];
+    if (wire.model !== cap.model || !Number.isSafeInteger(output) || Number(output) < 1 || Number(output) > cap.maxOutputTokens || bytes2.byteLength > cap.maxRequestBytes || cap.wireProtocol === "codex-responses" && Object.hasOwn(wire, "max_output_tokens") || outputAcceptanceCap !== void 0 && outputAcceptanceCap !== output)
+      throw new Error("model_dispatch_route_mismatch");
+    const authorization = this.input.authorization();
+    const requestOrdinal = (this.ordinals.get(scope.workSlotId) ?? 0) + 1;
+    if (requestOrdinal > cap.maxRequests) {
+      this.fenced = true;
+      throw new ModelDispatchClaimDeniedError(
+        "model_dispatch_budget_exhausted",
+        void 0,
+        "local_bound"
+      );
+    }
+    this.ordinals.set(scope.workSlotId, requestOrdinal);
+    this.active = true;
+    const claim = {
+      ...scope,
+      dispatchVersion: 2,
+      dispatchId: `rr-model-${hash2(
+        Buffer.from(
+          reviewModelDispatchIdPreimage({
+            authorizationId: authorization.authorizationId,
+            workSlotId: scope.workSlotId,
+            attemptOrdinal: 1,
+            requestOrdinal
+          })
+        )
+      )}`,
+      attemptOrdinal: 1,
+      requestOrdinal,
+      routeIdentityHash: cap.routeIdentityHash,
+      providerRequestEnvelopeHash: hash2(bytes2),
+      requestBytes: bytes2.byteLength,
+      maxOutputTokens: Number(output)
+    };
+    let result2;
+    try {
+      result2 = await this.json(
+        reviewModelDispatchContract.claimPath,
+        "POST",
+        claim,
+        {
+          authorization: `Bearer ${authorization.authorizationToken}`
+        },
+        signal
+      );
+      if (result2.status !== "claimed" || !/^[a-f0-9]{64}$/.test(result2.receiptToken) || !matchesClaim(result2.dispatch, claim, authorization.authorizationId) || result2.dispatch.state !== "dispatch_may_have_started" || !Number.isFinite(Date.parse(result2.notAfter)) || Date.parse(result2.notAfter) > Date.parse(cap.deadline))
+        throw new Error("model_dispatch_claim_unavailable");
+    } catch (error4) {
+      this.active = false;
+      this.fenced = true;
+      if (error4 instanceof ModelDispatchClaimDeniedError) throw error4;
+      throw new Error("model_dispatch_claim_unavailable");
+    }
+    let forwarded = false;
+    let settling = false;
+    let completed = false;
+    const settle = async (settlement) => {
+      if (settling) return;
+      settling = true;
+      const path40 = `${reviewModelDispatchContract.basePath}/${encodeURIComponent(claim.dispatchId)}`;
+      const headers = { [reviewModelDispatchContract.receiptHeader]: result2.receiptToken };
+      const agrees = (value) => {
+        const dispatch = value?.dispatch;
+        return !!dispatch && matchesClaim(dispatch, claim, authorization.authorizationId) && dispatch.state === settlement.state && (settlement.state !== "completed" || canonicalJson(dispatch.terminalReceipt) === canonicalJson(settlement.receipt));
+      };
+      try {
+        let response;
+        try {
+          response = await this.json(
+            `${path40}/settle`,
+            "POST",
+            settlement,
+            headers
+          );
+        } catch {
+          response = await this.json(path40, "GET", void 0, headers);
+        }
+        if (!agrees(response))
+          throw new Error("model_dispatch_settlement_unconfirmed");
+        completed = settlement.state === "completed";
+      } catch {
+        this.fenced = true;
+        throw new Error("model_dispatch_settlement_unconfirmed");
+      } finally {
+        this.active = false;
+      }
+    };
+    if (signal.aborted || Date.now() >= Date.parse(result2.notAfter)) {
+      await settle({ state: "not_dispatched", proof: "local_before_forward" });
+      throw new Error("model_dispatch_deadline");
+    }
+    return Object.freeze({
+      claim,
+      forwarded: () => {
+        forwarded = true;
+      },
+      isCompleted: () => completed,
+      complete: async (receipt) => {
+        if (!forwarded) throw new Error("model_dispatch_not_forwarded");
+        if (receipt.actualModel !== cap.model || !reviewModelDispatchOutputUsageIsWithinLimit(
+          receipt.usage,
+          claim.maxOutputTokens
+        )) {
+          this.fenced = true;
+          await settle({ state: "effect_unknown" });
+          throw new Error("model_dispatch_terminal_evidence_invalid");
+        }
+        await settle({
+          state: "completed",
+          receipt: {
+            ...receipt,
+            version: 2,
+            routeIdentityHash: cap.routeIdentityHash,
+            providerRequestEnvelopeHash: claim.providerRequestEnvelopeHash,
+            fullyConsumed: true,
+            terminal: "completed"
+          }
+        });
+      },
+      failed: async () => {
+        if (settling) return;
+        if (forwarded) this.fenced = true;
+        await settle(
+          forwarded ? { state: "effect_unknown" } : { state: "not_dispatched", proof: "local_before_forward" }
+        );
+      }
+    });
+  }
+  async json(path40, method, body2, headers, signal) {
+    const response = await (this.input.fetchImpl ?? fetch)(
+      new URL(path40, this.origin),
+      {
+        method,
+        redirect: "error",
+        headers: { ...headers, "content-type": "application/json" },
+        ...body2 === void 0 ? {} : { body: JSON.stringify(body2) },
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(3e4)]) : AbortSignal.timeout(3e4)
+      }
+    );
+    const claimDenial = path40 === reviewModelDispatchContract.claimPath && (response.status === 400 || response.status === 401 || response.status === 409);
+    if (!response.ok && !claimDenial || !response.body || !/^application\/json(?:\s*;.*)?$/i.test(
+      response.headers.get("content-type") ?? ""
+    )) {
+      await response.body?.cancel();
+      throw new Error("model_dispatch_control_unavailable");
+    }
+    const chunks = [];
+    let length = 0;
+    for await (const chunk of response.body) {
+      length += chunk.length;
+      if (length > reviewModelDispatchContract.maxReceiptBytes)
+        throw new Error("model_dispatch_control_bound");
+      chunks.push(chunk);
+    }
+    const value = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))
+    );
+    if (!response.ok) {
+      if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && Object.hasOwn(value, "code")) {
+        const code = MODEL_DISPATCH_CLAIM_DENIAL_CODES.find(
+          (candidate) => candidate === value.code
+        );
+        if (code && (response.status === 400 || response.status === 401 || response.status === 409))
+          throw new ModelDispatchClaimDeniedError(
+            code,
+            response.status,
+            "api_denial"
+          );
+      }
+      throw new Error("model_dispatch_control_unavailable");
+    }
+    return value;
+  }
+};
+function hash2(bytes2) {
+  return (0, import_crypto3.createHash)("sha256").update(bytes2).digest("hex");
+}
+function matchesClaim(value, claim, authorizationId) {
+  return !!value && value.authorizationId === authorizationId && Object.entries(claim).every(
+    ([key, field]) => key === "leaseCapability" || value[key] === field
+  );
+}
+
 // src/review-orchestration/infrastructure/codex-subscription-responses-codec.ts
+var import_crypto4 = require("crypto");
+var import_util4 = require("util");
 var CODEX_SUBSCRIPTION_RESPONSES_ROUTE = Object.freeze({
   descriptor: "openai-codex-subscription-responses.v1",
   sourceCommit: "be6e8eac029b183056b7e4402879f15d2c85f61b",
@@ -131471,7 +131930,7 @@ function codexSubscriptionResponsesHeaders(input) {
   });
 }
 function encodeCodexSubscriptionVerificationRequest(input) {
-  if (!input.model || !input.instructions || !input.userText || !positive(input.outputCap))
+  if (!input.model || !input.instructions || !input.userText || !positive2(input.outputCap))
     throw new Error("codex_subscription_verification_request_invalid");
   const request3 = {
     model: input.model,
@@ -131491,7 +131950,7 @@ function encodeCodexSubscriptionVerificationRequest(input) {
   return encoded(request3, input.maxRequestBytes, input.outputCap);
 }
 function normalizeCodexSubscriptionResponsesRequest(input) {
-  if (!positive(input.maxRequestBytes) || !positive(input.maxOutputTokens) || !input.requestBytes.byteLength || input.requestBytes.byteLength > input.maxRequestBytes)
+  if (!positive2(input.maxRequestBytes) || !positive2(input.maxOutputTokens) || !input.requestBytes.byteLength || input.requestBytes.byteLength > input.maxRequestBytes)
     throw new Error("codex_subscription_request_bound");
   let row;
   try {
@@ -131519,21 +131978,21 @@ function normalizeCodexSubscriptionResponsesRequest(input) {
     "client_metadata",
     "max_output_tokens"
   ]);
-  if (!record(row) || row.model !== input.model || row.stream !== true || row.store !== void 0 && row.store !== false || !Array.isArray(row.input) || row.input.length === 0 || Object.keys(row).some((key) => !allowed.has(key)) || row.instructions !== void 0 && typeof row.instructions !== "string" || row.tools !== void 0 && !Array.isArray(row.tools) || row.tool_choice !== void 0 && (typeof row.tool_choice !== "string" || !["auto", "none", "required"].includes(row.tool_choice)) || row.parallel_tool_calls !== void 0 && typeof row.parallel_tool_calls !== "boolean" || row.service_tier !== void 0 && row.service_tier !== "default" || row.include !== void 0 && (!Array.isArray(row.include) || row.include.some((item) => item !== "reasoning.encrypted_content")))
+  if (!record2(row) || row.model !== input.model || row.stream !== true || row.store !== void 0 && row.store !== false || !Array.isArray(row.input) || row.input.length === 0 || Object.keys(row).some((key) => !allowed.has(key)) || row.instructions !== void 0 && typeof row.instructions !== "string" || row.tools !== void 0 && !Array.isArray(row.tools) || row.tool_choice !== void 0 && (typeof row.tool_choice !== "string" || !["auto", "none", "required"].includes(row.tool_choice)) || row.parallel_tool_calls !== void 0 && typeof row.parallel_tool_calls !== "boolean" || row.service_tier !== void 0 && row.service_tier !== "default" || row.include !== void 0 && (!Array.isArray(row.include) || row.include.some((item) => item !== "reasoning.encrypted_content")))
     throw new Error("codex_subscription_request_invalid");
   const toolNames = [];
   for (const tool of row.tools ?? []) {
-    if (!record(tool) || tool.type !== "function" || typeof tool.name !== "string" || !/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(tool.name) || toolNames.includes(tool.name) || toolNames.length >= 128 || !record(tool.parameters))
+    if (!record2(tool) || tool.type !== "function" || typeof tool.name !== "string" || !/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(tool.name) || toolNames.includes(tool.name) || toolNames.length >= 128 || !record2(tool.parameters))
       throw new Error("codex_subscription_request_tools_invalid");
     toolNames.push(tool.name);
   }
   const requestedCap = row.max_output_tokens;
-  if (requestedCap !== void 0 && (typeof requestedCap !== "number" || !positive(requestedCap)))
+  if (requestedCap !== void 0 && (typeof requestedCap !== "number" || !positive2(requestedCap)))
     throw new Error("codex_subscription_request_output_cap_invalid");
   if (row.reasoning === null) delete row.reasoning;
-  if (row.reasoning !== void 0 && !record(row.reasoning))
+  if (row.reasoning !== void 0 && !record2(row.reasoning))
     throw new Error("codex_subscription_request_settings_invalid");
-  const actualEffort = record(row.reasoning) ? row.reasoning.effort : void 0;
+  const actualEffort = record2(row.reasoning) ? row.reasoning.effort : void 0;
   if (actualEffort !== void 0 && actualEffort !== null) effort(actualEffort);
   if (input.reasoningEffort !== void 0 && (actualEffort ?? null) !== (input.reasoningEffort === null ? null : effort(input.reasoningEffort)))
     throw new Error("codex_subscription_request_settings_mismatch");
@@ -131552,9 +132011,9 @@ function normalizeCodexSubscriptionResponsesRequest(input) {
 }
 function decodeCodexSubscriptionCompletedResponse(input) {
   const row = input.response;
-  if (!positive(input.maxOutputTokens) || !positive(input.maxOutputBytes) || !record(row) || row.object !== "response" || typeof row.id !== "string" || !row.id || row.model !== input.expectedModel || row.status !== "completed" || row.error != null || row.incomplete_details != null || !Array.isArray(row.output))
+  if (!positive2(input.maxOutputTokens) || !positive2(input.maxOutputBytes) || !record2(row) || row.object !== "response" || typeof row.id !== "string" || !row.id || row.model !== input.expectedModel || row.status !== "completed" || row.error != null || row.incomplete_details != null || !Array.isArray(row.output))
     throw new Error("codex_subscription_terminal_invalid");
-  if (!record(row.usage))
+  if (!record2(row.usage))
     throw new Error("codex_subscription_usage_unavailable");
   const promptTokens = counter(row.usage.input_tokens);
   const completionTokens = counter(row.usage.output_tokens);
@@ -131566,7 +132025,7 @@ function decodeCodexSubscriptionCompletedResponse(input) {
   const text3 = [];
   const toolCalls = /* @__PURE__ */ new Set();
   for (const item of row.output) {
-    if (!record(item) || item.status !== void 0 && item.status !== "completed")
+    if (!record2(item) || item.status !== void 0 && item.status !== "completed")
       throw new Error("codex_subscription_output_incomplete");
     if (item.type === "reasoning") continue;
     if (item.type === "function_call" || item.type === "custom_tool_call") {
@@ -131580,7 +132039,7 @@ function decodeCodexSubscriptionCompletedResponse(input) {
         } catch {
           throw new Error("codex_subscription_tool_invalid");
         }
-        if (!record(argumentsValue))
+        if (!record2(argumentsValue))
           throw new Error("codex_subscription_tool_invalid");
       } else if (typeof item.input !== "string")
         throw new Error("codex_subscription_tool_invalid");
@@ -131590,7 +132049,7 @@ function decodeCodexSubscriptionCompletedResponse(input) {
     if (item.type !== "message" || item.role !== "assistant" || !Array.isArray(item.content))
       throw new Error("codex_subscription_output_unsupported");
     for (const content of item.content) {
-      if (!record(content) || content.type !== "output_text" || typeof content.text !== "string")
+      if (!record2(content) || content.type !== "output_text" || typeof content.text !== "string")
         throw new Error("codex_subscription_output_unsupported");
       text3.push(content.text);
     }
@@ -131607,7 +132066,7 @@ function decodeCodexSubscriptionCompletedResponse(input) {
   });
 }
 function encoded(request3, maxRequestBytes, outputTokenAcceptanceCap) {
-  if (!positive(maxRequestBytes))
+  if (!positive2(maxRequestBytes))
     throw new Error("codex_subscription_request_bound");
   const requestBytes = Buffer.from(
     canonicalJson(request3),
@@ -131617,7 +132076,7 @@ function encoded(request3, maxRequestBytes, outputTokenAcceptanceCap) {
     throw new Error("codex_subscription_request_bound");
   return Object.freeze({
     requestBytes,
-    requestHash: (0, import_crypto3.createHash)("sha256").update(requestBytes).digest("hex"),
+    requestHash: (0, import_crypto4.createHash)("sha256").update(requestBytes).digest("hex"),
     outputTokenAcceptanceCap
   });
 }
@@ -131626,7 +132085,7 @@ function effort(value) {
     throw new Error("codex_subscription_reasoning_effort_unsupported");
   return value;
 }
-function positive(value) {
+function positive2(value) {
   return Number.isSafeInteger(value) && value > 0;
 }
 function counter(value) {
@@ -131634,7 +132093,7 @@ function counter(value) {
     throw new Error("codex_subscription_usage_invalid");
   return value;
 }
-function record(value) {
+function record2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -131844,7 +132303,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       return Object.freeze({
         generatedMarkdown: markdown,
         actualModel: auxiliary.actualModel,
-        providerRequestEnvelopeHash: (0, import_crypto4.createHash)("sha256").update(bytes2).digest("hex")
+        providerRequestEnvelopeHash: (0, import_crypto5.createHash)("sha256").update(bytes2).digest("hex")
       });
     } finally {
       clearTimeout(timer);
@@ -131914,7 +132373,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       return Object.freeze({
         body: Buffer.from(text3, "utf8"),
         actualModel: auxiliary.actualModel,
-        providerRequestEnvelopeHash: response.providerRequestEnvelopeHash ?? (0, import_crypto4.createHash)("sha256").update(bytes2).digest("hex")
+        providerRequestEnvelopeHash: response.providerRequestEnvelopeHash ?? (0, import_crypto5.createHash)("sha256").update(bytes2).digest("hex")
       });
     } finally {
       clearTimeout(timer);
@@ -132091,7 +132550,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       if (status === 200 && !isStream)
         throw new Error("account_gateway_invalid_stream");
       let count2 = 0;
-      const responseDigest = (0, import_crypto4.createHash)("sha256");
+      const responseDigest = (0, import_crypto5.createHash)("sha256");
       const terminalChunks = [];
       const diagnostic = [];
       const audit = isStream ? responsesStreamAudit(
@@ -132246,7 +132705,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         ...requestRef ? { requestRef } : {},
         body: bounded3,
         ...Buffer.isBuffer(body2) ? {
-          providerRequestEnvelopeHash: (0, import_crypto4.createHash)("sha256").update(body2).digest("hex")
+          providerRequestEnvelopeHash: (0, import_crypto5.createHash)("sha256").update(body2).digest("hex")
         } : {},
         cancel: abort
       };
@@ -132255,20 +132714,21 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       usage?.finish(true, controller.signal.aborted);
       observeTransport(
         this.observe,
-        responseReceived ? "upstream_headers" : "upstream_request",
-        responseReceived,
-        httpStatus,
+        error4 instanceof ModelDispatchClaimDeniedError ? "model_dispatch_claim" : responseReceived ? "upstream_headers" : "upstream_request",
+        error4 instanceof ModelDispatchClaimDeniedError ? error4.source === "api_denial" : responseReceived,
+        error4 instanceof ModelDispatchClaimDeniedError ? error4.httpStatus ?? null : httpStatus,
         error4
       );
       this.inferenceDenied = true;
       this.mayHaveDispatched = true;
       this.failure ??= {
-        code: "transport",
+        code: error4 instanceof ModelDispatchClaimDeniedError ? error4.code : "transport",
         effect: "effect_unknown",
         ...currentRequestRef ? { requestRef: currentRequestRef } : {}
       };
       controller.abort();
       dispose();
+      if (error4 instanceof ModelDispatchClaimDeniedError) throw error4;
       throw new Error("account_gateway_transport_unknown");
     }
   }
@@ -132446,7 +132906,7 @@ function normalizeCodexGatewayServiceTier(bytes2) {
   return normalized;
 }
 async function startLocalGatewayModelTransport(transport, observe, directProvider) {
-  const capability = (0, import_crypto4.randomBytes)(32).toString("hex");
+  const capability = (0, import_crypto5.randomBytes)(32).toString("hex");
   let stopping = false;
   let inFlight = 0;
   let contextToolsGuard;
@@ -132460,7 +132920,7 @@ async function startLocalGatewayModelTransport(transport, observe, directProvide
         const header = request3.headers.authorization;
         const expected = Buffer.from(`Bearer ${capability}`);
         const supplied = Buffer.from(header ?? "");
-        if (stopping || supplied.length !== expected.length || !(0, import_crypto4.timingSafeEqual)(supplied, expected) || request3.method !== "POST" || request3.url !== "/responses" || request3.headers.host !== address || request3.headers["content-encoding"] !== void 0 || !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+        if (stopping || supplied.length !== expected.length || !(0, import_crypto5.timingSafeEqual)(supplied, expected) || request3.method !== "POST" || request3.url !== "/responses" || request3.headers.host !== address || request3.headers["content-encoding"] !== void 0 || !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
           request3.headers["content-type"] ?? ""
         )) {
           reply.writeHead(403, { "content-type": "application/json" });
@@ -132955,7 +133415,7 @@ function hasReviewerPlan(value) {
 }
 
 // src/context-gateway/context-gateway-contract.ts
-var import_crypto5 = require("crypto");
+var import_crypto6 = require("crypto");
 var CONTEXT_GATEWAY_POLICY_VERSION = "context-gateway-v3";
 var CONTEXT_GATEWAY_MAX_OPERATIONS = 2e3;
 var CONTEXT_GIT_DIFF_POLICY_VERSION = "git-diff-stat-v2";
@@ -133065,10 +133525,10 @@ function canonicalJson2(value) {
   throw new Error("context_gateway_canonical_value_invalid");
 }
 function sha2562(value) {
-  return (0, import_crypto5.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto6.createHash)("sha256").update(value).digest("hex");
 }
 function keyedSha256(secret, value) {
-  return (0, import_crypto5.createHmac)("sha256", secret).update(value).digest("hex");
+  return (0, import_crypto6.createHmac)("sha256", secret).update(value).digest("hex");
 }
 function requireSha256(value, field) {
   if (!/^[a-f0-9]{64}$/u.test(value)) {
@@ -133095,7 +133555,7 @@ function isNonNegativeSafeInteger(value) {
 }
 
 // src/context-gateway/context-gateway-v4-contract.ts
-var import_crypto6 = require("crypto");
+var import_crypto7 = require("crypto");
 var CONTEXT_GATEWAY_V4_POLICY_VERSION = "context-gateway-v4";
 var CONTEXT_GATEWAY_V4_CURSOR_VERSION = 1;
 var CONTEXT_GATEWAY_V4_PAGE_MAX_ITEMS = 2e3;
@@ -133135,7 +133595,7 @@ function decodeContextGatewayV4Cursor(input) {
     throw new Error("context_gateway_cursor_invalid");
   }
   const expectedSignature = keyedSha256(input.secret, encoded2);
-  if (!(0, import_crypto6.timingSafeEqual)(
+  if (!(0, import_crypto7.timingSafeEqual)(
     Buffer.from(signature, "hex"),
     Buffer.from(expectedSignature, "hex")
   )) {
@@ -138179,10 +138639,10 @@ var compare = (a2, b2) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0;
 function fail(reason) {
   throw new Error(`review_skills_${reason}`);
 }
-function record2(value) {
+function record3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function keys(value, names) {
+function keys2(value, names) {
   if (Object.keys(value).length !== names.length || names.some((name) => !Object.hasOwn(value, name)))
     fail("unknown_or_missing_fields");
 }
@@ -138221,8 +138681,8 @@ function patterns(value, includes) {
   return Object.freeze(result2.sort(compare));
 }
 function parseReviewSkillScope(value) {
-  if (!record2(value)) fail("scope_invalid");
-  keys(value, ["includePaths", "excludePaths"]);
+  if (!record3(value)) fail("scope_invalid");
+  keys2(value, ["includePaths", "excludePaths"]);
   return Object.freeze({
     includePaths: patterns(value.includePaths, true),
     excludePaths: patterns(value.excludePaths, false)
@@ -138235,15 +138695,15 @@ function canonicalReviewSkillsJson(value) {
     return JSON.stringify(value);
   if (Array.isArray(value))
     return `[${value.map(canonicalReviewSkillsJson).join(",")}]`;
-  if (record2(value))
+  if (record3(value))
     return `{${Object.keys(value).sort(compare).map(
       (key) => `${JSON.stringify(key)}:${canonicalReviewSkillsJson(value[key])}`
     ).join(",")}}`;
   return fail("canonical_value_invalid");
 }
 function normalizePayload(value) {
-  if (!record2(value)) fail("capture_invalid");
-  keys(value, ["schemaVersion", "baseSha", "webSkills", "gitSources"]);
+  if (!record3(value)) fail("capture_invalid");
+  keys2(value, ["schemaVersion", "baseSha", "webSkills", "gitSources"]);
   if (value.schemaVersion !== reviewSkillsCompanionContract.schemaVersion)
     fail("schema_unsupported");
   if (typeof value.baseSha !== "string" || !/^[a-f0-9]{40}$/.test(value.baseSha))
@@ -138252,8 +138712,8 @@ function normalizePayload(value) {
     fail("too_many_skills");
   const seen = /* @__PURE__ */ new Set();
   const webSkills = value.webSkills.map((raw) => {
-    if (!record2(raw)) fail("skill_invalid");
-    keys(raw, [
+    if (!record3(raw)) fail("skill_invalid");
+    keys2(raw, [
       "skillId",
       "revisionId",
       "sourceWorkspaceId",
@@ -138295,8 +138755,8 @@ function normalizePayload(value) {
     fail("git_sources_invalid");
   const roots = /* @__PURE__ */ new Set();
   const gitSources = value.gitSources.map((raw) => {
-    if (!record2(raw)) fail("git_sources_invalid");
-    keys(raw, ["root"]);
+    if (!record3(raw)) fail("git_sources_invalid");
+    keys2(raw, ["root"]);
     if (raw.root !== ".reviewrouter/skills" && raw.root !== ".agents/skills")
       fail("git_sources_invalid");
     if (roots.has(raw.root)) fail("git_source_duplicate");
@@ -138322,8 +138782,8 @@ function createCapturedReviewSkills(value) {
   return result2;
 }
 function parseCapturedReviewSkills(value) {
-  if (!record2(value)) fail("capture_invalid");
-  keys(value, [
+  if (!record3(value)) fail("capture_invalid");
+  keys2(value, [
     "schemaVersion",
     "baseSha",
     "webSkills",
@@ -138457,7 +138917,7 @@ function deepFreeze(value) {
 }
 
 // src/analysis/llm/prompt-builder.ts
-var import_crypto7 = require("crypto");
+var import_crypto8 = require("crypto");
 
 // src/analysis/context/validation-detector.ts
 var ValidationDetector = class {
@@ -140966,7 +141426,7 @@ function compareCodePoints(left, right) {
   return 0;
 }
 function sha2563(value) {
-  return (0, import_crypto7.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto8.createHash)("sha256").update(value).digest("hex");
 }
 
 // node_modules/p-retry/index.js
@@ -142437,7 +142897,7 @@ function resolveRevalidationConfidenceThresholds(overrides) {
 }
 
 // src/github/comment-fingerprint.ts
-var import_crypto8 = require("crypto");
+var import_crypto9 = require("crypto");
 
 // src/review-projection/domain/finding-marker.ts
 var RESERVED_FINDING_MARKER_PREFIX_RE = /(?:review-router-finding:|reviewrouter:finding:v2:)/gi;
@@ -142516,7 +142976,7 @@ function signatureFromInlineComment(path40, line2, body2) {
   ].join(":");
 }
 function fingerprintFromInlineComment(path40, line2, body2) {
-  return (0, import_crypto8.createHash)("sha256").update(signatureFromInlineComment(path40, line2, body2)).digest("hex").slice(0, 16);
+  return (0, import_crypto9.createHash)("sha256").update(signatureFromInlineComment(path40, line2, body2)).digest("hex").slice(0, 16);
 }
 function inlineFingerprintMarker(fingerprint) {
   return `<!-- review-router-inline:${fingerprint} -->`;
@@ -142645,7 +143105,7 @@ function stableFindingFingerprint(input) {
     normalizeForSignature(stripSeverityPrefix(input.title)),
     normalizeForSignature(input.message).slice(0, 800)
   ].join("\n");
-  return (0, import_crypto8.createHash)("sha256").update(canonical).digest("hex").slice(0, 32);
+  return (0, import_crypto9.createHash)("sha256").update(canonical).digest("hex").slice(0, 32);
 }
 function semanticText(body2) {
   return body2.replace(/```[\s\S]*?```/g, " ").replace(/<details[\s\S]*?<\/details>/gi, " ").replace(/<sub[\s\S]*?<\/sub>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]+>/g, " ").replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, " ");
@@ -143153,15 +143613,15 @@ function coverageManifestFileStatusRank(status) {
 }
 
 // src/review-projection/domain/review-projection-canonicalizer.ts
-var import_crypto9 = require("crypto");
+var import_crypto10 = require("crypto");
 function canonicalizeReviewProjection(envelope) {
   return JSON.stringify(toCanonicalValue(envelope));
 }
 function hashReviewProjectionCanonicalJson(canonicalJson20) {
-  return (0, import_crypto9.createHash)("sha256").update(canonicalJson20, "utf8").digest("hex");
+  return (0, import_crypto10.createHash)("sha256").update(canonicalJson20, "utf8").digest("hex");
 }
 function hashProjectionFact(value) {
-  return (0, import_crypto9.createHash)("sha256").update(JSON.stringify(toCanonicalValue(value)), "utf8").digest("hex");
+  return (0, import_crypto10.createHash)("sha256").update(JSON.stringify(toCanonicalValue(value)), "utf8").digest("hex");
 }
 function deepFreezeProjection(value) {
   if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
@@ -143374,7 +143834,7 @@ function sortedUnique(values) {
 }
 
 // src/review-projection/domain/review-lifecycle-observation.ts
-var import_crypto10 = require("crypto");
+var import_crypto11 = require("crypto");
 var REVIEW_LIFECYCLE_THREAD_STATE_VERSION = "review_lifecycle_thread_state.v1";
 var REVIEW_LIFECYCLE_MARKER_FINGERPRINT = /^(?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64})$/;
 var RFC3339_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
@@ -143463,7 +143923,7 @@ function daysInMonth(year, month) {
   return [4, 6, 9, 11].includes(month) ? 30 : 31;
 }
 function sha2564(value) {
-  return (0, import_crypto10.createHash)("sha256").update(value, "utf8").digest("hex");
+  return (0, import_crypto11.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 function compareCodeUnits2(left, right) {
   if (left < right) return -1;
@@ -146338,7 +146798,7 @@ var CacheStorage = class {
 };
 
 // src/cache/key-builder.ts
-var import_crypto11 = require("crypto");
+var import_crypto12 = require("crypto");
 
 // src/cache/version.ts
 var CACHE_VERSION = 8;
@@ -146375,7 +146835,7 @@ function unversionCache(cached2, maxAge) {
 
 // src/cache/key-builder.ts
 function buildCacheKey(pr2, configHash) {
-  const hash6 = (0, import_crypto11.createHash)("sha1").update(`${pr2.baseSha}:${pr2.headSha}`).digest("hex").slice(0, 12);
+  const hash6 = (0, import_crypto12.createHash)("sha1").update(`${pr2.baseSha}:${pr2.headSha}`).digest("hex").slice(0, 12);
   const suffix = configHash ? `-${configHash}` : "";
   return `mpr-${hash6}${suffix}`;
 }
@@ -146401,11 +146861,11 @@ function hashConfig(config2) {
     pathDefaultIntensity: config2.pathDefaultIntensity
   };
   const stableJson = JSON.stringify(sortObject(relevantConfig));
-  const hash6 = (0, import_crypto11.createHash)("sha256").update(stableJson).digest("hex");
+  const hash6 = (0, import_crypto12.createHash)("sha256").update(stableJson).digest("hex");
   return hash6.slice(0, 16);
 }
 function hashIncrementalCompatibility(config2, runtimeConfigVersion, reviewSkills, memoryBundleHash) {
-  return (0, import_crypto11.createHash)("sha256").update(
+  return (0, import_crypto12.createHash)("sha256").update(
     incrementalCompatibilityPreimage(
       config2,
       runtimeConfigVersion,
@@ -150689,7 +151149,7 @@ function locationKey(path40, line2) {
 }
 
 // src/github/ledger.ts
-var import_crypto12 = require("crypto");
+var import_crypto13 = require("crypto");
 var LEDGER_MARKER = "reviewrouter-ledger:v1";
 var LEDGER_RE = /<!--\s*reviewrouter-ledger:v1\s+payload=([A-Za-z0-9_-]+)\s+signature=([a-f0-9]{64})\s*-->/;
 var MAX_LEDGER_ENTRIES = 200;
@@ -150877,7 +151337,7 @@ var ReviewLedger = class {
     ].join("\n");
   }
   sign(payload) {
-    return (0, import_crypto12.createHmac)("sha256", this.secret || "").update(canonicalJson3(payload)).digest("hex");
+    return (0, import_crypto13.createHmac)("sha256", this.secret || "").update(canonicalJson3(payload)).digest("hex");
   }
   emptyPayload(prNumber) {
     return {
@@ -150913,7 +151373,7 @@ function safeEqualHex(a2, b2) {
   }
   const aBuffer = Buffer.from(a2, "hex");
   const bBuffer = Buffer.from(b2, "hex");
-  return aBuffer.length === bBuffer.length && (0, import_crypto12.timingSafeEqual)(aBuffer, bBuffer);
+  return aBuffer.length === bBuffer.length && (0, import_crypto13.timingSafeEqual)(aBuffer, bBuffer);
 }
 
 // src/config/review-router-endpoints.json
@@ -152199,7 +152659,7 @@ var PromptGenerator = class {
 };
 
 // src/utils/sanitize.ts
-var import_crypto13 = require("crypto");
+var import_crypto14 = require("crypto");
 function encodeURIComponentSafe(value) {
   if (typeof value !== "string") {
     return "invalid";
@@ -152208,7 +152668,7 @@ function encodeURIComponentSafe(value) {
   const normalized = encoded2.replace(/[+]/g, "_").replace(/%/g, "_").replace(/[<>:"|?*]/g, "_");
   const MAX_PREFIX = 120;
   const prefix2 = normalized.length > MAX_PREFIX ? normalized.slice(0, MAX_PREFIX) : normalized;
-  const hashSuffix = (0, import_crypto13.createHash)("sha256").update(value).digest("hex").slice(0, 16);
+  const hashSuffix = (0, import_crypto14.createHash)("sha256").update(value).digest("hex").slice(0, 16);
   return `${prefix2}-${hashSuffix}`;
 }
 
@@ -153300,10 +153760,10 @@ var PluginLoader = class {
 };
 
 // src/core/batch-orchestrator.ts
-var import_crypto15 = require("crypto");
+var import_crypto16 = require("crypto");
 
 // src/review-orchestration/domain/content-defined-review-batches.ts
-var import_crypto14 = require("crypto");
+var import_crypto15 = require("crypto");
 var ROUTE_HASH_BITS = 256;
 function createContentDefinedReviewBatches(units, limits) {
   requirePositiveInteger(limits.maxFilesPerBatch, "max_files_per_batch");
@@ -153403,7 +153863,7 @@ function routeBit(hash6, bitIndex) {
   return nibble >> shift & 1;
 }
 function sha2565(value) {
-  return (0, import_crypto14.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto15.createHash)("sha256").update(value).digest("hex");
 }
 function compareCodePoints2(left, right) {
   if (left < right) return -1;
@@ -153542,7 +154002,7 @@ var BatchOrchestrator = class {
   }
 };
 function fileIdentity(file) {
-  return (0, import_crypto15.createHash)("sha256").update(
+  return (0, import_crypto16.createHash)("sha256").update(
     JSON.stringify({
       additions: file.additions,
       changes: file.changes,
@@ -153557,7 +154017,7 @@ function fileIdentity(file) {
 }
 
 // src/learning/suppression-tracker.ts
-var import_crypto16 = require("crypto");
+var import_crypto17 = require("crypto");
 var SuppressionTracker = class _SuppressionTracker {
   constructor(storage, repoKey) {
     this.storage = storage;
@@ -153580,7 +154040,7 @@ var SuppressionTracker = class _SuppressionTracker {
     const ttl = scope === "pr" ? _SuppressionTracker.PR_TTL_MS : _SuppressionTracker.REPO_TTL_MS;
     const timestamp3 = Date.now();
     const pattern = {
-      id: (0, import_crypto16.randomUUID)(),
+      id: (0, import_crypto17.randomUUID)(),
       category: finding.category,
       file: finding.file,
       line: finding.line,
@@ -154049,10 +154509,10 @@ var AcceptanceDetector = class {
 };
 
 // src/github/review-thread-inventory.ts
-var import_crypto18 = require("crypto");
+var import_crypto19 = require("crypto");
 
 // src/finding-revalidation/domain/packet.ts
-var import_crypto17 = require("crypto");
+var import_crypto18 = require("crypto");
 var REVALIDATION_POLICY_VERSION = lifecycleVerificationContract.executor;
 var REVALIDATION_LIMITS = Object.freeze({
   targets: lifecycleVerificationContract.maxTargetsPerPacket,
@@ -154071,10 +154531,10 @@ function canonicalRevalidationJson(value) {
   return canonicalJson(value);
 }
 function revalidationHash(domain, value) {
-  return (0, import_crypto17.createHash)("sha256").update(`${REVALIDATION_POLICY_VERSION}:${domain}\0`).update(canonicalRevalidationJson(value)).digest("hex");
+  return (0, import_crypto18.createHash)("sha256").update(`${REVALIDATION_POLICY_VERSION}:${domain}\0`).update(canonicalRevalidationJson(value)).digest("hex");
 }
 function byteHash(bytes2) {
-  return (0, import_crypto17.createHash)("sha256").update(bytes2).digest("hex");
+  return (0, import_crypto18.createHash)("sha256").update(bytes2).digest("hex");
 }
 function makeVerifyPacket(input) {
   const unsigned = {
@@ -154456,7 +154916,7 @@ var ReviewThreadInventoryLoader = class {
       parentCommentCreatedAt: normalizeReviewLifecycleTimestamp(
         requireCommentTimestamp(parent.createdAt)
       ),
-      parentCommentBodyHash: (0, import_crypto18.createHash)("sha256").update(body2, "utf8").digest("hex"),
+      parentCommentBodyHash: (0, import_crypto19.createHash)("sha256").update(body2, "utf8").digest("hex"),
       claimHash: revalidationHash("claim", {
         title,
         message,
@@ -154589,7 +155049,7 @@ function shouldTrustGitHubActionsBot(env) {
   return env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS === "fallback";
 }
 function targetIdFor(threadId, parentCommentId, fingerprint) {
-  return `rrt_${(0, import_crypto18.createHash)("sha256").update(`${threadId}
+  return `rrt_${(0, import_crypto19.createHash)("sha256").update(`${threadId}
 ${parentCommentId}
 ${fingerprint}`).digest("hex").slice(0, 16)}`;
 }
@@ -155283,10 +155743,10 @@ function safeReason(message) {
 }
 
 // src/control-plane/memory.ts
-var import_crypto20 = require("crypto");
+var import_crypto21 = require("crypto");
 
 // src/control-plane/review-memory-v2.ts
-var import_crypto19 = require("crypto");
+var import_crypto20 = require("crypto");
 var REVIEW_MEMORY_V2 = Object.freeze({
   bundlePath: "/api/action/v2/memory/bundle",
   admitPath: "/api/action/v2/memory/admit",
@@ -155404,7 +155864,7 @@ var ReviewMemorySession = class _ReviewMemorySession {
         );
         this.options.signal?.throwIfAborted();
         failureCause = "response_schema_invalid";
-        const result2 = record3(value);
+        const result2 = record4(value);
         if (result2.protocolVersion !== 2 || typeof result2.eligible !== "boolean") {
           throw new Error("review_memory_admission_invalid");
         }
@@ -155510,7 +155970,7 @@ function freezeReviewMemorySnapshot(bundle) {
     bundle: immutable,
     renderedPrompt,
     hashPreimage,
-    hash: (0, import_crypto19.createHash)("sha256").update(hashPreimage).digest("hex")
+    hash: (0, import_crypto20.createHash)("sha256").update(hashPreimage).digest("hex")
   });
 }
 function renderReviewMemoryPrompt(bundle) {
@@ -155551,7 +156011,7 @@ function renderReviewMemoryPrompt(bundle) {
   return lines.join("\n");
 }
 function parseReviewMemoryBundle(value, binding) {
-  const input = record3(value);
+  const input = record4(value);
   if (input.protocolVersion !== 2 || !Array.isArray(input.items) || input.items.length > REVIEW_MEMORY_V2.maxItems || typeof input.degraded !== "boolean" || !(input.reason === null || typeof input.reason === "string" && input.reason.length <= 120)) {
     throw new Error("review_memory_bundle_invalid");
   }
@@ -155571,7 +156031,7 @@ function parseReviewMemoryBundle(value, binding) {
     throw new Error("review_memory_bundle_expired");
   const identities = /* @__PURE__ */ new Set();
   const items = input.items.map((value2) => {
-    const item = record3(value2);
+    const item = record4(value2);
     if (item.scope !== "workspace" && item.scope !== "repository" || !["rule", "exception", "observation"].includes(String(item.kind)) || !Array.isArray(item.sourceIds) || item.sourceIds.length < 1 || item.sourceIds.length > 32) {
       throw new Error("review_memory_item_invalid");
     }
@@ -155631,7 +156091,7 @@ function parseSourceObservations(value) {
   const ids = /* @__PURE__ */ new Set();
   return Object.freeze(
     value.map((raw) => {
-      const item = record3(raw);
+      const item = record4(raw);
       const entryId = bounded(item.entryId, 160);
       if (ids.has(entryId) || typeof item.observedCommitSha !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(item.observedCommitSha))
         throw new Error("review_memory_source_observations_invalid");
@@ -155645,7 +156105,7 @@ function parseSourceObservations(value) {
   );
 }
 function parseContextPolicy(value) {
-  const policy = record3(value);
+  const policy = record4(value);
   if (!["public", "repository", "internal"].includes(String(policy.audience)) || !Array.isArray(policy.allowedTasks) || policy.allowedTasks.length < 1 || policy.allowedTasks.length > 3 || !policy.allowedTasks.every(
     (task) => ["review", "investigation", "pr_description"].includes(String(task))
   ) || new Set(policy.allowedTasks).size !== policy.allowedTasks.length)
@@ -155749,7 +156209,7 @@ async function postBoundedMemoryJson(input) {
     void reader?.cancel().catch(() => void 0);
   }
 }
-function record3(value) {
+function record4(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("review_memory_response_invalid");
   return value;
@@ -155908,13 +156368,13 @@ function formatActionMemoryBundleForPrompt(bundle) {
   return lines.join("\n");
 }
 function memorySourceHash(value) {
-  return (0, import_crypto20.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto21.createHash)("sha256").update(value).digest("hex");
 }
 function memoryCommandId(value) {
   const sort = (item) => Array.isArray(item) ? item.map(sort) : item && typeof item === "object" ? Object.fromEntries(
     Object.entries(item).sort(([a2], [b2]) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0).map(([key, child]) => [key, sort(child)])
   ) : item;
-  const bytes2 = (0, import_crypto20.createHash)("sha256").update("review-router-memory-command-v2\n").update(JSON.stringify(sort(value))).digest().subarray(0, 16);
+  const bytes2 = (0, import_crypto21.createHash)("sha256").update("review-router-memory-command-v2\n").update(JSON.stringify(sort(value))).digest().subarray(0, 16);
   bytes2[6] = bytes2[6] & 15 | 80;
   bytes2[8] = bytes2[8] & 63 | 128;
   const hex = bytes2.toString("hex");
@@ -156053,7 +156513,7 @@ function createExecutionDeadlineFromEnvironment(environment = process.env, clock
 
 // src/review-execution/infrastructure/http-review-checkpoint-client.ts
 var fs15 = __toESM(require("fs/promises"));
-var import_crypto21 = require("crypto");
+var import_crypto22 = require("crypto");
 
 // src/review-execution/domain/review-checkpoint.ts
 var REVIEW_CHECKPOINT_PROTOCOL_VERSION = 1;
@@ -157137,7 +157597,7 @@ var FileReviewCheckpointFinalizationMarkerWriter = class _FileReviewCheckpointFi
   }
   async write(marker2) {
     const validated = reviewCheckpointFinalizationMarkerSchema.parse(marker2);
-    const temporaryPath = `${this.path}.tmp-${process.pid}-${(0, import_crypto21.randomUUID)()}`;
+    const temporaryPath = `${this.path}.tmp-${process.pid}-${(0, import_crypto22.randomUUID)()}`;
     try {
       await fs15.writeFile(temporaryPath, JSON.stringify(validated), {
         encoding: "utf8",
@@ -159798,7 +160258,7 @@ function prioritizeFilesByRisk(files) {
 }
 
 // src/review-execution/domain/review-batch-plan.ts
-var import_crypto22 = require("crypto");
+var import_crypto23 = require("crypto");
 function compareCodePoints3(left, right) {
   if (left < right) return -1;
   if (left > right) return 1;
@@ -159843,10 +160303,10 @@ function createReviewBatchPlan(input) {
     providerNames,
     batches: canonicalBatches
   };
-  const planHash = (0, import_crypto22.createHash)("sha256").update(JSON.stringify(payload)).digest("hex");
+  const planHash = (0, import_crypto23.createHash)("sha256").update(JSON.stringify(payload)).digest("hex");
   const batches = Object.freeze(
     input.batches.map((batch, index) => {
-      const id = (0, import_crypto22.createHash)("sha256").update(
+      const id = (0, import_crypto23.createHash)("sha256").update(
         JSON.stringify({
           version: "v1" /* V1 */,
           planHash,
@@ -163886,7 +164346,7 @@ function sanitizeNoticeError(error4) {
 }
 
 // src/github/discussion.ts
-var import_crypto23 = require("crypto");
+var import_crypto24 = require("crypto");
 var DISCUSSION_MARKER = "reviewrouter-discussion:v1";
 var DISCUSSION_MARKER_RE = /<!--\s*reviewrouter-discussion:v1\s+user_comment_id=(\d+)\s+body_sha=([a-f0-9]{64})\s*-->/;
 var ReviewDiscussionHandler = class {
@@ -164131,7 +164591,7 @@ function isBotUser(user) {
   return user?.type === "Bot" || login.endsWith("[bot]");
 }
 function bodyHash(body2) {
-  return (0, import_crypto23.createHash)("sha256").update(body2.trim()).digest("hex");
+  return (0, import_crypto24.createHash)("sha256").update(body2.trim()).digest("hex");
 }
 function sanitizeError(error4) {
   const message = error4 instanceof Error ? error4.message : String(error4);
@@ -164370,7 +164830,7 @@ function parseReviewReviewerPlan(value) {
     if (bytes(value) > reviewerPlanContract.maxPlanBytes) fail2();
     value = JSON.parse(value);
   }
-  if (!record4(value) || bytes(JSON.stringify(value)) > reviewerPlanContract.maxPlanBytes || !keys2(value, [
+  if (!record5(value) || bytes(JSON.stringify(value)) > reviewerPlanContract.maxPlanBytes || !keys3(value, [
     "planVersion",
     "primaryReviewerId",
     "maxParallelReviewers",
@@ -164385,7 +164845,7 @@ function parseReviewReviewerPlan(value) {
   ))
     fail2();
   const groups = value.concurrencyGroups.map((candidate) => {
-    if (!record4(candidate) || !keys2(candidate, ["concurrencyGroupId", "maxParallel"]) || !reference(candidate.concurrencyGroupId))
+    if (!record5(candidate) || !keys3(candidate, ["concurrencyGroupId", "maxParallel"]) || !reference(candidate.concurrencyGroupId))
       fail2();
     const count2 = reviewers.filter(
       (row) => row.concurrencyGroupId === candidate.concurrencyGroupId
@@ -164412,7 +164872,7 @@ function parseReviewReviewerPlan(value) {
   });
 }
 function parseReviewer(value) {
-  if (!record4(value) || !keys2(value, [
+  if (!record5(value) || !keys3(value, [
     "reviewerId",
     "providerIndex",
     "providerVoteIdentityHash",
@@ -164468,12 +164928,12 @@ function parseReviewer(value) {
   });
 }
 function parseReviewReviewerModelSettings(value, requestedModel) {
-  if (!record4(value) || !keys2(value, ["model", "reasoning"]) || value.model !== requestedModel || bytes(JSON.stringify(value)) > 2048)
+  if (!record5(value) || !keys3(value, ["model", "reasoning"]) || value.model !== requestedModel || bytes(JSON.stringify(value)) > 2048)
     fail2();
   if (value.reasoning === null)
     return Object.freeze({ model: requestedModel, reasoning: null });
   const reasoning = value.reasoning;
-  if (!record4(reasoning) || !keys2(reasoning, ["allowed", "default"]) || !Array.isArray(reasoning.allowed) || reasoning.allowed.length < 1 || reasoning.allowed.length > efforts.length || reasoning.allowed.some((value2) => !effort2(value2)) || !unique3(reasoning.allowed) || !effort2(reasoning.default) || !reasoning.allowed.includes(reasoning.default))
+  if (!record5(reasoning) || !keys3(reasoning, ["allowed", "default"]) || !Array.isArray(reasoning.allowed) || reasoning.allowed.length < 1 || reasoning.allowed.length > efforts.length || reasoning.allowed.some((value2) => !effort2(value2)) || !unique3(reasoning.allowed) || !effort2(reasoning.default) || !reasoning.allowed.includes(reasoning.default))
     fail2();
   const allowed = reasoning.allowed;
   if (allowed.some(
@@ -164489,7 +164949,7 @@ function parseReviewReviewerModelSettings(value, requestedModel) {
   });
 }
 function parseReviewReviewerInvestigationGrant(value, reviewer) {
-  if (!record4(value) || !keys2(value, [
+  if (!record5(value) || !keys3(value, [
     "reviewerId",
     "providerVoteIdentityHash",
     "requestedModel",
@@ -164512,7 +164972,7 @@ function parseReviewReviewerInvestigationGrant(value, reviewer) {
   });
 }
 function parseReviewReviewerInvestigationDescriptorV3(value) {
-  if (!record4(value) || !keys2(value, [
+  if (!record5(value) || !keys3(value, [
     "authorizationDescriptorVersion",
     "capability",
     "coverageProfileHash",
@@ -164525,7 +164985,7 @@ function parseReviewReviewerInvestigationDescriptorV3(value) {
     fail2();
   const providerCapabilities = value.providerCapabilities.map(
     (row) => {
-      if (!record4(row) || !keys2(row, ["providerKind", "capabilities"]) || row.providerKind !== "codex" && row.providerKind !== "claude_code" || !Array.isArray(row.capabilities) || row.capabilities.length < 1 || row.capabilities.length > 6 || row.capabilities.some(
+      if (!record5(row) || !keys3(row, ["providerKind", "capabilities"]) || row.providerKind !== "codex" && row.providerKind !== "claude_code" || !Array.isArray(row.capabilities) || row.capabilities.length < 1 || row.capabilities.length > 6 || row.capabilities.some(
         (capability) => typeof capability !== "string" || !Object.hasOwn(dependencies, capability)
       ) || !unique3(row.capabilities) || !row.capabilities.includes("recording"))
         fail2();
@@ -164561,10 +165021,10 @@ function parseReviewReviewerInvestigationDescriptorV3(value) {
     providerCapabilities: Object.freeze(providerCapabilities)
   });
 }
-function record4(value) {
+function record5(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function keys2(value, expected) {
+function keys3(value, expected) {
   return Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 }
 function reference(value) {
@@ -164596,7 +165056,7 @@ function fail2() {
 var import_os5 = require("os");
 
 // src/control-plane/generated/review-action-v2/usage-producer-v1.ts
-var import_crypto24 = require("crypto");
+var import_crypto25 = require("crypto");
 var import_fs = require("fs");
 var import_path2 = require("path");
 
@@ -164646,14 +165106,14 @@ var UsageError = class extends Error {
     this.code = code;
   }
 };
-var invalid2 = () => {
+var invalid3 = () => {
   throw new UsageError("usage_invalid_fact");
 };
 function exact(value, keys5, optionalKeys2 = []) {
   if (!value || typeof value !== "object" || Array.isArray(value) || keys5.some((k2) => !Object.hasOwn(value, k2)) || Object.keys(value).some(
     (k2) => !keys5.includes(k2) && !optionalKeys2.includes(k2)
   ))
-    invalid2();
+    invalid3();
 }
 function hasControlCharacter(value) {
   for (let index = 0; index < value.length; index++) {
@@ -164664,10 +165124,10 @@ function hasControlCharacter(value) {
 function text2(value, nullable2 = false) {
   if (nullable2 && value === null) return;
   if (typeof value !== "string" || !value.length || value.length > 256 || hasControlCharacter(value))
-    invalid2();
+    invalid3();
 }
 function choice(value, choices) {
-  if (typeof value !== "string" || !choices.includes(value)) invalid2();
+  if (typeof value !== "string" || !choices.includes(value)) invalid3();
 }
 function validateUsageFact(f2) {
   exact(
@@ -164698,7 +165158,7 @@ function validateUsageFact(f2) {
     try {
       validateUsagePriceSnapshot(f2.priceSnapshot);
     } catch {
-      invalid2();
+      invalid3();
     }
   }
   exact(f2.identity, [
@@ -164757,9 +165217,9 @@ function validateUsageFact(f2) {
     text2(v2, true);
   text2(f2.identity.runtimeType);
   if (f2.identity.runAttempt !== null && (!Number.isSafeInteger(f2.identity.runAttempt) || f2.identity.runAttempt < 1))
-    invalid2();
+    invalid3();
   if (f2.cost !== null && (typeof f2.cost !== "object" || Array.isArray(f2.cost)))
-    invalid2();
+    invalid3();
   if (f2.cost) {
     text2(f2.cost.asOf);
     exact(f2.cost, [
@@ -164775,10 +165235,10 @@ function validateUsageFact(f2) {
     text2(f2.cost.priceVersion, true);
   }
   if (f2.childCallIds !== null && (!Array.isArray(f2.childCallIds) || !f2.childCallIds.length))
-    invalid2();
+    invalid3();
   for (const id of f2.childCallIds ?? []) text2(id);
   if (f2.schemaVersion !== 1 || !Number.isSafeInteger(f2.revision) || f2.revision < 1 || f2.revision > 2147483647)
-    invalid2();
+    invalid3();
   for (const s2 of [
     f2.sourceInstance,
     f2.eventId,
@@ -164790,29 +165250,29 @@ function validateUsageFact(f2) {
     f2.identity.provider
   ]) {
     if (typeof s2 !== "string" || s2.length < 1 || s2.length > 256 || hasControlCharacter(s2))
-      invalid2();
+      invalid3();
   }
   if (!/^\d{4}-\d\d-\d\dT.*Z$/.test(f2.identity.occurredAt) || !Number.isFinite(Date.parse(f2.identity.occurredAt)))
-    invalid2();
+    invalid3();
   for (const n2 of [...Object.values(f2.tokens), f2.durationMs, f2.ttftMs]) {
     if (n2 !== null && (typeof n2 !== "number" || !Number.isSafeInteger(n2) || n2 < 0))
-      invalid2();
+      invalid3();
   }
   const t2 = f2.tokens;
   if (t2.inputTotal !== null && t2.cacheRead !== null && t2.cacheRead > t2.inputTotal)
-    invalid2();
+    invalid3();
   if (t2.inputTotal !== null && t2.cacheWrite !== null && t2.cacheWrite > t2.inputTotal)
-    invalid2();
+    invalid3();
   if (t2.inputTotal !== null && t2.cacheRead !== null && t2.cacheWrite !== null && t2.cacheRead + t2.cacheWrite > t2.inputTotal)
-    invalid2();
+    invalid3();
   if (t2.outputTotal !== null && t2.reasoning !== null && t2.reasoning > t2.outputTotal)
-    invalid2();
+    invalid3();
   if (t2.total !== null && t2.inputTotal !== null && t2.outputTotal !== null && t2.total !== t2.inputTotal + t2.outputTotal)
-    invalid2();
+    invalid3();
   if (f2.cost && (!/^(0|[1-9]\d{0,17})(\.\d{1,12})?$/.test(f2.cost.amount) || !/^[A-Z]{3}$/.test(f2.cost.currency) || !Number.isFinite(Date.parse(f2.cost.asOf)) || f2.cost.basis === "estimated" && !f2.cost.priceVersion))
-    invalid2();
+    invalid3();
   if (f2.childCallIds && (f2.identity.granularity !== "turn" || f2.childCallIds.length > 1e4 || new Set(f2.childCallIds).size !== f2.childCallIds.length || f2.childCallIds.includes(f2.identity.callId)))
-    invalid2();
+    invalid3();
 }
 function canonicalJson5(value) {
   if (Array.isArray(value))
@@ -164823,7 +165283,7 @@ function canonicalJson5(value) {
 }
 
 // src/control-plane/generated/review-action-v2/usage-producer-v1.ts
-var digest3 = (value) => (0, import_crypto24.createHash)("sha256").update(canonicalJson5(value)).digest("hex");
+var digest3 = (value) => (0, import_crypto25.createHash)("sha256").update(canonicalJson5(value)).digest("hex");
 var UsageDelivery = class _UsageDelivery {
   constructor(options, grant, privateKey, directory) {
     this.options = options;
@@ -164844,7 +165304,7 @@ var UsageDelivery = class _UsageDelivery {
   coverageAckRevision = 0;
   /** Pre-register the public key under current OIDC authorization, never expose custody. */
   static prepareRegistration() {
-    const keys5 = (0, import_crypto24.generateKeyPairSync)("ed25519");
+    const keys5 = (0, import_crypto25.generateKeyPairSync)("ed25519");
     return {
       publicKey: keys5.publicKey.export({ type: "spki", format: "pem" }).toString(),
       acceptGrant: (options, grant) => _UsageDelivery.fromGrant(options, grant, keys5.privateKey)
@@ -164853,7 +165313,7 @@ var UsageDelivery = class _UsageDelivery {
   static async create(options) {
     const url3 = new URL("/api/provider-usage/grants", options.apiUrl);
     if (url3.protocol !== "https:") throw new Error("usage_https_required");
-    const keys5 = (0, import_crypto24.generateKeyPairSync)("ed25519");
+    const keys5 = (0, import_crypto25.generateKeyPairSync)("ed25519");
     const response = await (options.fetchImpl ?? fetch)(url3, {
       method: "POST",
       redirect: "error",
@@ -165043,7 +165503,7 @@ var UsageDelivery = class _UsageDelivery {
   }
   persist() {
     const envelope = this.envelope();
-    const signature = (0, import_crypto24.sign)(
+    const signature = (0, import_crypto25.sign)(
       null,
       Buffer.from(canonicalJson5(envelope)),
       this.privateKey
@@ -166040,7 +166500,7 @@ function ensureTrailingSlash3(value) {
 }
 
 // src/control-plane/conversations.ts
-var import_crypto25 = require("crypto");
+var import_crypto26 = require("crypto");
 var ControlPlaneConversationClient = class {
   constructor(runtime, fetchImpl = fetch) {
     this.runtime = runtime;
@@ -166111,7 +166571,7 @@ function parseConversationResult(value) {
     if (!input.reply || typeof input.reply !== "object" || Array.isArray(input.reply))
       throw invalid6();
     const candidate = input.reply;
-    if (typeof candidate.body !== "string" || !candidate.body.trim() || Buffer.byteLength(candidate.body, "utf8") > 16 * 1024 || typeof candidate.bodyDigest !== "string" || (0, import_crypto25.createHash)("sha256").update(candidate.body, "utf8").digest("hex") !== candidate.bodyDigest || typeof candidate.marker !== "string" || candidate.marker.length > 512 || !/^<!-- reviewrouter-conversation:v1 [a-zA-Z0-9_=:.-]+ -->$/.test(
+    if (typeof candidate.body !== "string" || !candidate.body.trim() || Buffer.byteLength(candidate.body, "utf8") > 16 * 1024 || typeof candidate.bodyDigest !== "string" || (0, import_crypto26.createHash)("sha256").update(candidate.body, "utf8").digest("hex") !== candidate.bodyDigest || typeof candidate.marker !== "string" || candidate.marker.length > 512 || !/^<!-- reviewrouter-conversation:v1 [a-zA-Z0-9_=:.-]+ -->$/.test(
       candidate.marker
     ) || candidate.body.split(candidate.marker).length !== 2 || !numericId(candidate.parentCommentId))
       throw invalid6();
@@ -166138,7 +166598,7 @@ function numericId(value) {
 }
 
 // src/github/conversation.ts
-var import_crypto26 = require("crypto");
+var import_crypto27 = require("crypto");
 function conversationSource(payload, replyMode) {
   const comment = payload.comment;
   const action5 = payload.action;
@@ -166195,7 +166655,7 @@ var ManagedConversationHandler = class {
     );
     if (matches.length) {
       const existing = matches[0];
-      if (matches.length === 1 && existing.user?.type === "Bot" && String(existing.in_reply_to_id) === reply.parentCommentId && (0, import_crypto26.createHash)("sha256").update(existing.body ?? "", "utf8").digest("hex") === reply.bodyDigest)
+      if (matches.length === 1 && existing.user?.type === "Bot" && String(existing.in_reply_to_id) === reply.parentCommentId && (0, import_crypto27.createHash)("sha256").update(existing.body ?? "", "utf8").digest("hex") === reply.bodyDigest)
         await receipt("published", String(existing.id));
       else if (result2.status === "unknown") await receipt("unknown");
       return;
@@ -166479,406 +166939,6 @@ function attributeReviewSkillsError(error4, context5) {
 }
 function renderReviewSkillsDiagnosticText(value) {
   return `<code>${(bounded2(value) ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("`", "&#96;").replaceAll("@", "&#64;").replaceAll("[", "&#91;").replaceAll("]", "&#93;").replaceAll("|", "&#124;")}</code>`;
-}
-
-// src/review-orchestration/infrastructure/prepared-model-dispatch.ts
-var import_crypto27 = require("crypto");
-
-// src/control-plane/generated/review-action-v2/review-model-dispatch-contract.ts
-var reviewModelWireProtocols = [
-  "openai-responses",
-  "codex-responses",
-  "anthropic-messages"
-];
-var anthropicModelAliases = ["sonnet", "opus", "haiku"];
-var reviewModelDispatchContract = Object.freeze({
-  extensionId: "review-model-dispatch.v2",
-  version: 2,
-  policyVersion: "model-dispatch-policy.v2",
-  capabilityRuntimeEnvKey: "REVIEW_ROUTER_MODEL_DISPATCH_CAPABILITY_JSON",
-  basePath: "/api/action/v2/model-dispatch",
-  claimPath: "/api/action/v2/model-dispatch/claim",
-  receiptHeader: "x-reviewrouter-dispatch-receipt",
-  wireProtocols: Object.freeze(reviewModelWireProtocols),
-  anthropicModelAliases: Object.freeze(anthropicModelAliases),
-  outputTokenLimits: Object.freeze([
-    "upstream_request",
-    "terminal_acceptance"
-  ]),
-  maxRequests: 32,
-  maxConcurrentRequests: 1,
-  maxRequestBytes: 16 * 1024 * 1024,
-  maxResponseBytes: 8 * 1024 * 1024,
-  maxOutputTokens: 32768,
-  maxReceiptBytes: 8 * 1024
-});
-var reviewModelDispatchHeaders = Object.freeze({
-  dispatchVersion: "x-reviewrouter-model-dispatch-version",
-  requestOrdinal: "x-reviewrouter-model-request-ordinal",
-  routeIdentityHash: "x-reviewrouter-model-route-identity-hash"
-});
-var reviewModelTransports = [
-  "runner_local_responses",
-  "runner_local_anthropic",
-  "account_gateway",
-  "hosted_pool"
-];
-function reviewModelDispatchIdPreimage(input) {
-  return JSON.stringify([
-    reviewModelDispatchContract.extensionId,
-    input.authorizationId,
-    input.workSlotId,
-    input.attemptOrdinal,
-    input.requestOrdinal
-  ]);
-}
-function parseReviewModelDispatchLimitsV2(value) {
-  const names = [
-    "maxRequests",
-    "maxConcurrentRequests",
-    "maxRequestBytes",
-    "maxResponseBytes",
-    "maxOutputTokens"
-  ];
-  if (!record5(value) || !keys3(value, names)) invalid3();
-  for (const name of names)
-    if (!positive2(value[name]) || value[name] > reviewModelDispatchContract[name])
-      invalid3();
-  if (value.maxConcurrentRequests !== 1) invalid3();
-  return Object.freeze({ ...value });
-}
-function parseReviewModelDispatchCapabilityV2(value) {
-  if (!record5(value) || !keys3(value, [
-    "extensionId",
-    "version",
-    "routeIdentityHash",
-    "transport",
-    "wireProtocol",
-    "outputTokenLimit",
-    "providerIndex",
-    "model",
-    ...Object.hasOwn(value, "configuredModel") ? ["configuredModel"] : [],
-    "deadline",
-    "maxRequests",
-    "maxConcurrentRequests",
-    "maxRequestBytes",
-    "maxResponseBytes",
-    "maxOutputTokens"
-  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
-    value.transport,
-    value.wireProtocol
-  ) || !Number.isSafeInteger(value.providerIndex) || Number(value.providerIndex) < 0 || Number(value.providerIndex) > 15 || typeof value.model !== "string" || !value.model.trim() || value.model.length > 256 || Object.hasOwn(value, "configuredModel") && (value.transport !== "runner_local_anthropic" || !anthropicModelAliases.includes(
-    value.configuredModel
-  ) || value.configuredModel === value.model) || typeof value.deadline !== "string" || !Number.isFinite(Date.parse(value.deadline)) || new Date(value.deadline).toISOString() !== value.deadline)
-    invalid3();
-  const {
-    maxRequests,
-    maxConcurrentRequests,
-    maxRequestBytes,
-    maxResponseBytes,
-    maxOutputTokens
-  } = value;
-  const limits = parseReviewModelDispatchLimitsV2({
-    maxRequests,
-    maxConcurrentRequests,
-    maxRequestBytes,
-    maxResponseBytes,
-    maxOutputTokens
-  });
-  return Object.freeze({
-    ...value,
-    ...limits
-  });
-}
-function isReviewModelTransport(value) {
-  return typeof value === "string" && reviewModelTransports.includes(value);
-}
-function isReviewModelWireProtocol(value) {
-  return typeof value === "string" && reviewModelWireProtocols.includes(value);
-}
-function reviewModelWireProtocolMatchesTransport(transport, protocol) {
-  switch (transport) {
-    case "runner_local_anthropic":
-      return protocol === "anthropic-messages";
-    case "hosted_pool":
-      return protocol === "codex-responses";
-    case "account_gateway":
-      return protocol === "openai-responses";
-    case "runner_local_responses":
-      return protocol === "openai-responses" || protocol === "codex-responses";
-  }
-}
-function reviewModelDispatchOutputUsageIsWithinLimit(usage, maxOutputTokens) {
-  return typeof usage.outputTokens === "number" && Number.isSafeInteger(usage.outputTokens) && usage.outputTokens >= 0 && Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 && usage.outputTokens <= maxOutputTokens;
-}
-function record5(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function keys3(value, names) {
-  return Object.keys(value).length === names.length && names.every((name) => Object.hasOwn(value, name));
-}
-function positive2(value) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-function hash(value) {
-  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-}
-function invalid3() {
-  throw new Error("review_model_dispatch_contract_invalid");
-}
-
-// src/review-orchestration/infrastructure/prepared-model-dispatch.ts
-function scopedModelInvocations(invocations, transport) {
-  return {
-    prepare: (input) => invocations.prepare(input),
-    async execute(input) {
-      const release = transport.beginInvocation?.(() => {
-        input.signal.throwIfAborted();
-        const lease = input.currentLease?.() ?? input.lease;
-        return {
-          executionId: input.sourceExecutionId,
-          workSlotId: input.invocation.workSlotId,
-          attemptOrdinal: input.invocation.attemptOrdinal,
-          leaseId: lease.leaseId,
-          leaseCapability: lease.leaseCapability,
-          fencingToken: lease.fencingToken,
-          preparedManifestKey: input.manifest.manifestKey
-        };
-      });
-      try {
-        return await invocations.execute(input);
-      } finally {
-        release?.();
-      }
-    }
-  };
-}
-var PreparedModelDispatch = class {
-  constructor(input) {
-    this.input = input;
-    this.capability = parseReviewModelDispatchCapabilityV2(input.capability);
-    this.origin = new URL(input.apiUrl);
-    if (this.origin.username || this.origin.password || this.origin.protocol !== "https:" && !(this.origin.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(this.origin.hostname)))
-      throw new Error("model_dispatch_origin_invalid");
-  }
-  capability;
-  origin;
-  scope;
-  ordinals = /* @__PURE__ */ new Map();
-  active = false;
-  fenced = false;
-  /** The runner installs a live lease getter only while its leased invocation
-   * runs. An engine cannot submit its own scope or mint a new ordinal. */
-  beginInvocation(scope) {
-    if (this.scope || this.active || this.fenced)
-      throw new Error("model_dispatch_scope_unavailable");
-    this.scope = scope;
-    return () => {
-      if (this.scope === scope) this.scope = void 0;
-      if (this.active) this.fenced = true;
-    };
-  }
-  normalizeResponsesRequest(input) {
-    const cap = this.capability;
-    if (cap.wireProtocol !== "openai-responses")
-      throw new Error("model_dispatch_wire_protocol_mismatch");
-    if (input.byteLength > cap.maxRequestBytes)
-      throw new Error("model_dispatch_request_bound");
-    const request3 = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(input)
-    );
-    if (!request3 || typeof request3 !== "object" || Array.isArray(request3))
-      throw new Error("model_dispatch_request_invalid");
-    const row = request3;
-    if (row.model !== cap.model || row.stream !== true)
-      throw new Error("model_dispatch_route_mismatch");
-    if (cap.transport === "account_gateway") {
-      if (row.store !== void 0 && row.store !== false || row.service_tier !== void 0 && row.service_tier !== "default" || Object.hasOwn(row, "previous_response_id"))
-        throw new Error("model_dispatch_route_mismatch");
-      if (row.reasoning === null) delete row.reasoning;
-      row.store = false;
-      row.service_tier = "default";
-    }
-    const requested = row.max_output_tokens ?? cap.maxOutputTokens;
-    if (typeof requested !== "number" || !Number.isSafeInteger(requested) || requested <= 0)
-      throw new Error("model_dispatch_output_bound");
-    row.max_output_tokens = Math.min(requested, cap.maxOutputTokens);
-    const normalized = Buffer.from(JSON.stringify(row));
-    if (normalized.byteLength > cap.maxRequestBytes)
-      throw new Error("model_dispatch_request_bound");
-    return normalized;
-  }
-  async reserve(bytes2, signal, explicitScope, outputAcceptanceCap) {
-    signal.throwIfAborted();
-    const cap = this.capability;
-    if (this.fenced || this.active || Date.now() >= Date.parse(cap.deadline))
-      throw new Error("model_dispatch_fenced");
-    const scope = explicitScope ?? this.scope?.();
-    if (!scope || scope.attemptOrdinal !== 1)
-      throw new Error("model_dispatch_scope_unavailable");
-    const raw = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
-    );
-    if (!raw || typeof raw !== "object" || Array.isArray(raw))
-      throw new Error("model_dispatch_request_invalid");
-    const wire = raw;
-    const output = cap.wireProtocol === "codex-responses" ? outputAcceptanceCap : wire[cap.wireProtocol === "anthropic-messages" ? "max_tokens" : "max_output_tokens"];
-    if (wire.model !== cap.model || !Number.isSafeInteger(output) || Number(output) < 1 || Number(output) > cap.maxOutputTokens || bytes2.byteLength > cap.maxRequestBytes || cap.wireProtocol === "codex-responses" && Object.hasOwn(wire, "max_output_tokens") || outputAcceptanceCap !== void 0 && outputAcceptanceCap !== output)
-      throw new Error("model_dispatch_route_mismatch");
-    const authorization = this.input.authorization();
-    const requestOrdinal = (this.ordinals.get(scope.workSlotId) ?? 0) + 1;
-    this.ordinals.set(scope.workSlotId, requestOrdinal);
-    this.active = true;
-    const claim = {
-      ...scope,
-      dispatchVersion: 2,
-      dispatchId: `rr-model-${hash2(
-        Buffer.from(
-          reviewModelDispatchIdPreimage({
-            authorizationId: authorization.authorizationId,
-            workSlotId: scope.workSlotId,
-            attemptOrdinal: 1,
-            requestOrdinal
-          })
-        )
-      )}`,
-      attemptOrdinal: 1,
-      requestOrdinal,
-      routeIdentityHash: cap.routeIdentityHash,
-      providerRequestEnvelopeHash: hash2(bytes2),
-      requestBytes: bytes2.byteLength,
-      maxOutputTokens: Number(output)
-    };
-    let result2;
-    try {
-      result2 = await this.json(
-        reviewModelDispatchContract.claimPath,
-        "POST",
-        claim,
-        {
-          authorization: `Bearer ${authorization.authorizationToken}`
-        },
-        signal
-      );
-      if (result2.status !== "claimed" || !/^[a-f0-9]{64}$/.test(result2.receiptToken) || !matchesClaim(result2.dispatch, claim, authorization.authorizationId) || result2.dispatch.state !== "dispatch_may_have_started" || !Number.isFinite(Date.parse(result2.notAfter)) || Date.parse(result2.notAfter) > Date.parse(cap.deadline))
-        throw new Error("model_dispatch_claim_unavailable");
-    } catch {
-      this.active = false;
-      this.fenced = true;
-      throw new Error("model_dispatch_claim_unavailable");
-    }
-    let forwarded = false;
-    let settling = false;
-    let completed = false;
-    const settle = async (settlement) => {
-      if (settling) return;
-      settling = true;
-      const path40 = `${reviewModelDispatchContract.basePath}/${encodeURIComponent(claim.dispatchId)}`;
-      const headers = { [reviewModelDispatchContract.receiptHeader]: result2.receiptToken };
-      const agrees = (value) => {
-        const dispatch = value?.dispatch;
-        return !!dispatch && matchesClaim(dispatch, claim, authorization.authorizationId) && dispatch.state === settlement.state && (settlement.state !== "completed" || canonicalJson(dispatch.terminalReceipt) === canonicalJson(settlement.receipt));
-      };
-      try {
-        let response;
-        try {
-          response = await this.json(
-            `${path40}/settle`,
-            "POST",
-            settlement,
-            headers
-          );
-        } catch {
-          response = await this.json(path40, "GET", void 0, headers);
-        }
-        if (!agrees(response))
-          throw new Error("model_dispatch_settlement_unconfirmed");
-        completed = settlement.state === "completed";
-      } catch {
-        this.fenced = true;
-        throw new Error("model_dispatch_settlement_unconfirmed");
-      } finally {
-        this.active = false;
-      }
-    };
-    if (signal.aborted || Date.now() >= Date.parse(result2.notAfter)) {
-      await settle({ state: "not_dispatched", proof: "local_before_forward" });
-      throw new Error("model_dispatch_deadline");
-    }
-    return Object.freeze({
-      claim,
-      forwarded: () => {
-        forwarded = true;
-      },
-      isCompleted: () => completed,
-      complete: async (receipt) => {
-        if (!forwarded) throw new Error("model_dispatch_not_forwarded");
-        if (receipt.actualModel !== cap.model || !reviewModelDispatchOutputUsageIsWithinLimit(
-          receipt.usage,
-          claim.maxOutputTokens
-        )) {
-          this.fenced = true;
-          await settle({ state: "effect_unknown" });
-          throw new Error("model_dispatch_terminal_evidence_invalid");
-        }
-        await settle({
-          state: "completed",
-          receipt: {
-            ...receipt,
-            version: 2,
-            routeIdentityHash: cap.routeIdentityHash,
-            providerRequestEnvelopeHash: claim.providerRequestEnvelopeHash,
-            fullyConsumed: true,
-            terminal: "completed"
-          }
-        });
-      },
-      failed: async () => {
-        if (settling) return;
-        if (forwarded) this.fenced = true;
-        await settle(
-          forwarded ? { state: "effect_unknown" } : { state: "not_dispatched", proof: "local_before_forward" }
-        );
-      }
-    });
-  }
-  async json(path40, method, body2, headers, signal) {
-    const response = await (this.input.fetchImpl ?? fetch)(
-      new URL(path40, this.origin),
-      {
-        method,
-        redirect: "error",
-        headers: { ...headers, "content-type": "application/json" },
-        ...body2 === void 0 ? {} : { body: JSON.stringify(body2) },
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(3e4)]) : AbortSignal.timeout(3e4)
-      }
-    );
-    if (!response.ok || !response.body || !/^application\/json(?:\s*;.*)?$/i.test(
-      response.headers.get("content-type") ?? ""
-    )) {
-      await response.body?.cancel();
-      throw new Error("model_dispatch_control_unavailable");
-    }
-    const chunks = [];
-    let length = 0;
-    for await (const chunk of response.body) {
-      length += chunk.length;
-      if (length > reviewModelDispatchContract.maxReceiptBytes)
-        throw new Error("model_dispatch_control_bound");
-      chunks.push(chunk);
-    }
-    return JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))
-    );
-  }
-};
-function hash2(bytes2) {
-  return (0, import_crypto27.createHash)("sha256").update(bytes2).digest("hex");
-}
-function matchesClaim(value, claim, authorizationId) {
-  return !!value && value.authorizationId === authorizationId && Object.entries(claim).every(
-    ([key, field]) => key === "leaseCapability" || value[key] === field
-  );
 }
 
 // src/codex-oauth/ocr-managed-bootstrap.ts
@@ -242697,6 +242757,7 @@ var SDK_GATEWAY_CODES = [
 ];
 var GATEWAY_CODES = [
   ...SDK_GATEWAY_CODES,
+  ...MODEL_DISPATCH_CLAIM_DENIAL_CODES,
   "authorization_denied",
   "close_pending",
   "context_tools_unavailable",
@@ -246115,7 +246176,7 @@ var ProductionT0ReviewRunner = class {
     }
     const admittedRuntime = preparedRoute?.runtimeConfig;
     const dispatchJson = admittedRuntime?.runtimeEnv[reviewModelDispatchContract.capabilityRuntimeEnvKey];
-    const modelDispatchCapability = dispatchJson ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson)) : void 0;
+    const modelDispatchCapability = dispatchJson ? parseReviewModelDispatchCapability(JSON.parse(dispatchJson)) : void 0;
     if (input.preparedRoute && !modelDispatchCapability)
       throw new Error("review_action_v2_prepared_route_unqualified");
     if (admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== void 0 && !input.ocr && !input.accountGateway?.reviewers)
@@ -246394,7 +246455,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
         const preparedRoute2 = input2.preparedRoute ?? input2.accountGateway ?? input2.providerApi;
         const admittedRuntime2 = preparedRoute2?.runtimeConfig;
         const dispatchJson2 = admittedRuntime2?.runtimeEnv[reviewModelDispatchContract.capabilityRuntimeEnvKey];
-        const modelDispatchCapability2 = dispatchJson2 ? parseReviewModelDispatchCapabilityV2(JSON.parse(dispatchJson2)) : void 0;
+        const modelDispatchCapability2 = dispatchJson2 ? parseReviewModelDispatchCapability(JSON.parse(dispatchJson2)) : void 0;
         const laneConfig = reviewer && admittedRuntime2 ? ConfigLoader.loadRuntimeEnvironment(admittedRuntime2.runtimeEnv, {
           modelTransport: true
         }) : parentConfig;
@@ -249289,7 +249350,7 @@ function approvedProviderApiAgent(runtime, expectedMode) {
       env.REVIEW_ROUTER_AGENT_PROFILE_JSON ?? "",
       env.REVIEW_ROUTER_AGENT_PROFILE_DIGEST ?? ""
     );
-    const cap = parseReviewModelDispatchCapabilityV2(
+    const cap = parseReviewModelDispatchCapability(
       JSON.parse(
         env[reviewModelDispatchContract.capabilityRuntimeEnvKey] ?? "null"
       )
@@ -250148,7 +250209,7 @@ async function runPreparedModelReview(input, ports) {
       input.repository,
       authorization.facts.headSha
     );
-    const cap = parseReviewModelDispatchCapabilityV2(
+    const cap = parseReviewModelDispatchCapability(
       JSON.parse(
         capability2.runtimeConfig.runtimeEnv[reviewModelDispatchContract.capabilityRuntimeEnvKey] ?? "null"
       )
@@ -251946,6 +252007,7 @@ async function runAccountGatewayActionInternal(options = {}) {
     observeRelay: (fact) => {
       if (!fact) return;
       const code = (/* @__PURE__ */ new Set([
+        ...MODEL_DISPATCH_CLAIM_DENIAL_CODES,
         "invalid_input",
         "transport",
         "invalid_response",

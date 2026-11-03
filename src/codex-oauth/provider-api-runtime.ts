@@ -2,7 +2,7 @@ import { UsageDelivery } from '../provider-usage/delivery';
 import { PreparedModelDispatch } from '../review-orchestration/infrastructure/prepared-model-dispatch';
 import {
   reviewModelDispatchContract,
-  parseReviewModelDispatchCapabilityV2,
+  parseReviewModelDispatchCapability,
 } from '../control-plane/generated/review-action-v2/review-model-dispatch-contract';
 import {
   prepareOcrManagedRun,
@@ -120,7 +120,7 @@ export function approvedProviderApiAgent(
       env.REVIEW_ROUTER_AGENT_PROFILE_JSON ?? '',
       env.REVIEW_ROUTER_AGENT_PROFILE_DIGEST ?? ''
     );
-    const cap = parseReviewModelDispatchCapabilityV2(
+    const cap = parseReviewModelDispatchCapability(
       JSON.parse(
         env[reviewModelDispatchContract.capabilityRuntimeEnvKey] ?? 'null'
       )

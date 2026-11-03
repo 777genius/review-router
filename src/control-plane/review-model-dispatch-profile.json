@@ -1,7 +1,7 @@
 {
   "extensionId": "review-model-dispatch.v2",
-  "descriptorDigest": "sha256:be55241ba86af0788b6a60973ac7c55e6aa33244d18bba52a230cbc195ba4a2d",
-  "policyVersion": "model-dispatch-policy.v2",
+  "descriptorDigest": "sha256:d529a458a0d6e6644df1d8e341f42988b5c137920f6883cd1467bfe524e8aadb",
+  "policyVersion": "model-dispatch-policy.capacity128.v1",
   "transports": [
     "runner_local_responses",
     "runner_local_anthropic",
@@ -25,7 +25,7 @@
     "hosted_pool": "ocr-managed-v5"
   },
   "limits": {
-    "maxRequests": 32,
+    "maxRequests": 128,
     "maxConcurrentRequests": 1,
     "maxRequestBytes": 16777216,
     "maxResponseBytes": 8388608,

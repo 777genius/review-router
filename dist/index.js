@@ -240932,6 +240932,7 @@ var ProductionReviewProjectionCommandFactory = class {
       [...manifestByPath.values()].map(({ entry }) => entry).sort((left, right) => compareCodeUnits8(left.path, right.path))
     );
     const comparisonBaseline = input.comparisonBaseline?.sourceReviewedHeadSha !== this.input.authorizationFacts.headSha ? input.comparisonBaseline : null;
+    const providerQuota = this.input.providerQuota?.();
     return Object.freeze({
       projectionPolicyVersion: this.input.lifecycleVerification ? "review-projection-policy.v7-lifecycle-verification" : productionReviewProjectionPolicyVersion,
       ...lifecycleVerification ? { lifecycleVerification } : {},
@@ -240951,7 +240952,7 @@ var ProductionReviewProjectionCommandFactory = class {
       },
       providerExecution,
       incompleteCauses,
-      ...!complete && this.input.providerQuota?.() ? { providerQuota: this.input.providerQuota() } : {},
+      ...providerQuota ? { providerQuota } : {},
       currentFindings: Object.freeze(
         findings.sort(
           (left, right) => compareCodeUnits8(left.sourceFindingId, right.sourceFindingId)

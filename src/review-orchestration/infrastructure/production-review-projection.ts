@@ -431,6 +431,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         ? input.comparisonBaseline
         : null;
 
+    const providerQuota = this.input.providerQuota?.();
     return Object.freeze({
       projectionPolicyVersion: this.input.lifecycleVerification
         ? 'review-projection-policy.v7-lifecycle-verification'
@@ -453,9 +454,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       },
       providerExecution,
       incompleteCauses,
-      ...(!complete && this.input.providerQuota?.()
-        ? { providerQuota: this.input.providerQuota() }
-        : {}),
+      ...(providerQuota ? { providerQuota } : {}),
       currentFindings: Object.freeze(
         findings.sort((left, right) =>
           compareCodeUnits(left.sourceFindingId, right.sourceFindingId)

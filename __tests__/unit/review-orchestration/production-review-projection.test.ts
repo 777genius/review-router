@@ -137,6 +137,62 @@ describe('production review projection coverage', () => {
     ).not.toContain('quota exhausted');
   });
 
+  it('retains quota reset when complete file coverage still has unverified lifecycle findings', async () => {
+    const inventory = completeLifecycleInventory();
+    inventory.loadCurrent.mockResolvedValue({
+      ...(await inventory.loadCurrent()),
+      targets: [
+        {
+          targetId: 'old-caller',
+          threadId: 'thread-old',
+          trustedMarker: 'a'.repeat(24),
+          title: 'Previous caller finding',
+          message: 'The previous caller is outside the current diff.',
+          severity: FindingSeverity.Major,
+          originalPath: '.github/workflows/old-caller.yml',
+          parentCommentUpdatedAt: '2026-07-22T00:00:00Z',
+          threadCommentCount: 1,
+          threadStateHash: 'a'.repeat(64),
+          disposition: LifecycleTargetDisposition.Active,
+          viewerCanResolve: true,
+        },
+      ],
+    });
+    const providerQuota = jest.fn(() => ({
+      provider: 'openrouter' as const,
+      limit: 1000,
+      remaining: 0 as const,
+      resetAt: '2026-11-05T00:00:00.000Z',
+    }));
+    const builder = projectionBuilder([assignment('required-slot', true)], {
+      lifecycleInventory: inventory,
+      providerQuota,
+    });
+    const result = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence(
+          'required-slot',
+          fullCoverageManifest('required-slot')
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+    expect(envelope.coverage.state).toBe('complete');
+    expect(envelope.publishing.summary.body).toContain(
+      '<!-- reviewrouter:review-status:incomplete -->'
+    );
+    expect(envelope.publishing.lifecycle[0]).toMatchObject({
+      verdict: 'uncertain',
+      mutationEligible: false,
+    });
+    expect(envelope.publishing.summary.body).toContain(
+      'OpenRouter request quota exhausted (0 of 1000 requests remaining). Try again after 2026-11-05 00:00 UTC.'
+    );
+    expect(providerQuota).toHaveBeenCalledTimes(1);
+  });
+
   it('freezes a private-safe receipt into the real canonical publication before hashing', async () => {
     const collector = new ReviewSkillsReceiptCollector();
     const skills = createMaterializedReviewSkills(

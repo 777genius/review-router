@@ -1,6 +1,6 @@
 # Plan: make OCR native preview the selection authority (2026-11-04)
 
-Status: **reviewed implementation plan; implementation pending**. Scope: public ReviewRouter Action adapter and focused tests. No runtime activation/deployment implied.
+Status: **implemented in draft PR #371; final CI/E2E qualification and merge pending**. Scope: public ReviewRouter Action adapter and focused tests. No runtime activation/deployment implied.
 
 ## Evidence and fixed baseline
 
@@ -75,3 +75,11 @@ No changes to OCR fork patches, CodeRabbit/OCR model choice, retry policy, Gatew
 ## Completion evidence required
 
 Plan in draft PR; source diff and expected-head SHA; complete two critical rounds after implementation; passing relevant CI / actual native synthetic E2E at the pushed head; no unresolved scoped findings; merge and post-merge readback. If CI or native binary cannot be run, explicitly report the blocker and do not claim E2E or merge success.
+
+## Implementation review after source changes
+
+- **Critic pass 1 (security):** exact native preview decisions are reconciled to the original assigned inventory, native-selected groups must match the selected set, and malformed/stale preview or unexpected selected paths fail closed. Out-of-scope files excluded with native `user_exclude` are permitted only when not selected.
+- **Critic pass 2 (behavior and compatibility):** retain both old and current native preview selection shapes without inferring an exclusion from absent paths. Native-managed `provider_directory` evidence classifies the tracked vendor JSON as an explicit policy exclusion instead of `Unavailable`. Partial outcomes, unverified spans, observed model identity, Gateway effects, immutable manifests and required reviewer votes are unchanged.
+- **Critic pass 3 (E2E):** add actual managed OCR binary coverage of an ordinary changed TypeScript file plus a tracked `vendor/**/*.json` exclusion using the existing synthetic loopback fixture, plus negative tests for missing selected groups, duplicate/out-of-scope paths, malformed schema and stale preview output. Generated `dist` is committed from the exact Action source.
+- **Zero eligible work:** existing public/SaaS terminal contracts do not encode a no-applicable-work success without fake model attribution or incorrect settled review facts. This PR deliberately leaves the no-model-request rejection fail-closed; do not misrepresent it as fixed or trigger a new protocol/migration in this bounded change. A separately authorized protocol-level no-op outcome is needed to fix workflow-only PRs safely.
+- **Release scope:** merge of this public Action source is not a production deployment, and no hosted runtime activation is implied.

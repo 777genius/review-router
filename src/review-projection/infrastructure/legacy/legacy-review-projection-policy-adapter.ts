@@ -101,13 +101,15 @@ export class LegacyReviewProjectionPolicyAdapter
     query: SelectCurrentFindingsQuery
   ): Promise<readonly SelectedCurrentFinding[]> {
     // Provider identities here come from accepted observations. Require every
-    // original contributor, since dedup can retain one source's category while
+    // original contributor. Native security is a factual category too; generic
+    // correctness has no separate bug-type witness in the accepted contract.
+    // Dedup can retain one source's category while
     // replacing its text with another source's explanation.
     const producerClassifiedBugIds = new Set(
       query.findings
         .filter(
           (finding) =>
-            finding.category === 'bug' &&
+            (finding.category === 'bug' || finding.category === 'security') &&
             finding.providerIds.length > 0 &&
             finding.providerIds.every((provider) => provider === 'ocr')
         )

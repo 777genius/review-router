@@ -211217,7 +211217,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
   async selectCurrent(query) {
     const producerClassifiedBugIds = new Set(
       query.findings.filter(
-        (finding) => finding.category === "bug" && finding.providerIds.length > 0 && finding.providerIds.every((provider) => provider === "ocr")
+        (finding) => (finding.category === "bug" || finding.category === "security") && finding.providerIds.length > 0 && finding.providerIds.every((provider) => provider === "ocr")
       ).map((finding) => finding.sourceFindingId)
     );
     const legacyFindings = query.findings.map(toLegacyFinding);

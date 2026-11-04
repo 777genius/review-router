@@ -741,9 +741,11 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     ) {
       throw new Error('review_action_v2_ocr_preview_failed');
     }
-    const previewSelectedPaths = Object.freeze(
-      parseOcrPreviewSelection(readPreviewOutput(previewOutputPath))
+    const preview = parseOcrPreviewCoverage(
+      readPreviewOutput(previewOutputPath),
+      assignedPaths
     );
+    const previewSelectedPaths = preview.selectedPaths;
 
     const pathCoverage: readonly PreparedPromptPathCoverage[] =
       assignedPaths.map((path) => {
@@ -752,12 +754,11 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         );
         return {
           path,
-          // The full canonical patch of every assigned path is in the exact
-          // revision OCR reviews; a preview-skipped path stays visible as
-          // unreviewed, never as an RR policy exclusion (§8.1).
-          kind: previewSelectedPaths.includes(path)
-            ? PreparedPromptPathCoverageKind.FullPatch
-            : PreparedPromptPathCoverageKind.Unavailable,
+          // Native preview owns selection/exclusion, not a second RR path
+          // allowlist. Missing/unknown/size-limited paths remain unavailable.
+          kind:
+            preview.coverageByPath.get(path) ??
+            PreparedPromptPathCoverageKind.Unavailable,
           contentHash: sha256(
             canonicalJson({
               filename: path,
@@ -933,7 +934,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       let processResult: OcrReviewProcessResult | undefined;
       try {
         this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-        return await this.runInvocation(input, assignment, (result) => {
+        return await this.runInvocation(input, assignment, preimages, (result) => {
           processResult = result;
         });
       } catch (error) {
@@ -1002,6 +1003,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       readonly currentLease?: () => ReviewInvocationLease;
     },
     assignment: OcrReviewAssignment,
+    prepared: OcrPreparedReviewInvocation,
     observeProcess: (result: OcrReviewProcessResult) => void
   ): Promise<ReviewObservationPayload> {
     assertOcrInvocationLive(input);
@@ -1101,7 +1103,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       resultBytes,
       observedActualModel: this.options.bridge.actualModel(),
       observedRequestCount: this.options.bridge.requestCount(),
-      expectedPaths: assignment.context.files.map((file) => file.filename),
+      expectedPaths: prepared.previewSelectedPaths,
       headFiles,
       diffPositions,
     });
@@ -1215,49 +1217,101 @@ function readPreviewOutput(outputPath: string): unknown {
   }
 }
 
-/** Lenient preview selection read (§5.1): the preview format is distinct
- * from the terminal review JSON and is never confused with it. The managed
- * preview lists `files: [{path, will_review, ...}]`; legacy preview shapes
- * with direct path arrays are also accepted. */
-function parseOcrPreviewSelection(raw: unknown): readonly string[] {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return [];
+/** Native OCR 1.13.1 preview exclusion reasons. These are semantic codes,
+ * never a second hardcoded path/extension policy in ReviewRouter. */
+const OCR_INTENTIONAL_EXCLUSION_REASONS: readonly string[] = [
+  'provider_directory',
+  'deleted',
+  'binary',
+  'secret_exclude',
+  'unsupported_ext',
+  'default_path',
+];
+
+/** The pinned native preview owns selection. Reconcile every original SCM path
+ * and never infer an intentional exclusion from a missing or unknown entry.
+ * Legacy array previews can prove selection only, not exclusion. */
+function parseOcrPreviewCoverage(
+  raw: unknown,
+  assignedPaths: readonly string[]
+): Readonly<{
+  selectedPaths: readonly string[];
+  coverageByPath: ReadonlyMap<string, PreparedPromptPathCoverageKind>;
+}> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('review_action_v2_ocr_preview_contract_invalid');
+  }
   const value = raw as Record<string, unknown>;
-  const collect = (candidate: unknown): string[] =>
-    Array.isArray(candidate)
-      ? candidate.filter((item): item is string => typeof item === 'string')
-      : [];
-  const direct = [
-    ...collect(value.paths),
-    ...collect(value.selected_paths),
-    ...collect(value.selectedPaths),
-  ];
-  if (direct.length > 0) return Object.freeze([...new Set(direct)]);
+  const assigned = new Set(assignedPaths);
+  const coverageByPath = new Map<string, PreparedPromptPathCoverageKind>(
+    assignedPaths.map((path) => [
+      path,
+      PreparedPromptPathCoverageKind.Unavailable,
+    ])
+  );
+
+  let files: readonly unknown[];
   if (Array.isArray(value.files)) {
-    const selected = value.files.flatMap((file) => {
-      if (typeof file !== 'object' || file === null) return [];
-      const entry = file as Record<string, unknown>;
-      const path = entry.path;
-      if (typeof path !== 'string') return [];
-      // A file is selected for review only when the preview says so; an
-      // absent will_review keeps the conservative "not reviewed" reading.
-      return entry.will_review === true ? [path] : [];
-    });
-    return Object.freeze([...new Set(selected)]);
+    files = value.files;
+  } else {
+    const legacyPaths =
+      value.selected_paths ?? value.selectedPaths ?? value.paths;
+    if (!Array.isArray(legacyPaths)) {
+      throw new Error('review_action_v2_ocr_preview_contract_invalid');
+    }
+    // Older selected-path-only output does not authorize excluding omissions.
+    files = legacyPaths.map((path) => ({ path, will_review: true }));
   }
-  if (Array.isArray(value.groups)) {
-    return Object.freeze([
-      ...new Set(
-        value.groups.flatMap((group) =>
-          collect(
-            typeof group === 'object' && group !== null
-              ? (group as Record<string, unknown>).paths
-              : undefined
-          )
-        )
-      ),
-    ]);
+  if (files.length > assigned.size) {
+    throw new Error('review_action_v2_ocr_preview_scope_invalid');
   }
-  return Object.freeze([]);
+
+  const observed = new Set<string>();
+  const selected = new Set<string>();
+  for (const file of files) {
+    if (
+      typeof file !== 'object' ||
+      file === null ||
+      Array.isArray(file)
+    ) {
+      throw new Error('review_action_v2_ocr_preview_contract_invalid');
+    }
+    const entry = file as Record<string, unknown>;
+    const path = entry.path;
+    if (
+      typeof path !== 'string' ||
+      !assigned.has(path) ||
+      observed.has(path)
+    ) {
+      throw new Error('review_action_v2_ocr_preview_scope_invalid');
+    }
+    observed.add(path);
+    if (typeof entry.will_review !== 'boolean') {
+      throw new Error('review_action_v2_ocr_preview_contract_invalid');
+    }
+    if (entry.will_review) {
+      if (
+        entry.exclude_reason !== undefined &&
+        entry.exclude_reason !== ''
+      ) {
+        throw new Error('review_action_v2_ocr_preview_contract_invalid');
+      }
+      selected.add(path);
+      coverageByPath.set(path, PreparedPromptPathCoverageKind.FullPatch);
+    } else if (
+      typeof entry.exclude_reason === 'string' &&
+      OCR_INTENTIONAL_EXCLUSION_REASONS.includes(entry.exclude_reason)
+    ) {
+      coverageByPath.set(path, PreparedPromptPathCoverageKind.PolicyExcluded);
+    }
+    // too_large, user_exclude, unknown reasons and absent entries stay
+    // Unavailable, preserving fail-closed required coverage.
+  }
+
+  return Object.freeze({
+    selectedPaths: Object.freeze([...selected].sort()),
+    coverageByPath,
+  });
 }
 
 function canonicalJson(value: unknown): string {

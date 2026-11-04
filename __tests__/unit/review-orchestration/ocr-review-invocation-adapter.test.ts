@@ -809,7 +809,33 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(observation.qualityFlags).toEqual([]);
   });
 
-  it('rejects unassigned native exclusions not caused by managed rules', async () => {
+  it.each([
+    'provider_directory',
+    'binary',
+    'secret_exclude',
+    'user_exclude',
+  ])('permits known native %s exclusion outside assigned scope', async (reason) => {
+    const { bridge, requests } = bridgeFixture();
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        {
+          path: 'unassigned.ts',
+          status: reason === 'binary' ? 'binary' : 'added',
+          will_review: false,
+          exclude_reason: reason,
+        },
+      ]).runner,
+      processRunner: unusedRunner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(prepared.previewSelectedPaths).toEqual(['calc.ts']);
+    expect(prepared.coverageManifest.paths).toHaveLength(1);
+    expect(requests.count).toBe(0);
+  });
+
+  it('rejects an unknown unassigned native exclusion', async () => {
     const { bridge, requests } = bridgeFixture();
     const { adapter, workSlot } = adapterFixture({
       bridge,
@@ -819,7 +845,7 @@ describe('OcrReviewInvocationAdapter', () => {
           path: 'unassigned.ts',
           status: 'added',
           will_review: false,
-          exclude_reason: 'provider_directory',
+          exclude_reason: 'unrecognized_native_exclusion',
         },
       ]).runner,
       processRunner: unusedRunner,
@@ -1817,17 +1843,19 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(processRunner.calls).toHaveLength(1);
   });
 
-  it('classifies an inventory gap as a partial missing_paths observation', async () => {
-    // §8.1/§8.2: a deleted file stays in the RR inventory denominator but the
-    // producer never groups it; that gap is a bounded missing_paths
-    // limitation, not a fatal coverage mismatch.
+  it('classifies an omitted native-selected group as partial missing_paths', async () => {
+    // An omitted native-selected modified path is real missing_paths.
+    // A deleted or explicitly preview-excluded path is not in this denominator.
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;
     const processRunner = processRunnerWriting(nativeResultBody());
     const { adapter, workSlot } = adapterFixture({
       bridge,
       processRunner: processRunner.runner,
-      previewRunner: previewRunner().runner,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        { path: 'missing.ts', status: 'modified', will_review: true },
+      ]).runner,
       planInputOverrides: {
         pr: prContext({
           files: [
@@ -1841,11 +1869,12 @@ describe('OcrReviewInvocationAdapter', () => {
                 '@@ -1 +1 @@\n-function add(a, b) { return a + b }\n+function add(a, b) { return a - b }',
             },
             {
-              filename: 'gone.ts',
-              status: 'removed',
-              additions: 0,
-              deletions: 3,
-              changes: 3,
+              filename: 'missing.ts',
+              status: 'modified',
+              additions: 1,
+              deletions: 1,
+              changes: 2,
+              patch: '@@ -1 +1 @@\n-old\n+new',
             },
           ],
         }),
@@ -1853,6 +1882,7 @@ describe('OcrReviewInvocationAdapter', () => {
     });
     const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
     const observation = await adapter.execute(executionInput(prepared));
+    expect(prepared.previewSelectedPaths).toEqual(['calc.ts', 'missing.ts']);
     expect(observation.qualityFlags).toEqual([
       'context_inspection_incomplete',
       'provider_warning',

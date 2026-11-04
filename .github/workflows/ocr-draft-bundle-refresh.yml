@@ -27,20 +27,30 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Rebuild committed Action bundles from draft source
-        run: |
-          git restore --worktree -- dist
-          npm run build
-      - name: Commit exact generated bundles back to the same draft branch
+      # Always rebuild against the latest draft head: queued runs may start
+      # after another scoped source commit has already landed.
+      - name: Rebuild and push Action bundles without force
         run: |
           set -euo pipefail
           git config user.name '777genius'
           git config user.email 'quantjumppro@gmail.com'
-          git add -- dist
-          if ! git diff --cached --quiet; then
+          for attempt in 1 2 3; do
+            git fetch origin refs/heads/fix/ocr-native-preview-inventory-20261104
+            git reset --hard FETCH_HEAD
+            npm run build
+            git add -- dist
+            if git diff --cached --quiet; then
+              echo 'Committed bundles already match source.'
+              exit 0
+            fi
             git commit -m 'build(ocr): synchronize committed Action bundles'
-            git push origin HEAD:refs/heads/fix/ocr-native-preview-inventory-20261104
-          fi
+            if git push origin HEAD:refs/heads/fix/ocr-native-preview-inventory-20261104; then
+              exit 0
+            fi
+            echo "Draft advanced during bundle build; regenerating (attempt $attempt)."
+          done
+          echo 'Draft bundle push lost three races; refusing stale artifact update.' >&2
+          exit 1
 
 # Rebuild after merging main 8328c2e6 for OCR E2E.
 

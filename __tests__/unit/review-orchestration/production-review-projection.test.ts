@@ -139,7 +139,7 @@ describe('production review projection coverage', () => {
   });
 
   it.each(['upstream_failure', 'relay_unknown'])(
-    'explains only confirmed upstream failure in an incomplete review: %s',
+    'explains an unknown request outcome without inventing its cause: %s',
     async (code) => {
       const builder = projectionBuilder([assignment('slot', true)], {
         providerFailure: () =>
@@ -165,10 +165,15 @@ describe('production review projection coverage', () => {
         expect(summary).toContain(
           'Wait for this run to finish, then start a new review.'
         );
-      } else
-        expect(summary).not.toContain(
-          'The review provider could not return a usable result.'
+      } else {
+        expect(summary).toContain(
+          'The review request did not produce a confirmed result.'
         );
+        expect(summary).not.toContain('upstream failure');
+      }
+      expect(summary).toContain(
+        'Automatic retry was withheld to avoid running the request twice.'
+      );
       expect(summary).not.toContain('retries were exhausted');
       const complete = await builder.build({
         acceptedEvidence: [

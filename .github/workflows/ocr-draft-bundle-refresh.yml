@@ -41,3 +41,5 @@ jobs:
             git commit -m 'build(ocr): synchronize committed Action bundles'
             git push origin HEAD:refs/heads/fix/ocr-native-preview-inventory-20261104
           fi
+
+# Rebuild after merging main 8328c2e6 for OCR E2E.

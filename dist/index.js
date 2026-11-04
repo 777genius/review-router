@@ -142914,7 +142914,7 @@ function confirmedProviderFailure(fact) {
   if (!fact || typeof fact !== "object") return void 0;
   const value = fact;
   if (value.effect === "effect_unknown" || value.effect === "dispatch_started" || value.effect === "response_started")
-    return value.code === "upstream_failure" ? "upstream_failure_unknown" : value.code === "provider_quota_exhausted" ? void 0 : "request_outcome_unknown";
+    return value.code === "upstream_failure" ? "upstream_failure_unknown" : confirmedProviderQuota(fact) !== void 0 ? void 0 : "request_outcome_unknown";
   if (value.code !== "upstream_failure") return void 0;
   return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
 }

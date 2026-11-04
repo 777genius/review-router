@@ -1,3 +1,5 @@
+import { confirmedProviderQuota } from './provider-quota';
+
 /** Display only closed failure/effect facts, never upstream error prose. */
 export type ProviderFailureNotice =
   | 'upstream_failure'
@@ -18,7 +20,7 @@ export function confirmedProviderFailure(
     // infer a 502, quota exhaustion or permission to replay from this notice.
     return value.code === 'upstream_failure'
       ? 'upstream_failure_unknown'
-      : value.code === 'provider_quota_exhausted'
+      : confirmedProviderQuota(fact) !== undefined
         ? undefined
         : 'request_outcome_unknown';
   if (value.code !== 'upstream_failure') return undefined;

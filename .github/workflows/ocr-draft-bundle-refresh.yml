@@ -1,4 +1,5 @@
 name: Temporary OCR draft bundle refresh
+# One-time rebuild on final scoped source; delete workflow before merge.
 
 on:
   push:

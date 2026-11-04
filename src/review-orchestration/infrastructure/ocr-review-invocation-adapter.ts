@@ -1253,9 +1253,15 @@ function parseOcrPreviewCoverage(
     ])
   );
 
+  // A present but malformed native files field cannot masquerade as a
+  // legacy selected-path-only response.
+  if (value.files !== undefined && !Array.isArray(value.files)) {
+    throw new Error('review_action_v2_ocr_preview_contract_invalid');
+  }
+  const nativeFiles = Array.isArray(value.files);
   let files: readonly unknown[];
-  if (Array.isArray(value.files)) {
-    files = value.files;
+  if (nativeFiles) {
+    files = value.files as readonly unknown[];
   } else {
     const groupedPaths = Array.isArray(value.groups)
       ? value.groups.flatMap((group): unknown[] =>
@@ -1286,6 +1292,15 @@ function parseOcrPreviewCoverage(
       throw new Error('review_action_v2_ocr_preview_contract_invalid');
     }
     const entry = file as Record<string, unknown>;
+    if (
+      nativeFiles &&
+      (typeof entry.status !== 'string' ||
+        !['added', 'modified', 'deleted', 'renamed', 'binary'].includes(
+          entry.status
+        ))
+    ) {
+      throw new Error('review_action_v2_ocr_preview_contract_invalid');
+    }
     const path = entry.path;
     if (typeof path !== 'string' || observed.has(path)) {
       throw new Error('review_action_v2_ocr_preview_scope_invalid');

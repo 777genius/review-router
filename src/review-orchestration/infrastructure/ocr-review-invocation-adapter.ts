@@ -697,6 +697,9 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       this.options.run.runDirectory,
       'preview.json'
     );
+    // A zero-exit preview must write fresh evidence for this preparation.
+    // Never reuse a prior attempt's file if a native runner omits output.
+    fs.rmSync(previewOutputPath, { force: true });
     const timeoutMs =
       this.options.previewTimeoutMs?.() ??
       this.options.limits.requestTimeoutSec * 1000;
@@ -1297,8 +1300,7 @@ function parseOcrPreviewCoverage(
       // selection to silently expand an admitted ReviewRouter work slot.
       if (
         entry.will_review ||
-        typeof entry.exclude_reason !== 'string' ||
-        entry.exclude_reason.length === 0
+        entry.exclude_reason !== 'user_exclude'
       ) {
         throw new Error('review_action_v2_ocr_preview_scope_invalid');
       }

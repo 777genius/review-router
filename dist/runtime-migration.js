@@ -222,7 +222,7 @@ function maskCodexAuthJson(authJsonBytes) {
 // src/codex-oauth/crypto.ts
 var import_crypto = require("crypto");
 
-// ../../rr-action229-span-fallback-20261104/node_modules/libsodium/dist/modules-esm/libsodium.mjs
+// node_modules/libsodium/dist/modules-esm/libsodium.mjs
 var import_meta = {};
 async function A(A3 = {}) {
   var I2, g2 = A3, C2 = !!globalThis.window, B2 = !!globalThis.WorkerGlobalScope, Q2 = (globalThis.process?.versions?.node && globalThis.process, import_meta.url);
@@ -420,7 +420,7 @@ async function A(A3 = {}) {
 }
 var libsodium_default = A;
 
-// ../../rr-action229-span-fallback-20261104/node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
+// node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
 var r;
 var t = {};
 if (void 0 === globalThis.crypto || "function" != typeof globalThis.crypto.getRandomValues) throw new Error("globalThis.crypto.getRandomValues is not available. The ESM build of libsodium requires a secure random source (available in all browsers and Node.js 19+).");

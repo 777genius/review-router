@@ -783,6 +783,55 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(observation.qualityFlags).toEqual([]);
   });
 
+  it('rejects unassigned native exclusions not caused by managed rules', async () => {
+    const { bridge, requests } = bridgeFixture();
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        {
+          path: 'unassigned.ts',
+          status: 'added',
+          will_review: false,
+          exclude_reason: 'provider_directory',
+        },
+      ]).runner,
+      processRunner: unusedRunner,
+    });
+    await expect(adapter.prepare({ workSlot, attemptOrdinal: 1 })).rejects.toThrow(
+      'review_action_v2_ocr_preview_scope_invalid'
+    );
+    expect(requests.count).toBe(0);
+  });
+
+  it('never reuses a previous preparation preview after an exit-zero no-output run', async () => {
+    const { bridge, requests } = bridgeFixture();
+    const preview = previewRunner();
+    let calls = 0;
+    const noOutputRunner: OcrPreviewRunner = async (input) => {
+      if (++calls === 1) return preview.runner(input);
+      // A broken native producer that returns exit 0 but writes no new file.
+      return {
+        closed: true,
+        exitCode: 0,
+        signal: null,
+        stdoutTail: '',
+        stderrTail: '',
+      };
+    };
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: noOutputRunner,
+      processRunner: unusedRunner,
+    });
+    await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.prepare({ workSlot, attemptOrdinal: 1 })).rejects.toThrow(
+      'review_action_v2_ocr_preview_contract_invalid'
+    );
+    expect(calls).toBe(2);
+    expect(requests.count).toBe(0);
+  });
+
   it('keeps a genuinely selected native group omission partial', async () => {
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;

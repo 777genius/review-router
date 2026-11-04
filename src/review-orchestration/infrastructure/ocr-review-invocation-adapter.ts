@@ -1103,7 +1103,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       resultBytes,
       observedActualModel: this.options.bridge.actualModel(),
       observedRequestCount: this.options.bridge.requestCount(),
-      expectedPaths: prepared.previewSelectedPaths,
+      selectedPaths: prepared.previewSelectedPaths,
       headFiles,
       diffPositions,
     });

@@ -288,7 +288,11 @@ describe('OcrReviewInvocationAdapter', () => {
     return { bridge, requests };
   }
 
-  function previewRunner(): {
+  function previewRunner(
+    files: readonly Record<string, unknown>[] = [
+      { path: 'calc.ts', status: 'modified', will_review: true },
+    ]
+  ): {
     runner: OcrPreviewRunner;
     calls: { argv: readonly string[]; env: NodeJS.ProcessEnv }[];
   } {
@@ -297,9 +301,7 @@ describe('OcrReviewInvocationAdapter', () => {
       calls.push({ argv: input.argv, env: input.env });
       fs.writeFileSync(
         input.outputPath,
-        JSON.stringify({
-          files: [{ path: 'calc.ts', status: 'modified', will_review: true }],
-        })
+        JSON.stringify({ files })
       );
       return {
         closed: true,
@@ -635,6 +637,309 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(serializedRequest).not.toContain('Bearer');
     expect(serializedRequest).not.toContain('127.0.0.1');
     expect(serializedRequest).not.toContain(bridge.capabilityAuthorization);
+  });
+
+  const vendorPath = 'vendor/account-gateway/candidate-sdk-provenance.json';
+  const mixedFiles = () => [
+    ...prContext().files,
+    {
+      filename: vendorPath,
+      status: 'added' as const,
+      additions: 1,
+      deletions: 0,
+      changes: 1,
+      patch: '@@ -0,0 +1 @@\n+{"kind":"provenance"}',
+    },
+  ];
+
+  it('accepts native provider_directory exclusion without fabricating missing_paths', async () => {
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const acceptanceDiagnostic = jest.fn<void, [OcrReviewAcceptanceDiagnostic]>();
+    const preview = previewRunner([
+      { path: 'calc.ts', status: 'modified', will_review: true },
+      {
+        path: vendorPath,
+        status: 'added',
+        will_review: false,
+        exclude_reason: 'provider_directory',
+      },
+    ]);
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      acceptanceDiagnostic,
+      previewRunner: preview.runner,
+      processRunner: processRunnerWriting(nativeResultBody()).runner,
+      planInputOverrides: { pr: prContext({ files: mixedFiles() }) },
+    });
+
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(prepared.previewSelectedPaths).toEqual(['calc.ts']);
+    expect(prepared.coverageManifest.paths.map(({ path, kind }) => [path, kind])).toEqual([
+      ['calc.ts', PreparedPromptPathCoverageKind.FullPatch],
+      [vendorPath, PreparedPromptPathCoverageKind.PolicyExcluded],
+    ]);
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([]);
+    expect(acceptanceDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        acceptedPartial: false,
+        uncoveredPathCount: 0,
+      })
+    );
+  });
+
+  it.each([
+    ['too_large', 'too_large'],
+    ['user_exclude', 'user_exclude'],
+    ['unknown_reason', 'unknown_new_native_reason'],
+    ['no_reason', undefined],
+    ['missing_entry', 'absent'],
+  ])('keeps unproven %s exclusions unavailable', async (_label, reason) => {
+    const { bridge } = bridgeFixture();
+    const files: Record<string, unknown>[] = [
+      { path: 'calc.ts', status: 'modified', will_review: true },
+    ];
+    if (reason !== 'absent') {
+      files.push({
+        path: vendorPath,
+        status: 'added',
+        will_review: false,
+        ...(reason ? { exclude_reason: reason } : {}),
+      });
+    }
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: previewRunner(files).runner,
+      processRunner: unusedRunner,
+      planInputOverrides: { pr: prContext({ files: mixedFiles() }) },
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(prepared.coverageManifest.paths[1].kind).toBe(
+      PreparedPromptPathCoverageKind.Unavailable
+    );
+  });
+
+  it.each([
+    [
+      'duplicate path',
+      [
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        { path: 'calc.ts', status: 'modified', will_review: true },
+      ],
+    ],
+    [
+      'path outside assigned scope',
+      [{ path: 'other.ts', status: 'modified', will_review: true }],
+    ],
+    [
+      'selected file with exclusion reason',
+      [
+        {
+          path: 'calc.ts',
+          status: 'modified',
+          will_review: true,
+          exclude_reason: 'provider_directory',
+        },
+      ],
+    ],
+    [
+      'missing will_review',
+      [{ path: 'calc.ts', status: 'modified' }],
+    ],
+    [
+      'missing native status',
+      [{ path: 'calc.ts', will_review: true }],
+    ],
+    [
+      'unknown native status',
+      [{ path: 'calc.ts', status: 'unexpected', will_review: true }],
+    ],
+  ])('rejects %s before any native model run', async (_label, files) => {
+    const { bridge, requests } = bridgeFixture();
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: previewRunner(files).runner,
+      processRunner: unusedRunner,
+    });
+    await expect(adapter.prepare({ workSlot, attemptOrdinal: 1 })).rejects.toThrow(
+      /review_action_v2_ocr_preview_(scope|contract)_invalid/u
+    );
+    expect(requests.count).toBe(0);
+  });
+
+  it('rejects a malformed native files field even with legacy selected_paths', async () => {
+    const { adapter, workSlot } = adapterFixture({
+      bridge: bridgeFixture().bridge,
+      previewRunner: async (input) => {
+        const outcome = await previewRunner().runner(input);
+        fs.writeFileSync(input.outputPath, JSON.stringify({
+          files: null,
+          selected_paths: ['calc.ts'],
+        }));
+        return outcome;
+      },
+      processRunner: unusedRunner,
+    });
+    await expect(adapter.prepare({ workSlot, attemptOrdinal: 1 })).rejects.toThrow(
+      'review_action_v2_ocr_preview_contract_invalid'
+    );
+  });
+
+  it('tolerates extra native files that managed exact-path rules explicitly excluded', async () => {
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        {
+          path: 'unassigned.ts',
+          status: 'added',
+          will_review: false,
+          exclude_reason: 'user_exclude',
+        },
+      ]).runner,
+      processRunner: processRunnerWriting(nativeResultBody()).runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(prepared.previewSelectedPaths).toEqual(['calc.ts']);
+    expect(prepared.coverageManifest.paths).toHaveLength(1);
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([]);
+  });
+
+  it.each([
+    'provider_directory',
+    'binary',
+    'secret_exclude',
+    'user_exclude',
+  ])('permits known native %s exclusion outside assigned scope', async (reason) => {
+    const { bridge, requests } = bridgeFixture();
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        {
+          path: 'unassigned.ts',
+          status: reason === 'binary' ? 'binary' : 'added',
+          will_review: false,
+          exclude_reason: reason,
+        },
+      ]).runner,
+      processRunner: unusedRunner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(prepared.previewSelectedPaths).toEqual(['calc.ts']);
+    expect(prepared.coverageManifest.paths).toHaveLength(1);
+    expect(requests.count).toBe(0);
+  });
+
+  it('rejects an unknown unassigned native exclusion', async () => {
+    const { bridge, requests } = bridgeFixture();
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        {
+          path: 'unassigned.ts',
+          status: 'added',
+          will_review: false,
+          exclude_reason: 'unrecognized_native_exclusion',
+        },
+      ]).runner,
+      processRunner: unusedRunner,
+    });
+    await expect(adapter.prepare({ workSlot, attemptOrdinal: 1 })).rejects.toThrow(
+      'review_action_v2_ocr_preview_scope_invalid'
+    );
+    expect(requests.count).toBe(0);
+  });
+
+  it('never reuses a previous preparation preview after an exit-zero no-output run', async () => {
+    const { bridge, requests } = bridgeFixture();
+    const preview = previewRunner();
+    let calls = 0;
+    const noOutputRunner: OcrPreviewRunner = async (input) => {
+      if (++calls === 1) return preview.runner(input);
+      // A broken native producer that returns exit 0 but writes no new file.
+      return {
+        closed: true,
+        exitCode: 0,
+        signal: null,
+        stdoutTail: '',
+        stderrTail: '',
+      };
+    };
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: noOutputRunner,
+      processRunner: unusedRunner,
+    });
+    await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.prepare({ workSlot, attemptOrdinal: 1 })).rejects.toThrow(
+      'review_action_v2_ocr_preview_contract_invalid'
+    );
+    expect(calls).toBe(2);
+    expect(requests.count).toBe(0);
+  });
+
+  it('keeps a genuinely selected native group omission partial', async () => {
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const diagnostic = jest.fn<void, [OcrReviewAcceptanceDiagnostic]>();
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      acceptanceDiagnostic: diagnostic,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        { path: vendorPath, status: 'added', will_review: true },
+      ]).runner,
+      processRunner: processRunnerWriting(nativeResultBody()).runner,
+      planInputOverrides: { pr: prContext({ files: mixedFiles() }) },
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(prepared.coverageManifest.paths[1].kind).toBe(
+      PreparedPromptPathCoverageKind.FullPatch
+    );
+    expect(diagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        acceptedPartial: true,
+        uncoveredPathCount: 1,
+        reasons: expect.arrayContaining(['missing_paths']),
+      })
+    );
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+    ]);
+  });
+
+  it('rejects a native group for a path explicitly excluded by preview', async () => {
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const raw = JSON.parse(nativeResultBody()) as Record<string, unknown>;
+    const outcome = raw.reviewrouter_outcome as { groups: { paths: string[] }[] };
+    outcome.groups[0].paths = ['calc.ts', vendorPath];
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        {
+          path: vendorPath,
+          status: 'added',
+          will_review: false,
+          exclude_reason: 'provider_directory',
+        },
+      ]).runner,
+      processRunner: processRunnerWriting(JSON.stringify(raw)).runner,
+      planInputOverrides: { pr: prContext({ files: mixedFiles() }) },
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    await expect(adapter.execute(executionInput(prepared))).rejects.toThrow(
+      /review_action_v2_ocr_coverage_mismatch/u
+    );
   });
 
   it('bounds background text to the binary hard limit before preview and identity', async () => {
@@ -1163,7 +1468,10 @@ describe('OcrReviewInvocationAdapter', () => {
       bridge,
       acceptanceDiagnostic: diagnostic,
       processRunner: processRunnerWriting(preservedFilterResultBody()).runner,
-      previewRunner: previewRunner().runner,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        { path: 'missing.ts', status: 'modified', will_review: true },
+      ]).runner,
       planInputOverrides: {
         pr: prContext({
           files: [
@@ -1177,11 +1485,12 @@ describe('OcrReviewInvocationAdapter', () => {
                 '@@ -1 +1 @@\n-function add(a, b) { return a + b }\n+function add(a, b) { return a - b }',
             },
             {
-              filename: 'gone.ts',
-              status: 'removed',
-              additions: 0,
-              deletions: 3,
-              changes: 3,
+              filename: 'missing.ts',
+              status: 'modified',
+              additions: 1,
+              deletions: 1,
+              changes: 2,
+              patch: '@@ -1 +1 @@\n-old\n+new',
             },
           ],
         }),
@@ -1534,17 +1843,19 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(processRunner.calls).toHaveLength(1);
   });
 
-  it('classifies an inventory gap as a partial missing_paths observation', async () => {
-    // §8.1/§8.2: a deleted file stays in the RR inventory denominator but the
-    // producer never groups it; that gap is a bounded missing_paths
-    // limitation, not a fatal coverage mismatch.
+  it('classifies an omitted native-selected group as partial missing_paths', async () => {
+    // An omitted native-selected modified path is real missing_paths.
+    // A deleted or explicitly preview-excluded path is not in this denominator.
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;
     const processRunner = processRunnerWriting(nativeResultBody());
     const { adapter, workSlot } = adapterFixture({
       bridge,
       processRunner: processRunner.runner,
-      previewRunner: previewRunner().runner,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        { path: 'missing.ts', status: 'modified', will_review: true },
+      ]).runner,
       planInputOverrides: {
         pr: prContext({
           files: [
@@ -1558,11 +1869,12 @@ describe('OcrReviewInvocationAdapter', () => {
                 '@@ -1 +1 @@\n-function add(a, b) { return a + b }\n+function add(a, b) { return a - b }',
             },
             {
-              filename: 'gone.ts',
-              status: 'removed',
-              additions: 0,
-              deletions: 3,
-              changes: 3,
+              filename: 'missing.ts',
+              status: 'modified',
+              additions: 1,
+              deletions: 1,
+              changes: 2,
+              patch: '@@ -1 +1 @@\n-old\n+new',
             },
           ],
         }),
@@ -1570,6 +1882,7 @@ describe('OcrReviewInvocationAdapter', () => {
     });
     const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
     const observation = await adapter.execute(executionInput(prepared));
+    expect(prepared.previewSelectedPaths).toEqual(['calc.ts', 'missing.ts']);
     expect(observation.qualityFlags).toEqual([
       'context_inspection_incomplete',
       'provider_warning',

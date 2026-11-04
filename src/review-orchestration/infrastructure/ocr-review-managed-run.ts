@@ -329,7 +329,7 @@ export type OcrAcceptedReviewResult = Readonly<{
   /** Bounded local diagnostic codes; never new wire keys (§8.2). */
   reasons: readonly string[];
   partial: boolean;
-  /** Inventory paths with no outcome group (§8.2 missing_paths limitation). */
+  /** Native-selected paths that did not receive an outcome group. */
   uncoveredPaths: readonly string[];
 }>;
 
@@ -350,8 +350,8 @@ export function acceptOcrManagedReviewResult(input: {
   readonly observedActualModel: string | undefined;
   /** Observed request count from the loopback bridge; 0 means no requests. */
   readonly observedRequestCount: number | undefined;
-  /** Canonical assigned inventory prepared before dispatch (§8.4 step 6). */
-  readonly expectedPaths: readonly string[];
+  /** Native preview-selected reviewable paths bound to this preparation. */
+  readonly selectedPaths: readonly string[];
   /** path -> authorized HEAD content; a lazy loader is allowed. */
   readonly headFiles: Readonly<{ get(path: string): string | undefined }>;
   readonly diffPositions?: ReadonlyMap<string, ReadonlyMap<number, number>>;
@@ -415,9 +415,9 @@ export function acceptOcrManagedReviewResult(input: {
   // Step 6: reconcile outcome paths with the prepared canonical inventory.
   // Paths reported outside the inventory (or duplicated) are a genuine
   // contradiction and fail closed; inventory paths without any outcome group
-  // (deleted/binary/preview-excluded files the producer never grouped) are a
-  // bounded missing_paths limitation, not a fatal mismatch (§8.1/§8.2).
-  const expected = new Set(input.expectedPaths);
+  // in the native-selected set without any group are real missing_paths;
+  // explicit preview exclusions are not in this expected set (§8.1/§8.2).
+  const expected = new Set(input.selectedPaths);
   const observed = new Set<string>();
   for (const group of native.outcome.groups) {
     for (const path of group.paths) {
@@ -435,7 +435,7 @@ export function acceptOcrManagedReviewResult(input: {
   try {
     normalized = normalizeOcrFindings({
       comments: native.comments,
-      assignedPaths: input.expectedPaths,
+      assignedPaths: input.selectedPaths,
       headFiles: input.headFiles,
       ...(input.diffPositions ? { diffPositions: input.diffPositions } : {}),
     });

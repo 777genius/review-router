@@ -2219,7 +2219,7 @@ async function projectNativeOcrComments(
     },
     observedActualModel: 'observed-model',
     observedRequestCount: 1,
-    expectedPaths: paths,
+    selectedPaths: paths,
     headFiles: new Map([
       ...paths.map((filename) => [filename, headContent] as const),
       ['src/outside.ts', 'outside_unsafe();'],

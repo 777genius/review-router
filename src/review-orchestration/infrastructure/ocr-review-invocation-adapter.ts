@@ -1244,7 +1244,7 @@ function parseOcrPreviewCoverage(
   const value = raw as Record<string, unknown>;
   const assigned = new Set(assignedPaths);
   const coverageByPath = new Map<string, PreparedPromptPathCoverageKind>(
-    assignedPaths.map((path) => [
+    assignedPaths.map((path): [string, PreparedPromptPathCoverageKind] => [
       path,
       PreparedPromptPathCoverageKind.Unavailable,
     ])
@@ -1254,8 +1254,18 @@ function parseOcrPreviewCoverage(
   if (Array.isArray(value.files)) {
     files = value.files;
   } else {
+    const groupedPaths = Array.isArray(value.groups)
+      ? value.groups.flatMap((group): unknown[] =>
+          typeof group === 'object' &&
+          group !== null &&
+          !Array.isArray(group) &&
+          Array.isArray((group as Record<string, unknown>).paths)
+            ? ((group as Record<string, unknown>).paths as unknown[])
+            : []
+        )
+      : undefined;
     const legacyPaths =
-      value.selected_paths ?? value.selectedPaths ?? value.paths;
+      value.selected_paths ?? value.selectedPaths ?? value.paths ?? groupedPaths;
     if (!Array.isArray(legacyPaths)) {
       throw new Error('review_action_v2_ocr_preview_contract_invalid');
     }

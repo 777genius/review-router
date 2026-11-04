@@ -462,6 +462,8 @@ interface ScriptedScenarioResult {
   /** Rejection of the first attempt when reopenRetry ran a second one. */
   firstRejection?: unknown;
   reopened: number;
+  previewSelectedPaths: readonly string[];
+  previewCoveragePaths: readonly { path: string; kind: string }[];
   requests: ScriptedRequest[];
   maxInFlight: number;
   resultRaw: Record<string, unknown> | undefined;
@@ -808,6 +810,11 @@ async function runScriptedScenario(input: {
       ...(rejection !== undefined ? { rejection } : {}),
       ...(firstRejection !== undefined ? { firstRejection } : {}),
       reopened,
+      previewSelectedPaths: prepared.previewSelectedPaths,
+      previewCoveragePaths: prepared.coverageManifest.paths.map(({ path, kind }) => ({
+        path,
+        kind,
+      })),
       requests: stub.requests,
       maxInFlight: stub.maxInFlight,
       resultRaw,
@@ -853,6 +860,52 @@ describeHarness(
       await new Promise((resolve) => server?.close(() => resolve(undefined)));
       if (workspace) fs.rmSync(workspace, { recursive: true, force: true });
     });
+
+    it('real native OCR excludes tracked vendor JSON without hiding eligible review', async () => {
+      const repo = path.join(workspace, 'native-provider-directory-coverage');
+      fs.mkdirSync(repo);
+      git(repo, 'init', '-q');
+      fs.writeFileSync(path.join(repo, 'calc.ts'), 'export const value = 1;\n');
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-qm', 'base');
+
+      fs.writeFileSync(path.join(repo, 'calc.ts'), 'export const value = 2;\n');
+      const vendorPath = 'vendor/account-gateway/candidate-sdk-provenance.json';
+      const vendorDir = path.join(repo, 'vendor', 'account-gateway');
+      fs.mkdirSync(vendorDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(vendorDir, 'candidate-sdk-provenance.json'),
+        '{"kind":"tracked-provenance"}\n'
+      );
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-qm', 'head');
+
+      const scenario = await runScriptedScenario({
+        workspace,
+        checkoutRoot: repo,
+        assignedPaths: ['calc.ts', vendorPath],
+        script: { nComments: 0, contentLen: 80, filterMode: 'approve' },
+      });
+
+      expect(scenario.rejection).toBeUndefined();
+      expect(scenario.previewSelectedPaths).toEqual(['calc.ts']);
+      expect(scenario.previewCoveragePaths).toEqual([
+        { path: 'calc.ts', kind: 'full_patch' },
+        { path: vendorPath, kind: 'policy_excluded' },
+      ]);
+      expect(scenario.observation?.qualityFlags).toEqual([]);
+      expect(scenario.requests.some((request) => request.kind === 'main')).toBe(
+        true
+      );
+      const native = parseOcrNativeReviewResult(
+        scenario.resultRaw,
+        scenario.admission
+      );
+      expect(native.outcome.groups.flatMap((group) => group.paths)).toEqual([
+        'calc.ts',
+      ]);
+      expect(classifyOcrReviewOutcome(native.outcome).partial).toBe(false);
+    }, 120_000);
 
     it('supplies approved memory to the actual managed OCR model request end to end', async () => {
       const mergeBaseSha = git(checkoutRoot, 'rev-parse', 'HEAD~1').trim();

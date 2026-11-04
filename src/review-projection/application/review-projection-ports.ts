@@ -1,3 +1,5 @@
+import type { ProviderFailureNotice } from '../../review-execution/domain/provider-failure';
+import type { ProviderQuota } from '../../review-execution/domain/provider-quota';
 import {
   CheckConclusion,
   CurrentFindingCandidate,
@@ -79,6 +81,8 @@ export interface ProjectReviewPresentationQuery {
   readonly providerExecution: ProviderExecutionSummaryFact;
   readonly coverage: ReviewCoverageFact;
   readonly incompleteCauses?: readonly string[];
+  readonly providerQuota?: ProviderQuota;
+  readonly providerFailure?: ProviderFailureNotice;
   readonly occurrences: readonly FindingOccurrence[];
   readonly revisionFiles: readonly RevisionFile[];
   readonly limits: ReviewProjectionLimits;

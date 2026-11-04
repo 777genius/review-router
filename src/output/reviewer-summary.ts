@@ -1,3 +1,10 @@
+import { providerFailureMessage } from '../review-execution/domain/provider-failure';
+import type { ProviderFailureNotice } from '../review-execution/domain/provider-failure';
+import {
+  parseProviderQuota,
+  providerQuotaMessage,
+} from '../review-execution/domain/provider-quota';
+import type { ProviderQuota } from '../review-execution/domain/provider-quota';
 import { Finding, PRContext, Review, ReviewMetrics, Severity } from '../types';
 import { isLinkedCurrentFinding } from '../analysis/thread-lifecycle';
 import { coverageManifestFileStatusRank } from '../review-projection/domain';
@@ -243,6 +250,8 @@ export type ReviewerSummaryInput = ReviewerSummaryOptions & {
   >;
   readonly incomplete?: boolean;
   readonly incompleteCauses?: readonly string[];
+  readonly providerQuota?: ProviderQuota;
+  readonly providerFailure?: ProviderFailureNotice;
   readonly coverage?: {
     readonly complete: boolean;
     readonly totalFiles: number;
@@ -366,6 +375,10 @@ export function renderReviewerSummaryMarkdown(
       lines.push(`- ${copy.incompleteCauses[code]}`);
     }
   }
+  const quota = parseProviderQuota(input.providerQuota);
+  if (incomplete && quota) lines.push('', providerQuotaMessage(quota));
+  const providerFailure = providerFailureMessage(input.providerFailure, true);
+  if (incomplete && providerFailure) lines.push('', providerFailure);
   if (incomplete && severityLine) lines.push('', severityLine);
   const chrome = compactCopy[locale];
   const banner = renderReviewerBanner(input, incomplete, counts);

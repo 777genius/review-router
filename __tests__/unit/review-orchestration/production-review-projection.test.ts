@@ -1,3 +1,4 @@
+import { confirmedProviderFailure } from '../../../src/review-execution/domain/provider-failure';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import type { TargetWitness } from '../../../src/finding-revalidation';
 import { lifecycleVerificationDescriptorDigest } from '../../../src/control-plane/generated/review-action-v2/companion-contracts';
@@ -102,6 +103,141 @@ describe('production review projection coverage', () => {
         reviewRevisionHash: authorizationFacts.reviewRevisionHash,
       })
     ).rejects.toThrow('review_projection_coverage_manifest_scope_invalid');
+  });
+
+  it('publishes confirmed quota reset only for incomplete coverage', async () => {
+    const builder = projectionBuilder([assignment('slot', true)], {
+      providerQuota: () => ({
+        provider: 'openrouter',
+        limit: 1000,
+        remaining: 0,
+        resetAt: '2026-11-05T00:00:00.000Z',
+      }),
+    });
+    const partial = await builder.build({
+      acceptedEvidence: [],
+      exhaustedWorkSlotIds: ['slot'],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const partialSummary = JSON.parse(partial.projectionEnvelopeCanonicalJson)
+      .publishing.summary.body;
+    expect(partialSummary).toContain(
+      'OpenRouter request quota exhausted (0 of 1000 requests remaining). Try again after 2026-11-05 00:00 UTC.'
+    );
+    expect(partial.coverageComplete).toBe(false);
+    const complete = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence('slot', fullCoverageManifest('slot')),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    expect(
+      JSON.parse(complete.projectionEnvelopeCanonicalJson).publishing.summary
+        .body
+    ).not.toContain('quota exhausted');
+  });
+
+  it.each(['upstream_failure', 'relay_unknown'])(
+    'explains only confirmed upstream failure in an incomplete review: %s',
+    async (code) => {
+      const builder = projectionBuilder([assignment('slot', true)], {
+        providerFailure: () =>
+          confirmedProviderFailure({ code, effect: 'effect_unknown' }),
+      });
+      const partial = await builder.build({
+        acceptedEvidence: [],
+        exhaustedWorkSlotIds: ['slot'],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      const summary = JSON.parse(partial.projectionEnvelopeCanonicalJson)
+        .publishing.summary.body;
+      if (code === 'upstream_failure') {
+        expect(summary).toContain(
+          'The review provider could not return a usable result.'
+        );
+        expect(summary).toContain(
+          'The outcome of the failed provider request is unknown.'
+        );
+        expect(summary).toContain(
+          'This review is incomplete and does not approve the changes.'
+        );
+        expect(summary).toContain(
+          'Wait for this run to finish, then start a new review.'
+        );
+      } else
+        expect(summary).not.toContain(
+          'The review provider could not return a usable result.'
+        );
+      expect(summary).not.toContain('retries were exhausted');
+      const complete = await builder.build({
+        acceptedEvidence: [
+          acceptedEvidence('slot', fullCoverageManifest('slot')),
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      expect(
+        JSON.parse(complete.projectionEnvelopeCanonicalJson).publishing.summary
+          .body
+      ).not.toContain('The review provider could not return a usable result.');
+    }
+  );
+
+  it('retains quota reset when complete file coverage still has unverified lifecycle findings', async () => {
+    const inventory = completeLifecycleInventory();
+    inventory.loadCurrent.mockResolvedValue({
+      ...(await inventory.loadCurrent()),
+      targets: [
+        {
+          targetId: 'old-caller',
+          threadId: 'thread-old',
+          trustedMarker: 'a'.repeat(24),
+          title: 'Previous caller finding',
+          message: 'The previous caller is outside the current diff.',
+          severity: FindingSeverity.Major,
+          originalPath: '.github/workflows/old-caller.yml',
+          parentCommentUpdatedAt: '2026-07-22T00:00:00Z',
+          threadCommentCount: 1,
+          threadStateHash: 'a'.repeat(64),
+          disposition: LifecycleTargetDisposition.Active,
+          viewerCanResolve: true,
+        },
+      ],
+    });
+    const providerQuota = jest.fn(() => ({
+      provider: 'openrouter' as const,
+      limit: 1000,
+      remaining: 0 as const,
+      resetAt: '2026-11-05T00:00:00.000Z',
+    }));
+    const builder = projectionBuilder([assignment('required-slot', true)], {
+      lifecycleInventory: inventory,
+      providerQuota,
+    });
+    const result = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence(
+          'required-slot',
+          fullCoverageManifest('required-slot')
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+    expect(envelope.coverage.state).toBe('complete');
+    expect(envelope.publishing.summary.body).toContain(
+      '<!-- reviewrouter:review-status:incomplete -->'
+    );
+    expect(envelope.publishing.lifecycle[0]).toMatchObject({
+      verdict: 'uncertain',
+      mutationEligible: false,
+    });
+    expect(envelope.publishing.summary.body).toContain(
+      'OpenRouter request quota exhausted (0 of 1000 requests remaining). Try again after 2026-11-05 00:00 UTC.'
+    );
+    expect(providerQuota).toHaveBeenCalledTimes(1);
   });
 
   it('freezes a private-safe receipt into the real canonical publication before hashing', async () => {
@@ -672,6 +808,133 @@ describe('production review projection coverage', () => {
     expect(envelope.publishing.summary.body).not.toContain('.spec.ts');
     expect(envelope.mergeGate.conclusion).toBe('fail');
   });
+
+  it.each([
+    {
+      category: 'security',
+      providerKind: ReviewExecutionProviderKind.Ocr,
+      testPath: false,
+      kept: 1,
+    },
+    {
+      category: 'security',
+      providerKind: ReviewExecutionProviderKind.Ocr,
+      testPath: true,
+      kept: 0,
+    },
+    {
+      category: 'style',
+      providerKind: ReviewExecutionProviderKind.Ocr,
+      testPath: false,
+      kept: 0,
+    },
+    {
+      category: 'correctness',
+      providerKind: ReviewExecutionProviderKind.Ocr,
+      testPath: false,
+      kept: 0,
+    },
+    {
+      category: 'security',
+      providerKind: ReviewExecutionProviderKind.Codex,
+      testPath: false,
+      kept: 0,
+    },
+  ])(
+    'preserves qualified OCR security classification without bypassing policy: %j',
+    async ({ category, providerKind, testPath, kept }) => {
+      // Exact normalized accepted finding from Payments PR30/run41744471499.
+      const message =
+        "The removal of `binding.buyerId === operation.buyerId` from the `ownsSubscription` function eliminates a critical platform-level authorization check. This check ensured that a subscription binding belongs to the same platform buyer (application-level identity) as the operation. Without it, a buyer who knows or can guess a `bindingId` and `providerSubscriptionRef` could potentially access subscription authority for bindings owned by other buyers, as long as the payment provider's `customerRef` happens to match. The `buyerId` (platform identity) and `customerRef` (payment provider identity) are distinct identifiers - a platform buyer may map to multiple provider customers, or the mapping may not be 1:1. Other authorization paths in the codebase (e.g., `selection.ts` lines 52 and 96, `outcomes.ts` line 129, `memory-operation-state.ts` lines 129 and 197) consistently retain the `buyerId` check, making this removal an inconsistency that weakens the authorization model.";
+      const path = testPath
+        ? 'packages/payments-core/src/features/payment-evidence/application/authority.spec.ts'
+        : 'packages/payments-core/src/features/payment-evidence/application/authority.ts';
+      const patch =
+        '@@ -1 +1 @@\n-return binding.buyerId === operation.buyerId && binding.customerRef === operation.customerRef;\n+return binding.customerRef === operation.customerRef;';
+      const finding = {
+        category,
+        severity: 'major',
+        path,
+        startLine: null,
+        endLine: null,
+        evidence: [],
+        suggestion: null,
+        placementConfidence: null,
+        normalizedFailureModeHash:
+          'ad853aa334981cf4c5c66a14c5181f875a7d5c713a6a386918dd05294e7a0085',
+        title: message.slice(0, 400),
+        message,
+      };
+      const evidence = acceptedEvidence(
+        'security-slot',
+        createReviewPromptCoverageManifest({
+          workSlotId: 'security-slot',
+          reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+          assignedPaths: [path],
+          pathCoverage: [
+            {
+              path,
+              kind: ReviewPromptPathCoverageKind.FullPatch,
+              contentHash: '8'.repeat(64),
+            },
+          ],
+        }),
+        [],
+        [finding]
+      );
+      const builder = createProductionReviewProjectionBuilder({
+        authorizationFacts: {
+          ...authorizationFacts,
+          providerVoteLanes: [
+            { ...authorizationFacts.providerVoteLanes[0], providerKind },
+          ],
+        },
+        pr: {
+          ...pr,
+          files: [{ ...pr.files[0], filename: path, patch }],
+          diff: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n${patch}`,
+        },
+        config: { ...DEFAULT_CONFIG, failOnSeverity: 'major' },
+        protocolLimits,
+        assignments: [
+          {
+            ...assignment('security-slot', true),
+            providerKind,
+            filePaths: [path],
+          },
+        ],
+        uncoveredPaths: [],
+        uncoveredLifecycleTargetIds: [],
+        lifecycleInventory: completeLifecycleInventory(),
+      });
+      const result = await builder.build({
+        acceptedEvidence: [
+          {
+            ...evidence,
+            observation: { ...evidence.observation, providerKind },
+          },
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+      expect(envelope.coverage.state).toBe('complete');
+      expect(envelope.occurrences).toHaveLength(kept);
+      if (kept) {
+        expect(envelope.occurrences[0]).toMatchObject({
+          category: 'security',
+          severity: 'major',
+        });
+        expect(envelope.publishing.summary.allClear).toBe(false);
+        expect(envelope.publishing.summary.body).toContain('ownsSubscription');
+        expect(envelope.publishing.summary.body).not.toContain(
+          '## No findings'
+        );
+        expect(envelope.mergeGate.conclusion).toBe('fail');
+        expect(envelope.publishing.inlineReviewChunks).toHaveLength(0);
+      }
+    }
+  );
 
   it('marks OCR verified spans and never re-anchors them through projection', async () => {
     // §8.2: an OCR verified HEAD span keeps its exact range in the final

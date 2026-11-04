@@ -1,3 +1,5 @@
+import type { ProviderFailureNotice } from '../../review-execution/domain/provider-failure';
+import type { ProviderQuota } from '../../review-execution/domain/provider-quota';
 import { projectLifecycleVerification } from '../domain/lifecycle-verification';
 import type {
   LifecycleVerificationContext,
@@ -81,6 +83,8 @@ export interface BuildCurrentReviewProjectionCommand {
   readonly lifecycleRevalidations: readonly LifecycleRevalidation[];
   readonly coverage: ReviewCoverageFact;
   readonly incompleteCauses?: readonly string[];
+  readonly providerQuota?: ProviderQuota;
+  readonly providerFailure?: ProviderFailureNotice;
   readonly revisionFiles: readonly RevisionFile[];
   readonly diff: string;
   readonly failOnSeverity?: FindingSeverity;
@@ -268,6 +272,8 @@ export class BuildCurrentReviewProjection {
         providerExecution: command.providerExecution,
         coverage,
         incompleteCauses: command.incompleteCauses,
+        providerQuota: command.providerQuota,
+        providerFailure: command.providerFailure,
         occurrences,
         lifecycle: { targets: inventory.targets, facts: lifecycleFacts },
         revisionFiles: command.revisionFiles,

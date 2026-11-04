@@ -21,6 +21,31 @@ describe('ProviderInvocationFailureClassifier', () => {
     );
   });
 
+  it('makes confirmed provider quota terminal while preserving unknown effect custody', () => {
+    const quota = {
+      provider: 'openrouter' as const,
+      limit: 1000,
+      remaining: 0 as const,
+      resetAt: '2026-11-05T00:00:00.000Z',
+    };
+    const exhausted = new ProviderInvocationFailureClassifier(() => ({
+      code: 'provider_quota_exhausted',
+      effect: 'effect_unknown',
+      providerQuota: quota,
+    }));
+    expect(exhausted.classify(new Error('generic upstream failure'))).toBe(
+      ReviewInvocationFailureClass.CapacityUnavailable
+    );
+    const unconfirmed = new ProviderInvocationFailureClassifier(() => ({
+      code: 'upstream_failure',
+      effect: 'effect_unknown',
+      providerQuota: quota,
+    }));
+    expect(unconfirmed.classify(new Error('generic upstream failure'))).toBe(
+      ReviewInvocationFailureClass.Retryable
+    );
+  });
+
   it('classifies structured provider capacity codes', () => {
     expect(classifier.classify({ error: { code: 'resource_exhausted' } })).toBe(
       ReviewInvocationFailureClass.CapacityUnavailable

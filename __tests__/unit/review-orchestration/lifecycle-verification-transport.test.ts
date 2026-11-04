@@ -1,3 +1,7 @@
+import {
+  confirmedProviderFailure,
+  providerFailureMessage,
+} from '../../../src/review-execution/domain/provider-failure';
 import https from 'https';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
@@ -240,6 +244,137 @@ test.each([
       if (accepted)
         await expect(request).resolves.toMatchObject({ httpStatus: 200 });
       else await expect(request).rejects.toThrow();
+    } finally {
+      upstream.restore();
+    }
+  }
+);
+
+test.each([
+  [
+    {
+      provider: 'openrouter',
+      limit: 1000,
+      remaining: 0,
+      resetAt: '2026-11-05T00:00:00.000Z',
+      secret: 'must-not-survive',
+    },
+    true,
+  ],
+  [
+    {
+      provider: 'openrouter',
+      limit: 1000,
+      remaining: 1,
+      resetAt: '2026-11-05T00:00:00.000Z',
+    },
+    false,
+  ],
+  [
+    {
+      provider: 'openrouter',
+      limit: 1000,
+      remaining: 0,
+      resetAt: '2026-02-30T00:00:00.000Z',
+    },
+    false,
+  ],
+  [
+    {
+      provider: 'openrouter',
+      limit: 0,
+      remaining: 0,
+      resetAt: '2026-11-05T00:00:00.000Z',
+    },
+    false,
+  ],
+  [
+    {
+      provider: 'other',
+      limit: 1000,
+      remaining: 0,
+      resetAt: '2026-11-05T00:00:00.000Z',
+    },
+    false,
+  ],
+])(
+  'retains only confirmed safe quota DTO from one failed HTTP attempt: %j',
+  async (providerQuota, confirmed) => {
+    const upstream = mockUpstream(
+      502,
+      JSON.stringify({
+        error: {
+          code: 'provider_quota_exhausted',
+          effect: 'effect_unknown',
+          providerQuota,
+        },
+      }),
+      'application/json'
+    );
+    try {
+      const transport = new AccountGatewayModelTransport(
+        'https://fixture.invalid',
+        () => 'synthetic'
+      );
+      const response = await transport.responses(
+        bytes,
+        new AbortController().signal
+      );
+      for await (const _chunk of response.body) {
+        /* Drain failure facts. */
+      }
+      expect(upstream.seen).toHaveLength(1);
+      expect(transport.lastFailure?.effect).toBe('effect_unknown');
+      if (confirmed)
+        expect(transport.lastFailure?.providerQuota).toEqual({
+          provider: 'openrouter',
+          limit: 1000,
+          remaining: 0,
+          resetAt: '2026-11-05T00:00:00.000Z',
+        });
+      else expect(transport.lastFailure?.providerQuota).toBeUndefined();
+    } finally {
+      upstream.restore();
+    }
+  }
+);
+
+test.each(['upstream_failure', 'relay_unknown', 'provider_quota_exhausted'])(
+  'explains confirmed upstream HTTP502 without changing unknown effects or replaying: %s',
+  async (code) => {
+    const upstream = mockUpstream(
+      502,
+      JSON.stringify({ error: { code, effect: 'effect_unknown' } }),
+      'application/json'
+    );
+    try {
+      const transport = new AccountGatewayModelTransport(
+        'https://fixture.invalid',
+        () => 'synthetic'
+      );
+      const response = await transport.responses(
+        bytes,
+        new AbortController().signal
+      );
+      for await (const _chunk of response.body) {
+        /* Drain the safe failure fact. */
+      }
+      expect(upstream.seen).toHaveLength(1);
+      expect(transport.lastFailure?.effect).toBe('effect_unknown');
+      const message = providerFailureMessage(
+        confirmedProviderFailure(transport.lastFailure)
+      );
+      if (code === 'upstream_failure') {
+        expect(message).toContain(
+          'The outcome of the failed provider request is unknown.'
+        );
+        expect(message).toContain(
+          'An incomplete review does not approve the changes.'
+        );
+        expect(message).toContain(
+          'Wait for this run to finish, then start a new review.'
+        );
+      } else expect(message).toBeUndefined();
     } finally {
       upstream.restore();
     }

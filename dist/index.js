@@ -167973,7 +167973,7 @@ function acceptOcrManagedReviewResult(input) {
   if (input.observedActualModel === void 0) {
     throw new OcrReviewAcceptanceError("actual_model_missing", "");
   }
-  const expected = new Set(input.expectedPaths);
+  const expected = new Set(input.selectedPaths);
   const observed = /* @__PURE__ */ new Set();
   for (const group of native.outcome.groups) {
     for (const path40 of group.paths) {
@@ -167990,7 +167990,7 @@ function acceptOcrManagedReviewResult(input) {
   try {
     normalized = normalizeOcrFindings({
       comments: native.comments,
-      assignedPaths: input.expectedPaths,
+      assignedPaths: input.selectedPaths,
       headFiles: input.headFiles,
       ...input.diffPositions ? { diffPositions: input.diffPositions } : {}
     });
@@ -243217,6 +243217,7 @@ var OcrReviewInvocationAdapter = class {
       this.options.run.runDirectory,
       "preview.json"
     );
+    fs26.rmSync(previewOutputPath, { force: true });
     const timeoutMs = this.options.previewTimeoutMs?.() ?? this.options.limits.requestTimeoutSec * 1e3;
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
       throw new Error("review_action_v2_ocr_preview_timeout");
@@ -243255,19 +243256,20 @@ var OcrReviewInvocationAdapter = class {
     if (previewResult.exitCode !== 0 || previewResult.spawnError !== void 0) {
       throw new Error("review_action_v2_ocr_preview_failed");
     }
-    const previewSelectedPaths = Object.freeze(
-      parseOcrPreviewSelection(readPreviewOutput(previewOutputPath))
+    const preview = parseOcrPreviewCoverage(
+      readPreviewOutput(previewOutputPath),
+      assignedPaths
     );
+    const previewSelectedPaths = preview.selectedPaths;
     const pathCoverage = assignedPaths.map((path40) => {
       const file = assignment.context.files.find(
         (candidate) => candidate.filename === path40
       );
       return {
         path: path40,
-        // The full canonical patch of every assigned path is in the exact
-        // revision OCR reviews; a preview-skipped path stays visible as
-        // unreviewed, never as an RR policy exclusion (§8.1).
-        kind: previewSelectedPaths.includes(path40) ? "full_patch" /* FullPatch */ : "unavailable" /* Unavailable */,
+        // Native preview owns selection/exclusion, not a second RR path
+        // allowlist. Missing/unknown/size-limited paths remain unavailable.
+        kind: preview.coverageByPath.get(path40) ?? "unavailable" /* Unavailable */,
         contentHash: sha25616(
           canonicalJson16({
             filename: path40,
@@ -243417,7 +243419,7 @@ var OcrReviewInvocationAdapter = class {
       let processResult2;
       try {
         this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-        return await this.runInvocation(input, assignment, (result2) => {
+        return await this.runInvocation(input, assignment, preimages, (result2) => {
           processResult2 = result2;
         });
       } catch (error4) {
@@ -243463,7 +243465,7 @@ var OcrReviewInvocationAdapter = class {
     this.inFlight = next.catch(() => void 0);
     return next;
   }
-  async runInvocation(input, assignment, observeProcess) {
+  async runInvocation(input, assignment, prepared, observeProcess) {
     assertOcrInvocationLive(input);
     const outputPath = path29.join(this.options.run.runDirectory, "result.json");
     const argv = buildOcrReviewArgv({
@@ -243546,7 +243548,7 @@ var OcrReviewInvocationAdapter = class {
       resultBytes,
       observedActualModel: this.options.bridge.actualModel(),
       observedRequestCount: this.options.bridge.requestCount(),
-      expectedPaths: assignment.context.files.map((file) => file.filename),
+      selectedPaths: prepared.previewSelectedPaths,
       headFiles,
       diffPositions
     });
@@ -243620,38 +243622,74 @@ function readPreviewOutput(outputPath) {
     return void 0;
   }
 }
-function parseOcrPreviewSelection(raw) {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return [];
+var OCR_INTENTIONAL_EXCLUSION_REASONS = [
+  "provider_directory",
+  "deleted",
+  "binary",
+  "secret_exclude",
+  "unsupported_ext",
+  "default_path"
+];
+function parseOcrPreviewCoverage(raw, assignedPaths) {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error("review_action_v2_ocr_preview_contract_invalid");
+  }
   const value = raw;
-  const collect = (candidate) => Array.isArray(candidate) ? candidate.filter((item) => typeof item === "string") : [];
-  const direct = [
-    ...collect(value.paths),
-    ...collect(value.selected_paths),
-    ...collect(value.selectedPaths)
-  ];
-  if (direct.length > 0) return Object.freeze([...new Set(direct)]);
+  const assigned = new Set(assignedPaths);
+  const coverageByPath = new Map(
+    assignedPaths.map((path40) => [
+      path40,
+      "unavailable" /* Unavailable */
+    ])
+  );
+  let files;
   if (Array.isArray(value.files)) {
-    const selected = value.files.flatMap((file) => {
-      if (typeof file !== "object" || file === null) return [];
-      const entry = file;
-      const path40 = entry.path;
-      if (typeof path40 !== "string") return [];
-      return entry.will_review === true ? [path40] : [];
-    });
-    return Object.freeze([...new Set(selected)]);
+    files = value.files;
+  } else {
+    const groupedPaths = Array.isArray(value.groups) ? value.groups.flatMap(
+      (group) => typeof group === "object" && group !== null && !Array.isArray(group) && Array.isArray(group.paths) ? group.paths : []
+    ) : void 0;
+    const legacyPaths = value.selected_paths ?? value.selectedPaths ?? value.paths ?? groupedPaths;
+    if (!Array.isArray(legacyPaths)) {
+      throw new Error("review_action_v2_ocr_preview_contract_invalid");
+    }
+    files = legacyPaths.map((path40) => ({ path: path40, will_review: true }));
   }
-  if (Array.isArray(value.groups)) {
-    return Object.freeze([
-      ...new Set(
-        value.groups.flatMap(
-          (group) => collect(
-            typeof group === "object" && group !== null ? group.paths : void 0
-          )
-        )
-      )
-    ]);
+  const observed = /* @__PURE__ */ new Set();
+  const selected = /* @__PURE__ */ new Set();
+  for (const file of files) {
+    if (typeof file !== "object" || file === null || Array.isArray(file)) {
+      throw new Error("review_action_v2_ocr_preview_contract_invalid");
+    }
+    const entry = file;
+    const path40 = entry.path;
+    if (typeof path40 !== "string" || observed.has(path40)) {
+      throw new Error("review_action_v2_ocr_preview_scope_invalid");
+    }
+    observed.add(path40);
+    if (typeof entry.will_review !== "boolean") {
+      throw new Error("review_action_v2_ocr_preview_contract_invalid");
+    }
+    if (!assigned.has(path40)) {
+      if (entry.will_review || entry.exclude_reason !== "user_exclude") {
+        throw new Error("review_action_v2_ocr_preview_scope_invalid");
+      }
+      continue;
+    }
+    if (entry.will_review) {
+      if (entry.exclude_reason !== void 0 && entry.exclude_reason !== "") {
+        throw new Error("review_action_v2_ocr_preview_contract_invalid");
+      }
+      selected.add(path40);
+      coverageByPath.set(path40, "full_patch" /* FullPatch */);
+    } else if (typeof entry.exclude_reason === "string" && OCR_INTENTIONAL_EXCLUSION_REASONS.includes(entry.exclude_reason)) {
+      coverageByPath.set(path40, "policy_excluded" /* PolicyExcluded */);
+    }
   }
-  return Object.freeze([]);
+  return Object.freeze({
+    selectedPaths: Object.freeze([...selected].sort()),
+    coverageByPath
+  });
 }
 function canonicalJson16(value) {
   if (value === void 0) return "null";

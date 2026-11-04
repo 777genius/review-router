@@ -109,7 +109,7 @@ function acceptInput(overrides: Record<string, unknown> = {}) {
     resultBytes: validNativeResultBytes(),
     observedActualModel: 'observed-model',
     observedRequestCount: 1,
-    expectedPaths: ['calc.ts'],
+    selectedPaths: ['calc.ts'],
     headFiles: { get: () => undefined },
     ...overrides,
   };
@@ -432,14 +432,13 @@ describe('acceptOcrManagedReviewResult (§8.4 order 1-8)', () => {
     ).toBe('coverage_mismatch');
   });
 
-  it('classifies inventory gaps as partial missing_paths instead of a fatal coverage mismatch', () => {
-    // Deleted/binary/gitignored/preview-excluded paths stay in the RR
-    // inventory denominator but never appear in outcome groups (§8.1/§8.4-6):
-    // that is a coverage limitation, not a contradiction.
+  it('classifies missing native-selected paths as partial, not an exclusion', () => {
+    // Only paths selected by the same native preview are required in groups.
+    // A selected path omitted from an actual outcome is not a policy skip.
     const accepted = acceptedWithCoverage(
-      acceptInput({ expectedPaths: ['calc.ts', 'deleted.ts', 'binary.bin'] })
+      acceptInput({ selectedPaths: ['calc.ts', 'eligible-but-missing.ts'] })
     );
-    expect(accepted.uncoveredPaths).toEqual(['binary.bin', 'deleted.ts']);
+    expect(accepted.uncoveredPaths).toEqual(['eligible-but-missing.ts']);
     expect(accepted.partial).toBe(true);
     expect(accepted.reasons).toContain('missing_paths');
   });

@@ -243680,7 +243680,9 @@ function parseOcrPreviewCoverage(raw, assignedPaths) {
       throw new Error("review_action_v2_ocr_preview_contract_invalid");
     }
     if (!assigned.has(path40)) {
-      if (entry.will_review || entry.exclude_reason !== "user_exclude") {
+      if (entry.will_review || entry.exclude_reason !== "user_exclude" && (typeof entry.exclude_reason !== "string" || !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(
+        entry.exclude_reason
+      ))) {
         throw new Error("review_action_v2_ocr_preview_scope_invalid");
       }
       continue;

@@ -1,3 +1,4 @@
+import { confirmedProviderFailure } from '../../../src/review-execution/domain/provider-failure';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import type { TargetWitness } from '../../../src/finding-revalidation';
 import { lifecycleVerificationDescriptorDigest } from '../../../src/control-plane/generated/review-action-v2/companion-contracts';
@@ -136,6 +137,52 @@ describe('production review projection coverage', () => {
         .body
     ).not.toContain('quota exhausted');
   });
+
+  it.each(['upstream_failure', 'relay_unknown'])(
+    'explains only confirmed upstream failure in an incomplete review: %s',
+    async (code) => {
+      const builder = projectionBuilder([assignment('slot', true)], {
+        providerFailure: () =>
+          confirmedProviderFailure({ code, effect: 'effect_unknown' }),
+      });
+      const partial = await builder.build({
+        acceptedEvidence: [],
+        exhaustedWorkSlotIds: ['slot'],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      const summary = JSON.parse(partial.projectionEnvelopeCanonicalJson)
+        .publishing.summary.body;
+      if (code === 'upstream_failure') {
+        expect(summary).toContain(
+          'The review provider could not return a usable result.'
+        );
+        expect(summary).toContain(
+          'The outcome of the failed provider request is unknown.'
+        );
+        expect(summary).toContain(
+          'This review is incomplete and does not approve the changes.'
+        );
+        expect(summary).toContain(
+          'Wait for this run to finish, then start a new review.'
+        );
+      } else
+        expect(summary).not.toContain(
+          'The review provider could not return a usable result.'
+        );
+      expect(summary).not.toContain('retries were exhausted');
+      const complete = await builder.build({
+        acceptedEvidence: [
+          acceptedEvidence('slot', fullCoverageManifest('slot')),
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      expect(
+        JSON.parse(complete.projectionEnvelopeCanonicalJson).publishing.summary
+          .body
+      ).not.toContain('The review provider could not return a usable result.');
+    }
+  );
 
   it('retains quota reset when complete file coverage still has unverified lifecycle findings', async () => {
     const inventory = completeLifecycleInventory();

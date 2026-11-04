@@ -1,3 +1,4 @@
+import type { ProviderFailureNotice } from '../../review-execution/domain/provider-failure';
 import type { ProviderQuota } from '../../review-execution/domain/provider-quota';
 import { createHash } from 'crypto';
 import { REVIEW_ROUTER_WEB_ORIGIN } from '../../config/review-router-endpoints';
@@ -78,6 +79,7 @@ export type ProductionWorkAssignmentFacts = {
 
 export function createProductionReviewProjectionBuilder(input: {
   readonly providerQuota?: () => ProviderQuota | undefined;
+  readonly providerFailure?: () => ProviderFailureNotice | undefined;
   readonly authorizationFacts: ReviewRunAuthorizationFacts;
   readonly pr: PRContext;
   readonly config: ReviewConfig;
@@ -142,6 +144,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
   constructor(
     private readonly input: {
       readonly providerQuota?: () => ProviderQuota | undefined;
+      readonly providerFailure?: () => ProviderFailureNotice | undefined;
       readonly authorizationFacts: ReviewRunAuthorizationFacts;
       readonly pr: PRContext;
       readonly config: ReviewConfig;
@@ -432,6 +435,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         : null;
 
     const providerQuota = this.input.providerQuota?.();
+    const providerFailure = this.input.providerFailure?.();
     return Object.freeze({
       projectionPolicyVersion: this.input.lifecycleVerification
         ? 'review-projection-policy.v7-lifecycle-verification'
@@ -455,6 +459,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       providerExecution,
       incompleteCauses,
       ...(providerQuota ? { providerQuota } : {}),
+      ...(providerFailure ? { providerFailure } : {}),
       currentFindings: Object.freeze(
         findings.sort((left, right) =>
           compareCodeUnits(left.sourceFindingId, right.sourceFindingId)

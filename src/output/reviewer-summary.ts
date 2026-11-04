@@ -1,3 +1,5 @@
+import { providerFailureMessage } from '../review-execution/domain/provider-failure';
+import type { ProviderFailureNotice } from '../review-execution/domain/provider-failure';
 import {
   parseProviderQuota,
   providerQuotaMessage,
@@ -249,6 +251,7 @@ export type ReviewerSummaryInput = ReviewerSummaryOptions & {
   readonly incomplete?: boolean;
   readonly incompleteCauses?: readonly string[];
   readonly providerQuota?: ProviderQuota;
+  readonly providerFailure?: ProviderFailureNotice;
   readonly coverage?: {
     readonly complete: boolean;
     readonly totalFiles: number;
@@ -374,6 +377,8 @@ export function renderReviewerSummaryMarkdown(
   }
   const quota = parseProviderQuota(input.providerQuota);
   if (incomplete && quota) lines.push('', providerQuotaMessage(quota));
+  const providerFailure = providerFailureMessage(input.providerFailure, true);
+  if (incomplete && providerFailure) lines.push('', providerFailure);
   if (incomplete && severityLine) lines.push('', severityLine);
   const chrome = compactCopy[locale];
   const banner = renderReviewerBanner(input, incomplete, counts);

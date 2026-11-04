@@ -142909,6 +142909,21 @@ function uniqueSuggestionsByVoteKey(suggestions) {
   return unique4;
 }
 
+// src/review-execution/domain/provider-failure.ts
+function confirmedProviderFailure(fact) {
+  if (!fact || typeof fact !== "object") return void 0;
+  const value = fact;
+  if (value.code !== "upstream_failure") return void 0;
+  if (value.effect === "effect_unknown" || value.effect === "dispatch_started" || value.effect === "response_started")
+    return "upstream_failure_unknown";
+  return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
+}
+function providerFailureMessage(notice, incompleteReview = false) {
+  if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown")
+    return void 0;
+  return "The review provider could not return a usable result. " + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
+}
+
 // src/finding-revalidation/domain/resolve-confidence-policy.ts
 var DEFAULT_RESOLVE_CONFIDENCE = Object.freeze({ critical: 0.9, major: 0.85, minor: 0.8, unknown: 0.9 });
 function resolveRevalidationConfidenceThresholds(overrides) {
@@ -144439,6 +144454,8 @@ function renderReviewerSummaryMarkdown(input) {
   }
   const quota = parseProviderQuota(input.providerQuota);
   if (incomplete && quota) lines.push("", providerQuotaMessage(quota));
+  const providerFailure = providerFailureMessage(input.providerFailure, true);
+  if (incomplete && providerFailure) lines.push("", providerFailure);
   if (incomplete && severityLine2) lines.push("", severityLine2);
   const chrome = compactCopy[locale];
   const banner = renderReviewerBanner(input, incomplete, counts);
@@ -239291,6 +239308,7 @@ var BuildCurrentReviewProjection = class {
       coverage,
       incompleteCauses: command.incompleteCauses,
       providerQuota: command.providerQuota,
+      providerFailure: command.providerFailure,
       occurrences,
       lifecycle: { targets: inventory.targets, facts: lifecycleFacts },
       revisionFiles: command.revisionFiles,
@@ -240146,6 +240164,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
         incomplete,
         incompleteCauses: query.incompleteCauses,
         providerQuota: query.providerQuota,
+        providerFailure: query.providerFailure,
         coverage: {
           complete: query.coverage.state === "complete" /* Complete */,
           totalFiles: query.coverage.totalFiles,
@@ -240933,6 +240952,7 @@ var ProductionReviewProjectionCommandFactory = class {
     );
     const comparisonBaseline = input.comparisonBaseline?.sourceReviewedHeadSha !== this.input.authorizationFacts.headSha ? input.comparisonBaseline : null;
     const providerQuota = this.input.providerQuota?.();
+    const providerFailure = this.input.providerFailure?.();
     return Object.freeze({
       projectionPolicyVersion: this.input.lifecycleVerification ? "review-projection-policy.v7-lifecycle-verification" : productionReviewProjectionPolicyVersion,
       ...lifecycleVerification ? { lifecycleVerification } : {},
@@ -240953,6 +240973,7 @@ var ProductionReviewProjectionCommandFactory = class {
       providerExecution,
       incompleteCauses,
       ...providerQuota ? { providerQuota } : {},
+      ...providerFailure ? { providerFailure } : {},
       currentFindings: Object.freeze(
         findings.sort(
           (left, right) => compareCodeUnits8(left.sourceFindingId, right.sourceFindingId)
@@ -246607,6 +246628,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               ),
               leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
               projectionBuilder: createProductionReviewProjectionBuilder({
+                providerFailure: () => confirmedProviderFailure(
+                  preparedRoute2?.modelTransport.failureFact()
+                ),
                 providerQuota: () => confirmedProviderQuota(
                   preparedRoute2?.modelTransport.failureFact()
                 ),
@@ -246916,6 +246940,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(logger),
                 leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
                 projectionBuilder: createProductionReviewProjectionBuilder({
+                  providerFailure: () => confirmedProviderFailure(modelTransport.failureFact()),
                   providerQuota: () => confirmedProviderQuota(modelTransport.failureFact()),
                   authorizationFacts: authorization2.facts,
                   pr: pr2,
@@ -247305,6 +247330,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
             ...investigationRecording ? { investigationRecording } : {},
             projectionBuilder: createProductionReviewProjectionBuilder({
+              providerFailure: () => confirmedProviderFailure(
+                preparedRoute2?.modelTransport.failureFact()
+              ),
               providerQuota: () => confirmedProviderQuota(
                 preparedRoute2?.modelTransport.failureFact()
               ),
@@ -247504,6 +247532,11 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             )
           },
           projectionBuilder: createProductionReviewProjectionBuilder({
+            providerFailure: () => [...modelTransports.values()].map(
+              (transport) => confirmedProviderFailure(transport.failureFact())
+            ).find((notice) => notice === "upstream_failure_unknown") ?? [...modelTransports.values()].map(
+              (transport) => confirmedProviderFailure(transport.failureFact())
+            ).find((notice) => notice !== void 0),
             providerQuota: () => [...modelTransports.values()].map(
               (transport) => confirmedProviderQuota(transport.failureFact())
             ).filter((quota) => quota !== void 0).sort((a2, b2) => b2.resetAt.localeCompare(a2.resetAt))[0],
@@ -252088,6 +252121,10 @@ async function runAccountGatewayActionInternal(options = {}) {
       warning(`Gateway result: ${code}; effect: ${effect}.`);
       const quota = confirmedProviderQuota(fact);
       if (quota) warning(providerQuotaMessage(quota));
+      const providerFailure = providerFailureMessage(
+        confirmedProviderFailure(fact)
+      );
+      if (providerFailure) warning(providerFailure);
       setOutput("reviewrouter_gateway_code", fact.code);
       setOutput("reviewrouter_gateway_effect", fact.effect);
       if (fact.requestRef)
@@ -252099,7 +252136,7 @@ async function runAccountGatewayActionInternal(options = {}) {
             summaryPath,
             `
 Gateway result: ${fact.code}; effect: ${fact.effect}.
-${quota ? providerQuotaMessage(quota) + "\n" : ""}`,
+${quota ? providerQuotaMessage(quota) + "\n" : ""}${providerFailure ? providerFailure + "\n" : ""}`,
             "utf8"
           );
         } catch {

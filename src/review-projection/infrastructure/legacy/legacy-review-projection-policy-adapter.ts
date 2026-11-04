@@ -388,6 +388,7 @@ export class LegacyReviewProjectionPolicyAdapter
         incomplete,
         incompleteCauses: query.incompleteCauses,
         providerQuota: query.providerQuota,
+        providerFailure: query.providerFailure,
         coverage: {
           complete: query.coverage.state === ProjectionCoverageState.Complete,
           totalFiles: query.coverage.totalFiles,

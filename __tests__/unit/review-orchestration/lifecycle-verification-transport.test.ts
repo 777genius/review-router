@@ -1,3 +1,7 @@
+import {
+  confirmedProviderFailure,
+  providerFailureMessage,
+} from '../../../src/review-execution/domain/provider-failure';
 import https from 'https';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
@@ -329,6 +333,48 @@ test.each([
           resetAt: '2026-11-05T00:00:00.000Z',
         });
       else expect(transport.lastFailure?.providerQuota).toBeUndefined();
+    } finally {
+      upstream.restore();
+    }
+  }
+);
+
+test.each(['upstream_failure', 'relay_unknown', 'provider_quota_exhausted'])(
+  'explains confirmed upstream HTTP502 without changing unknown effects or replaying: %s',
+  async (code) => {
+    const upstream = mockUpstream(
+      502,
+      JSON.stringify({ error: { code, effect: 'effect_unknown' } }),
+      'application/json'
+    );
+    try {
+      const transport = new AccountGatewayModelTransport(
+        'https://fixture.invalid',
+        () => 'synthetic'
+      );
+      const response = await transport.responses(
+        bytes,
+        new AbortController().signal
+      );
+      for await (const _chunk of response.body) {
+        /* Drain the safe failure fact. */
+      }
+      expect(upstream.seen).toHaveLength(1);
+      expect(transport.lastFailure?.effect).toBe('effect_unknown');
+      const message = providerFailureMessage(
+        confirmedProviderFailure(transport.lastFailure)
+      );
+      if (code === 'upstream_failure') {
+        expect(message).toContain(
+          'The outcome of the failed provider request is unknown.'
+        );
+        expect(message).toContain(
+          'An incomplete review does not approve the changes.'
+        );
+        expect(message).toContain(
+          'Wait for this run to finish, then start a new review.'
+        );
+      } else expect(message).toBeUndefined();
     } finally {
       upstream.restore();
     }

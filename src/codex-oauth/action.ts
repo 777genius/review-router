@@ -1,4 +1,8 @@
 import {
+  confirmedProviderFailure,
+  providerFailureMessage,
+} from '../review-execution/domain/provider-failure';
+import {
   confirmedProviderQuota,
   providerQuotaMessage,
 } from '../review-execution/domain/provider-quota';
@@ -615,6 +619,10 @@ async function runAccountGatewayActionInternal(
       core.warning(`Gateway result: ${code}; effect: ${effect}.`);
       const quota = confirmedProviderQuota(fact);
       if (quota) core.warning(providerQuotaMessage(quota));
+      const providerFailure = providerFailureMessage(
+        confirmedProviderFailure(fact)
+      );
+      if (providerFailure) core.warning(providerFailure);
       core.setOutput('reviewrouter_gateway_code', fact.code);
       core.setOutput('reviewrouter_gateway_effect', fact.effect);
       if (fact.requestRef)
@@ -624,7 +632,7 @@ async function runAccountGatewayActionInternal(
         try {
           fs.appendFileSync(
             summaryPath,
-            `\nGateway result: ${fact.code}; effect: ${fact.effect}.\n${quota ? providerQuotaMessage(quota) + '\n' : ''}`,
+            `\nGateway result: ${fact.code}; effect: ${fact.effect}.\n${quota ? providerQuotaMessage(quota) + '\n' : ''}${providerFailure ? providerFailure + '\n' : ''}`,
             'utf8'
           );
         } catch {

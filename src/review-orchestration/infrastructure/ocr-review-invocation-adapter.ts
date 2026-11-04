@@ -1272,10 +1272,6 @@ function parseOcrPreviewCoverage(
     // Older selected-path-only output does not authorize excluding omissions.
     files = legacyPaths.map((path) => ({ path, will_review: true }));
   }
-  if (files.length > assigned.size) {
-    throw new Error('review_action_v2_ocr_preview_scope_invalid');
-  }
-
   const observed = new Set<string>();
   const selected = new Set<string>();
   for (const file of files) {
@@ -1288,16 +1284,25 @@ function parseOcrPreviewCoverage(
     }
     const entry = file as Record<string, unknown>;
     const path = entry.path;
-    if (
-      typeof path !== 'string' ||
-      !assigned.has(path) ||
-      observed.has(path)
-    ) {
+    if (typeof path !== 'string' || observed.has(path)) {
       throw new Error('review_action_v2_ocr_preview_scope_invalid');
     }
     observed.add(path);
     if (typeof entry.will_review !== 'boolean') {
       throw new Error('review_action_v2_ocr_preview_contract_invalid');
+    }
+    if (!assigned.has(path)) {
+      // A managed native run can preview additional tracked changes, but its
+      // exact-path policy excludes them before dispatch. Never allow native
+      // selection to silently expand an admitted ReviewRouter work slot.
+      if (
+        entry.will_review ||
+        typeof entry.exclude_reason !== 'string' ||
+        entry.exclude_reason.length === 0
+      ) {
+        throw new Error('review_action_v2_ocr_preview_scope_invalid');
+      }
+      continue;
     }
     if (entry.will_review) {
       if (

@@ -747,6 +747,14 @@ describe('OcrReviewInvocationAdapter', () => {
       'missing will_review',
       [{ path: 'calc.ts', status: 'modified' }],
     ],
+    [
+      'missing native status',
+      [{ path: 'calc.ts', will_review: true }],
+    ],
+    [
+      'unknown native status',
+      [{ path: 'calc.ts', status: 'unexpected', will_review: true }],
+    ],
   ])('rejects %s before any native model run', async (_label, files) => {
     const { bridge, requests } = bridgeFixture();
     const { adapter, workSlot } = adapterFixture({
@@ -758,6 +766,24 @@ describe('OcrReviewInvocationAdapter', () => {
       /review_action_v2_ocr_preview_(scope|contract)_invalid/u
     );
     expect(requests.count).toBe(0);
+  });
+
+  it('rejects a malformed native files field even with legacy selected_paths', async () => {
+    const { adapter, workSlot } = adapterFixture({
+      bridge: bridgeFixture().bridge,
+      previewRunner: async (input) => {
+        const outcome = await previewRunner().runner(input);
+        fs.writeFileSync(input.outputPath, JSON.stringify({
+          files: null,
+          selected_paths: ['calc.ts'],
+        }));
+        return outcome;
+      },
+      processRunner: unusedRunner,
+    });
+    await expect(adapter.prepare({ workSlot, attemptOrdinal: 1 })).rejects.toThrow(
+      'review_action_v2_ocr_preview_contract_invalid'
+    );
   });
 
   it('tolerates extra native files that managed exact-path rules explicitly excluded', async () => {

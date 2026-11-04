@@ -648,7 +648,7 @@ describe('OcrReviewInvocationAdapter', () => {
       additions: 1,
       deletions: 0,
       changes: 1,
-      patch: '@@ -0,0 +1 @@\\n+{"kind":"provenance"}',
+      patch: '@@ -0,0 +1 @@\n+{"kind":"provenance"}',
     },
   ];
 
@@ -1344,7 +1344,10 @@ describe('OcrReviewInvocationAdapter', () => {
       bridge,
       acceptanceDiagnostic: diagnostic,
       processRunner: processRunnerWriting(preservedFilterResultBody()).runner,
-      previewRunner: previewRunner().runner,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        { path: 'missing.ts', status: 'modified', will_review: true },
+      ]).runner,
       planInputOverrides: {
         pr: prContext({
           files: [
@@ -1358,11 +1361,12 @@ describe('OcrReviewInvocationAdapter', () => {
                 '@@ -1 +1 @@\n-function add(a, b) { return a + b }\n+function add(a, b) { return a - b }',
             },
             {
-              filename: 'gone.ts',
-              status: 'removed',
-              additions: 0,
-              deletions: 3,
-              changes: 3,
+              filename: 'missing.ts',
+              status: 'modified',
+              additions: 1,
+              deletions: 1,
+              changes: 2,
+              patch: '@@ -1 +1 @@\n-old\n+new',
             },
           ],
         }),

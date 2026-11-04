@@ -381,3 +381,12 @@ at file level without an inline anchor or suggested patch, and the projection
 explains that cause even when every assigned path has full diff coverage.
 Missing quotes and grounded off-diff quotes retain their existing file-placement
 semantics. This diagnostic does not relax provider, source, path or coverage gates.
+
+### Unknown review-request outcomes
+
+An incomplete review with a closed `effect_unknown`, `dispatch_started` or
+`response_started` failure fact explains that the request may have reached the
+provider and that automatic replay was withheld. An unclassified Gateway error
+does not establish an upstream HTTP cause or exhausted quota. The user can wait
+for the run to finish and start a new review. This display-only diagnostic does
+not reopen dispatch, alter settlement or change coverage acceptance.

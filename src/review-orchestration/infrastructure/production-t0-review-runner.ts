@@ -2023,7 +2023,11 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                     .map((transport) =>
                       confirmedProviderFailure(transport.failureFact())
                     )
-                    .find((notice) => notice === 'upstream_failure_unknown') ??
+                    .find(
+                      (notice) =>
+                        notice === 'upstream_failure_unknown' ||
+                        notice === 'request_outcome_unknown'
+                    ) ??
                   [...modelTransports.values()]
                     .map((transport) =>
                       confirmedProviderFailure(transport.failureFact())

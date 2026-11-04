@@ -760,6 +760,29 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(requests.count).toBe(0);
   });
 
+  it('tolerates extra native files that managed exact-path rules explicitly excluded', async () => {
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      previewRunner: previewRunner([
+        { path: 'calc.ts', status: 'modified', will_review: true },
+        {
+          path: 'unassigned.ts',
+          status: 'added',
+          will_review: false,
+          exclude_reason: 'user_exclude',
+        },
+      ]).runner,
+      processRunner: processRunnerWriting(nativeResultBody()).runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(prepared.previewSelectedPaths).toEqual(['calc.ts']);
+    expect(prepared.coverageManifest.paths).toHaveLength(1);
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([]);
+  });
+
   it('keeps a genuinely selected native group omission partial', async () => {
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;

@@ -374,7 +374,11 @@ test.each(['upstream_failure', 'relay_unknown', 'provider_quota_exhausted'])(
         expect(message).toContain(
           'Wait for this run to finish, then start a new review.'
         );
-      } else expect(message).toBeUndefined();
+      } else {
+        expect(message).toContain('The request may have reached the provider.');
+        expect(message).toContain('Automatic retry was withheld');
+        expect(message).not.toContain('upstream failure');
+      }
     } finally {
       upstream.restore();
     }

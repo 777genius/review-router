@@ -119949,21 +119949,6 @@ __export(production_t0_review_runner_exports, {
 });
 module.exports = __toCommonJS(production_t0_review_runner_exports);
 
-// src/review-execution/domain/provider-failure.ts
-function confirmedProviderFailure(fact) {
-  if (!fact || typeof fact !== "object") return void 0;
-  const value = fact;
-  if (value.code !== "upstream_failure") return void 0;
-  if (value.effect === "effect_unknown" || value.effect === "dispatch_started" || value.effect === "response_started")
-    return "upstream_failure_unknown";
-  return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
-}
-function providerFailureMessage(notice, incompleteReview = false) {
-  if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown")
-    return void 0;
-  return "The review provider could not return a usable result. " + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
-}
-
 // src/review-execution/domain/provider-quota.ts
 function parseProviderQuota(value) {
   if (!value || typeof value !== "object") return void 0;
@@ -119985,6 +119970,21 @@ function confirmedProviderQuota(fact) {
 function providerQuotaMessage(quota) {
   const resetAt = quota.resetAt.replace("T", " ").replace(/:00\.000Z$/, " UTC").replace(/Z$/, " UTC");
   return `OpenRouter request quota exhausted (0 of ${quota.limit} requests remaining). Try again after ${resetAt}.`;
+}
+
+// src/review-execution/domain/provider-failure.ts
+function confirmedProviderFailure(fact) {
+  if (!fact || typeof fact !== "object") return void 0;
+  const value = fact;
+  if (value.effect === "effect_unknown" || value.effect === "dispatch_started" || value.effect === "response_started")
+    return value.code === "upstream_failure" ? "upstream_failure_unknown" : confirmedProviderQuota(fact) !== void 0 ? void 0 : "request_outcome_unknown";
+  if (value.code !== "upstream_failure") return void 0;
+  return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
+}
+function providerFailureMessage(notice, incompleteReview = false) {
+  if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown" && notice !== "request_outcome_unknown")
+    return void 0;
+  return (notice === "request_outcome_unknown" ? "The review request did not produce a confirmed result. " : "The review provider could not return a usable result. ") + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : notice === "request_outcome_unknown" ? "The request may have reached the provider. " : "") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "Automatic retry was withheld to avoid running the request twice. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
 }
 
 // src/control-plane/generated/review-action-v2/review-model-dispatch-contract.ts
@@ -149063,7 +149063,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.229",
+  version: "1.0.230",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -223428,7 +223428,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           projectionBuilder: createProductionReviewProjectionBuilder({
             providerFailure: () => [...modelTransports.values()].map(
               (transport) => confirmedProviderFailure(transport.failureFact())
-            ).find((notice) => notice === "upstream_failure_unknown") ?? [...modelTransports.values()].map(
+            ).find(
+              (notice) => notice === "upstream_failure_unknown" || notice === "request_outcome_unknown"
+            ) ?? [...modelTransports.values()].map(
               (transport) => confirmedProviderFailure(transport.failureFact())
             ).find((notice) => notice !== void 0),
             providerQuota: () => [...modelTransports.values()].map(

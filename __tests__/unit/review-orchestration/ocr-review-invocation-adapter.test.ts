@@ -961,6 +961,7 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(observation.qualityFlags).toEqual([
       'context_inspection_incomplete',
       'provider_warning',
+      'unverified_native_span',
     ]);
     expect(diagnostic).toHaveBeenCalledTimes(1);
     expect(diagnostic).toHaveBeenCalledWith({
@@ -983,6 +984,61 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(serialized).not.toContain(secretish);
     expect(serialized).not.toContain('calc.ts');
     expect(serialized).not.toContain('private_path_923.ts');
+  });
+
+  it('retains the finite unverified-span cause on otherwise complete file-level evidence', async () => {
+    const diagnostic = jest.fn<void, [OcrReviewAcceptanceDiagnostic]>();
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      acceptanceDiagnostic: diagnostic,
+      processRunner: processRunnerWriting(
+        nativeResultBody({
+          comments: [
+            {
+              path: 'calc.ts',
+              content: 'Missing authorization check.',
+              severity: 'high',
+              category: 'security',
+              existing_code: 'removed authorization check',
+              suggestion_code: 'do not publish this patch',
+              start_line: 1,
+              end_line: 1,
+            },
+          ],
+        })
+      ).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(diagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasons: ['unverified_native_span'],
+        classificationPartial: false,
+        normalizationPartial: true,
+        skippedFindingCount: 0,
+        uncoveredPathCount: 0,
+      })
+    );
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+      'unverified_native_span',
+    ]);
+    expect(
+      JSON.parse(observation.payloadCanonicalJson).normalizedFindings
+    ).toEqual([
+      expect.objectContaining({
+        severity: 'major',
+        category: 'security',
+        path: 'calc.ts',
+        startLine: null,
+        endLine: null,
+        suggestion: null,
+      }),
+    ]);
   });
 
   it('tiers a preserved filter decision to provider_warning alone', async () => {

@@ -1349,6 +1349,42 @@ describe('production review projection coverage', () => {
     expect(envelope.publishing.check.conclusion).toBe(CheckConclusion.Neutral);
   });
 
+  it('explains an unverified native span while keeping full-path evidence partial', async () => {
+    const builder = projectionBuilder([assignment('required-slot', true)]);
+    const projection = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence(
+          'required-slot',
+          fullCoverageManifest('required-slot'),
+          [
+            'context_inspection_incomplete',
+            'provider_warning',
+            'unverified_native_span',
+          ]
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
+    expect(envelope.coverage).toMatchObject({
+      state: 'partial',
+      reviewedFiles: 1,
+      unreviewedFiles: 0,
+    });
+    expect(envelope.publishing.summary.body).toContain(
+      'Quoted code could not be verified against a unique span in the reviewed file.'
+    );
+    expect(envelope.publishing.summary.body).toContain(
+      'Affected findings remain at file level without inline anchors or suggested patches.'
+    );
+    expect(envelope.publishing.summary.body).not.toContain(
+      'unverified_native_span'
+    );
+    expect(envelope.publishing.summary.allClear).toBe(false);
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+  });
+
   it('publishes investigation findings as partial when the investigation is inconclusive', async () => {
     const builder = projectionBuilder([assignment('required-slot', true)]);
     const manifest = fullCoverageManifest('required-slot');

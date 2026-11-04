@@ -149063,7 +149063,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.228",
+  version: "1.0.229",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -212180,6 +212180,11 @@ var ProductionReviewProjectionCommandFactory = class {
         coverageLimitations.push(
           `work_slot_context_inspection_incomplete:${assignment.workSlotId}`
         );
+        if (accepted.observation.qualityFlags.includes("unverified_native_span")) {
+          coverageLimitations.push(
+            "Quoted code could not be verified against a unique span in the reviewed file. Affected findings remain at file level without inline anchors or suggested patches."
+          );
+        }
       }
       if (accepted.observation.qualityFlags.includes("investigation_inconclusive")) {
         coverageLimitations.push(
@@ -216726,6 +216731,9 @@ var OcrReviewInvocationAdapter = class {
       transportAttemptCount: 1
     };
     const qualityFlags = accepted.partial ? accepted.classification.filterCommentsPreserved && !accepted.normalized.diagnostics.partialFlagsRequired && accepted.uncoveredPaths.length === 0 ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
+    if (accepted.normalized.diagnostics.reasons.includes("unverified_native_span")) {
+      qualityFlags.push("unverified_native_span");
+    }
     const observation = normalizeReviewObservation({
       workSlotId: input.invocation.workSlotId,
       attemptOrdinal: input.invocation.attemptOrdinal,

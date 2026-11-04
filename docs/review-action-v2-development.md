@@ -371,3 +371,13 @@ separately fenced producer manifest and capability descriptor for the exact
 provider/model authority. The Action intersects those server grants with its
 local kill switches and never derives critic authority from a Codex parent
 manifest.
+
+## Unverified managed OCR spans
+
+Action 1.0.229 retains the closed `unverified_native_span` normalization cause
+in accepted evidence quality flags. A quote that cannot be matched uniquely
+to authorized HEAD content still makes the review partial. Its finding remains
+at file level without an inline anchor or suggested patch, and the projection
+explains that cause even when every assigned path has full diff coverage.
+Missing quotes and grounded off-diff quotes retain their existing file-placement
+semantics. This diagnostic does not relax provider, source, path or coverage gates.

@@ -1148,6 +1148,14 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         ? ['provider_warning']
         : ['context_inspection_incomplete', 'provider_warning']
       : [];
+    // Preserve the finite normalization cause across evidence serialization.
+    // ReviewResult.content is local-only; without this flag a fully covered
+    // but ungrounded finding yields an unexplained partial summary.
+    if (
+      accepted.normalized.diagnostics.reasons.includes('unverified_native_span')
+    ) {
+      qualityFlags.push('unverified_native_span');
+    }
     const observation = normalizeReviewObservation({
       workSlotId: input.invocation.workSlotId,
       attemptOrdinal: input.invocation.attemptOrdinal,

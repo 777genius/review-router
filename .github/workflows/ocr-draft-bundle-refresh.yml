@@ -1,0 +1,40 @@
+name: Temporary OCR draft bundle refresh
+
+on:
+  push:
+    branches:
+      - fix/ocr-native-preview-inventory-20261104
+    paths:
+      - .github/workflows/ocr-draft-bundle-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Rebuild committed Action bundles from draft source
+        run: |
+          git restore --worktree -- dist
+          npm run build
+      - name: Commit exact generated bundles back to the same draft branch
+        run: |
+          set -euo pipefail
+          git config user.name '777genius'
+          git config user.email 'quantjumppro@gmail.com'
+          git add -- dist
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(ocr): synchronize committed Action bundles'
+            git push origin HEAD:refs/heads/fix/ocr-native-preview-inventory-20261104
+          fi

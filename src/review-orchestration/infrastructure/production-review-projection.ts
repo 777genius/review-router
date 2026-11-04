@@ -356,6 +356,13 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         coverageLimitations.push(
           `work_slot_context_inspection_incomplete:${assignment.workSlotId}`
         );
+        if (
+          accepted.observation.qualityFlags.includes('unverified_native_span')
+        ) {
+          coverageLimitations.push(
+            'Quoted code could not be verified against a unique span in the reviewed file. Affected findings remain at file level without inline anchors or suggested patches.'
+          );
+        }
       }
       if (
         accepted.observation.qualityFlags.includes('investigation_inconclusive')

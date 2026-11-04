@@ -166,7 +166,9 @@ async function assertAdapterKeepsUnknownTransport(
       previewRunner: async (input) => {
         writeFileSync(
           input.outputPath,
-          JSON.stringify({ files: [{ path: 'calc.ts', will_review: true }] })
+          JSON.stringify({
+            files: [{ path: 'calc.ts', status: 'modified', will_review: true }],
+          })
         );
         return {
           closed: true,

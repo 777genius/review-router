@@ -1315,7 +1315,11 @@ function parseOcrPreviewCoverage(
       // selection to silently expand an admitted ReviewRouter work slot.
       if (
         entry.will_review ||
-        entry.exclude_reason !== 'user_exclude'
+        (entry.exclude_reason !== 'user_exclude' &&
+          (typeof entry.exclude_reason !== 'string' ||
+            !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(
+              entry.exclude_reason
+            )))
       ) {
         throw new Error('review_action_v2_ocr_preview_scope_invalid');
       }

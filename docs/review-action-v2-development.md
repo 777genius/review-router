@@ -145,7 +145,9 @@ App-first Gateway interaction and native model/privacy gates before selection.
 ## Inline reviewer agreement in managed v2 reviews
 
 `inlineMinAgreement` is a threshold for **inline publication**, measured using
-distinct provider vote identities (not repeated instances of the same model).
+distinct provider vote identities: repeated work slots from one identity do
+not add votes. Independently configured reviewer identities are distinct even
+when they happen to use the same model family.
 Below-threshold findings remain visible in the review summary, with an explicit
 count and a note that they were not independently corroborated. They do **not**
 become inline review comments. Existing severity-based merge checks may still

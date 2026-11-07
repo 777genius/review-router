@@ -119,6 +119,129 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     ]);
   });
 
+  it('keeps unconfirmed bugs in summary without publishing them inline', async () => {
+    const guarded = new LegacyReviewProjectionPolicyAdapter({
+      ...DEFAULT_CONFIG,
+      inlineMinAgreement: 2,
+      inlineMinSeverity: 'minor',
+      inlineMaxComments: 20,
+    });
+    const single = candidate({
+      sourceFindingId: 'solo',
+      providerIds: ['codex'],
+      providerVoteKeys: ['codex/account-1'],
+    });
+    const selected = await guarded.selectCurrent({
+      findings: [single],
+      revisionFiles: [revisionFile()],
+      diff: diff(),
+      limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+    });
+    expect(selected).toHaveLength(1);
+    expect(selected[0].providerVoteKeys).toEqual(['codex/account-1']);
+
+    const singleOccurrence = occurrence({
+      sourceFindingIds: ['solo'],
+      anchorVerified: true,
+      providerVoteKeys: ['codex/account-1'],
+    });
+    const query = {
+      scope: {
+        scmRepositoryIdentityId: 'repo-1',
+        pullRequestNumber: 1,
+        baseSha: '0'.repeat(40),
+        reviewedHeadSha: '1'.repeat(40),
+        reviewRevisionHash: 'revision-1',
+      },
+      presentation: {
+        title: 'Review',
+        author: 'author',
+        additions: 1,
+        deletions: 0,
+      },
+      providerExecution: { plannedProviders: 2, succeededProviders: 2 },
+      coverage: {
+        state: ProjectionCoverageState.Complete,
+        mode: 'full' as const,
+        totalFiles: 1,
+        reviewedFiles: 1,
+        unreviewedFiles: 0,
+        limitations: [],
+      },
+      occurrences: [singleOccurrence],
+      revisionFiles: [revisionFile()],
+      limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+    };
+    const presented = await guarded.projectPresentation(query);
+    expect(presented.placements[0]).toMatchObject({
+      kind: FindingPlacementKind.Summary,
+      reason: 'insufficient independent reviewer agreement for inline publication',
+    });
+    expect(presented.summaryBody).toContain('**Reviewer agreement:** 1');
+    expect(presented.summaryBody).toContain('Runtime crash on valid request');
+    expect(presented.checkSummary).toBe(presented.summaryBody);
+    expect(guarded.evaluateMergeGate({
+      failOnSeverity: FindingSeverity.Major,
+      occurrences: [singleOccurrence],
+      coverage: query.coverage,
+      lifecycleInventoryComplete: true,
+    }).conclusion).toBe('fail');
+
+    const confirmed = await guarded.projectPresentation({
+      ...query,
+      occurrences: [
+        occurrence({
+          anchorVerified: true,
+          providerVoteKeys: ['codex/account-1', 'claude/account-1'],
+        }),
+      ],
+    });
+    expect(confirmed.summaryBody).not.toContain('**Reviewer agreement:**');
+    expect(confirmed.placements[0]?.reason).not.toBe(
+      'insufficient independent reviewer agreement for inline publication'
+    );
+
+    for (const deterministicVote of ['static', 'ast']) {
+      const mixed = await guarded.projectPresentation({
+        ...query,
+        occurrences: [
+          occurrence({
+            anchorVerified: true,
+            providerVoteKeys: [deterministicVote, 'codex/account-1'],
+          }),
+        ],
+      });
+      expect(mixed.placements[0]).toMatchObject({
+        kind: FindingPlacementKind.Summary,
+        reason: 'insufficient independent reviewer agreement for inline publication',
+      });
+      expect(mixed.summaryBody).toContain('**Reviewer agreement:** 1');
+
+      const deterministicOnly = await guarded.projectPresentation({
+        ...query,
+        occurrences: [
+          occurrence({ anchorVerified: true, providerVoteKeys: [deterministicVote] }),
+        ],
+      });
+      expect(deterministicOnly.placements[0]?.reason).not.toBe(
+        'insufficient independent reviewer agreement for inline publication'
+      );
+    }
+
+    const mixedConfirmed = await guarded.projectPresentation({
+      ...query,
+      occurrences: [
+        occurrence({
+          anchorVerified: true,
+          providerVoteKeys: ['static', 'codex/account-1', 'claude/account-1'],
+        }),
+      ],
+    });
+    expect(mixedConfirmed.placements[0]?.reason).not.toBe(
+      'insufficient independent reviewer agreement for inline publication'
+    );
+  });
+
   it('retains a concrete customer isolation bug with an incidental lint warning', async () => {
     // Own synthetic PR113: the final projection discarded a real data exposure
     // solely because its explanation also mentioned lint/compiler checks.

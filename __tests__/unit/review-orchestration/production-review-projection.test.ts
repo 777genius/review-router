@@ -105,6 +105,80 @@ describe('production review projection coverage', () => {
     ).rejects.toThrow('review_projection_coverage_manifest_scope_invalid');
   });
 
+  it('enforces inline quorum in the final artifact while reporting solo findings', async () => {
+    const first = {
+      ...assignment('first', true),
+      providerKind: ReviewExecutionProviderKind.Ocr,
+      providerVoteIdentityHash: 'a'.repeat(64),
+    };
+    const second = {
+      ...assignment('second', true),
+      providerKind: ReviewExecutionProviderKind.Ocr,
+      providerVoteIdentityHash: 'b'.repeat(64),
+    };
+    const builder = projectionBuilder([first, second], {
+      pr: collidingPr(),
+      config: {
+        ...DEFAULT_CONFIG,
+        inlineMinAgreement: 2,
+        failOnSeverity: 'major',
+      },
+    });
+    const firstFinding = spanEvidence(
+      'first',
+      ReviewExecutionProviderKind.Ocr,
+      first.providerVoteIdentityHash
+    );
+    const emptySecond = acceptedEvidence(
+      'second',
+      fullCoverageManifest('second')
+    );
+    const noSecondFinding = {
+      ...emptySecond,
+      observation: {
+        ...emptySecond.observation,
+        providerKind: ReviewExecutionProviderKind.Ocr,
+        providerVoteIdentityHash: second.providerVoteIdentityHash,
+      },
+    };
+    const solo = await builder.build({
+      acceptedEvidence: [firstFinding, noSecondFinding],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const soloEnvelope = JSON.parse(solo.projectionEnvelopeCanonicalJson);
+    expect(soloEnvelope.coverage.state).toBe('complete');
+    expect(soloEnvelope.occurrences).toHaveLength(1);
+    expect(soloEnvelope.occurrences[0].placement.kind).toBe('summary');
+    expect(soloEnvelope.publishing.inlineReviewChunks).toHaveLength(0);
+    expect(soloEnvelope.publishing.summary.allClear).toBe(false);
+    expect(soloEnvelope.publishing.summary.body).toContain(
+      '**Reviewer agreement:** 1'
+    );
+    expect(soloEnvelope.publishing.summary.body).toContain('Wrong return value');
+    expect(soloEnvelope.mergeGate.conclusion).toBe('fail');
+
+    const both = await builder.build({
+      acceptedEvidence: [
+        firstFinding,
+        spanEvidence(
+          'second',
+          ReviewExecutionProviderKind.Ocr,
+          second.providerVoteIdentityHash
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const confirmed = JSON.parse(both.projectionEnvelopeCanonicalJson);
+    expect(confirmed.coverage.state).toBe('complete');
+    expect(confirmed.occurrences).toHaveLength(1);
+    expect(confirmed.occurrences[0].providerVoteKeys).toHaveLength(2);
+    expect(confirmed.occurrences[0].placement.kind).toBe('inline');
+    expect(confirmed.publishing.inlineReviewChunks).toHaveLength(1);
+    expect(confirmed.publishing.summary.body).not.toContain('**Reviewer agreement:**');
+  });
+
   it('publishes confirmed quota reset only for incomplete coverage', async () => {
     const builder = projectionBuilder([assignment('slot', true)], {
       providerQuota: () => ({

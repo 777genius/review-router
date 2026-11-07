@@ -1,0 +1,37 @@
+# Temporary branch-scoped bundle refresh. The job deletes this file before its
+# generated-artifact commit; no workflow change reaches main.
+name: One-shot compile inline agreement
+on:
+  push:
+    branches:
+      - fix/inline-agreement-summary-only-20261107
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint && npm run typecheck
+      - run: npm test -- __tests__/unit/consensus.test.ts __tests__/unit/review-projection/legacy-review-projection-policy-adapter.test.ts --runInBand
+      - run: npm run build
+      - name: Push generated bundle and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/one-shot-compile-inline-agreement.yml
+          git add dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git diff --cached --stat
+          git commit -m "build(review): refresh committed Action bundle after quorum fix"
+          git push origin HEAD:fix/inline-agreement-summary-only-20261107

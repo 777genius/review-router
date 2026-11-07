@@ -340,8 +340,7 @@ export class LegacyReviewProjectionPolicyAdapter
     );
     const currentOccurrences = activeOccurrences.filter(isCurrentOccurrence);
     const pendingAgreement = currentOccurrences.filter(
-      (occurrence) =>
-        !this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)
+      (occurrence) => !this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)
     ).length;
     const legacyFindings = new Map(
       currentOccurrences.map((occurrence) => [

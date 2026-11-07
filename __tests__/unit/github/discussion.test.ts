@@ -82,6 +82,43 @@ describe('ReviewDiscussionHandler', () => {
     });
   });
 
+  it.each([
+    "/rr fixed",
+    "@review-router-ai fixed",
+    "@reviewrouter fixed",
+    "Исправил, проверь",
+    "/rr suggest fix",
+    "@review-router-ai suggest fix",
+    "Предложи исправление",
+  ])("never starts a legacy paid inference for managed-only %s", async (body) => {
+    const { client, octokit } = makeClient([
+      { id: 10, path: "src/a.ts", line: 2, body: parentBody },
+      { id: 11, in_reply_to_id: 10, body, user: { login: "maintainer", type: "User" } },
+    ]);
+    const responder: DiscussionResponder = {
+      respond: jest.fn(),
+    };
+    const handler = makeHandler(client, responder);
+    const preflight = await handler.preflight(makePayload(body));
+    expect(preflight).toEqual({
+      shouldRun: false,
+      needsDiscussion: false,
+      reason: "focused command requires qualified managed Gateway",
+    });
+    await handler.execute(makePayload(body));
+    expect(responder.respond).not.toHaveBeenCalled();
+    expect(octokit.rest.pulls.createReplyForReviewComment).not.toHaveBeenCalled();
+  });
+
+  it("still permits ordinary legacy Q&A for a human fix claim", async () => {
+    const { client } = makeClient([
+      { id: 10, path: "src/a.ts", line: 2, body: parentBody },
+      { id: 11, in_reply_to_id: 10, body: "I changed the code. What do you think?",
+        user: { login: "maintainer", type: "User" } },
+    ]);
+    expect((await makeHandler(client).preflight(makePayload("I changed the code. What do you think?"))).needsDiscussion).toBe(true);
+  });
+
   it('does not run discussion for unrelated review replies', async () => {
     const { client } = makeClient([
       { id: 10, path: 'src/users.ts', line: 10, body: 'Human review comment' },

@@ -115,6 +115,16 @@ export class ReviewDiscussionHandler {
     if (isBotUser(comment.user)) {
       return ignore('bot comment');
     }
+    // Focused paid requests are qualified only through the managed Gateway.
+    // Never interpret the same commands as a legacy conversational inference.
+    const text = comment.body.trim();
+    if (
+      !text.includes('\n') &&
+      !text.includes('\r') &&
+      /^(?:\/rr\s+(?:fixed|suggest\s+fix)|@(?:reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(?:fixed|suggest\s+fix)|исправил[,!.\s]*проверь|предложи\s+исправление)$/iu.test(text)
+    ) {
+      return ignore('focused command requires qualified managed Gateway');
+    }
     if (comment.body.trim().startsWith('/rr ')) {
       return {
         shouldRun: true,

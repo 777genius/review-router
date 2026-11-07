@@ -249,10 +249,16 @@ export class ReviewInteractionHandler {
           // The control plane deduplicates manual-comment:<id>; a restored
           // delivery must not post a second "queued" acknowledgement.
           if (requested.status === 'queued') {
-            await this.postNotice(
-              prContext.prNumber,
-              `ReviewRouter review requested for HEAD \`${prContext.headSha.slice(0, 12)}\`. This confirms queue admission, **not** a completed review. See the PR checks and ReviewRouter summary for results.`
-            );
+            try {
+              await this.postNotice(
+                prContext.prNumber,
+                `ReviewRouter review requested for HEAD \`${prContext.headSha.slice(0, 12)}\`. This confirms queue admission, **not** a completed review. See the PR checks and ReviewRouter summary for results.`
+              );
+            } catch {
+              // The review is already admitted. A comment publication error
+              // cannot reclassify it as a failed review request.
+              logger.warn('ReviewRouter review was queued but its acknowledgement could not be posted.');
+            }
           }
           return;
         }

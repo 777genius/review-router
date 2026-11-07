@@ -164498,6 +164498,10 @@ var ReviewDiscussionHandler = class {
     if (isBotUser(comment.user)) {
       return ignore("bot comment");
     }
+    const text3 = comment.body.trim();
+    if (!text3.includes("\n") && !text3.includes("\r") && /^(?:\/rr\s+(?:fixed|suggest\s+fix)|@(?:reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(?:fixed|suggest\s+fix)|исправил[,!.\s]*проверь|предложи\s+исправление)$/iu.test(text3)) {
+      return ignore("focused command requires qualified managed Gateway");
+    }
     if (comment.body.trim().startsWith("/rr ")) {
       return {
         shouldRun: true,

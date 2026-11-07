@@ -200,6 +200,46 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     expect(confirmed.placements[0]?.reason).not.toBe(
       'insufficient independent reviewer agreement for inline publication'
     );
+
+    for (const deterministicVote of ['static', 'ast']) {
+      const mixed = await guarded.projectPresentation({
+        ...query,
+        occurrences: [
+          occurrence({
+            anchorVerified: true,
+            providerVoteKeys: [deterministicVote, 'codex/account-1'],
+          }),
+        ],
+      });
+      expect(mixed.placements[0]).toMatchObject({
+        kind: FindingPlacementKind.Summary,
+        reason: 'insufficient independent reviewer agreement for inline publication',
+      });
+      expect(mixed.summaryBody).toContain('**Reviewer agreement:** 1');
+
+      const deterministicOnly = await guarded.projectPresentation({
+        ...query,
+        occurrences: [
+          occurrence({ anchorVerified: true, providerVoteKeys: [deterministicVote] }),
+        ],
+      });
+      expect(deterministicOnly.placements[0]?.reason).not.toBe(
+        'insufficient independent reviewer agreement for inline publication'
+      );
+    }
+
+    const mixedConfirmed = await guarded.projectPresentation({
+      ...query,
+      occurrences: [
+        occurrence({
+          anchorVerified: true,
+          providerVoteKeys: ['static', 'codex/account-1', 'claude/account-1'],
+        }),
+      ],
+    });
+    expect(mixedConfirmed.placements[0]?.reason).not.toBe(
+      'insufficient independent reviewer agreement for inline publication'
+    );
   });
 
   it('retains a concrete customer isolation bug with an incidental lint warning', async () => {

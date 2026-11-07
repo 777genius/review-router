@@ -157,6 +157,61 @@ describe('ReviewInteractionHandler', () => {
     process.env = { ...originalEnv };
   });
 
+  it.each(['/rr help', '@reviewrouter help', '@ReviewRouter-AI HELP'])(
+    'shows help without model or review dispatch: %s',
+    async (body) => {
+      const { client, octokit } = makeClient();
+      process.env.GITHUB_EVENT_PATH = writeEvent({
+        comment: { id: 1901, body, user: { login: 'reader', type: 'User' } },
+        issue: { number: 123, pull_request: {} },
+      });
+      await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
+      expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issue_number: 123,
+          body: expect.stringContaining('ReviewRouter commands'),
+        })
+      );
+      expect(octokit.rest.repos.getCollaboratorPermissionLevel).not.toHaveBeenCalled();
+      expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+    }
+  );
+
+  it('routes a ReviewRouter review mention through the existing current-head request API', async () => {
+    const { client, octokit } = makeClient();
+    const reviewRequests = new CapturingReviewRequestClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: { id: 1902, body: '@reviewrouter review', user: { login: 'maintainer' } },
+      issue: { number: 123, pull_request: {} },
+    });
+    octokit.rest.pulls.get.mockResolvedValue({
+      data: { number: 123, head: { sha: 'd'.repeat(40), repo: { fork: false } }, user: { login: 'author' } },
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    await new ReviewInteractionHandler(
+      client, new ReviewLedger(client, 'test-secret'), undefined,
+      client, undefined, reviewRequests
+    ).execute();
+    expect(reviewRequests.requests).toEqual([{
+      pullRequestNumber: 123, expectedHeadSha: 'd'.repeat(40),
+      sourceId: 'manual-comment:1902', commandKind: 'review',
+    }]);
+  });
+
+  it('does not execute commands inside Markdown examples', async () => {
+    const { client, octokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: { id: 1903, body: 'Example:\n\n~~~\n@reviewrouter review\n~~~', user: { login: 'reader' } },
+      issue: { number: 123, pull_request: {} },
+    });
+    await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
+    expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
+    expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+  });
+
+
   it('records /rr skip from maintainer and reruns the failed review job', async () => {
     const { client, octokit } = makeClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({

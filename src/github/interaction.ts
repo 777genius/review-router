@@ -40,7 +40,7 @@ import {
   type ManualReviewRequestPort,
 } from '../control-plane/review-request';
 
-type CommandKind = 'skip' | 'unskip' | 'status' | 'review';
+type CommandKind = 'skip' | 'unskip' | 'status' | 'review' | 'help';
 
 interface ParsedCommand {
   kind: CommandKind;
@@ -172,6 +172,11 @@ export class ReviewInteractionHandler {
         prContext.prNumber,
         'ReviewRouter ignored this command because it could not verify the pull request context.'
       );
+      return;
+    }
+
+    if (command.kind === 'help') {
+      await this.postHelp(prContext.prNumber);
       return;
     }
 
@@ -567,6 +572,27 @@ export class ReviewInteractionHandler {
     await this.postNotice(
       prNumber,
       `Recorded \`/rr ${command.kind}\`, but could not automatically rerun the review check: ${rerun.reason}. Re-run the ReviewRouter check manually if the PR status did not update.`
+    );
+  }
+
+  private async postHelp(prNumber: number): Promise<void> {
+    await this.postNotice(
+      prNumber,
+      [
+        '**ReviewRouter commands**',
+        '',
+        'PR comments:',
+        '- /rr help or @reviewrouter help: command reference (no AI needed).',
+        '- /rr review or @reviewrouter review: request a review of the current PR revision (write access required).',
+        '- /rr status or @reviewrouter status: status of signed skip/unskip overrides, not overall review progress.',
+        '',
+        'Reply directly to a ReviewRouter inline finding:',
+        '- /rr skip [reason]: authorized and signed finding override.',
+        '- /rr unskip [reason]: restore an overridden finding.',
+        '',
+        'AI replies to questions in review threads require an enabled discussion workflow/provider.',
+        'Fork PRs still cannot run secret-backed reviews.',
+      ].join('\n')
     );
   }
 
@@ -1095,21 +1121,25 @@ async function sleep(ms: number): Promise<void> {
 
 export function parseInteractionCommand(body: string): ParsedCommand | null {
   const trimmed = body.trim();
-  const codexReviewMatch = trimmed.match(/^@codex\s+review\b[\s:,-]*(.*)$/is);
-  if (codexReviewMatch) {
-    return {
-      kind: 'review',
-      reason: (codexReviewMatch[1] || '').trim(),
-    };
-  }
-  const match = trimmed.match(
-    /^\/rr\s+(skip|unskip|status|review)\b[\s:,-]*(.*)$/is
+  const mentioned = trimmed.match(
+    /^@(codex|reviewrouter(?:-ai)?)\s+(review|status|help)\b[\s:,-]*(.*)$/is
   );
-  if (!match) return null;
-  return {
-    kind: match[1].toLowerCase() as CommandKind,
-    reason: (match[2] || '').trim(),
-  };
+  if (mentioned) {
+    const mention = mentioned[1].toLowerCase();
+    const kind = mentioned[2].toLowerCase() as CommandKind;
+    const reason = (mentioned[3] || '').trim();
+    if (mention === 'codex' && kind !== 'review') return null;
+    if (kind !== 'review' && reason) return null;
+    return { kind, reason };
+  }
+  const slash = trimmed.match(
+    /^\/rr\s+(skip|unskip|status|review|help)\b[\s:,-]*(.*)$/is
+  );
+  if (!slash) return null;
+  const kind = slash[1].toLowerCase() as CommandKind;
+  const reason = (slash[2] || '').trim();
+  if (kind === 'help' && reason) return null;
+  return { kind, reason };
 }
 
 function addDismissalNotice(

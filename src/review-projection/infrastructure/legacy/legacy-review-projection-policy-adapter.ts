@@ -524,10 +524,13 @@ export class LegacyReviewProjectionPolicyAdapter
   ): boolean {
     if (this.config.inlineMinAgreement <= 1) return true;
     const voters = new Set(providerVoteKeys);
-    // Deterministic static analysis is not an LLM reviewer vote.
-    if (voters.size === 1 && (voters.has('static') || voters.has('ast')))
-      return true;
-    return voters.size >= this.config.inlineMinAgreement;
+    const independentReviewers = [...voters].filter(
+      (vote) => vote !== 'static' && vote !== 'ast'
+    );
+    // Deterministic-only findings are exempt, but static analysis is never
+    // an extra model vote when its finding overlaps an AI review.
+    if (independentReviewers.length === 0 && voters.size > 0) return true;
+    return independentReviewers.length >= this.config.inlineMinAgreement;
   }
 
   private isBlockingOccurrence(

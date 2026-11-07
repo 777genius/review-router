@@ -312,6 +312,30 @@ describe('ReviewInteractionHandler', () => {
     );
   });
 
+  it('keeps an admitted review queued when its acknowledgement cannot be published', async () => {
+    const { client, octokit } = makeClient();
+    const reviewRequests = new CapturingReviewRequestClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: { id: 1995, body: '/rr review', user: { login: 'maintainer' } },
+      issue: { number: 123, pull_request: {} },
+    });
+    octokit.rest.pulls.get.mockResolvedValue({
+      data: { number: 123, head: { sha: 'a'.repeat(40), repo: { fork: false } }, user: { login: 'author' } },
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    octokit.rest.issues.createComment.mockRejectedValueOnce(new Error('GitHub comment unavailable'));
+
+    await expect(new ReviewInteractionHandler(
+      client, new ReviewLedger(client, 'test-secret'),
+      undefined, client, undefined, reviewRequests
+    ).execute()).resolves.toBeUndefined();
+
+    expect(reviewRequests.requests).toHaveLength(1);
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
+  });
+
   it('records /rr skip from maintainer and reruns the failed review job', async () => {
     const { client, octokit } = makeClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({

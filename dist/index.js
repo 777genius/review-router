@@ -163556,6 +163556,10 @@ var ReviewInteractionHandler = class {
       return;
     }
     const command = parseInteractionCommand(body2);
+    if (payload.action === "edited" && (command?.kind === "help" || command?.kind === "status")) {
+      logger.info("Ignoring an edited read-only ReviewRouter command.");
+      return;
+    }
     const memoryInteraction = parseMemoryInteraction(body2);
     if (!command && isMemoryInteraction(memoryInteraction)) {
       await this.handleMemoryInteraction(payload, memoryInteraction);
@@ -164363,7 +164367,14 @@ async function sleep(ms) {
 }
 function parseInteractionCommand(body2) {
   const trimmed = body2.trim();
-  if (trimmed.includes("\n") || trimmed.includes("\r")) return null;
+  if (trimmed.includes("\n") || trimmed.includes("\r")) {
+    const override = /^\/rr\s+(skip|unskip)\b(?:\s+([\s\S]*))?$/i.exec(trimmed);
+    if (!override) return null;
+    const reason2 = (override[2] || "").trim();
+    if (/(?:^|\n)[ \t]*(?:\/rr\b|@(?:codex|reviewrouter|review-router-ai)\b)/i.test(reason2))
+      return null;
+    return { kind: override[1].toLowerCase(), reason: reason2 };
+  }
   const mentioned = /^@(codex|reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(review|status|help)\s*$/i.exec(trimmed);
   if (mentioned) {
     const kind2 = mentioned[2].toLowerCase();
@@ -253507,8 +253518,12 @@ async function runInteractionPreflight(token) {
   );
   if (process.env.REVIEW_ROUTER_INTERACTION_BACKEND === "account-gateway") {
     const isHuman = payload.comment?.user?.type !== "Bot" && !String(payload.comment?.user?.login || "").endsWith("[bot]");
+    const command2 = parseInteractionCommand(
+      String(payload.comment?.body || "")
+    );
+    const editedReadOnly2 = payload.action === "edited" && (command2?.kind === "help" || command2?.kind === "status");
     const isPrCommand = Boolean(
-      payload.issue?.pull_request && ["created", "edited"].includes(payload.action) && isHuman && parseInteractionCommand(String(payload.comment?.body || ""))
+      payload.issue?.pull_request && ["created", "edited"].includes(payload.action) && isHuman && command2 && !editedReadOnly2
     );
     const eligible = conversationSource(payload) !== null || isPrCommand;
     setOutput("should_run", eligible ? "true" : "false");
@@ -253524,13 +253539,14 @@ async function runInteractionPreflight(token) {
   const body2 = String(payload?.comment?.body || "");
   const botComment = payload?.comment?.user?.type === "Bot" || String(payload?.comment?.user?.login || "").endsWith("[bot]");
   const command = parseInteractionCommand(body2);
+  const editedReadOnly = payload.action === "edited" && (command?.kind === "help" || command?.kind === "status");
   const memoryInteraction = parseMemoryInteraction(body2);
   const memoryRequest = memoryInteraction.instructions.length > 0 || Boolean(memoryInteraction.invalidReason);
   const result2 = botComment ? {
     shouldRun: false,
     needsDiscussion: false,
     reason: "bot comment"
-  } : command ? {
+  } : command && !editedReadOnly ? {
     shouldRun: true,
     needsDiscussion: false,
     reason: "ReviewRouter command"

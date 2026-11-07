@@ -157,6 +157,11 @@ describe('ReviewInteractionHandler', () => {
     process.env = { ...originalEnv };
   });
 
+  it("leaves focused suggestion commands for qualified managed Gateway", () => {
+    for (const body of ["/rr suggest fix", "@review-router-ai suggest fix", "Предложи исправление"])
+      expect(parseInteractionCommand(body)).toBeNull();
+  });
+
   it.each(['/rr help', '@reviewrouter help', '@ReviewRouter-AI HELP'])(
     'shows help without model or review dispatch: %s',
     async (body) => {

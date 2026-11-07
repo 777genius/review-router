@@ -15,7 +15,7 @@ Reply `/rr suggest fix` under **one** ReviewRouter inline finding. Produce a Git
 
 ## Acceptance / E2E
 
-Valid exact-current one-line and multi-line RIGHT-side suggestions, quoting/backtick fences; patch has no RIGHT-side lines, crossing hunks, removed path, outdated line, changed head, malicious paths, oversized proposal, invalid code output; outsider/fork/bot/edited source; duplicate/concurrent events; provider missing; user applies suggestion manually in a disposable PR; no automatic commits. E2E must verify the exact rendered GitHub UI and no changes to branch or check results.
+Valid exact-current one-line and single-line RIGHT-side suggestions, quoting/backtick fences; patch has no RIGHT-side lines, crossing hunks, removed path, outdated line, changed head, malicious paths, oversized proposal, invalid code output; outsider/fork/bot/edited source; duplicate/concurrent events; provider missing; user applies suggestion manually in a disposable PR; no automatic commits. E2E must verify the exact rendered GitHub UI and no changes to branch or check results.
 
 ## Budget and boundaries
 

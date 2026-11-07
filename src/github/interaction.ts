@@ -1129,7 +1129,9 @@ export function parseInteractionCommand(body: string): ParsedCommand | null {
     const kind = mentioned[2].toLowerCase() as CommandKind;
     const reason = (mentioned[3] || '').trim();
     if (mention === 'codex' && kind !== 'review') return null;
-    if (kind !== 'review' && reason) return null;
+    // Only the plain command is implemented. Do not silently run a normal
+    // review when someone requests an unsupported focused or full variant.
+    if (mention !== 'codex' && reason) return null;
     return { kind, reason };
   }
   const slash = trimmed.match(

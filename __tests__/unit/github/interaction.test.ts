@@ -200,6 +200,27 @@ describe('ReviewInteractionHandler', () => {
     }]);
   });
 
+  it.each([
+    '@reviewrouter review security',
+    '@reviewrouter review full',
+    '@reviewrouter status extra',
+    '@reviewrouter help extra',
+  ])('does not silently accept unsupported mention arguments: %s', async (body) => {
+    const { client, octokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: { id: 1904, body, user: { login: 'maintainer' } },
+      issue: { number: 123, pull_request: {} },
+    });
+
+    await new ReviewInteractionHandler(
+      client, new ReviewLedger(client, 'test-secret')
+    ).execute();
+
+    expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+    expect(octokit.rest.repos.getCollaboratorPermissionLevel).not.toHaveBeenCalled();
+    expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
+  });
+
   it('does not execute commands inside Markdown examples', async () => {
     const { client, octokit } = makeClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({

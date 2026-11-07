@@ -207658,7 +207658,7 @@ var ConsensusEngine = class {
   constructor(options) {
     this.options = options;
   }
-  filter(findings) {
+  filter(findings, options = {}) {
     const grouped = /* @__PURE__ */ new Map();
     for (const finding of findings) {
       if (!this.meetsSeverity(finding.severity)) {
@@ -207726,7 +207726,7 @@ var ConsensusEngine = class {
       });
     }
     const filtered = Array.from(grouped.values()).filter(
-      (f) => this.meetsAgreement(f.providerVoteKeys || getProviderVoteKeys(f))
+      (f) => options.retainBelowAgreement === true || this.meetsAgreement(f.providerVoteKeys || getProviderVoteKeys(f))
     ).map((f) => {
       if (f._suggestions && f._suggestions.length >= 2) {
         const consensus = this.checkSuggestionConsensus(
@@ -211240,7 +211240,9 @@ var LegacyReviewProjectionPolicyAdapter = class {
     );
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
-    const consensus = this.consensus.filter(deduped);
+    const consensus = this.consensus.filter(deduped, {
+      retainBelowAgreement: true
+    });
     const filtered = new FindingFilter().filter(consensus, query.diff, {
       allowUnanchoredFindings: true,
       isProducerClassifiedBug: (finding) => {
@@ -211399,6 +211401,9 @@ var LegacyReviewProjectionPolicyAdapter = class {
       (occurrence) => occurrence.state !== "resolved" /* Resolved */ && occurrence.state !== "suppressed_by_human" /* SuppressedByHuman */
     );
     const currentOccurrences = activeOccurrences.filter(isCurrentOccurrence);
+    const pendingAgreement = currentOccurrences.filter(
+      (occurrence) => !this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)
+    ).length;
     const legacyFindings = new Map(
       currentOccurrences.map((occurrence) => [
         occurrence,
@@ -211459,6 +211464,15 @@ var LegacyReviewProjectionPolicyAdapter = class {
         lifecycle: lifecycleLinesForSummary(query.occurrences, query.lifecycle)
       })
     );
+    if (pendingAgreement > 0) {
+      summaryBody = limitReviewerPostedMarkdown(
+        [
+          `**Reviewer agreement:** ${pendingAgreement} finding(s) have fewer than ${this.config.inlineMinAgreement} independent reviewer votes. They remain visible in this summary, not inline; configured severity checks can still apply.`,
+          "",
+          summaryBody
+        ].join("\n")
+      );
+    }
     const verification = query.reviewPresentation?.verification;
     if (verification) {
       const fixes = query.lifecycle?.facts.filter(
@@ -211526,6 +211540,13 @@ var LegacyReviewProjectionPolicyAdapter = class {
       reasonCodes: []
     };
   }
+  hasRequiredInlineAgreement(providerVoteKeys) {
+    if (this.config.inlineMinAgreement <= 1) return true;
+    const voters = new Set(providerVoteKeys);
+    if (voters.size === 1 && (voters.has("static") || voters.has("ast")))
+      return true;
+    return voters.size >= this.config.inlineMinAgreement;
+  }
   isBlockingOccurrence(occurrence, threshold) {
     const review = minimalLegacyReview([toLegacyFinding(occurrence)]);
     return getBlockingFindingBreakdown(review, toLegacySeverity(threshold)).total > 0;
@@ -211533,6 +211554,12 @@ var LegacyReviewProjectionPolicyAdapter = class {
   placeOccurrence(occurrence, review, revisionFiles, sourceFinding) {
     if (!isCurrentOccurrence(occurrence)) {
       return summaryPlacement3(occurrence, "historical lifecycle occurrence");
+    }
+    if (!this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)) {
+      return summaryPlacement3(
+        occurrence,
+        "insufficient independent reviewer agreement for inline publication"
+      );
     }
     const revisionFile = findRevisionFile(occurrence.filePath, revisionFiles);
     if (!revisionFile) {

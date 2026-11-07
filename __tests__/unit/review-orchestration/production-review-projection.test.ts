@@ -118,17 +118,25 @@ describe('production review projection coverage', () => {
     };
     const builder = projectionBuilder([first, second], {
       pr: collidingPr(),
-      config: { ...DEFAULT_CONFIG, inlineMinAgreement: 2, failOnSeverity: 'major' },
+      config: {
+        ...DEFAULT_CONFIG,
+        inlineMinAgreement: 2,
+        failOnSeverity: 'major',
+      },
     });
     const firstFinding = spanEvidence(
       'first',
       ReviewExecutionProviderKind.Ocr,
       first.providerVoteIdentityHash
     );
+    const emptySecond = acceptedEvidence(
+      'second',
+      fullCoverageManifest('second')
+    );
     const noSecondFinding = {
-      ...acceptedEvidence('second', fullCoverageManifest('second')),
+      ...emptySecond,
       observation: {
-        ...acceptedEvidence('second', fullCoverageManifest('second')).observation,
+        ...emptySecond.observation,
         providerKind: ReviewExecutionProviderKind.Ocr,
         providerVoteIdentityHash: second.providerVoteIdentityHash,
       },
@@ -144,7 +152,9 @@ describe('production review projection coverage', () => {
     expect(soloEnvelope.occurrences[0].placement.kind).toBe('summary');
     expect(soloEnvelope.publishing.inlineReviewChunks).toHaveLength(0);
     expect(soloEnvelope.publishing.summary.allClear).toBe(false);
-    expect(soloEnvelope.publishing.summary.body).toContain('**Reviewer agreement:** 1');
+    expect(soloEnvelope.publishing.summary.body).toContain(
+      '**Reviewer agreement:** 1'
+    );
     expect(soloEnvelope.publishing.summary.body).toContain('Wrong return value');
     expect(soloEnvelope.mergeGate.conclusion).toBe('fail');
 

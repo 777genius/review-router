@@ -152,8 +152,9 @@ Below-threshold findings remain visible in the review summary, with an explicit
 count and a note that they were not independently corroborated. They do **not**
 become inline review comments. Existing severity-based merge checks may still
 fail on these findings; this avoids silently treating a serious unconfirmed bug
-as an all-clear. Deterministic static-analysis findings are exempt from the
-model-vote threshold. The default threshold of one preserves prior behavior.
+as an all-clear. Deterministic-only static-analysis findings are exempt from the
+model-vote threshold; `static` and `ast` are not extra AI reviewer votes when
+mixed with model findings. The default threshold of one preserves prior behavior.
 
 Do not confuse this setting with the separate, stricter quorum for resolving
 historical GitHub discussion threads (see [lifecycle policy](./review-thread-lifecycle.md)).

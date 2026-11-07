@@ -145,6 +145,15 @@ export class ReviewInteractionHandler {
     }
 
     const command = parseInteractionCommand(body);
+    // A human can refresh the source text, but edited read-only commands must
+    // not manufacture additional bot replies on each webhook delivery.
+    if (
+      payload.action === 'edited' &&
+      (command?.kind === 'help' || command?.kind === 'status')
+    ) {
+      logger.info('Ignoring an edited read-only ReviewRouter command.');
+      return;
+    }
     const memoryInteraction = parseMemoryInteraction(body);
     if (!command && isMemoryInteraction(memoryInteraction)) {
       await this.handleMemoryInteraction(payload, memoryInteraction);
@@ -1177,9 +1186,17 @@ async function sleep(ms: number): Promise<void> {
 
 export function parseInteractionCommand(body: string): ParsedCommand | null {
   const trimmed = body.trim();
-  // Only whole-comment, single-line commands. The real App login on installed
-  // repositories may differ; the /rr prefix is the canonical fallback.
-  if (trimmed.includes('\n') || trimmed.includes('\r')) return null;
+  // Keep older multi-line human override reasons valid, but never treat a
+  // multi-line explanation or second command as a review/help/status request.
+  if (trimmed.includes('\n') || trimmed.includes('\r')) {
+    const override = /^\/rr\s+(skip|unskip)\b(?:\s+([\s\S]*))?$/i.exec(trimmed);
+    if (!override) return null;
+    const reason = (override[2] || '').trim();
+    if (/(?:^|\n)[ \t]*(?:\/rr\b|@(?:codex|reviewrouter|review-router-ai)\b)/i.test(reason))
+      return null;
+    return { kind: override[1].toLowerCase() as CommandKind, reason };
+  }
+  // The real App login may vary; /rr is the canonical fallback.
   const mentioned = /^@(codex|reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(review|status|help)\s*$/i.exec(trimmed);
   if (mentioned) {
     const kind = mentioned[2].toLowerCase() as CommandKind;

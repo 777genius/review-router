@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { GitHubClient } from '../../../src/github/client';
 import { ReviewLedger } from '../../../src/github/ledger';
-import { ReviewInteractionHandler } from '../../../src/github/interaction';
+import { parseInteractionCommand, ReviewInteractionHandler } from '../../../src/github/interaction';
 import {
   ActionMemoryCandidateRequest,
   ActionMemoryCommand,
@@ -334,6 +334,39 @@ describe('ReviewInteractionHandler', () => {
 
     expect(reviewRequests.requests).toHaveLength(1);
     expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['/rr help', '/rr status', '@review-router-ai help', '@review-router-ai status'])(
+    'does not produce another notice after an edited read-only command: %s',
+    async (body) => {
+      const { client, octokit } = makeClient();
+      process.env.GITHUB_EVENT_PATH = writeEvent({
+        action: 'edited',
+        comment: { id: 2040, body, user: { login: 'maintainer', type: 'User' } },
+        issue: { number: 123, pull_request: {} },
+      });
+      await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
+      expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
+      expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+      expect(octokit.rest.pulls.get).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    { command: '/rr skip\nValidated by the team', kind: 'skip', reason: 'Validated by the team' },
+    { command: '/rr unskip\nReopened because of new evidence', kind: 'unskip', reason: 'Reopened because of new evidence' },
+    { command: '/rr skip\r\nA multi-line\nreason', kind: 'skip', reason: 'A multi-line\nreason' },
+  ])('preserves multi-line override reasons: $kind', ({ command, kind, reason }) => {
+    expect(parseInteractionCommand(command)).toEqual({ kind, reason });
+  });
+
+  it.each([
+    '/rr skip\n/rr review',
+    '/rr status\nthis should not trigger another reply',
+    '/rr review\n/rr help',
+    '@review-router-ai review\nother text',
+  ])('rejects ambiguous multi-line command %s', (body) => {
+    expect(parseInteractionCommand(body)).toBeNull();
   });
 
   it('records /rr skip from maintainer and reruns the failed review job', async () => {

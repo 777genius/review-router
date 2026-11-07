@@ -537,11 +537,17 @@ async function runInteractionPreflight(token: string): Promise<void> {
   if (process.env.REVIEW_ROUTER_INTERACTION_BACKEND === 'account-gateway') {
     const isHuman = payload.comment?.user?.type !== 'Bot' &&
       !String(payload.comment?.user?.login || '').endsWith('[bot]');
+    const command = parseInteractionCommand(
+      String(payload.comment?.body || '')
+    );
+    const editedReadOnly = payload.action === 'edited' &&
+      (command?.kind === 'help' || command?.kind === 'status');
     const isPrCommand = Boolean(
       payload.issue?.pull_request &&
       ['created', 'edited'].includes(payload.action) &&
       isHuman &&
-      parseInteractionCommand(String(payload.comment?.body || ''))
+      command &&
+      !editedReadOnly
     );
     const eligible = conversationSource(payload) !== null || isPrCommand;
     core.setOutput('should_run', eligible ? 'true' : 'false');
@@ -559,6 +565,8 @@ async function runInteractionPreflight(token: string): Promise<void> {
     payload?.comment?.user?.type === 'Bot' ||
     String(payload?.comment?.user?.login || '').endsWith('[bot]');
   const command = parseInteractionCommand(body);
+  const editedReadOnly = payload.action === 'edited' &&
+    (command?.kind === 'help' || command?.kind === 'status');
   const memoryInteraction = parseMemoryInteraction(body);
   const memoryRequest =
     memoryInteraction.instructions.length > 0 ||
@@ -569,7 +577,7 @@ async function runInteractionPreflight(token: string): Promise<void> {
         needsDiscussion: false,
         reason: 'bot comment',
       }
-    : command
+    : command && !editedReadOnly
       ? {
           shouldRun: true,
           needsDiscussion: false,

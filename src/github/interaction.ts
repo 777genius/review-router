@@ -602,7 +602,7 @@ export class ReviewInteractionHandler {
     const lines = [
       '**ReviewRouter status**',
       '',
-      headSha ? \`Current PR HEAD: \\\`\${headSha.slice(0, 12)}\\\`.\` : 'Current PR HEAD could not be verified.',
+      headSha ? `Current PR HEAD: \`${headSha.slice(0, 12)}\`.` : 'Current PR HEAD could not be verified.',
     ];
     if (headSha) {
       try {
@@ -621,10 +621,10 @@ export class ReviewInteractionHandler {
         if (latest?.id) {
           const completed = latest.status === 'completed';
           const state = completed
-            ? \`finished (\${safeWorkflowState(latest.conclusion)})\`
-            : \`not finished (\${safeWorkflowState(latest.status)})\`;
+            ? `finished (${safeWorkflowState(latest.conclusion)})`
+            : `not finished (${safeWorkflowState(latest.status)})`;
           lines.push(
-            \`Latest matching GitHub Actions review: [run #\${latest.id}](https://github.com/\${owner}/\${repo}/actions/runs/\${latest.id}) — \${state}.\`
+            `Latest matching GitHub Actions review: [run #${latest.id}](https://github.com/${owner}/${repo}/actions/runs/${latest.id}) — ${state}.`
           );
         } else {
           lines.push('No matching review workflow run found among the most recent 100 pull_request runs for this HEAD.');
@@ -640,8 +640,8 @@ export class ReviewInteractionHandler {
     const loaded = await this.ledger.load(prNumber);
     lines.push(
       loaded.valid
-        ? \`Finding overrides: \${this.ledger.statusText(loaded.payload, headSha)}\`
-        : \`Finding overrides unavailable: \${loaded.invalidReason || 'unknown reason'}.\`
+        ? `Finding overrides: ${this.ledger.statusText(loaded.payload, headSha)}`
+        : `Finding overrides unavailable: ${loaded.invalidReason || 'unknown reason'}.`
     );
     await this.postNotice(prNumber, lines.join('\n'));
   }

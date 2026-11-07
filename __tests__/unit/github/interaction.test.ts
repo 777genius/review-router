@@ -233,6 +233,85 @@ describe('ReviewInteractionHandler', () => {
   });
 
 
+
+  it.each([
+    '/rr review security',
+    '/rr review full',
+    '/rr status verbose',
+    '/rr help extra',
+    '/rr review\n/rr status',
+    '> /rr review',
+    '@review-router-ai review security',
+  ])('rejects unsupported or embedded command %s without dispatch', async (body) => {
+    const { client, octokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: { id: 1991, body, user: { login: 'maintainer' } },
+      issue: { number: 123, pull_request: {} },
+    });
+    await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
+    expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+    expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
+  });
+
+  it('shows current-HEAD workflow status separately from signed finding overrides', async () => {
+    const { client, octokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: { id: 1992, body: '@review-router-ai status', user: { login: 'reader' } },
+      issue: { number: 123, pull_request: {} },
+    });
+    octokit.rest.pulls.get.mockResolvedValue({
+      data: { number: 123, head: { sha: 'a'.repeat(40), repo: { fork: false } }, user: { login: 'author' } },
+    });
+    octokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
+      data: { workflow_runs: [
+        { id: 765, path: '.github/workflows/reviewrouter.yml',
+          head_sha: 'a'.repeat(40), status: 'completed', conclusion: 'success',
+          pull_requests: [{ number: 123 }], created_at: '2026-11-07T10:00:00Z' },
+        { id: 764, path: '.github/workflows/reviewrouter.yml',
+          head_sha: 'b'.repeat(40), status: 'completed', conclusion: 'failure',
+          pull_requests: [{ number: 123 }], created_at: '2026-11-07T11:00:00Z' },
+      ] },
+    });
+    await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining('run #765'),
+      })
+    );
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining('not** proof of complete'),
+      })
+    );
+    expect(octokit.rest.repos.getCollaboratorPermissionLevel).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a queued manual review once without claiming completion', async () => {
+    const { client, octokit } = makeClient();
+    const reviewRequests = new CapturingReviewRequestClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: { id: 1993, body: '@review-router-ai review', user: { login: 'maintainer' } },
+      issue: { number: 123, pull_request: {} },
+    });
+    octokit.rest.pulls.get.mockResolvedValue({
+      data: { number: 123, head: { sha: 'a'.repeat(40), repo: { fork: false } }, user: { login: 'author' } },
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    await new ReviewInteractionHandler(
+      client, new ReviewLedger(client, 'test-secret'),
+      undefined, client, undefined, reviewRequests
+    ).execute();
+    expect(reviewRequests.requests).toEqual([{
+      pullRequestNumber: 123, expectedHeadSha: 'a'.repeat(40),
+      sourceId: 'manual-comment:1993', commandKind: 'review',
+    }]);
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.stringContaining('not** a completed review') })
+    );
+  });
+
   it('records /rr skip from maintainer and reruns the failed review job', async () => {
     const { client, octokit } = makeClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({

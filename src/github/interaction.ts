@@ -179,6 +179,10 @@ export class ReviewInteractionHandler {
       await this.postHelp(prContext.prNumber);
       return;
     }
+    if (command.kind === 'status') {
+      await this.postStatus(prContext.prNumber, prContext.headSha);
+      return;
+    }
 
     if (prContext.isFork) {
       await this.postNotice(
@@ -188,10 +192,6 @@ export class ReviewInteractionHandler {
       return;
     }
 
-    if (command.kind === 'status') {
-      await this.postStatus(prContext.prNumber, prContext.headSha);
-      return;
-    }
     if (command.kind === 'review') {
       await this.handleManualReviewCommand(payload, prContext);
       return;
@@ -246,9 +246,14 @@ export class ReviewInteractionHandler {
           commandKind: 'review',
         });
         if (requested.status !== 'unsupported') {
-          logger.info(
-            `Queued revision-aware ReviewRouter review for PR #${prContext.prNumber}`
-          );
+          // The control plane deduplicates manual-comment:<id>; a restored
+          // delivery must not post a second "queued" acknowledgement.
+          if (requested.status === 'queued') {
+            await this.postNotice(
+              prContext.prNumber,
+              `ReviewRouter review requested for HEAD \`${prContext.headSha.slice(0, 12)}\`. This confirms queue admission, **not** a completed review. See the PR checks and ReviewRouter summary for results.`
+            );
+          }
           return;
         }
       } catch (error) {
@@ -576,32 +581,69 @@ export class ReviewInteractionHandler {
   }
 
   private async postHelp(prNumber: number): Promise<void> {
-    await this.postNotice(
-      prNumber,
-      [
-        '**ReviewRouter commands**',
-        '',
-        'PR comments:',
-        '- /rr help or @reviewrouter help: command reference (no AI needed).',
-        '- /rr review or @reviewrouter review: request a review of the current PR revision (write access required).',
-        '- /rr status or @reviewrouter status: status of signed skip/unskip overrides, not overall review progress.',
-        '',
-        'Reply directly to a ReviewRouter inline finding:',
-        '- /rr skip [reason]: authorized and signed finding override.',
-        '- /rr unskip [reason]: restore an overridden finding.',
-        '',
-        'AI replies to questions in review threads require an enabled discussion workflow/provider.',
-        'Fork PRs still cannot run secret-backed reviews.',
-      ].join('\n')
-    );
+    await this.postNotice(prNumber, [
+      '**ReviewRouter commands**',
+      '',
+      'In the PR conversation:',
+      '- \`/rr help\` — show these commands (no model call).',
+      '- \`/rr review\` — request a review of the current HEAD (write, maintain, or admin required).',
+      '- \`/rr status\` — show the current HEAD, recent matching GitHub Actions review status, and finding overrides. A passing workflow does not prove complete review coverage.',
+      '- \`@review-router-ai review\` — alternative text trigger when this is the installed App account; \`/rr\` works regardless of its GitHub login.',
+      '',
+      'Reply directly to a ReviewRouter inline finding:',
+      '- \`/rr skip [reason]\` / \`/rr unskip [reason]\` — permission-checked finding overrides.',
+      '- \`/rr explain\` or an ordinary question — ask for an explanation **when the qualified managed conversation provider is enabled** (same-repository PRs only).',
+      '',
+      'Unconfigured providers and fork PRs cannot run secret-backed reviews. Review requests may be queued or rejected; the PR checks report final results.',
+    ].join('\n'));
   }
 
   private async postStatus(prNumber: number, headSha?: string): Promise<void> {
+    const lines = [
+      '**ReviewRouter status**',
+      '',
+      headSha ? \`Current PR HEAD: \\\`\${headSha.slice(0, 12)}\\\`.\` : 'Current PR HEAD could not be verified.',
+    ];
+    if (headSha) {
+      try {
+        const { owner, repo, octokit } = this.actionsClient;
+        const { data } = await octokit.rest.actions.listWorkflowRunsForRepo({
+          owner, repo, event: 'pull_request', per_page: 100,
+        });
+        const configuredFile =
+          process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || 'reviewrouter.yml';
+        const matching = ((data.workflow_runs || []) as WorkflowRunSummary[])
+          .filter((run) => this.matchesReviewWorkflowRun(
+            run, configuredFile, prNumber, headSha
+          ))
+          .sort(compareWorkflowRunsNewestFirst);
+        const latest = matching[0];
+        if (latest?.id) {
+          const completed = latest.status === 'completed';
+          const state = completed
+            ? \`finished (\${safeWorkflowState(latest.conclusion)})\`
+            : \`not finished (\${safeWorkflowState(latest.status)})\`;
+          lines.push(
+            \`Latest matching GitHub Actions review: [run #\${latest.id}](https://github.com/\${owner}/\${repo}/actions/runs/\${latest.id}) — \${state}.\`
+          );
+        } else {
+          lines.push('No matching review workflow run found among the most recent 100 pull_request runs for this HEAD.');
+        }
+      } catch {
+        lines.push('GitHub Actions status is unavailable (permissions or API error).');
+      }
+    }
+    lines.push(
+      'Review findings and coverage: check the latest ReviewRouter review summary. A successful workflow is **not** proof of complete or all-clear coverage.',
+      ''
+    );
     const loaded = await this.ledger.load(prNumber);
-    const body = loaded.valid
-      ? `ReviewRouter override status:\n\n${this.ledger.statusText(loaded.payload, headSha)}`
-      : `ReviewRouter override ledger is unavailable: ${loaded.invalidReason || 'unknown reason'}.`;
-    await this.postNotice(prNumber, body);
+    lines.push(
+      loaded.valid
+        ? \`Finding overrides: \${this.ledger.statusText(loaded.payload, headSha)}\`
+        : \`Finding overrides unavailable: \${loaded.invalidReason || 'unknown reason'}.\`
+    );
+    await this.postNotice(prNumber, lines.join('\n'));
   }
 
   private async findReviewComment(
@@ -1101,6 +1143,14 @@ function isFailedWorkflowConclusion(conclusion?: string | null): boolean {
   );
 }
 
+
+function safeWorkflowState(value: string | null | undefined): string {
+  // Never render arbitrary GitHub response text as Markdown or GitHub mention.
+  return typeof value === 'string' && /^[a-z_]{1,40}$/.test(value)
+    ? value
+    : 'unknown';
+}
+
 function compareWorkflowRunsNewestFirst(
   a: WorkflowRunSummary,
   b: WorkflowRunSummary
@@ -1121,26 +1171,20 @@ async function sleep(ms: number): Promise<void> {
 
 export function parseInteractionCommand(body: string): ParsedCommand | null {
   const trimmed = body.trim();
-  const mentioned = trimmed.match(
-    /^@(codex|reviewrouter(?:-ai)?)\s+(review|status|help)\b[\s:,-]*(.*)$/is
-  );
+  // Only whole-comment, single-line commands. The real App login on installed
+  // repositories may differ; the /rr prefix is the canonical fallback.
+  if (trimmed.includes('\n') || trimmed.includes('\r')) return null;
+  const mentioned = /^@(codex|reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(review|status|help)\s*$/i.exec(trimmed);
   if (mentioned) {
-    const mention = mentioned[1].toLowerCase();
     const kind = mentioned[2].toLowerCase() as CommandKind;
-    const reason = (mentioned[3] || '').trim();
-    if (mention === 'codex' && kind !== 'review') return null;
-    // Only the plain command is implemented. Do not silently run a normal
-    // review when someone requests an unsupported focused or full variant.
-    if (mention !== 'codex' && reason) return null;
-    return { kind, reason };
+    if (mentioned[1].toLowerCase() === 'codex' && kind !== 'review') return null;
+    return { kind, reason: '' };
   }
-  const slash = trimmed.match(
-    /^\/rr\s+(skip|unskip|status|review|help)\b[\s:,-]*(.*)$/is
-  );
+  const slash = /^\/rr\s+(skip|unskip|status|review|help)\b(?:\s+(.+))?$/i.exec(trimmed);
   if (!slash) return null;
   const kind = slash[1].toLowerCase() as CommandKind;
   const reason = (slash[2] || '').trim();
-  if (kind === 'help' && reason) return null;
+  if (!['skip', 'unskip'].includes(kind) && reason) return null;
   return { kind, reason };
 }
 

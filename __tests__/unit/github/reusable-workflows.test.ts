@@ -1162,7 +1162,15 @@ describe('production reusable workflows', () => {
       "${{ inputs.interaction_backend == 'account-gateway' }}"
     );
     expect(workflow.jobs?.interaction?.if).toBe(
-      "${{ inputs.interaction_backend == 'legacy' }}"
+      "${{ inputs.interaction_backend == 'legacy' || (inputs.interaction_backend == 'account-gateway' && github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.type != 'Bot') }}"
+    );
+    expect(workflow.jobs?.interaction?.env?.REVIEW_ROUTER_INTERACTION_BACKEND).toBe(
+      "${{ inputs.interaction_backend }}"
+    );
+    // The Gateway conversation job remains inline-only. Top-level PR commands
+    // use the existing read-only preflight and bounded command handler.
+    expect(managed?.if).toBe(
+      "${{ inputs.interaction_backend == 'account-gateway' }}"
     );
     expect(managed?.env).toMatchObject({
       REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',

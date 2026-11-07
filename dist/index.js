@@ -163556,6 +163556,10 @@ var ReviewInteractionHandler = class {
       return;
     }
     const command = parseInteractionCommand(body2);
+    if (payload.action === "edited" && (command?.kind === "help" || command?.kind === "status")) {
+      logger.info("Ignoring an edited read-only ReviewRouter command.");
+      return;
+    }
     const memoryInteraction = parseMemoryInteraction(body2);
     if (!command && isMemoryInteraction(memoryInteraction)) {
       await this.handleMemoryInteraction(payload, memoryInteraction);
@@ -163582,15 +163586,19 @@ var ReviewInteractionHandler = class {
       );
       return;
     }
+    if (command.kind === "help") {
+      await this.postHelp(prContext.prNumber);
+      return;
+    }
+    if (command.kind === "status") {
+      await this.postStatus(prContext.prNumber, prContext.headSha);
+      return;
+    }
     if (prContext.isFork) {
       await this.postNotice(
         prContext.prNumber,
         "ReviewRouter ignored this command because fork pull requests do not receive secret-backed review automation by default."
       );
-      return;
-    }
-    if (command.kind === "status") {
-      await this.postStatus(prContext.prNumber, prContext.headSha);
       return;
     }
     if (command.kind === "review") {
@@ -163640,9 +163648,16 @@ var ReviewInteractionHandler = class {
           commandKind: "review"
         });
         if (requested.status !== "unsupported") {
-          logger.info(
-            `Queued revision-aware ReviewRouter review for PR #${prContext.prNumber}`
-          );
+          if (requested.status === "queued") {
+            try {
+              await this.postNotice(
+                prContext.prNumber,
+                `ReviewRouter review requested for HEAD \`${prContext.headSha.slice(0, 12)}\`. This confirms queue admission, **not** a completed review. See the PR checks and ReviewRouter summary for results.`
+              );
+            } catch {
+              logger.warn("ReviewRouter review was queued but its acknowledgement could not be posted.");
+            }
+          }
           return;
         }
       } catch (error4) {
@@ -163928,12 +163943,68 @@ var ReviewInteractionHandler = class {
       `Recorded \`/rr ${command.kind}\`, but could not automatically rerun the review check: ${rerun.reason}. Re-run the ReviewRouter check manually if the PR status did not update.`
     );
   }
+  async postHelp(prNumber) {
+    await this.postNotice(prNumber, [
+      "**ReviewRouter commands**",
+      "",
+      "In the PR conversation:",
+      "- `/rr help` \u2014 show these commands (no model call).",
+      "- `/rr review` \u2014 request a review of the current HEAD (write, maintain, or admin required).",
+      "- `/rr status` \u2014 show the current HEAD, recent matching GitHub Actions review status, and finding overrides. A passing workflow does not prove complete review coverage.",
+      "- `@review-router-ai review` \u2014 alternative text trigger when this is the installed App account; `/rr` works regardless of its GitHub login.",
+      "",
+      "Reply directly to a ReviewRouter inline finding:",
+      "- `/rr skip [reason]` / `/rr unskip [reason]` \u2014 permission-checked finding overrides.",
+      "- `/rr explain` or an ordinary question \u2014 ask for an explanation **when the qualified managed conversation provider is enabled** (same-repository PRs only).",
+      "",
+      "Unconfigured providers and fork PRs cannot run secret-backed reviews. Review requests may be queued or rejected; the PR checks report final results."
+    ].join("\n"));
+  }
   async postStatus(prNumber, headSha) {
+    const lines = [
+      "**ReviewRouter status**",
+      "",
+      headSha ? `Current PR HEAD: \`${headSha.slice(0, 12)}\`.` : "Current PR HEAD could not be verified."
+    ];
+    if (headSha) {
+      try {
+        const { owner, repo, octokit } = this.actionsClient;
+        const { data } = await octokit.rest.actions.listWorkflowRunsForRepo({
+          owner,
+          repo,
+          event: "pull_request",
+          per_page: 100
+        });
+        const configuredFile = process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || "reviewrouter.yml";
+        const matching = (data.workflow_runs || []).filter((run3) => this.matchesReviewWorkflowRun(
+          run3,
+          configuredFile,
+          prNumber,
+          headSha
+        )).sort(compareWorkflowRunsNewestFirst);
+        const latest = matching[0];
+        if (latest?.id) {
+          const completed = latest.status === "completed";
+          const state3 = completed ? `finished (${safeWorkflowState(latest.conclusion)})` : `not finished (${safeWorkflowState(latest.status)})`;
+          lines.push(
+            `Latest matching GitHub Actions review: [run #${latest.id}](https://github.com/${owner}/${repo}/actions/runs/${latest.id}) \u2014 ${state3}.`
+          );
+        } else {
+          lines.push("No matching review workflow run found among the most recent 100 pull_request runs for this HEAD.");
+        }
+      } catch {
+        lines.push("GitHub Actions status is unavailable (permissions or API error).");
+      }
+    }
+    lines.push(
+      "Review findings and coverage: check the latest ReviewRouter review summary. A successful workflow is **not** proof of complete or all-clear coverage.",
+      ""
+    );
     const loaded = await this.ledger.load(prNumber);
-    const body2 = loaded.valid ? `ReviewRouter override status:
-
-${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override ledger is unavailable: ${loaded.invalidReason || "unknown reason"}.`;
-    await this.postNotice(prNumber, body2);
+    lines.push(
+      loaded.valid ? `Finding overrides: ${this.ledger.statusText(loaded.payload, headSha)}` : `Finding overrides unavailable: ${loaded.invalidReason || "unknown reason"}.`
+    );
+    await this.postNotice(prNumber, lines.join("\n"));
   }
   async findReviewComment(prNumber, commentId) {
     const { octokit, owner, repo } = this.client;
@@ -164279,6 +164350,9 @@ function safeNoticeText(value) {
 function isFailedWorkflowConclusion(conclusion) {
   return conclusion === "failure" || conclusion === "cancelled" || conclusion === "timed_out";
 }
+function safeWorkflowState(value) {
+  return typeof value === "string" && /^[a-z_]{1,40}$/.test(value) ? value : "unknown";
+}
 function compareWorkflowRunsNewestFirst(a2, b2) {
   return workflowRunTime(b2) - workflowRunTime(a2);
 }
@@ -164293,21 +164367,26 @@ async function sleep(ms) {
 }
 function parseInteractionCommand(body2) {
   const trimmed = body2.trim();
-  const codexReviewMatch = trimmed.match(/^@codex\s+review\b[\s:,-]*(.*)$/is);
-  if (codexReviewMatch) {
-    return {
-      kind: "review",
-      reason: (codexReviewMatch[1] || "").trim()
-    };
+  if (trimmed.includes("\n") || trimmed.includes("\r")) {
+    const override = /^\/rr\s+(skip|unskip)\b(?:\s+([\s\S]*))?$/i.exec(trimmed);
+    if (!override) return null;
+    const reason2 = (override[2] || "").trim();
+    if (/(?:^|\n)[ \t]*(?:\/rr\b|@(?:codex|reviewrouter|review-router-ai)\b)/i.test(reason2))
+      return null;
+    return { kind: override[1].toLowerCase(), reason: reason2 };
   }
-  const match2 = trimmed.match(
-    /^\/rr\s+(skip|unskip|status|review)\b[\s:,-]*(.*)$/is
-  );
-  if (!match2) return null;
-  return {
-    kind: match2[1].toLowerCase(),
-    reason: (match2[2] || "").trim()
-  };
+  const mentioned = /^@(codex|reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(review|status|help)\s*$/i.exec(trimmed);
+  if (mentioned) {
+    const kind2 = mentioned[2].toLowerCase();
+    if (mentioned[1].toLowerCase() === "codex" && kind2 !== "review") return null;
+    return { kind: kind2, reason: "" };
+  }
+  const slash = /^\/rr\s+(skip|unskip|status|review|help)\b(?:\s+(.+))?$/i.exec(trimmed);
+  if (!slash) return null;
+  const kind = slash[1].toLowerCase();
+  const reason = (slash[2] || "").trim();
+  if (!["skip", "unskip"].includes(kind) && reason) return null;
+  return { kind, reason };
 }
 function addDismissalNotice(body2, actor, reason) {
   const cleanBody = removeDismissalNotice(body2).trimEnd();
@@ -253438,7 +253517,15 @@ async function runInteractionPreflight(token) {
     fs36.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
   );
   if (process.env.REVIEW_ROUTER_INTERACTION_BACKEND === "account-gateway") {
-    const eligible = conversationSource(payload) !== null;
+    const isHuman = payload.comment?.user?.type !== "Bot" && !String(payload.comment?.user?.login || "").endsWith("[bot]");
+    const command2 = parseInteractionCommand(
+      String(payload.comment?.body || "")
+    );
+    const editedReadOnly2 = payload.action === "edited" && (command2?.kind === "help" || command2?.kind === "status");
+    const isPrCommand = Boolean(
+      payload.issue?.pull_request && ["created", "edited"].includes(payload.action) && isHuman && command2 && !editedReadOnly2
+    );
+    const eligible = conversationSource(payload) !== null || isPrCommand;
     setOutput("should_run", eligible ? "true" : "false");
     setOutput("needs_discussion", "false");
     setOutput("discussion_auth_mode", "account-gateway");
@@ -253452,13 +253539,14 @@ async function runInteractionPreflight(token) {
   const body2 = String(payload?.comment?.body || "");
   const botComment = payload?.comment?.user?.type === "Bot" || String(payload?.comment?.user?.login || "").endsWith("[bot]");
   const command = parseInteractionCommand(body2);
+  const editedReadOnly = payload.action === "edited" && (command?.kind === "help" || command?.kind === "status");
   const memoryInteraction = parseMemoryInteraction(body2);
   const memoryRequest = memoryInteraction.instructions.length > 0 || Boolean(memoryInteraction.invalidReason);
   const result2 = botComment ? {
     shouldRun: false,
     needsDiscussion: false,
     reason: "bot comment"
-  } : command ? {
+  } : command && !editedReadOnly ? {
     shouldRun: true,
     needsDiscussion: false,
     reason: "ReviewRouter command"

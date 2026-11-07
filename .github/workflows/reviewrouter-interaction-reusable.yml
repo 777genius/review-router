@@ -94,7 +94,7 @@ on:
 
 jobs:
   gateway-interaction:
-    if: ${{ inputs.interaction_backend == 'account-gateway' }}
+    if: ${{ inputs.interaction_backend == 'account-gateway' && github.event_name == 'pull_request_review_comment' }}
     name: managed interaction
     runs-on: ubuntu-latest
     concurrency:

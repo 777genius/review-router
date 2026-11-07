@@ -240340,9 +240340,11 @@ var LegacyReviewProjectionPolicyAdapter = class {
   hasRequiredInlineAgreement(providerVoteKeys) {
     if (this.config.inlineMinAgreement <= 1) return true;
     const voters = new Set(providerVoteKeys);
-    if (voters.size === 1 && (voters.has("static") || voters.has("ast")))
-      return true;
-    return voters.size >= this.config.inlineMinAgreement;
+    const independentReviewers = [...voters].filter(
+      (vote) => vote !== "static" && vote !== "ast"
+    );
+    if (independentReviewers.length === 0 && voters.size > 0) return true;
+    return independentReviewers.length >= this.config.inlineMinAgreement;
   }
   isBlockingOccurrence(occurrence, threshold) {
     const review = minimalLegacyReview([toLegacyFinding(occurrence)]);

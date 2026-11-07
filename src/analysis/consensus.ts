@@ -27,7 +27,10 @@ const SEVERITY_ORDER: Record<Severity, number> = {
 export class ConsensusEngine {
   constructor(private readonly options: ConsensusOptions) {}
 
-  filter(findings: Finding[]): Finding[] {
+  filter(
+    findings: Finding[],
+    options: { readonly retainBelowAgreement?: boolean } = {}
+  ): Finding[] {
     const grouped = new Map<
       string,
       Finding & {
@@ -122,8 +125,10 @@ export class ConsensusEngine {
 
     // Check suggestion consensus and set hasConsensus on merged findings
     const filtered = Array.from(grouped.values())
-      .filter((f) =>
-        this.meetsAgreement(f.providerVoteKeys || getProviderVoteKeys(f))
+      .filter(
+        (f) =>
+          options.retainBelowAgreement === true ||
+          this.meetsAgreement(f.providerVoteKeys || getProviderVoteKeys(f))
       )
       .map((f) => {
         // Check if we have multiple provider suggestions to compare

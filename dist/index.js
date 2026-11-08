@@ -144750,7 +144750,10 @@ ${safeFindingBody(line2.message)}`
       severity
     }))
   );
-  if (hotspots.length > 0) {
+  const addsDistinctContext = hotspots.some(
+    ({ reason }) => reason === "shared-code" || reason === "not-reviewed"
+  ) || input.findings.length > 3;
+  if (hotspots.length > 0 && addsDistinctContext) {
     const text3 = riskHotspotCopy[locale];
     const items = hotspots.slice(0, 3).map((hotspot) => {
       const label = escapeCoverageManifestPath(
@@ -144855,8 +144858,8 @@ var riskHotspotCopy = {
     major: "Important issue identified",
     minor: "Issue worth reviewing",
     notReviewed: "Review of this file did not finish",
-    partial: "Only verified signals are shown; the review did not cover everything.",
-    shared: (n2) => n2 ? `Referenced by ${n2} changed file${n2 === 1 ? "" : "s"}` : "Connected to other changed files"
+    partial: "Only available evidence is shown; the review did not cover everything.",
+    shared: (n2) => n2 ? `Possible dependency links to ${n2} changed file${n2 === 1 ? "" : "s"}` : "Possible links to other changed files"
   },
   ru: {
     heading: "\u041D\u0430 \u0447\u0442\u043E \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u044C \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
@@ -144864,8 +144867,8 @@ var riskHotspotCopy = {
     major: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u0430\u044F \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430",
     minor: "\u0415\u0441\u0442\u044C \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438",
     notReviewed: "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u044D\u0442\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0430 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430",
-    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435; \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0431\u044B\u043B\u0430 \u043D\u0435\u043F\u043E\u043B\u043D\u043E\u0439.",
-    shared: (n2) => n2 ? `\u0421\u0432\u044F\u0437\u0430\u043D\u043E \u0441 ${n2} \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u0421\u0432\u044F\u0437\u0430\u043D\u043E \u0441 \u0434\u0440\u0443\u0433\u0438\u043C\u0438 \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
+    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0438\u043C\u0435\u044E\u0449\u0438\u0435\u0441\u044F \u0434\u0430\u043D\u043D\u044B\u0435; \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0431\u044B\u043B\u0430 \u043D\u0435\u043F\u043E\u043B\u043D\u043E\u0439.",
+    shared: (n2) => n2 ? `\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u044B\u0435 \u0441\u0432\u044F\u0437\u0438 \u0441 ${n2} \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u044B\u0435 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0434\u0440\u0443\u0433\u0438\u043C\u0438 \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
   },
   uk: {
     heading: "\u041D\u0430 \u0449\u043E \u0437\u0432\u0435\u0440\u043D\u0443\u0442\u0438 \u0443\u0432\u0430\u0433\u0443",
@@ -144873,8 +144876,8 @@ var riskHotspotCopy = {
     major: "\u0412\u0438\u044F\u0432\u043B\u0435\u043D\u043E \u0441\u0435\u0440\u0439\u043E\u0437\u043D\u0443 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0443",
     minor: "\u0404 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F \u0434\u043B\u044F \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0438",
     notReviewed: "\u041F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0443 \u0446\u044C\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0443 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
-    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u043E \u043B\u0438\u0448\u0435 \u043F\u0456\u0434\u0442\u0432\u0435\u0440\u0434\u0436\u0435\u043D\u0456 \u0434\u0430\u043D\u0456; \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0430 \u0431\u0443\u043B\u0430 \u043D\u0435\u043F\u043E\u0432\u043D\u043E\u044E.",
-    shared: (n2) => n2 ? `\u041F\u043E\u0432\u2019\u044F\u0437\u0430\u043D\u043E \u0437 ${n2} \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u041F\u043E\u0432\u2019\u044F\u0437\u0430\u043D\u043E \u0437 \u0456\u043D\u0448\u0438\u043C\u0438 \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
+    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u043E \u043D\u0430\u044F\u0432\u043D\u0456 \u0434\u0430\u043D\u0456; \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0430 \u0431\u0443\u043B\u0430 \u043D\u0435\u043F\u043E\u0432\u043D\u043E\u044E.",
+    shared: (n2) => n2 ? `\u041C\u043E\u0436\u043B\u0438\u0432\u0456 \u0437\u0432\u2019\u044F\u0437\u043A\u0438 \u0437 ${n2} \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u041C\u043E\u0436\u043B\u0438\u0432\u0456 \u0437\u0432\u2019\u044F\u0437\u043A\u0438 \u0437 \u0456\u043D\u0448\u0438\u043C\u0438 \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
   },
   es: {
     heading: "D\xF3nde revisar primero",
@@ -144882,8 +144885,8 @@ var riskHotspotCopy = {
     major: "Se encontr\xF3 un problema importante",
     minor: "Hay un problema que revisar",
     notReviewed: "No se complet\xF3 la revisi\xF3n de este archivo",
-    partial: "Solo se muestran se\xF1ales verificadas; la revisi\xF3n est\xE1 incompleta.",
-    shared: (n2) => n2 ? `Relacionado con ${n2} archivos modificados` : "Relacionado con otros archivos modificados"
+    partial: "Solo se muestran indicios disponibles; la revisi\xF3n est\xE1 incompleta.",
+    shared: (n2) => n2 ? `Posibles dependencias con ${n2} archivos modificados` : "Posibles dependencias con otros archivos modificados"
   },
   pt: {
     heading: "Onde revisar primeiro",
@@ -144891,8 +144894,8 @@ var riskHotspotCopy = {
     major: "Problema importante identificado",
     minor: "Problema que merece revis\xE3o",
     notReviewed: "A revis\xE3o deste arquivo n\xE3o foi conclu\xEDda",
-    partial: "Apenas sinais verificados s\xE3o mostrados; a revis\xE3o est\xE1 incompleta.",
-    shared: (n2) => n2 ? `Relacionado a ${n2} arquivos alterados` : "Relacionado a outros arquivos alterados"
+    partial: "Apenas sinais dispon\xEDveis s\xE3o mostrados; a revis\xE3o est\xE1 incompleta.",
+    shared: (n2) => n2 ? `Poss\xEDveis depend\xEAncias com ${n2} arquivos alterados` : "Poss\xEDveis depend\xEAncias com outros arquivos alterados"
   },
   fr: {
     heading: "O\xF9 regarder en premier",
@@ -144900,8 +144903,8 @@ var riskHotspotCopy = {
     major: "Probl\xE8me important d\xE9tect\xE9",
     minor: "Point \xE0 v\xE9rifier",
     notReviewed: "La v\xE9rification de ce fichier est incompl\xE8te",
-    partial: "Seuls les indices v\xE9rifi\xE9s sont affich\xE9s ; la revue est incompl\xE8te.",
-    shared: (n2) => n2 ? `Li\xE9 \xE0 ${n2} fichiers modifi\xE9s` : "Li\xE9 \xE0 d\u2019autres fichiers modifi\xE9s"
+    partial: "Seuls les indices disponibles sont affich\xE9s ; la revue est incompl\xE8te.",
+    shared: (n2) => n2 ? `Liens de d\xE9pendance possibles avec ${n2} fichiers modifi\xE9s` : "Liens possibles avec d\u2019autres fichiers modifi\xE9s"
   },
   de: {
     heading: "Worauf zuerst achten",
@@ -144909,8 +144912,8 @@ var riskHotspotCopy = {
     major: "Wichtiges Problem erkannt",
     minor: "Hinweis zur Pr\xFCfung",
     notReviewed: "Pr\xFCfung dieser Datei nicht abgeschlossen",
-    partial: "Nur gepr\xFCfte Hinweise werden angezeigt; die Pr\xFCfung ist unvollst\xE4ndig.",
-    shared: (n2) => n2 ? `Mit ${n2} ge\xE4nderten Dateien verbunden` : "Mit anderen ge\xE4nderten Dateien verbunden"
+    partial: "Nur verf\xFCgbare Hinweise werden angezeigt; die Pr\xFCfung ist unvollst\xE4ndig.",
+    shared: (n2) => n2 ? `M\xF6gliche Abh\xE4ngigkeiten zu ${n2} ge\xE4nderten Dateien` : "M\xF6gliche Abh\xE4ngigkeiten zu anderen ge\xE4nderten Dateien"
   },
   it: {
     heading: "Dove guardare prima",
@@ -144918,8 +144921,8 @@ var riskHotspotCopy = {
     major: "Problema importante rilevato",
     minor: "Problema da verificare",
     notReviewed: "Revisione di questo file non completata",
-    partial: "Si mostrano solo segnali verificati; revisione incompleta.",
-    shared: (n2) => n2 ? `Collegato a ${n2} file modificati` : "Collegato ad altri file modificati"
+    partial: "Si mostrano solo i segnali disponibili; revisione incompleta.",
+    shared: (n2) => n2 ? `Possibili dipendenze con ${n2} file modificati` : "Possibili dipendenze con altri file modificati"
   },
   zh: {
     heading: "\u4F18\u5148\u67E5\u770B",
@@ -144927,8 +144930,8 @@ var riskHotspotCopy = {
     major: "\u53D1\u73B0\u91CD\u8981\u95EE\u9898",
     minor: "\u5B58\u5728\u9700\u8981\u68C0\u67E5\u7684\u95EE\u9898",
     notReviewed: "\u6B64\u6587\u4EF6\u5C1A\u672A\u5B8C\u6210\u5BA1\u67E5",
-    partial: "\u4EC5\u663E\u793A\u5DF2\u9A8C\u8BC1\u7684\u4FE1\u606F\uFF1B\u5BA1\u67E5\u5C1A\u4E0D\u5B8C\u6574\u3002",
-    shared: (n2) => n2 ? `\u5173\u8054 ${n2} \u4E2A\u5DF2\u66F4\u6539\u6587\u4EF6` : "\u4E0E\u5176\u4ED6\u5DF2\u66F4\u6539\u6587\u4EF6\u5173\u8054"
+    partial: "\u4EC5\u663E\u793A\u73B0\u6709\u7684\u4FE1\u606F\uFF1B\u5BA1\u67E5\u5C1A\u4E0D\u5B8C\u6574\u3002",
+    shared: (n2) => n2 ? `\u53EF\u80FD\u5173\u8054 ${n2} \u4E2A\u5DF2\u66F4\u6539\u6587\u4EF6` : "\u53EF\u80FD\u4E0E\u5176\u4ED6\u5DF2\u66F4\u6539\u6587\u4EF6\u5173\u8054"
   },
   ja: {
     heading: "\u512A\u5148\u3057\u3066\u78BA\u8A8D\u3059\u308B\u7B87\u6240",
@@ -144936,8 +144939,8 @@ var riskHotspotCopy = {
     major: "\u91CD\u8981\u306A\u554F\u984C\u304C\u3042\u308A\u307E\u3059",
     minor: "\u78BA\u8A8D\u304C\u5FC5\u8981\u306A\u6307\u6458\u304C\u3042\u308A\u307E\u3059",
     notReviewed: "\u3053\u306E\u30D5\u30A1\u30A4\u30EB\u306E\u30EC\u30D3\u30E5\u30FC\u306F\u672A\u5B8C\u4E86\u3067\u3059",
-    partial: "\u691C\u8A3C\u6E08\u307F\u306E\u60C5\u5831\u306E\u307F\u8868\u793A\u3057\u3066\u3044\u307E\u3059\u3002\u30EC\u30D3\u30E5\u30FC\u306F\u672A\u5B8C\u4E86\u3067\u3059\u3002",
-    shared: (n2) => n2 ? `\u5909\u66F4\u3055\u308C\u305F ${n2} \u30D5\u30A1\u30A4\u30EB\u3068\u95A2\u9023` : "\u4ED6\u306E\u5909\u66F4\u30D5\u30A1\u30A4\u30EB\u3068\u95A2\u9023"
+    partial: "\u5229\u7528\u53EF\u80FD\u306A\u60C5\u5831\u306E\u307F\u8868\u793A\u3057\u3066\u3044\u307E\u3059\u3002\u30EC\u30D3\u30E5\u30FC\u306F\u672A\u5B8C\u4E86\u3067\u3059\u3002",
+    shared: (n2) => n2 ? `\u5909\u66F4\u3055\u308C\u305F ${n2} \u30D5\u30A1\u30A4\u30EB\u3068\u306E\u4F9D\u5B58\u95A2\u4FC2\u306E\u53EF\u80FD\u6027` : "\u4ED6\u306E\u5909\u66F4\u30D5\u30A1\u30A4\u30EB\u3068\u306E\u95A2\u9023\u306E\u53EF\u80FD\u6027"
   },
   ko: {
     heading: "\uBA3C\uC800 \uD655\uC778\uD560 \uBD80\uBD84",
@@ -144945,8 +144948,8 @@ var riskHotspotCopy = {
     major: "\uC911\uC694\uD55C \uBB38\uC81C\uAC00 \uBC1C\uACAC\uB428",
     minor: "\uD655\uC778\uD560 \uBB38\uC81C\uAC00 \uC788\uC74C",
     notReviewed: "\uC774 \uD30C\uC77C\uC758 \uAC80\uD1A0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC74C",
-    partial: "\uAC80\uC99D\uB41C \uC815\uBCF4\uB9CC \uD45C\uC2DC\uD569\uB2C8\uB2E4. \uAC80\uD1A0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
-    shared: (n2) => n2 ? `\uBCC0\uACBD\uB41C \uD30C\uC77C ${n2}\uAC1C\uC640 \uAD00\uB828\uB428` : "\uB2E4\uB978 \uBCC0\uACBD \uD30C\uC77C\uACFC \uAD00\uB828\uB428"
+    partial: "\uD655\uC778 \uAC00\uB2A5\uD55C \uC815\uBCF4\uB9CC \uD45C\uC2DC\uD569\uB2C8\uB2E4. \uAC80\uD1A0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+    shared: (n2) => n2 ? `\uBCC0\uACBD\uB41C \uD30C\uC77C ${n2}\uAC1C\uC640 \uC5F0\uAD00 \uAC00\uB2A5\uC131` : "\uB2E4\uB978 \uBCC0\uACBD \uD30C\uC77C\uACFC \uC5F0\uAD00 \uAC00\uB2A5\uC131"
   }
 };
 function renderReviewSummary(review, language, options = {}) {

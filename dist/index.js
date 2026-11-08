@@ -143669,7 +143669,11 @@ function score(candidate) {
 }
 function rankReviewHotspots(candidates, limit = maxDisplayed) {
   const selected = /* @__PURE__ */ new Map();
-  for (const candidate of candidates.slice(0, maxCandidates)) {
+  for (let index = 0; index < candidates.length; index++) {
+    const candidate = candidates[index];
+    if (index >= maxCandidates && candidate.severity !== "critical" && candidate.severity !== "major") {
+      continue;
+    }
     const path40 = candidate.path;
     if (typeof path40 !== "string" || path40.trim().length === 0 || path40.length > 1024) {
       continue;

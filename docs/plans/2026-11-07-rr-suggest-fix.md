@@ -1,6 +1,6 @@
 # PR command: `/rr suggest fix` — one bounded GitHub suggestion
 
-Status: implementation plan accompanying a separate Draft PR. Action baseline `fcc3e1d6bfd1208a9a36a8b2f6fb018dd1b0cbaf`; independent of the `/rr fixed` code beyond existing shared inline finding lookup.
+Status: implementation plan for Action PR #374 and managed server PR #829, now dependent on merged `/rr fixed`.
 
 ## Goal and explicit exclusions
 

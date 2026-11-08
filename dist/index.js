@@ -142732,7 +142732,7 @@ var ConsensusEngine = class {
   constructor(options) {
     this.options = options;
   }
-  filter(findings) {
+  filter(findings, options = {}) {
     const grouped = /* @__PURE__ */ new Map();
     for (const finding of findings) {
       if (!this.meetsSeverity(finding.severity)) {
@@ -142800,7 +142800,7 @@ var ConsensusEngine = class {
       });
     }
     const filtered = Array.from(grouped.values()).filter(
-      (f2) => this.meetsAgreement(f2.providerVoteKeys || getProviderVoteKeys(f2))
+      (f2) => options.retainBelowAgreement === true || this.meetsAgreement(f2.providerVoteKeys || getProviderVoteKeys(f2))
     ).map((f2) => {
       if (f2._suggestions && f2._suggestions.length >= 2) {
         const consensus = this.checkSuggestionConsensus(
@@ -163956,6 +163956,7 @@ var ReviewInteractionHandler = class {
       "Reply directly to a ReviewRouter inline finding:",
       "- `/rr skip [reason]` / `/rr unskip [reason]` \u2014 permission-checked finding overrides.",
       "- `/rr explain` or an ordinary question \u2014 ask for an explanation **when the qualified managed conversation provider is enabled** (same-repository PRs only).",
+      "- `/rr fixed` or @review-router-ai fixed \u2014 check one finding against the current HEAD with evidence when qualified managed Gateway is enabled; never auto-close the thread.",
       "",
       "Unconfigured providers and fork PRs cannot run secret-backed reviews. Review requests may be queued or rejected; the PR checks report final results."
     ].join("\n"));
@@ -164496,6 +164497,10 @@ var ReviewDiscussionHandler = class {
     }
     if (isBotUser(comment.user)) {
       return ignore("bot comment");
+    }
+    const firstLine = (comment.body.trim().split(/\r\n?|\n/u, 1)[0] ?? "").trim();
+    if (/^(?:\/rr\s+(?:fixed|suggest\s+fix)|@(?:reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(?:fixed|suggest\s+fix)|исправил[,!.\s]*проверь|предложи\s+исправление)(?=$|[\s.,!?;:])/iu.test(firstLine)) {
+      return ignore("focused command requires qualified managed Gateway");
     }
     if (comment.body.trim().startsWith("/rr ")) {
       return {
@@ -240037,7 +240042,9 @@ var LegacyReviewProjectionPolicyAdapter = class {
     );
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
-    const consensus = this.consensus.filter(deduped);
+    const consensus = this.consensus.filter(deduped, {
+      retainBelowAgreement: true
+    });
     const filtered = new FindingFilter().filter(consensus, query.diff, {
       allowUnanchoredFindings: true,
       isProducerClassifiedBug: (finding) => {
@@ -240196,6 +240203,9 @@ var LegacyReviewProjectionPolicyAdapter = class {
       (occurrence) => occurrence.state !== "resolved" /* Resolved */ && occurrence.state !== "suppressed_by_human" /* SuppressedByHuman */
     );
     const currentOccurrences = activeOccurrences.filter(isCurrentOccurrence);
+    const pendingAgreement = currentOccurrences.filter(
+      (occurrence) => !this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)
+    ).length;
     const legacyFindings = new Map(
       currentOccurrences.map((occurrence) => [
         occurrence,
@@ -240256,6 +240266,15 @@ var LegacyReviewProjectionPolicyAdapter = class {
         lifecycle: lifecycleLinesForSummary(query.occurrences, query.lifecycle)
       })
     );
+    if (pendingAgreement > 0) {
+      summaryBody = limitReviewerPostedMarkdown(
+        [
+          `**Reviewer agreement:** ${pendingAgreement} finding(s) have fewer than ${this.config.inlineMinAgreement} independent reviewer votes. They remain visible in this summary, not inline; configured severity checks can still apply.`,
+          "",
+          summaryBody
+        ].join("\n")
+      );
+    }
     const verification = query.reviewPresentation?.verification;
     if (verification) {
       const fixes = query.lifecycle?.facts.filter(
@@ -240323,6 +240342,15 @@ var LegacyReviewProjectionPolicyAdapter = class {
       reasonCodes: []
     };
   }
+  hasRequiredInlineAgreement(providerVoteKeys) {
+    if (this.config.inlineMinAgreement <= 1) return true;
+    const voters = new Set(providerVoteKeys);
+    const independentReviewers = [...voters].filter(
+      (vote) => vote !== "static" && vote !== "ast"
+    );
+    if (independentReviewers.length === 0 && voters.size > 0) return true;
+    return independentReviewers.length >= this.config.inlineMinAgreement;
+  }
   isBlockingOccurrence(occurrence, threshold) {
     const review = minimalLegacyReview([toLegacyFinding(occurrence)]);
     return getBlockingFindingBreakdown(review, toLegacySeverity(threshold)).total > 0;
@@ -240330,6 +240358,12 @@ var LegacyReviewProjectionPolicyAdapter = class {
   placeOccurrence(occurrence, review, revisionFiles, sourceFinding) {
     if (!isCurrentOccurrence(occurrence)) {
       return summaryPlacement3(occurrence, "historical lifecycle occurrence");
+    }
+    if (!this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)) {
+      return summaryPlacement3(
+        occurrence,
+        "insufficient independent reviewer agreement for inline publication"
+      );
     }
     const revisionFile = findRevisionFile(occurrence.filePath, revisionFiles);
     if (!revisionFile) {

@@ -43,6 +43,61 @@ describe('ConsensusEngine', () => {
     );
   });
 
+  it('can retain below-threshold findings for summary without claiming agreement', () => {
+    const engine = new ConsensusEngine({
+      minAgreement: 3,
+      minSeverity: 'minor',
+      maxComments: 10,
+    });
+    const duplicateModel: Finding[] = [
+      {
+        file: 'src/service.ts',
+        line: 8,
+        severity: 'major',
+        title: 'Incorrect access check',
+        message: 'Check the tenant first',
+        provider: 'openrouter/openai/model:free',
+        providerVoteKeys: ['openrouter/openai/model:free'],
+        suggestion: 'requireTenant()',
+      },
+      {
+        file: 'src/service.ts',
+        line: 8,
+        severity: 'major',
+        title: 'Incorrect access check',
+        message: 'Check the tenant first',
+        provider: 'openrouter/openai/model:free#2',
+        providerVoteKeys: ['openrouter/openai/model:free'],
+        suggestion: 'requireTenant()',
+      },
+      {
+        file: 'src/service.ts',
+        line: 8,
+        severity: 'major',
+        title: 'Incorrect access check',
+        message: 'Check the tenant first',
+        provider: 'codex',
+        providerVoteKeys: ['codex'],
+        suggestion: 'requireTenant()',
+      },
+    ];
+    // Two genuinely independent voters are still insufficient when three
+    // are required; cloned model instances must not inflate the vote count.
+    expect(engine.filter(duplicateModel)).toHaveLength(0);
+    const retained = engine.filter(duplicateModel, {
+      retainBelowAgreement: true,
+    });
+    expect(retained).toHaveLength(1);
+    expect(retained[0].providerVoteKeys?.slice().sort()).toEqual([
+      'codex',
+      'openrouter/openai/model:free',
+    ]);
+    expect(retained[0].hasConsensus).toBe(false);
+    expect(
+      engine.filter([duplicateModel[0]], { retainBelowAgreement: true })
+    ).toHaveLength(1);
+  });
+
   it('allows static findings even when agreement threshold is higher', () => {
     const engine = new ConsensusEngine({
       minAgreement: 2,

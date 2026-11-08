@@ -117,7 +117,11 @@ export class LegacyReviewProjectionPolicyAdapter
     );
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
-    const consensus = this.consensus.filter(deduped);
+    // Keep insufficiently corroborated findings visible in the summary.
+    // Inline placement enforces the threshold separately.
+    const consensus = this.consensus.filter(deduped, {
+      retainBelowAgreement: true,
+    });
     const filtered = new FindingFilter().filter(consensus, query.diff, {
       allowUnanchoredFindings: true,
       isProducerClassifiedBug: (finding) => {
@@ -335,6 +339,9 @@ export class LegacyReviewProjectionPolicyAdapter
         occurrence.state !== FindingOccurrenceState.SuppressedByHuman
     );
     const currentOccurrences = activeOccurrences.filter(isCurrentOccurrence);
+    const pendingAgreement = currentOccurrences.filter(
+      (occurrence) => !this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)
+    ).length;
     const legacyFindings = new Map(
       currentOccurrences.map((occurrence) => [
         occurrence,
@@ -401,6 +408,16 @@ export class LegacyReviewProjectionPolicyAdapter
         lifecycle: lifecycleLinesForSummary(query.occurrences, query.lifecycle),
       })
     );
+
+    if (pendingAgreement > 0) {
+      summaryBody = limitReviewerPostedMarkdown(
+        [
+          `**Reviewer agreement:** ${pendingAgreement} finding(s) have fewer than ${this.config.inlineMinAgreement} independent reviewer votes. They remain visible in this summary, not inline; configured severity checks can still apply.`,
+          '',
+          summaryBody,
+        ].join('\n')
+      );
+    }
 
     const verification = query.reviewPresentation?.verification;
     if (verification) {
@@ -502,6 +519,20 @@ export class LegacyReviewProjectionPolicyAdapter
     };
   }
 
+  private hasRequiredInlineAgreement(
+    providerVoteKeys: readonly string[]
+  ): boolean {
+    if (this.config.inlineMinAgreement <= 1) return true;
+    const voters = new Set(providerVoteKeys);
+    const independentReviewers = [...voters].filter(
+      (vote) => vote !== 'static' && vote !== 'ast'
+    );
+    // Deterministic-only findings are exempt, but static analysis is never
+    // an extra model vote when its finding overlaps an AI review.
+    if (independentReviewers.length === 0 && voters.size > 0) return true;
+    return independentReviewers.length >= this.config.inlineMinAgreement;
+  }
+
   private isBlockingOccurrence(
     occurrence: FindingOccurrence,
     threshold: FindingSeverity
@@ -520,6 +551,12 @@ export class LegacyReviewProjectionPolicyAdapter
   ): FindingPlacementDecision {
     if (!isCurrentOccurrence(occurrence)) {
       return summaryPlacement(occurrence, 'historical lifecycle occurrence');
+    }
+    if (!this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)) {
+      return summaryPlacement(
+        occurrence,
+        'insufficient independent reviewer agreement for inline publication'
+      );
     }
     const revisionFile = findRevisionFile(occurrence.filePath, revisionFiles);
     if (!revisionFile) {

@@ -16,4 +16,6 @@ On qualified managed installations, inline questions and `/rr explain` use the e
 
 Read-only `/rr help` and `/rr status` run for a newly created PR comment, not on edits to the same comment (to avoid repeated bot notices). `/rr skip` and `/rr unskip` continue accepting multi-line reasons in a direct inline reply. Changes to commands in old comments require a new PR comment.
 
+`/rr fixed` (or `@review-router-ai fixed`) is a separate, read-only targeted verification request in a direct reply to a ReviewRouter finding. It is available only to authorized same-repository maintainers through the qualified managed Gateway. A verified result reports **Fixed**, **Still present**, or **Cannot verify** with current-HEAD evidence; it does not dismiss, skip, resolve or automatically change code. In an unsupported legacy or unqualified installation, it does not run a paid revalidation.
+
 `/rr suggest fix` (or `@review-router-ai suggest fix`) requests one **human-applied** GitHub code suggestion in a direct reply to an App-owned ReviewRouter finding on current HEAD. Qualified managed Gateway and a current RIGHT-side diff line matching the original bot anchor are required; otherwise no suggestion is generated. The bot does not commit, push, resolve or alter review state. Unsupported legacy modes do not start a paid AI suggestion call.

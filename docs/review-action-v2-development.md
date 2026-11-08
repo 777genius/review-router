@@ -142,6 +142,25 @@ The control plane must attest the exact immutable caller/runtime, configure the
 qualified source-processing and inference profiles, and pass the disposable
 App-first Gateway interaction and native model/privacy gates before selection.
 
+## Inline reviewer agreement in managed v2 reviews
+
+`inlineMinAgreement` is a threshold for **inline publication**, measured using
+distinct provider vote identities: repeated work slots from one identity do
+not add votes. Independently configured reviewer identities are distinct even
+when they happen to use the same model family.
+Below-threshold findings remain visible in the review summary, with an explicit
+count and a note that they were not independently corroborated. They do **not**
+become inline review comments. Existing severity-based merge checks may still
+fail on these findings; this avoids silently treating a serious unconfirmed bug
+as an all-clear. Deterministic-only static-analysis findings are exempt from the
+model-vote threshold; `static` and `ast` are not extra AI reviewer votes when
+mixed with model findings. The default threshold of one preserves prior behavior.
+
+Do not confuse this setting with the separate, stricter quorum for resolving
+historical GitHub discussion threads (see [lifecycle policy](./review-thread-lifecycle.md)).
+This is the managed v2 projection contract, not a claim that every older direct
+Action path has the same summary policy.
+
 ## Projection envelope compatibility
 
 Projection envelope v1 includes `authoritativeObservationIds` so the SaaS can

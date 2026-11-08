@@ -59,7 +59,7 @@ describe('Risk-Aware Review Lite: adapters', () => {
   it('ignores removed files, findings outside the change and graph errors', () => {
     const result = buildReviewHotspots({
       files: [
-        { filename: 'deleted.ts', status: 'removed', additions: 0, deletions: 2, changes: 2 },
+        { filename: 'deleted.ts', status: 'removed', additions: 0, deletions: 2 },
         files[0],
       ],
       findings: [

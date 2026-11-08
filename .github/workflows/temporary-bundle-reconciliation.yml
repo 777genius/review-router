@@ -1,0 +1,51 @@
+# TEMPORARY build reconciliation for current-main merge; delete before merging.
+name: Action bundle reconciliation (temporary)
+
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - .github/workflows/temporary-bundle-reconciliation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-commit:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/pr-comment-fixed-target-20261107' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout checked PR branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install frozen dependencies
+        run: npm ci
+      - name: Restore bundled baseline after install hooks
+        run: git restore --worktree -- dist
+      - name: Build runtime on reconciled source
+        run: npm run build
+      - name: Verify generated runtime
+        run: npm run check:context-gateway-release-metadata
+      - name: Commit rebuilt tracked bundles to the PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- dist/index.js dist/index.js.map dist/single-t0-plan.js
+          git diff --cached --stat
+          if git diff --cached --quiet; then
+            echo "Runtime artifacts already match; no commit necessary."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "build(action): reconcile committed runtime with current main"
+          git push origin HEAD:refs/heads/feat/pr-comment-fixed-target-20261107

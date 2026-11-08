@@ -772,9 +772,9 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: 'Important issue identified',
     minor: 'Issue worth reviewing',
     notReviewed: 'Review of this file did not finish',
-    partial: 'Only verified signals are shown; the review did not cover everything.',
+    partial: 'Only available evidence is shown; the review did not cover everything.',
     shared: (n) =>
-      n ? `Referenced by ${n} changed file${n === 1 ? '' : 's'}` : 'Connected to other changed files',
+      n ? `Possible dependency links to ${n} changed file${n === 1 ? '' : 's'}` : 'Possible links to other changed files',
   },
   ru: {
     heading: 'На что обратить внимание',
@@ -782,8 +782,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: 'Обнаружена серьёзная проблема',
     minor: 'Есть замечание для проверки',
     notReviewed: 'Проверка этого файла не завершена',
-    partial: 'Показаны только подтверждённые данные; проверка была неполной.',
-    shared: (n) => n ? `Связано с ${n} изменёнными файлами` : 'Связано с другими изменёнными файлами',
+    partial: 'Показаны имеющиеся данные; проверка была неполной.',
+    shared: (n) => n ? `Возможные связи с ${n} изменёнными файлами` : 'Возможные связи с другими изменёнными файлами',
   },
   uk: {
     heading: 'На що звернути увагу',
@@ -791,8 +791,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: 'Виявлено серйозну проблему',
     minor: 'Є зауваження для перевірки',
     notReviewed: 'Перевірку цього файлу не завершено',
-    partial: 'Показано лише підтверджені дані; перевірка була неповною.',
-    shared: (n) => n ? `Пов’язано з ${n} зміненими файлами` : 'Пов’язано з іншими зміненими файлами',
+    partial: 'Показано наявні дані; перевірка була неповною.',
+    shared: (n) => n ? `Можливі зв’язки з ${n} зміненими файлами` : 'Можливі зв’язки з іншими зміненими файлами',
   },
   es: {
     heading: 'Dónde revisar primero',
@@ -800,8 +800,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: 'Se encontró un problema importante',
     minor: 'Hay un problema que revisar',
     notReviewed: 'No se completó la revisión de este archivo',
-    partial: 'Solo se muestran señales verificadas; la revisión está incompleta.',
-    shared: (n) => n ? `Relacionado con ${n} archivos modificados` : 'Relacionado con otros archivos modificados',
+    partial: 'Solo se muestran indicios disponibles; la revisión está incompleta.',
+    shared: (n) => n ? `Posibles dependencias con ${n} archivos modificados` : 'Posibles dependencias con otros archivos modificados',
   },
   pt: {
     heading: 'Onde revisar primeiro',
@@ -809,8 +809,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: 'Problema importante identificado',
     minor: 'Problema que merece revisão',
     notReviewed: 'A revisão deste arquivo não foi concluída',
-    partial: 'Apenas sinais verificados são mostrados; a revisão está incompleta.',
-    shared: (n) => n ? `Relacionado a ${n} arquivos alterados` : 'Relacionado a outros arquivos alterados',
+    partial: 'Apenas sinais disponíveis são mostrados; a revisão está incompleta.',
+    shared: (n) => n ? `Possíveis dependências com ${n} arquivos alterados` : 'Possíveis dependências com outros arquivos alterados',
   },
   fr: {
     heading: 'Où regarder en premier',
@@ -818,8 +818,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: 'Problème important détecté',
     minor: 'Point à vérifier',
     notReviewed: 'La vérification de ce fichier est incomplète',
-    partial: 'Seuls les indices vérifiés sont affichés ; la revue est incomplète.',
-    shared: (n) => n ? `Lié à ${n} fichiers modifiés` : 'Lié à d’autres fichiers modifiés',
+    partial: 'Seuls les indices disponibles sont affichés ; la revue est incomplète.',
+    shared: (n) => n ? `Liens de dépendance possibles avec ${n} fichiers modifiés` : 'Liens possibles avec d’autres fichiers modifiés',
   },
   de: {
     heading: 'Worauf zuerst achten',
@@ -827,8 +827,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: 'Wichtiges Problem erkannt',
     minor: 'Hinweis zur Prüfung',
     notReviewed: 'Prüfung dieser Datei nicht abgeschlossen',
-    partial: 'Nur geprüfte Hinweise werden angezeigt; die Prüfung ist unvollständig.',
-    shared: (n) => n ? `Mit ${n} geänderten Dateien verbunden` : 'Mit anderen geänderten Dateien verbunden',
+    partial: 'Nur verfügbare Hinweise werden angezeigt; die Prüfung ist unvollständig.',
+    shared: (n) => n ? `Mögliche Abhängigkeiten zu ${n} geänderten Dateien` : 'Mögliche Abhängigkeiten zu anderen geänderten Dateien',
   },
   it: {
     heading: 'Dove guardare prima',
@@ -836,8 +836,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: 'Problema importante rilevato',
     minor: 'Problema da verificare',
     notReviewed: 'Revisione di questo file non completata',
-    partial: 'Si mostrano solo segnali verificati; revisione incompleta.',
-    shared: (n) => n ? `Collegato a ${n} file modificati` : 'Collegato ad altri file modificati',
+    partial: 'Si mostrano solo i segnali disponibili; revisione incompleta.',
+    shared: (n) => n ? `Possibili dipendenze con ${n} file modificati` : 'Possibili dipendenze con altri file modificati',
   },
   zh: {
     heading: '优先查看',
@@ -845,8 +845,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: '发现重要问题',
     minor: '存在需要检查的问题',
     notReviewed: '此文件尚未完成审查',
-    partial: '仅显示已验证的信息；审查尚不完整。',
-    shared: (n) => n ? `关联 ${n} 个已更改文件` : '与其他已更改文件关联',
+    partial: '仅显示现有的信息；审查尚不完整。',
+    shared: (n) => n ? `可能关联 ${n} 个已更改文件` : '可能与其他已更改文件关联',
   },
   ja: {
     heading: '優先して確認する箇所',
@@ -854,8 +854,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: '重要な問題があります',
     minor: '確認が必要な指摘があります',
     notReviewed: 'このファイルのレビューは未完了です',
-    partial: '検証済みの情報のみ表示しています。レビューは未完了です。',
-    shared: (n) => n ? `変更された ${n} ファイルと関連` : '他の変更ファイルと関連',
+    partial: '利用可能な情報のみ表示しています。レビューは未完了です。',
+    shared: (n) => n ? `変更された ${n} ファイルとの依存関係の可能性` : '他の変更ファイルとの関連の可能性',
   },
   ko: {
     heading: '먼저 확인할 부분',
@@ -863,8 +863,8 @@ const riskHotspotCopy: Record<ReviewerSummaryLocale, RiskCopy> = {
     major: '중요한 문제가 발견됨',
     minor: '확인할 문제가 있음',
     notReviewed: '이 파일의 검토가 완료되지 않음',
-    partial: '검증된 정보만 표시합니다. 검토가 완료되지 않았습니다.',
-    shared: (n) => n ? `변경된 파일 ${n}개와 관련됨` : '다른 변경 파일과 관련됨',
+    partial: '확인 가능한 정보만 표시합니다. 검토가 완료되지 않았습니다.',
+    shared: (n) => n ? `변경된 파일 ${n}개와 연관 가능성` : '다른 변경 파일과 연관 가능성',
   },
 };
 

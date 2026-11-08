@@ -157,6 +157,11 @@ describe('ReviewInteractionHandler', () => {
     process.env = { ...originalEnv };
   });
 
+  it("keeps focused fixed requests out of legacy parser so managed Gateway receives them", () => {
+    for (const body of ["/rr fixed", "@review-router-ai fixed", "Исправил, проверь"])
+      expect(parseInteractionCommand(body)).toBeNull();
+  });
+
   it.each(['/rr help', '@reviewrouter help', '@ReviewRouter-AI HELP'])(
     'shows help without model or review dispatch: %s',
     async (body) => {

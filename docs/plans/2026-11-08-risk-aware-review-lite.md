@@ -89,3 +89,11 @@ Tests must fail for the intended reason before implementation (red), then pass (
 **Round C: UX and operations critic.** A numeric risk score without supporting evidence would create false precision and a second dashboard adds friction. **Resolution:** maximum three plain-language hotspots in the current summary; fallback explains uncertainty, no additional controls; require generated bundle and PR E2E.
 
 **Round D: licensing critic.** LiveReview is source-available, not permissively reusable; `review-router` is derived from Keith Herrington's MIT upstream. **Resolution:** independent feature implementation; separate licensing audit and PRs retaining MIT notices where required. Do not imply Apache relicenses third-party code.
+
+## 8. Independent implementation review (follow-up)
+
+- **Correctness pass:** Found that the initial 2,000-candidate budget could truncate all late critical/major findings on a very large PR. Added an explicit >2,000-candidate regression test; all serious findings are now examined independently of the ordinary candidate budget. This remains a presentation-only change.
+- **Evidence/UX pass:** Existing `CodeGraph.getDependents()` uses partial snapshot and heuristic module resolution; a counted edge cannot prove complete impact. Replaced strong “Referenced by” / “only verified” language with qualified *possible dependency* wording in all supported locales. No new graph/parser implementation.
+- **Publication/architecture pass:** The feature adds no provider call, store, API, flag or gate, reuses source-revision URL validation, and renders inside the existing summary. Runtime must be rebuilt and compared at exact HEAD; test output and actual GitHub PR acceptance are required before merge.
+
+These changes preserve the strict boundary: **attention hints are not safety verdicts, incident probabilities, coverage guarantees or merge policy**.

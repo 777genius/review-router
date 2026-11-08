@@ -99,3 +99,5 @@ Tests must fail for the intended reason before implementation (red), then pass (
 These changes preserve the strict boundary: **attention hints are not safety verdicts, incident probabilities, coverage guarantees or merge policy**.
 
 - **Third UX/maintainability pass:** On one or two ordinary findings, a second list merely repeated the normal review. The formatter now shows the priority section only for distinct dependency/coverage context or when more than three findings need prioritization. A real MarkdownFormatter regression asserts that a single major finding remains visible, linked to exact HEAD, and its blocking gate is unchanged. A separate same-basename path test prevents misleading source links.
+
+Bundle hygiene: the final source has been regenerated into the committed Action runtime by the one-shot CI build; keep exact-HEAD lint, typecheck, tests, output parity and GitHub E2E as mandatory merge gates.

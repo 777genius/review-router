@@ -3,7 +3,10 @@ import os from 'os';
 import path from 'path';
 import { GitHubClient } from '../../../src/github/client';
 import { ReviewLedger } from '../../../src/github/ledger';
-import { parseInteractionCommand, ReviewInteractionHandler } from '../../../src/github/interaction';
+import {
+  parseInteractionCommand,
+  ReviewInteractionHandler,
+} from '../../../src/github/interaction';
 import {
   ActionMemoryCandidateRequest,
   ActionMemoryCommand,
@@ -157,13 +160,21 @@ describe('ReviewInteractionHandler', () => {
     process.env = { ...originalEnv };
   });
 
-  it("keeps focused fixed requests out of legacy parser so managed Gateway receives them", () => {
-    for (const body of ["/rr fixed", "@review-router-ai fixed", "Исправил, проверь"])
+  it('keeps focused fixed requests out of legacy parser so managed Gateway receives them', () => {
+    for (const body of [
+      '/rr fixed',
+      '@review-router-ai fixed',
+      'Исправил, проверь',
+    ])
       expect(parseInteractionCommand(body)).toBeNull();
   });
 
-  it("leaves focused suggestion commands for qualified managed Gateway", () => {
-    for (const body of ["/rr suggest fix", "@review-router-ai suggest fix", "Предложи исправление"])
+  it('leaves focused suggestion commands for qualified managed Gateway', () => {
+    for (const body of [
+      '/rr suggest fix',
+      '@review-router-ai suggest fix',
+      'Предложи исправление',
+    ])
       expect(parseInteractionCommand(body)).toBeNull();
   });
 
@@ -175,7 +186,10 @@ describe('ReviewInteractionHandler', () => {
         comment: { id: 1901, body, user: { login: 'reader', type: 'User' } },
         issue: { number: 123, pull_request: {} },
       });
-      await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
+      await new ReviewInteractionHandler(
+        client,
+        new ReviewLedger(client, 'test-secret')
+      ).execute();
       expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
           issue_number: 123,
@@ -192,8 +206,12 @@ describe('ReviewInteractionHandler', () => {
           body: expect.stringContaining('/rr suggest fix'),
         })
       );
-      expect(octokit.rest.repos.getCollaboratorPermissionLevel).not.toHaveBeenCalled();
-      expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+      expect(
+        octokit.rest.repos.getCollaboratorPermissionLevel
+      ).not.toHaveBeenCalled();
+      expect(
+        octokit.rest.actions.listWorkflowRunsForRepo
+      ).not.toHaveBeenCalled();
     }
   );
 
@@ -201,23 +219,39 @@ describe('ReviewInteractionHandler', () => {
     const { client, octokit } = makeClient();
     const reviewRequests = new CapturingReviewRequestClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({
-      comment: { id: 1902, body: '@reviewrouter review', user: { login: 'maintainer' } },
+      comment: {
+        id: 1902,
+        body: '@reviewrouter review',
+        user: { login: 'maintainer' },
+      },
       issue: { number: 123, pull_request: {} },
     });
     octokit.rest.pulls.get.mockResolvedValue({
-      data: { number: 123, head: { sha: 'd'.repeat(40), repo: { fork: false } }, user: { login: 'author' } },
+      data: {
+        number: 123,
+        head: { sha: 'd'.repeat(40), repo: { fork: false } },
+        user: { login: 'author' },
+      },
     });
     octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
       data: { permission: 'write', role_name: 'maintain' },
     });
     await new ReviewInteractionHandler(
-      client, new ReviewLedger(client, 'test-secret'), undefined,
-      client, undefined, reviewRequests
+      client,
+      new ReviewLedger(client, 'test-secret'),
+      undefined,
+      client,
+      undefined,
+      reviewRequests
     ).execute();
-    expect(reviewRequests.requests).toEqual([{
-      pullRequestNumber: 123, expectedHeadSha: 'd'.repeat(40),
-      sourceId: 'manual-comment:1902', commandKind: 'review',
-    }]);
+    expect(reviewRequests.requests).toEqual([
+      {
+        pullRequestNumber: 123,
+        expectedHeadSha: 'd'.repeat(40),
+        sourceId: 'manual-comment:1902',
+        commandKind: 'review',
+      },
+    ]);
   });
 
   it.each([
@@ -225,34 +259,47 @@ describe('ReviewInteractionHandler', () => {
     '@reviewrouter review full',
     '@reviewrouter status extra',
     '@reviewrouter help extra',
-  ])('does not silently accept unsupported mention arguments: %s', async (body) => {
-    const { client, octokit } = makeClient();
-    process.env.GITHUB_EVENT_PATH = writeEvent({
-      comment: { id: 1904, body, user: { login: 'maintainer' } },
-      issue: { number: 123, pull_request: {} },
-    });
+  ])(
+    'does not silently accept unsupported mention arguments: %s',
+    async (body) => {
+      const { client, octokit } = makeClient();
+      process.env.GITHUB_EVENT_PATH = writeEvent({
+        comment: { id: 1904, body, user: { login: 'maintainer' } },
+        issue: { number: 123, pull_request: {} },
+      });
 
-    await new ReviewInteractionHandler(
-      client, new ReviewLedger(client, 'test-secret')
-    ).execute();
+      await new ReviewInteractionHandler(
+        client,
+        new ReviewLedger(client, 'test-secret')
+      ).execute();
 
-    expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
-    expect(octokit.rest.repos.getCollaboratorPermissionLevel).not.toHaveBeenCalled();
-    expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
-  });
+      expect(
+        octokit.rest.actions.listWorkflowRunsForRepo
+      ).not.toHaveBeenCalled();
+      expect(
+        octokit.rest.repos.getCollaboratorPermissionLevel
+      ).not.toHaveBeenCalled();
+      expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
+    }
+  );
 
   it('does not execute commands inside Markdown examples', async () => {
     const { client, octokit } = makeClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({
-      comment: { id: 1903, body: 'Example:\n\n~~~\n@reviewrouter review\n~~~', user: { login: 'reader' } },
+      comment: {
+        id: 1903,
+        body: 'Example:\n\n~~~\n@reviewrouter review\n~~~',
+        user: { login: 'reader' },
+      },
       issue: { number: 123, pull_request: {} },
     });
-    await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
+    await new ReviewInteractionHandler(
+      client,
+      new ReviewLedger(client, 'test-secret')
+    ).execute();
     expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
     expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
   });
-
-
 
   it.each([
     '/rr review security',
@@ -262,37 +309,70 @@ describe('ReviewInteractionHandler', () => {
     '/rr review\n/rr status',
     '> /rr review',
     '@review-router-ai review security',
-  ])('rejects unsupported or embedded command %s without dispatch', async (body) => {
-    const { client, octokit } = makeClient();
-    process.env.GITHUB_EVENT_PATH = writeEvent({
-      comment: { id: 1991, body, user: { login: 'maintainer' } },
-      issue: { number: 123, pull_request: {} },
-    });
-    await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
-    expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
-    expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
-  });
+  ])(
+    'rejects unsupported or embedded command %s without dispatch',
+    async (body) => {
+      const { client, octokit } = makeClient();
+      process.env.GITHUB_EVENT_PATH = writeEvent({
+        comment: { id: 1991, body, user: { login: 'maintainer' } },
+        issue: { number: 123, pull_request: {} },
+      });
+      await new ReviewInteractionHandler(
+        client,
+        new ReviewLedger(client, 'test-secret')
+      ).execute();
+      expect(
+        octokit.rest.actions.listWorkflowRunsForRepo
+      ).not.toHaveBeenCalled();
+      expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
+    }
+  );
 
   it('shows current-HEAD workflow status separately from signed finding overrides', async () => {
     const { client, octokit } = makeClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({
-      comment: { id: 1992, body: '@review-router-ai status', user: { login: 'reader' } },
+      comment: {
+        id: 1992,
+        body: '@review-router-ai status',
+        user: { login: 'reader' },
+      },
       issue: { number: 123, pull_request: {} },
     });
     octokit.rest.pulls.get.mockResolvedValue({
-      data: { number: 123, head: { sha: 'a'.repeat(40), repo: { fork: false } }, user: { login: 'author' } },
+      data: {
+        number: 123,
+        head: { sha: 'a'.repeat(40), repo: { fork: false } },
+        user: { login: 'author' },
+      },
     });
     octokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
-      data: { workflow_runs: [
-        { id: 765, path: '.github/workflows/reviewrouter.yml',
-          head_sha: 'a'.repeat(40), status: 'completed', conclusion: 'success',
-          pull_requests: [{ number: 123 }], created_at: '2026-11-07T10:00:00Z' },
-        { id: 764, path: '.github/workflows/reviewrouter.yml',
-          head_sha: 'b'.repeat(40), status: 'completed', conclusion: 'failure',
-          pull_requests: [{ number: 123 }], created_at: '2026-11-07T11:00:00Z' },
-      ] },
+      data: {
+        workflow_runs: [
+          {
+            id: 765,
+            path: '.github/workflows/reviewrouter.yml',
+            head_sha: 'a'.repeat(40),
+            status: 'completed',
+            conclusion: 'success',
+            pull_requests: [{ number: 123 }],
+            created_at: '2026-11-07T10:00:00Z',
+          },
+          {
+            id: 764,
+            path: '.github/workflows/reviewrouter.yml',
+            head_sha: 'b'.repeat(40),
+            status: 'completed',
+            conclusion: 'failure',
+            pull_requests: [{ number: 123 }],
+            created_at: '2026-11-07T11:00:00Z',
+          },
+        ],
+      },
     });
-    await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
+    await new ReviewInteractionHandler(
+      client,
+      new ReviewLedger(client, 'test-secret')
+    ).execute();
     expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.stringContaining('run #765'),
@@ -303,32 +383,52 @@ describe('ReviewInteractionHandler', () => {
         body: expect.stringContaining('not** proof of complete'),
       })
     );
-    expect(octokit.rest.repos.getCollaboratorPermissionLevel).not.toHaveBeenCalled();
+    expect(
+      octokit.rest.repos.getCollaboratorPermissionLevel
+    ).not.toHaveBeenCalled();
   });
 
   it('acknowledges a queued manual review once without claiming completion', async () => {
     const { client, octokit } = makeClient();
     const reviewRequests = new CapturingReviewRequestClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({
-      comment: { id: 1993, body: '@review-router-ai review', user: { login: 'maintainer' } },
+      comment: {
+        id: 1993,
+        body: '@review-router-ai review',
+        user: { login: 'maintainer' },
+      },
       issue: { number: 123, pull_request: {} },
     });
     octokit.rest.pulls.get.mockResolvedValue({
-      data: { number: 123, head: { sha: 'a'.repeat(40), repo: { fork: false } }, user: { login: 'author' } },
+      data: {
+        number: 123,
+        head: { sha: 'a'.repeat(40), repo: { fork: false } },
+        user: { login: 'author' },
+      },
     });
     octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
       data: { permission: 'write', role_name: 'maintain' },
     });
     await new ReviewInteractionHandler(
-      client, new ReviewLedger(client, 'test-secret'),
-      undefined, client, undefined, reviewRequests
+      client,
+      new ReviewLedger(client, 'test-secret'),
+      undefined,
+      client,
+      undefined,
+      reviewRequests
     ).execute();
-    expect(reviewRequests.requests).toEqual([{
-      pullRequestNumber: 123, expectedHeadSha: 'a'.repeat(40),
-      sourceId: 'manual-comment:1993', commandKind: 'review',
-    }]);
+    expect(reviewRequests.requests).toEqual([
+      {
+        pullRequestNumber: 123,
+        expectedHeadSha: 'a'.repeat(40),
+        sourceId: 'manual-comment:1993',
+        commandKind: 'review',
+      },
+    ]);
     expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
-      expect.objectContaining({ body: expect.stringContaining('not** a completed review') })
+      expect.objectContaining({
+        body: expect.stringContaining('not** a completed review'),
+      })
     );
   });
 
@@ -340,45 +440,86 @@ describe('ReviewInteractionHandler', () => {
       issue: { number: 123, pull_request: {} },
     });
     octokit.rest.pulls.get.mockResolvedValue({
-      data: { number: 123, head: { sha: 'a'.repeat(40), repo: { fork: false } }, user: { login: 'author' } },
+      data: {
+        number: 123,
+        head: { sha: 'a'.repeat(40), repo: { fork: false } },
+        user: { login: 'author' },
+      },
     });
     octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
       data: { permission: 'write', role_name: 'maintain' },
     });
-    octokit.rest.issues.createComment.mockRejectedValueOnce(new Error('GitHub comment unavailable'));
+    octokit.rest.issues.createComment.mockRejectedValueOnce(
+      new Error('GitHub comment unavailable')
+    );
 
-    await expect(new ReviewInteractionHandler(
-      client, new ReviewLedger(client, 'test-secret'),
-      undefined, client, undefined, reviewRequests
-    ).execute()).resolves.toBeUndefined();
+    await expect(
+      new ReviewInteractionHandler(
+        client,
+        new ReviewLedger(client, 'test-secret'),
+        undefined,
+        client,
+        undefined,
+        reviewRequests
+      ).execute()
+    ).resolves.toBeUndefined();
 
     expect(reviewRequests.requests).toHaveLength(1);
     expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['/rr help', '/rr status', '@review-router-ai help', '@review-router-ai status'])(
+  it.each([
+    '/rr help',
+    '/rr status',
+    '@review-router-ai help',
+    '@review-router-ai status',
+  ])(
     'does not produce another notice after an edited read-only command: %s',
     async (body) => {
       const { client, octokit } = makeClient();
       process.env.GITHUB_EVENT_PATH = writeEvent({
         action: 'edited',
-        comment: { id: 2040, body, user: { login: 'maintainer', type: 'User' } },
+        comment: {
+          id: 2040,
+          body,
+          user: { login: 'maintainer', type: 'User' },
+        },
         issue: { number: 123, pull_request: {} },
       });
-      await new ReviewInteractionHandler(client, new ReviewLedger(client, 'test-secret')).execute();
+      await new ReviewInteractionHandler(
+        client,
+        new ReviewLedger(client, 'test-secret')
+      ).execute();
       expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
-      expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+      expect(
+        octokit.rest.actions.listWorkflowRunsForRepo
+      ).not.toHaveBeenCalled();
       expect(octokit.rest.pulls.get).not.toHaveBeenCalled();
     }
   );
 
   it.each([
-    { command: '/rr skip\nValidated by the team', kind: 'skip', reason: 'Validated by the team' },
-    { command: '/rr unskip\nReopened because of new evidence', kind: 'unskip', reason: 'Reopened because of new evidence' },
-    { command: '/rr skip\r\nA multi-line\nreason', kind: 'skip', reason: 'A multi-line\nreason' },
-  ])('preserves multi-line override reasons: $kind', ({ command, kind, reason }) => {
-    expect(parseInteractionCommand(command)).toEqual({ kind, reason });
-  });
+    {
+      command: '/rr skip\nValidated by the team',
+      kind: 'skip',
+      reason: 'Validated by the team',
+    },
+    {
+      command: '/rr unskip\nReopened because of new evidence',
+      kind: 'unskip',
+      reason: 'Reopened because of new evidence',
+    },
+    {
+      command: '/rr skip\r\nA multi-line\nreason',
+      kind: 'skip',
+      reason: 'A multi-line\nreason',
+    },
+  ])(
+    'preserves multi-line override reasons: $kind',
+    ({ command, kind, reason }) => {
+      expect(parseInteractionCommand(command)).toEqual({ kind, reason });
+    }
+  );
 
   it.each([
     '/rr skip\n/rr review',

@@ -163655,7 +163655,9 @@ var ReviewInteractionHandler = class {
                 `ReviewRouter review requested for HEAD \`${prContext.headSha.slice(0, 12)}\`. This confirms queue admission, **not** a completed review. See the PR checks and ReviewRouter summary for results.`
               );
             } catch {
-              logger.warn("ReviewRouter review was queued but its acknowledgement could not be posted.");
+              logger.warn(
+                "ReviewRouter review was queued but its acknowledgement could not be posted."
+              );
             }
           }
           return;
@@ -163944,22 +163946,26 @@ var ReviewInteractionHandler = class {
     );
   }
   async postHelp(prNumber) {
-    await this.postNotice(prNumber, [
-      "**ReviewRouter commands**",
-      "",
-      "In the PR conversation:",
-      "- `/rr help` \u2014 show these commands (no model call).",
-      "- `/rr review` \u2014 request a review of the current HEAD (write, maintain, or admin required).",
-      "- `/rr status` \u2014 show the current HEAD, recent matching GitHub Actions review status, and finding overrides. A passing workflow does not prove complete review coverage.",
-      "- `@review-router-ai review` \u2014 alternative text trigger when this is the installed App account; `/rr` works regardless of its GitHub login.",
-      "",
-      "Reply directly to a ReviewRouter inline finding:",
-      "- `/rr skip [reason]` / `/rr unskip [reason]` \u2014 permission-checked finding overrides.",
-      "- `/rr explain` or an ordinary question \u2014 ask for an explanation **when the qualified managed conversation provider is enabled** (same-repository PRs only).",
-      "- `/rr fixed` or @review-router-ai fixed \u2014 check one finding against the current HEAD with evidence when qualified managed Gateway is enabled; never auto-close the thread.",
-      "",
-      "Unconfigured providers and fork PRs cannot run secret-backed reviews. Review requests may be queued or rejected; the PR checks report final results."
-    ].join("\n"));
+    await this.postNotice(
+      prNumber,
+      [
+        "**ReviewRouter commands**",
+        "",
+        "In the PR conversation:",
+        "- `/rr help` \u2014 show these commands (no model call).",
+        "- `/rr review` \u2014 request a review of the current HEAD (write, maintain, or admin required).",
+        "- `/rr status` \u2014 show the current HEAD, recent matching GitHub Actions review status, and finding overrides. A passing workflow does not prove complete review coverage.",
+        "- `@review-router-ai review` \u2014 alternative text trigger when this is the installed App account; `/rr` works regardless of its GitHub login.",
+        "",
+        "Reply directly to a ReviewRouter inline finding:",
+        "- `/rr skip [reason]` / `/rr unskip [reason]` \u2014 permission-checked finding overrides.",
+        "- `/rr explain` or an ordinary question \u2014 ask for an explanation **when the qualified managed conversation provider is enabled** (same-repository PRs only).",
+        "- `/rr fixed` or @review-router-ai fixed \u2014 check one finding against the current HEAD with evidence when qualified managed Gateway is enabled; never auto-close the thread.",
+        "- `/rr suggest fix` \u2014 propose one human-applied GitHub suggestion for a verified current-HEAD inline finding through qualified managed Gateway; no automatic commits or thread resolution.",
+        "",
+        "Unconfigured providers and fork PRs cannot run secret-backed reviews. Review requests may be queued or rejected; the PR checks report final results."
+      ].join("\n")
+    );
   }
   async postStatus(prNumber, headSha) {
     const lines = [
@@ -163977,12 +163983,14 @@ var ReviewInteractionHandler = class {
           per_page: 100
         });
         const configuredFile = process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || "reviewrouter.yml";
-        const matching = (data.workflow_runs || []).filter((run3) => this.matchesReviewWorkflowRun(
-          run3,
-          configuredFile,
-          prNumber,
-          headSha
-        )).sort(compareWorkflowRunsNewestFirst);
+        const matching = (data.workflow_runs || []).filter(
+          (run3) => this.matchesReviewWorkflowRun(
+            run3,
+            configuredFile,
+            prNumber,
+            headSha
+          )
+        ).sort(compareWorkflowRunsNewestFirst);
         const latest = matching[0];
         if (latest?.id) {
           const completed = latest.status === "completed";
@@ -163991,10 +163999,14 @@ var ReviewInteractionHandler = class {
             `Latest matching GitHub Actions review: [run #${latest.id}](https://github.com/${owner}/${repo}/actions/runs/${latest.id}) \u2014 ${state3}.`
           );
         } else {
-          lines.push("No matching review workflow run found among the most recent 100 pull_request runs for this HEAD.");
+          lines.push(
+            "No matching review workflow run found among the most recent 100 pull_request runs for this HEAD."
+          );
         }
       } catch {
-        lines.push("GitHub Actions status is unavailable (permissions or API error).");
+        lines.push(
+          "GitHub Actions status is unavailable (permissions or API error)."
+        );
       }
     }
     lines.push(
@@ -164372,17 +164384,24 @@ function parseInteractionCommand(body2) {
     const override = /^\/rr\s+(skip|unskip)\b(?:\s+([\s\S]*))?$/i.exec(trimmed);
     if (!override) return null;
     const reason2 = (override[2] || "").trim();
-    if (/(?:^|\n)[ \t]*(?:\/rr\b|@(?:codex|reviewrouter|review-router-ai)\b)/i.test(reason2))
+    if (/(?:^|\n)[ \t]*(?:\/rr\b|@(?:codex|reviewrouter|review-router-ai)\b)/i.test(
+      reason2
+    ))
       return null;
     return { kind: override[1].toLowerCase(), reason: reason2 };
   }
-  const mentioned = /^@(codex|reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(review|status|help)\s*$/i.exec(trimmed);
+  const mentioned = /^@(codex|reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(review|status|help)\s*$/i.exec(
+    trimmed
+  );
   if (mentioned) {
     const kind2 = mentioned[2].toLowerCase();
-    if (mentioned[1].toLowerCase() === "codex" && kind2 !== "review") return null;
+    if (mentioned[1].toLowerCase() === "codex" && kind2 !== "review")
+      return null;
     return { kind: kind2, reason: "" };
   }
-  const slash = /^\/rr\s+(skip|unskip|status|review|help)\b(?:\s+(.+))?$/i.exec(trimmed);
+  const slash = /^\/rr\s+(skip|unskip|status|review|help)\b(?:\s+(.+))?$/i.exec(
+    trimmed
+  );
   if (!slash) return null;
   const kind = slash[1].toLowerCase();
   const reason = (slash[2] || "").trim();

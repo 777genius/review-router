@@ -53,10 +53,17 @@ describe('Risk-Aware Review Lite: adapters', () => {
       findings: [],
       contexts: [{
         file: 'src/consumer.ts',
-        downstreamConsumers: ['./auth', 'nested/auth', '@org/auth'],
+        downstreamConsumers: ['./auth', './nested/auth', '@org/auth'],
       }],
     });
-    expect(result).toEqual([]);
+    expect(result).toEqual([
+      {
+        path: 'src/nested/auth.ts',
+        reason: 'shared-code',
+        priority: 'attention',
+        relatedFiles: 1,
+      },
+    ]);
   });
 
   it('does not build graph or infer safety where no graph exists', () => {

@@ -129503,7 +129503,7 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
   if (nearby.length === 0) return reportedLine;
   const bodyTokens = tokenizeForLineScoring(commentBody);
   const riskTerms = getRiskTerms(commentBody);
-  const score = (candidate) => {
+  const score2 = (candidate) => {
     const content = candidate.content;
     const lower = content.toLowerCase();
     const codeTokens2 = tokenizeForLineScoring(content);
@@ -129526,11 +129526,11 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
     return proximity + overlap + riskScore + interpolationScore + callScore + declarationPenalty;
   };
   const current = nearby.find((line2) => line2.line === reportedLine);
-  const currentScore = current ? score(current) : Number.NEGATIVE_INFINITY;
+  const currentScore = current ? score2(current) : Number.NEGATIVE_INFINITY;
   const best = [...nearby].sort(
-    (a2, b2) => score(b2) - score(a2) || Math.abs(a2.line - reportedLine) - Math.abs(b2.line - reportedLine)
+    (a2, b2) => score2(b2) - score2(a2) || Math.abs(a2.line - reportedLine) - Math.abs(b2.line - reportedLine)
   )[0];
-  const bestScore = score(best);
+  const bestScore = score2(best);
   return bestScore > currentScore + 1 ? best.line : reportedLine;
 }
 function tokenizeForLineScoring(text3) {
@@ -135155,13 +135155,13 @@ ${JSON.stringify(outputSchema)}` : prompt;
       if (changed.has(file)) continue;
       const content = this.readRepoFileSync(file);
       if (!content) continue;
-      let score = 0;
+      let score2 = 0;
       for (const identifier2 of identifiers) {
         if (content.includes(identifier2))
-          score += this.contextIdentifierWeight(identifier2);
+          score2 += this.contextIdentifierWeight(identifier2);
       }
-      if (score > 0) {
-        scored.push({ file, score });
+      if (score2 > 0) {
+        scored.push({ file, score: score2 });
       }
     }
     return scored.sort((a2, b2) => b2.score - a2.score || a2.file.localeCompare(b2.file)).slice(0, 8).map((item) => item.file);
@@ -136185,26 +136185,26 @@ async function fetchOpenCodeModels(timeoutMs = 1e4) {
   }
 }
 function rankOpenCodeModel(model2) {
-  let score = 0;
+  let score2 = 0;
   if (model2.isFree) {
-    score += 100;
+    score2 += 100;
   }
   const modelLower = model2.id.toLowerCase();
   if (modelLower.includes("claude")) {
-    score += 50;
+    score2 += 50;
   } else if (modelLower.includes("gpt-4")) {
-    score += 40;
+    score2 += 40;
   } else if (modelLower.includes("gemini")) {
-    score += 35;
+    score2 += 35;
   } else if (modelLower.includes("deepseek")) {
-    score += 30;
+    score2 += 30;
   } else if (modelLower.includes("qwen")) {
-    score += 25;
+    score2 += 25;
   }
   if (modelLower.includes("code")) {
-    score += 20;
+    score2 += 20;
   }
-  return score;
+  return score2;
 }
 async function getBestFreeOpenCodeModels(count2 = 4, timeoutMs = 1e4) {
   const models = await fetchOpenCodeModels(timeoutMs);
@@ -136690,10 +136690,10 @@ var ProviderRegistry = class {
     }
     const scored = [];
     for (const provider of providers) {
-      const score = await this.reliabilityTracker.getReliabilityScore(
+      const score2 = await this.reliabilityTracker.getReliabilityScore(
         provider.name
       );
-      scored.push({ provider, score });
+      scored.push({ provider, score: score2 });
     }
     scored.sort((a2, b2) => b2.score - a2.score);
     const sorted = scored.map((s2) => s2.provider);
@@ -143622,6 +143622,71 @@ function unique(values) {
   return Array.from(new Set(values));
 }
 
+// src/review-risk/domain/rank-review-hotspots.ts
+var maxCandidates = 2e3;
+var maxDisplayed = 3;
+function validDependents(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? Math.min(value, 999) : void 0;
+}
+function safeLine(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
+}
+function score(candidate) {
+  const dependents = validDependents(candidate.dependents);
+  const line2 = safeLine(candidate.line);
+  let rank;
+  let reason;
+  let priority = "attention";
+  if (candidate.severity === "critical") {
+    rank = 50;
+    reason = "critical-finding";
+  } else if (candidate.severity === "major") {
+    rank = 40;
+    reason = "major-finding";
+  } else if (dependents !== void 0 && dependents > 0) {
+    rank = 30 + Math.min(9, dependents);
+    reason = "shared-code";
+  } else if (candidate.coverage === "unreviewed" || candidate.coverage === "metadata-only") {
+    rank = 20;
+    reason = "not-reviewed";
+    priority = "unknown";
+  } else if (candidate.severity === "minor") {
+    rank = 10;
+    reason = "minor-finding";
+  } else {
+    return void 0;
+  }
+  return {
+    rank,
+    hotspot: {
+      path: candidate.path,
+      reason,
+      priority,
+      ...line2 === void 0 ? {} : { line: line2 },
+      ...dependents === void 0 || dependents === 0 ? {} : { relatedFiles: dependents }
+    }
+  };
+}
+function rankReviewHotspots(candidates, limit = maxDisplayed) {
+  const selected = /* @__PURE__ */ new Map();
+  for (const candidate of candidates.slice(0, maxCandidates)) {
+    const path40 = candidate.path;
+    if (typeof path40 !== "string" || path40.trim().length === 0 || path40.length > 1024) {
+      continue;
+    }
+    const next = score(candidate);
+    if (!next) continue;
+    const previous = selected.get(path40);
+    if (!previous || next.rank > previous.rank || next.rank === previous.rank && (next.hotspot.line ?? Number.MAX_SAFE_INTEGER) < (previous.hotspot.line ?? Number.MAX_SAFE_INTEGER)) {
+      selected.set(path40, next);
+    }
+  }
+  const count2 = Number.isSafeInteger(limit) ? Math.max(0, Math.min(limit, maxDisplayed)) : maxDisplayed;
+  return [...selected.values()].sort(
+    (left, right) => right.rank - left.rank || (left.hotspot.path < right.hotspot.path ? -1 : left.hotspot.path > right.hotspot.path ? 1 : 0)
+  ).slice(0, count2).map(({ hotspot }) => hotspot);
+}
+
 // src/review-projection/domain/review-projection.ts
 var FindingSeverity = /* @__PURE__ */ ((FindingSeverity3) => {
   FindingSeverity3["Critical"] = "critical";
@@ -144674,6 +144739,42 @@ ${safeFindingBody(line2.message)}`
     lines.push("", block);
     return true;
   };
+  const hotspots = input.hotspots ?? rankReviewHotspots(
+    input.findings.map(({ file, line: line2, severity }) => ({
+      path: file,
+      line: line2,
+      severity
+    }))
+  );
+  if (hotspots.length > 0) {
+    const text3 = riskHotspotCopy[locale];
+    const items = hotspots.slice(0, 3).map((hotspot) => {
+      const label = escapeCoverageManifestPath(
+        hotspot.path + (Number.isSafeInteger(hotspot.line) && (hotspot.line ?? 0) > 0 ? `:${hotspot.line}` : "")
+      );
+      const url3 = findingSourceUrl(
+        {
+          file: hotspot.path,
+          line: hotspot.line ?? 0,
+          severity: "minor",
+          title: "",
+          message: ""
+        },
+        input.source
+      );
+      const location = url3 ? `[${label}](${url3})` : label;
+      const explanation = hotspot.reason === "critical-finding" ? text3.critical : hotspot.reason === "major-finding" ? text3.major : hotspot.reason === "minor-finding" ? text3.minor : hotspot.reason === "not-reviewed" ? text3.notReviewed : text3.shared(hotspot.relatedFiles);
+      return `- ${location} \u2014 ${explanation}`;
+    });
+    append(
+      `### ${text3.heading}${input.coverage?.complete === false ? `
+
+${text3.partial}` : ""}
+
+${items.join("\n")}`,
+      maxSummaryBytes - 4e3
+    );
+  }
   const findings = [...input.findings].sort(compareSummaryFindings);
   const newFindings = findings.filter((finding) => !finding.previous);
   const previousFindings = findings.filter((finding) => finding.previous);
@@ -144743,6 +144844,107 @@ ${details.join("\n\n")}
   if (omitted) lines.push("", notice);
   return lines.join("\n");
 }
+var riskHotspotCopy = {
+  en: {
+    heading: "Where to look first",
+    critical: "Critical issue identified",
+    major: "Important issue identified",
+    minor: "Issue worth reviewing",
+    notReviewed: "Review of this file did not finish",
+    partial: "Only verified signals are shown; the review did not cover everything.",
+    shared: (n2) => n2 ? `Referenced by ${n2} changed file${n2 === 1 ? "" : "s"}` : "Connected to other changed files"
+  },
+  ru: {
+    heading: "\u041D\u0430 \u0447\u0442\u043E \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u044C \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
+    critical: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u043A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430",
+    major: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u0430\u044F \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430",
+    minor: "\u0415\u0441\u0442\u044C \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438",
+    notReviewed: "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u044D\u0442\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0430 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430",
+    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435; \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0431\u044B\u043B\u0430 \u043D\u0435\u043F\u043E\u043B\u043D\u043E\u0439.",
+    shared: (n2) => n2 ? `\u0421\u0432\u044F\u0437\u0430\u043D\u043E \u0441 ${n2} \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u0421\u0432\u044F\u0437\u0430\u043D\u043E \u0441 \u0434\u0440\u0443\u0433\u0438\u043C\u0438 \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
+  },
+  uk: {
+    heading: "\u041D\u0430 \u0449\u043E \u0437\u0432\u0435\u0440\u043D\u0443\u0442\u0438 \u0443\u0432\u0430\u0433\u0443",
+    critical: "\u0412\u0438\u044F\u0432\u043B\u0435\u043D\u043E \u043A\u0440\u0438\u0442\u0438\u0447\u043D\u0443 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0443",
+    major: "\u0412\u0438\u044F\u0432\u043B\u0435\u043D\u043E \u0441\u0435\u0440\u0439\u043E\u0437\u043D\u0443 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0443",
+    minor: "\u0404 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F \u0434\u043B\u044F \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0438",
+    notReviewed: "\u041F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0443 \u0446\u044C\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0443 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
+    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u043E \u043B\u0438\u0448\u0435 \u043F\u0456\u0434\u0442\u0432\u0435\u0440\u0434\u0436\u0435\u043D\u0456 \u0434\u0430\u043D\u0456; \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0430 \u0431\u0443\u043B\u0430 \u043D\u0435\u043F\u043E\u0432\u043D\u043E\u044E.",
+    shared: (n2) => n2 ? `\u041F\u043E\u0432\u2019\u044F\u0437\u0430\u043D\u043E \u0437 ${n2} \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u041F\u043E\u0432\u2019\u044F\u0437\u0430\u043D\u043E \u0437 \u0456\u043D\u0448\u0438\u043C\u0438 \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
+  },
+  es: {
+    heading: "D\xF3nde revisar primero",
+    critical: "Se encontr\xF3 un problema cr\xEDtico",
+    major: "Se encontr\xF3 un problema importante",
+    minor: "Hay un problema que revisar",
+    notReviewed: "No se complet\xF3 la revisi\xF3n de este archivo",
+    partial: "Solo se muestran se\xF1ales verificadas; la revisi\xF3n est\xE1 incompleta.",
+    shared: (n2) => n2 ? `Relacionado con ${n2} archivos modificados` : "Relacionado con otros archivos modificados"
+  },
+  pt: {
+    heading: "Onde revisar primeiro",
+    critical: "Problema cr\xEDtico identificado",
+    major: "Problema importante identificado",
+    minor: "Problema que merece revis\xE3o",
+    notReviewed: "A revis\xE3o deste arquivo n\xE3o foi conclu\xEDda",
+    partial: "Apenas sinais verificados s\xE3o mostrados; a revis\xE3o est\xE1 incompleta.",
+    shared: (n2) => n2 ? `Relacionado a ${n2} arquivos alterados` : "Relacionado a outros arquivos alterados"
+  },
+  fr: {
+    heading: "O\xF9 regarder en premier",
+    critical: "Probl\xE8me critique d\xE9tect\xE9",
+    major: "Probl\xE8me important d\xE9tect\xE9",
+    minor: "Point \xE0 v\xE9rifier",
+    notReviewed: "La v\xE9rification de ce fichier est incompl\xE8te",
+    partial: "Seuls les indices v\xE9rifi\xE9s sont affich\xE9s ; la revue est incompl\xE8te.",
+    shared: (n2) => n2 ? `Li\xE9 \xE0 ${n2} fichiers modifi\xE9s` : "Li\xE9 \xE0 d\u2019autres fichiers modifi\xE9s"
+  },
+  de: {
+    heading: "Worauf zuerst achten",
+    critical: "Kritisches Problem erkannt",
+    major: "Wichtiges Problem erkannt",
+    minor: "Hinweis zur Pr\xFCfung",
+    notReviewed: "Pr\xFCfung dieser Datei nicht abgeschlossen",
+    partial: "Nur gepr\xFCfte Hinweise werden angezeigt; die Pr\xFCfung ist unvollst\xE4ndig.",
+    shared: (n2) => n2 ? `Mit ${n2} ge\xE4nderten Dateien verbunden` : "Mit anderen ge\xE4nderten Dateien verbunden"
+  },
+  it: {
+    heading: "Dove guardare prima",
+    critical: "Problema critico rilevato",
+    major: "Problema importante rilevato",
+    minor: "Problema da verificare",
+    notReviewed: "Revisione di questo file non completata",
+    partial: "Si mostrano solo segnali verificati; revisione incompleta.",
+    shared: (n2) => n2 ? `Collegato a ${n2} file modificati` : "Collegato ad altri file modificati"
+  },
+  zh: {
+    heading: "\u4F18\u5148\u67E5\u770B",
+    critical: "\u53D1\u73B0\u4E25\u91CD\u95EE\u9898",
+    major: "\u53D1\u73B0\u91CD\u8981\u95EE\u9898",
+    minor: "\u5B58\u5728\u9700\u8981\u68C0\u67E5\u7684\u95EE\u9898",
+    notReviewed: "\u6B64\u6587\u4EF6\u5C1A\u672A\u5B8C\u6210\u5BA1\u67E5",
+    partial: "\u4EC5\u663E\u793A\u5DF2\u9A8C\u8BC1\u7684\u4FE1\u606F\uFF1B\u5BA1\u67E5\u5C1A\u4E0D\u5B8C\u6574\u3002",
+    shared: (n2) => n2 ? `\u5173\u8054 ${n2} \u4E2A\u5DF2\u66F4\u6539\u6587\u4EF6` : "\u4E0E\u5176\u4ED6\u5DF2\u66F4\u6539\u6587\u4EF6\u5173\u8054"
+  },
+  ja: {
+    heading: "\u512A\u5148\u3057\u3066\u78BA\u8A8D\u3059\u308B\u7B87\u6240",
+    critical: "\u91CD\u5927\u306A\u554F\u984C\u304C\u3042\u308A\u307E\u3059",
+    major: "\u91CD\u8981\u306A\u554F\u984C\u304C\u3042\u308A\u307E\u3059",
+    minor: "\u78BA\u8A8D\u304C\u5FC5\u8981\u306A\u6307\u6458\u304C\u3042\u308A\u307E\u3059",
+    notReviewed: "\u3053\u306E\u30D5\u30A1\u30A4\u30EB\u306E\u30EC\u30D3\u30E5\u30FC\u306F\u672A\u5B8C\u4E86\u3067\u3059",
+    partial: "\u691C\u8A3C\u6E08\u307F\u306E\u60C5\u5831\u306E\u307F\u8868\u793A\u3057\u3066\u3044\u307E\u3059\u3002\u30EC\u30D3\u30E5\u30FC\u306F\u672A\u5B8C\u4E86\u3067\u3059\u3002",
+    shared: (n2) => n2 ? `\u5909\u66F4\u3055\u308C\u305F ${n2} \u30D5\u30A1\u30A4\u30EB\u3068\u95A2\u9023` : "\u4ED6\u306E\u5909\u66F4\u30D5\u30A1\u30A4\u30EB\u3068\u95A2\u9023"
+  },
+  ko: {
+    heading: "\uBA3C\uC800 \uD655\uC778\uD560 \uBD80\uBD84",
+    critical: "\uCE58\uBA85\uC801\uC778 \uBB38\uC81C\uAC00 \uBC1C\uACAC\uB428",
+    major: "\uC911\uC694\uD55C \uBB38\uC81C\uAC00 \uBC1C\uACAC\uB428",
+    minor: "\uD655\uC778\uD560 \uBB38\uC81C\uAC00 \uC788\uC74C",
+    notReviewed: "\uC774 \uD30C\uC77C\uC758 \uAC80\uD1A0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC74C",
+    partial: "\uAC80\uC99D\uB41C \uC815\uBCF4\uB9CC \uD45C\uC2DC\uD569\uB2C8\uB2E4. \uAC80\uD1A0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+    shared: (n2) => n2 ? `\uBCC0\uACBD\uB41C \uD30C\uC77C ${n2}\uAC1C\uC640 \uAD00\uB828\uB428` : "\uB2E4\uB978 \uBCC0\uACBD \uD30C\uC77C\uACFC \uAD00\uB828\uB428"
+  }
+};
 function renderReviewSummary(review, language, options = {}) {
   const retainedLocale = review.summary.match(
     /<!-- reviewrouter:summary-locale:([a-z]{2}) -->/
@@ -144795,6 +144997,7 @@ function renderReviewSummary(review, language, options = {}) {
     ...options,
     language: language ?? retainedLocale,
     findings: review.findings.map(toReviewerSummaryFinding),
+    ...review.riskHotspots ? { hotspots: review.riskHotspots } : {},
     metrics: review.metrics,
     incomplete: retainedIncomplete,
     ...scope ? {
@@ -150181,21 +150384,21 @@ ${deleted}`;
   }
   featureScore(value) {
     const lower = value.toLowerCase();
-    let score = 0;
-    if (/hide|hidden|show|visible|visibility/.test(lower)) score += 4;
+    let score2 = 0;
+    if (/hide|hidden|show|visible|visibility/.test(lower)) score2 += 4;
     if (/paid|premium|feature|access|moderation|profile|course|chat/.test(lower))
-      score += 3;
-    if (/info|setting|flag|mode/.test(lower)) score += 2;
+      score2 += 3;
+    if (/info|setting|flag|mode/.test(lower)) score2 += 2;
     if (/[A-Z]/.test(value) || value.includes("_") || value.includes("-"))
-      score += 2;
+      score2 += 2;
     if (/checkbox|button|widget|row|dialog|header|page|screen|sliver/.test(lower))
-      score -= 5;
+      score2 -= 5;
     if (/^(id|name|type|data|value|status|created|updated|deleted|module|table|serverpod)$/.test(
       lower
     ))
-      score -= 4;
-    if (/^\d+$/.test(lower)) score -= 10;
-    return score;
+      score2 -= 4;
+    if (/^\d+$/.test(lower)) score2 -= 10;
+    return score2;
   }
   humanizeIdentifier(value) {
     return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
@@ -153070,8 +153273,8 @@ var ReliabilityTracker = class _ReliabilityTracker {
   async rankProviders(providerIds) {
     const ranked = [];
     for (const providerId of providerIds) {
-      const score = await this.getReliabilityScore(providerId);
-      ranked.push({ providerId, score });
+      const score2 = await this.getReliabilityScore(providerId);
+      ranked.push({ providerId, score: score2 });
     }
     ranked.sort((a2, b2) => b2.score - a2.score);
     logger.debug(
@@ -158736,6 +158939,48 @@ var GraphCache = class _GraphCache {
   }
 };
 
+// src/review-risk/application/build-review-hotspots.ts
+var maxGraphFiles = 128;
+function buildReviewHotspots(input) {
+  const changedFiles = input.files.filter((file) => file.status !== "removed");
+  const changedPaths = new Set(changedFiles.map((file) => file.filename));
+  const graph = changedFiles.length <= maxGraphFiles ? input.graph : void 0;
+  const coverageByPath = new Map(
+    (input.coverage?.files ?? []).map((file) => [file.path, file.status])
+  );
+  const candidates = changedFiles.map((file) => ({
+    path: file.filename,
+    changedLines: file.additions + file.deletions,
+    coverage: coverageByPath.get(file.filename),
+    ...graph ? {
+      dependents: boundedDependents(
+        graph,
+        file.filename,
+        changedPaths
+      )
+    } : {}
+  }));
+  for (const finding of input.findings) {
+    if (!changedPaths.has(finding.file)) continue;
+    candidates.push({
+      path: finding.file,
+      severity: finding.severity,
+      line: finding.line,
+      coverage: coverageByPath.get(finding.file)
+    });
+  }
+  return rankReviewHotspots(candidates);
+}
+function boundedDependents(graph, file, changedPaths) {
+  try {
+    return new Set(
+      graph.getDependents(file).filter((dependent) => dependent !== file && changedPaths.has(dependent))
+    ).size;
+  } catch {
+    return void 0;
+  }
+}
+
 // src/analysis/path-matcher.ts
 var MAX_PATTERN_LENGTH2 = 500;
 var MAX_COMPLEXITY_SCORE = 50;
@@ -161767,6 +162012,12 @@ var ReviewOrchestrator = class {
         }
         review.threadLifecycle = lifecycle;
       }
+      review.riskHotspots = buildReviewHotspots({
+        files: pr2.files,
+        findings: review.findings,
+        coverage: review.coverage,
+        graph: codeGraph
+      });
       const markdown = this.components.formatter.format(review);
       await this.updatePullRequestDescription(pr2);
       if (config2.learningEnabled && this.components.acceptanceDetector && this.components.providerWeightTracker && this.components.githubClient) {

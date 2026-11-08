@@ -114,8 +114,9 @@ function existingImportDependents(
   if (!contexts?.length) return new Map();
   const byModule = new Map<string, string[]>();
   for (const file of changedPaths) {
-    if (file.includes('\\') || file.startsWith('/') || file.includes('\0'))
+    if (file.includes('\\') || file.startsWith('/') || file.includes('\0')) {
       continue;
+    }
     const key = stripSourceExtension(file);
     const existing = byModule.get(key) ?? [];
     existing.push(file);
@@ -126,8 +127,12 @@ function existingImportDependents(
   for (const context of contexts.slice(0, maxGraphFiles)) {
     if (!changedPaths.has(context.file)) continue;
     for (const specifier of context.downstreamConsumers.slice(0, 16)) {
-      if (specifier.length > 512 || !/^\.\.?\//.test(specifier)) continue;
-      if (specifier.includes('\\') || specifier.includes('\0')) continue;
+      if (specifier.length > 512 || !/^\.\.?\//.test(specifier)) {
+        continue;
+      }
+      if (specifier.includes('\\') || specifier.includes('\0')) {
+        continue;
+      }
       const resolved = path.posix.normalize(
         path.posix.join(path.posix.dirname(context.file), specifier)
       );
@@ -135,16 +140,22 @@ function existingImportDependents(
         resolved.startsWith('../') ||
         resolved === '..' ||
         path.posix.isAbsolute(resolved)
-      ) continue;
+      ) {
+        continue;
+      }
       const matches = byModule.get(stripSourceExtension(resolved));
-      if (matches?.length !== 1 || matches[0] === context.file) continue;
+      if (matches?.length !== 1 || matches[0] === context.file) {
+        continue;
+      }
       const target = matches[0];
       const importers = references.get(target) ?? new Set<string>();
       importers.add(context.file);
       references.set(target, importers);
     }
   }
-  return new Map([...references].map(([file, importers]) => [file, importers.size]));
+  return new Map(
+    [...references].map(([file, importers]) => [file, importers.size])
+  );
 }
 
 function stripSourceExtension(modulePath: string): string {

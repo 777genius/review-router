@@ -105,6 +105,28 @@ describe('Risk-aware summary user experience', () => {
     expect(markdown).not.toContain('Where to look first');
   });
 
+  it('never links a matching basename in another folder', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [],
+      source: {
+        repositoryHtmlUrl: 'https://github.com/example/demo',
+        headSha,
+        availablePaths: ['src/other/auth.ts'],
+      },
+      hotspots: [{
+        path: 'src/auth.ts',
+        reason: 'shared-code',
+        priority: 'attention',
+        relatedFiles: 2,
+      }],
+    });
+    expect(markdown).toContain('src/auth.ts');
+    expect(markdown).not.toContain(`/blob/${headSha}/src/auth.ts`);
+    expect(markdown).not.toContain(`/blob/${headSha}/src/other/auth.ts`);
+  });
+
   it('escapes malicious paths and does not link to unknown files', () => {
     const markdown = renderReviewerSummaryMarkdown({
       language: 'en',

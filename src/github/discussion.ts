@@ -121,7 +121,7 @@ export class ReviewDiscussionHandler {
     // ordinary legacy Q&A: fail closed instead of buying unverified inference.
     const firstLine = (comment.body.trim().split(/\r\n?|\n/u, 1)[0] ?? '').trim();
     if (
-      /^(?:\/rr\s+(?:fixed|suggest\s+fix)|@(?:reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(?:fixed|suggest\s+fix)|исправил[,!.\s]*проверь|предложи\s+исправление)$/iu.test(firstLine)
+      /^(?:\/rr\s+(?:fixed|suggest\s+fix)|@(?:reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(?:fixed|suggest\s+fix)|исправил[,!.\s]*проверь|предложи\s+исправление)(?=$|[\s.,!?;:])/iu.test(firstLine)
     ) {
       return ignore('focused command requires qualified managed Gateway');
     }

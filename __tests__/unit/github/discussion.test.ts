@@ -95,6 +95,11 @@ describe('ReviewDiscussionHandler', () => {
     "@review-router-ai fixed  \nHere is my rationale",
     "@review-router-ai suggest fix\nFor this line",
     "Предложи исправление\nК этой строке",
+    "/rr fixed please check this",
+    "@review-router-ai fixed please check this",
+    "@reviewrouter fixed?",
+    "@review-router-ai suggest fix please",
+    "Исправил, проверь пожалуйста",
   ])("never starts a legacy paid inference for managed-only %s", async (body) => {
     const { client, octokit } = makeClient([
       { id: 10, path: "src/a.ts", line: 2, body: parentBody },

@@ -32,7 +32,7 @@ describe('Risk-aware summary user experience', () => {
       ],
     });
     expect(markdown).toContain('Where to look first');
-    expect(markdown).toContain('Referenced by 2 changed files');
+    expect(markdown).toContain('Possible dependency links to 2 changed files');
     expect(markdown).toContain(`/blob/${headSha}/src/auth.ts#L14`);
     expect(markdown).not.toContain('priority=attention');
     expect(markdown).not.toContain('risk probability');

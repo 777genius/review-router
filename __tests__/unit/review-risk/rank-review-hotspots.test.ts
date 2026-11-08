@@ -67,6 +67,26 @@ describe('Risk-Aware Review Lite: pure, deterministic prioritization', () => {
     expect(ranked).toHaveLength(3);
   });
 
+  it('retains a critical finding after more than 2,000 changed-file candidates', () => {
+    const normal = Array.from({ length: 2_100 }, (_, index) => ({
+      path: `src/file-${index}.ts`,
+      changedLines: 2,
+    }));
+    expect(
+      rankReviewHotspots([
+        ...normal,
+        { path: 'src/critical.ts', severity: 'critical', line: 7 },
+      ])
+    ).toEqual([
+      {
+        path: 'src/critical.ts',
+        priority: 'attention',
+        reason: 'critical-finding',
+        line: 7,
+      },
+    ]);
+  });
+
   it('never trusts nonfinite dependents or malformed line numbers', () => {
     const [result] = rankReviewHotspots([
       { path: 'src/one.ts', dependents: Number.POSITIVE_INFINITY, severity: 'minor', line: -1 },

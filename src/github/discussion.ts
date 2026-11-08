@@ -119,7 +119,7 @@ export class ReviewDiscussionHandler {
     // Never interpret the same commands as a legacy conversational inference.
     // A qualified command followed by explanatory lines is still not an
     // ordinary legacy Q&A: fail closed instead of buying unverified inference.
-    const firstLine = comment.body.trim().split(/\r\n?|\n/u, 1)[0] ?? '';
+    const firstLine = (comment.body.trim().split(/\r\n?|\n/u, 1)[0] ?? '').trim();
     if (
       /^(?:\/rr\s+(?:fixed|suggest\s+fix)|@(?:reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(?:fixed|suggest\s+fix)|исправил[,!.\s]*проверь|предложи\s+исправление)$/iu.test(firstLine)
     ) {

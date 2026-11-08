@@ -92,6 +92,7 @@ describe('ReviewDiscussionHandler', () => {
     "Предложи исправление",
     "/rr fixed\nPlease check this finding",
     "@review-router-ai fixed\nHere is my rationale",
+    "@review-router-ai fixed  \nHere is my rationale",
     "@review-router-ai suggest fix\nFor this line",
     "Предложи исправление\nК этой строке",
   ])("never starts a legacy paid inference for managed-only %s", async (body) => {

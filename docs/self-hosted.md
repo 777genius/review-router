@@ -409,4 +409,4 @@ For issues and questions:
 
 ## License
 
-MIT License - See LICENSE file for details
+Licensing: ReviewRouter contributions use Apache License 2.0; inherited upstream code remains under MIT. See [LICENSE](../LICENSE), [NOTICE](../NOTICE), and [upstream MIT terms](../LICENSES/MIT-upstream.txt).

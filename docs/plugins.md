@@ -612,4 +612,4 @@ For plugin development help:
 
 ## License
 
-Plugins must be compatible with the MIT license of the main project.
+Plugins must have licenses compatible with the combined project's applicable terms: Apache License 2.0 for ReviewRouter contributions and MIT for inherited upstream code. See [LICENSE](../LICENSE) and [NOTICE](../NOTICE).

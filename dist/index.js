@@ -165799,7 +165799,7 @@ var package_default = {
     "review-router": "./bin/mpr",
     mpr: "./bin/mpr"
   },
-  license: "MIT",
+  license: "Apache-2.0 AND MIT",
   scripts: {
     build: "npm run build:action && npm run build:cli",
     "build:action": "npm run build:action:main && npm run build:context-gateway && npm run build:newtest-job && npm run build:single-t0-plan && npm run build:runtime-migration",

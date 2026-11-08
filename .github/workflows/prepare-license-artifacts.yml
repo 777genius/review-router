@@ -29,8 +29,9 @@ jobs:
         run: |
           set -euo pipefail
           git add -u dist/
+          git rm .github/workflows/prepare-license-artifacts.yml
           if git diff --cached --quiet; then
-            echo "Generated bundles already match"
+            echo "No generated changes"
             exit 0
           fi
           git config user.name "github-actions[bot]"

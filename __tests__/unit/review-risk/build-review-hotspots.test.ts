@@ -23,6 +23,42 @@ describe('Risk-Aware Review Lite: adapters', () => {
     ]);
   });
 
+  it('finds bounded exact imports from existing static context with graph disabled', () => {
+    const result = buildReviewHotspots({
+      files,
+      findings: [],
+      contexts: [
+        { file: 'src/ui.tsx', downstreamConsumers: ['./auth', 'react'] },
+        { file: 'src/utils.ts', downstreamConsumers: ['./auth'] },
+      ],
+    });
+    expect(result).toEqual([
+      {
+        path: 'src/auth.ts',
+        reason: 'shared-code',
+        priority: 'attention',
+        relatedFiles: 2,
+      },
+    ]);
+  });
+
+  it('does not claim an ambiguous basename or unrelated package import', () => {
+    const result = buildReviewHotspots({
+      files: [
+        { filename: 'src/auth.ts', status: 'modified', additions: 1, deletions: 0 },
+        { filename: 'src/auth.tsx', status: 'modified', additions: 1, deletions: 0 },
+        { filename: 'src/consumer.ts', status: 'modified', additions: 1, deletions: 0 },
+        { filename: 'src/nested/auth.ts', status: 'modified', additions: 1, deletions: 0 },
+      ],
+      findings: [],
+      contexts: [{
+        file: 'src/consumer.ts',
+        downstreamConsumers: ['./auth', 'nested/auth', '@org/auth'],
+      }],
+    });
+    expect(result).toEqual([]);
+  });
+
   it('does not build graph or infer safety where no graph exists', () => {
     expect(buildReviewHotspots({ files, findings: [] })).toEqual([]);
   });

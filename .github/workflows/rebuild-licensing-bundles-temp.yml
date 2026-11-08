@@ -7,7 +7,7 @@ permissions:
   contents: write
 jobs:
   sync:
-    if: github.event.head_commit.message == 'chore(ci): run one-shot license bundle sync'
+    if: contains(github.event.head_commit.message, 'one-shot license bundle sync')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

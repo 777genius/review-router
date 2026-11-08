@@ -1,4 +1,7 @@
 import { renderReviewerSummaryMarkdown } from '../../../src/output/reviewer-summary';
+import { MarkdownFormatter } from '../../../src/output/formatter';
+import { getBlockingFindingBreakdown } from '../../../src/output/severity-gate';
+import type { Review } from '../../../src/types';
 
 const headSha = '1111111111111111111111111111111111111111';
 const metrics = {
@@ -11,6 +14,48 @@ const metrics = {
 };
 
 describe('Risk-aware summary user experience', () => {
+  it('does not duplicate a single major finding in the real GitHub formatter', () => {
+    const finding = {
+      file: 'src/auth.ts',
+      line: 8,
+      severity: 'major' as const,
+      title: 'Check permission handling',
+      message: 'Permissions are not validated before access.',
+    };
+    const review: Review = {
+      summary: '',
+      sourceRevision: {
+        repositoryHtmlUrl: 'https://github.com/example/demo',
+        headSha,
+        availablePaths: ['src/auth.ts'],
+      },
+      findings: [finding],
+      inlineComments: [],
+      actionItems: [],
+      metrics: {
+        ...metrics,
+        totalFindings: 1,
+        major: 1,
+        providersFailed: 0,
+        totalTokens: 0,
+        totalCost: 0,
+        durationSeconds: 0,
+      },
+      riskHotspots: [{
+        path: 'src/auth.ts',
+        line: 8,
+        reason: 'major-finding',
+        priority: 'attention',
+      }],
+    };
+    const markdown = new MarkdownFormatter().format(review);
+    expect(markdown).toContain('Check permission handling');
+    expect(markdown).toContain(`/blob/${headSha}/src/auth.ts#L8`);
+    expect(markdown).not.toContain('Where to look first');
+    expect(getBlockingFindingBreakdown(review, 'major').total).toBe(1);
+    expect(review.findings[0].severity).toBe('major');
+  });
+
   it('shows at most three plain-language hotspots linking to exact reviewed SHA', () => {
     const markdown = renderReviewerSummaryMarkdown({
       language: 'en',

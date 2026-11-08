@@ -115,7 +115,18 @@ export function rankReviewHotspots(
   limit = maxDisplayed
 ): ReviewHotspot[] {
   const selected = new Map<string, ScoredHotspot>();
-  for (const candidate of candidates.slice(0, maxCandidates)) {
+  // Reserve the normal candidate budget for efficiency, but always inspect
+  // serious findings even when a GitHub PR contains >2,000 changed files.
+  // Otherwise file-level candidates can hide critical/major evidence.
+  for (let index = 0; index < candidates.length; index++) {
+    const candidate = candidates[index];
+    if (
+      index >= maxCandidates &&
+      candidate.severity !== 'critical' &&
+      candidate.severity !== 'major'
+    ) {
+      continue;
+    }
     const path = candidate.path;
     if (
       typeof path !== 'string' ||

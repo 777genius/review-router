@@ -182,6 +182,16 @@ describe('ReviewInteractionHandler', () => {
           body: expect.stringContaining('ReviewRouter commands'),
         })
       );
+      expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('/rr fixed'),
+        })
+      );
+      expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('/rr suggest fix'),
+        })
+      );
       expect(octokit.rest.repos.getCollaboratorPermissionLevel).not.toHaveBeenCalled();
       expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
     }

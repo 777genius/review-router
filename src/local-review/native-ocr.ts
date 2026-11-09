@@ -1,7 +1,7 @@
 /** Native OCR execution boundary. Never calls the hosted --reviewrouter-managed path. */
 import { spawn } from 'child_process';
 import * as path from 'path';
-import { LocalReviewFinding, LocalReviewOutcome, LocalReviewRunRequest, LocalReviewUsageError, summaryFromFindings } from './contracts';
+import { LocalReviewFinding, LocalReviewOutcome, LocalReviewRunRequest, LocalReviewUsageError, LocalReviewExecutionError, LocalReviewInterruptedError, summaryFromFindings } from './contracts';
 import { LocalGitSnapshot } from './git-snapshot';
 
 const MAX_STDOUT = 16 * 1024 * 1024;
@@ -40,7 +40,9 @@ export const runNativeProcess: NativeProcessRunner = (command, args, options) =>
   child.on('close', (exitCode, signal) => {
     clearTimeout(timeout);
     options.signal?.removeEventListener('abort', abort);
-    if (abortReason) reject(new LocalReviewUsageError(abortReason));
+    if (abortReason === 'Local review interrupted.') reject(new LocalReviewInterruptedError());
+    else if (abortReason === 'Native OCR executable unavailable or cannot start.') reject(new LocalReviewUsageError(abortReason));
+    else if (abortReason) reject(new LocalReviewExecutionError(abortReason));
     else resolve({ exitCode, signal, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8') });
   });
 });

@@ -364,17 +364,25 @@ event trigger separately.
 | `/rr fixed` | Direct inline reply to a verified ReviewRouter finding | With a qualified **managed Conversation Gateway**, rechecks one finding against the current HEAD. Replies **fixed**, **still present** or **cannot verify**, with source evidence when verifiable. Does not resolve the thread or modify code. |
 | `/rr suggest fix` | Direct inline reply to a verified ReviewRouter finding | With the same qualified managed Gateway, may produce one validated GitHub **Apply suggestion** for a single current, RIGHT-side diff line. The human applies it manually; ReviewRouter never commits, pushes or resolves the thread. |
 
+Edits to existing `/rr help` or `/rr status` comments do **not** trigger another
+response. Post a **new** comment/reply to request an updated result.
+
 The focused `/rr fixed` and `/rr suggest fix` commands require a verified
 repository maintainer, a same-repository PR, the original App-verified inline
 finding, current source evidence and an eligible managed provider. Send each
 command **alone on one line**, without suffixes or additional instructions.
+Enable published managed replies with `REVIEW_ROUTER_DISCUSSION_MODE=suggest` in
+the generated interaction workflow, or `discussion_mode: suggest` in the reusable
+interaction workflow. The reusable input defaults to `off`, which does **not**
+publish a focused reply even when the provider and finding are otherwise eligible.
 On an unsupported, stale, sensitive or unsafe anchor, ReviewRouter declines
 rather than guessing. These commands are **not** the standalone Codex discussion
 responder and do not trigger persistent Memory changes. `/rr` is the stable
 prefix regardless of the installed GitHub App login.
 
-**Optional Memory commands:** when the separate Action memory service is
-available, `/rr remember repo <text>` or `/rr remember workspace <text>`
+**Optional Action Memory commands (legacy interaction backend only):** when
+the separate Action Memory backend is configured and the workflow receives an
+inline review comment, `/rr remember repo <text>` or `/rr remember workspace <text>`
 submits a candidate; `/rr remember mem_suggestion_<id>` confirms it;
 `/rr reject-memory mem_suggestion_<id>` rejects it;
 `/rr memory active` / `/rr memory pending` lists entries;
@@ -383,9 +391,12 @@ submits a candidate; `/rr remember mem_suggestion_<id>` confirms it;
 `/rr forget mem_<id>` requests deletion, and
 `/rr memory-status <operation-uuid>` checks an asynchronous operation.
 These have separate authorization and provider requirements and may be
-unavailable in a given installation. Managed conversation Memory
-confirmation uses its own exact, revision-bound instructions; it is not
-equivalent to the Action's `/rr remember` syntax.
+unavailable in a given installation. They are handled by the **legacy Action
+Memory client**, not the managed `account-gateway` interaction: managed PR
+conversation preflight does not dispatch these commands to Action Memory, and
+managed inline replies go through the Conversation Gateway instead. For
+managed Memory changes, use the exact revision-bound confirmation text offered
+by ReviewRouter; `/rr remember` is not interchangeable with that instruction.
 
 ## Human Overrides
 

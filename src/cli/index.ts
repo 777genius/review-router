@@ -8,7 +8,7 @@ import { PRContext } from '../types';
 import { logger } from '../utils/logger';
 import { generateAnalytics, printSummary } from './analytics';
 import { parseLocalReviewOptions, usesExplicitLocalOptions } from '../local-review/cli-options';
-import { LocalReviewUsageError, exitCodeForLocalOutcome, renderLocalReview } from '../local-review/contracts';
+import { LocalReviewUsageError, LocalReviewExecutionError, LocalReviewInterruptedError, exitCodeForLocalOutcome, renderLocalReview } from '../local-review/contracts';
 import { runLocalReview } from '../local-review/run-local-review';
 import { NativeOcrEngine } from '../local-review/native-ocr';
 import { ConfigLoader } from '../config/loader';
@@ -110,15 +110,17 @@ export class CLI {
       return exitCodeForLocalOutcome(result);
     } catch (error) {
       const usage = error instanceof LocalReviewUsageError;
-      const message = usage ? error.message : 'Local review failed; no clean result was established.';
+      const interrupted = error instanceof LocalReviewInterruptedError;
+      const message = usage || interrupted || error instanceof LocalReviewExecutionError
+        ? error.message : 'Local review failed; no clean result was established.';
       if (wantsJson) {
         process.stdout.write(JSON.stringify({ schemaVersion: 1, status: 'failed', error: {
-          kind: usage ? 'usage' : 'execution', message
+          kind: interrupted ? 'interrupted' : usage ? 'usage' : 'execution', message
         } }) + '\n');
       } else {
         console.error(this.formatter.formatMessage(message, 'error'));
       }
-      return usage ? 4 : 3;
+      return interrupted ? 130 : usage ? 4 : 3;
     }
   }
 

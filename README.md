@@ -342,6 +342,50 @@ ReviewRouter suppresses duplicate inline comments when a rerun reports the same 
 
 It intentionally does not delete or move existing inline discussions by default. Deleting old comments can hide review history and is easy to get wrong when a model slightly changes wording. If a future lifecycle mode is added, it should be opt-in and heavily tested.
 
+## PR comment commands
+
+ReviewRouter commands run through the **ReviewRouter Interaction** workflow, not
+through a plain PR comment alone. The managed GitHub App setup listens to PR
+conversation comments and inline review replies. The standalone
+`scripts/install.sh` interaction workflow currently listens to **inline review
+replies only**; its `/rr help`, `/rr status` and `/rr review` commands therefore
+must also be posted as inline replies unless you configure a PR-conversation
+event trigger separately.
+
+| Command | Where | What it does |
+| --- | --- | --- |
+| `/rr help` | PR conversation or inline reply, when the workflow listens there | Lists the available commands; no AI model call. |
+| `/rr status` | Same | Reports the current PR HEAD, a matching recent GitHub Actions review run and signed finding overrides; a passing run does **not** prove complete review coverage. |
+| `/rr review` | Same | Requests a review of the current HEAD (requires `write`, `maintain` or `admin`). A queued request is **not** a finished review; check PR checks for the outcome. |
+| `/rr skip [reason]` | Direct reply to a ReviewRouter inline finding | Records a permission-checked, signed finding override and requests re-evaluation of the review check. An optional reason explains the dismissal. |
+| `/rr unskip [reason]` | Direct reply to a ReviewRouter inline finding | Reverses that finding override and requests re-evaluation; it does not change code. |
+| `/rr explain` or a question | Direct inline reply | Asks about the finding when a qualified discussion provider is configured. Answers do not dismiss findings or unblock CI. |
+| `/rr fixed` | Direct inline reply to a verified ReviewRouter finding | With a qualified **managed Conversation Gateway**, rechecks one finding against the current HEAD. Replies **fixed**, **still present** or **cannot verify**, with source evidence when verifiable. Does not resolve the thread or modify code. |
+| `/rr suggest fix` | Direct inline reply to a verified ReviewRouter finding | With the same qualified managed Gateway, may produce one validated GitHub **Apply suggestion** for a single current, RIGHT-side diff line. The human applies it manually; ReviewRouter never commits, pushes or resolves the thread. |
+
+The focused `/rr fixed` and `/rr suggest fix` commands require a verified
+repository maintainer, a same-repository PR, the original App-verified inline
+finding, current source evidence and an eligible managed provider. Send each
+command **alone on one line**, without suffixes or additional instructions.
+On an unsupported, stale, sensitive or unsafe anchor, ReviewRouter declines
+rather than guessing. These commands are **not** the standalone Codex discussion
+responder and do not trigger persistent Memory changes. `/rr` is the stable
+prefix regardless of the installed GitHub App login.
+
+**Optional Memory commands:** when the separate Action memory service is
+available, `/rr remember repo <text>` or `/rr remember workspace <text>`
+submits a candidate; `/rr remember mem_suggestion_<id>` confirms it;
+`/rr reject-memory mem_suggestion_<id>` rejects it;
+`/rr memory active` / `/rr memory pending` lists entries;
+`/rr memory edit mem_<id> <text>` updates an entry;
+`/rr disable-memory mem_<id>` retires it;
+`/rr forget mem_<id>` requests deletion, and
+`/rr memory-status <operation-uuid>` checks an asynchronous operation.
+These have separate authorization and provider requirements and may be
+unavailable in a given installation. Managed conversation Memory
+confirmation uses its own exact, revision-bound instructions; it is not
+equivalent to the Action's `/rr remember` syntax.
+
 ## Human Overrides
 
 If ReviewRouter posts a blocking finding that a maintainer has verified as not actionable, reply to that inline comment with:

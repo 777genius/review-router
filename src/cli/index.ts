@@ -105,7 +105,7 @@ export class CLI {
         );
       }
       const result = await runLocalReview(parsed.request, { configFile: parsed.configFile });
-      if (parsed.format === 'json') process.stdout.write(JSON.stringify(result) + '\\n');
+      if (parsed.format === 'json') process.stdout.write(JSON.stringify(result) + '\n');
       else console.log(renderLocalReview(result));
       return exitCodeForLocalOutcome(result);
     } catch (error) {
@@ -114,7 +114,7 @@ export class CLI {
       if (wantsJson) {
         process.stdout.write(JSON.stringify({ schemaVersion: 1, status: 'failed', error: {
           kind: usage ? 'usage' : 'execution', message
-        } }) + '\\n');
+        } }) + '\n');
       } else {
         console.error(this.formatter.formatMessage(message, 'error'));
       }

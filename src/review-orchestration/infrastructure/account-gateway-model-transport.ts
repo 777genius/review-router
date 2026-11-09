@@ -783,11 +783,12 @@ export class AccountGatewayModelTransport {
         }
         // Only the closed, positive pre-request denial permits another POST.
         // Missing response headers/references and bare proxy errors prove nothing.
+        // Reuse the existing dispatch ticket: relay saturation is rejected before
+        // the server forwards or consumes that ticket, so no new claim is made.
         const referenced =
           response.headers['x-reviewrouter-request-ref'] !== undefined;
         if (
           !this.directProvider &&
-          !this.modelDispatch &&
           !this.auxiliaryDescription &&
           httpStatus === 503 &&
           !referenced &&

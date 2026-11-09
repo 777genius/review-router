@@ -55,7 +55,7 @@ export class LocalGitSnapshotReader {
   root(): string {
     const root = git(this.workingDirectory, ['rev-parse', '--show-toplevel']).toString('utf8').trim();
     if (!root || !path.isAbsolute(root)) throw new LocalReviewUsageError('Not inside a Git working tree.');
-    return root;
+    return path.resolve(root); // Git uses / separators on Windows; filesystem reads use native paths.
   }
 
   capture(scope: LocalReviewScope, includeUntracked: boolean): LocalGitSnapshot {
@@ -105,7 +105,10 @@ export class LocalGitSnapshotReader {
         let bytesRead = 0;
         for (const p of untrackedPaths) {
           const resolved = path.resolve(root, p);
-          if (!resolved.startsWith(root + path.sep)) throw new LocalReviewUsageError('Unsafe untracked path.');
+          const relative = path.relative(root, resolved);
+          if (!relative || relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+            throw new LocalReviewUsageError('Unsafe untracked path.');
+          }
           const stat = lstatSync(resolved);
           if (stat.isSymbolicLink()) {
             // Native OCR can follow links; do not send arbitrary external contents.

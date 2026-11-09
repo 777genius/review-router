@@ -12,6 +12,10 @@ describe('engine-neutral local review arguments', () => {
     expect(parse('--engine', 'ocr', '--scope', 'commit', '--ref', 'HEAD').request.scope)
       .toEqual({ kind: 'commit', ref: 'HEAD' });
   });
+  it('passes legacy dry-run through the explicit engine contract', () => {
+    expect(parse('--engine=legacy', '--dry-run').request.dryRun).toBe(true);
+    expect(() => parse('--engine=ocr', '--dry-run')).toThrow(/dry-run/);
+  });
   it.each([
     ['--engine=other'], ['--engine=ocr', '--scope=branch'], ['--engine=ocr', '--scope=commit'],
     ['--engine=ocr', '--base=HEAD'], ['--engine=ocr', '--include-untracked', '--scope=commit', '--ref=HEAD'],

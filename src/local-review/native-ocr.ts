@@ -112,9 +112,9 @@ function findingFromNative(value: unknown, selected: ReadonlySet<string>): Local
   const c = requiredRecord(value, 'comment');
   const file = safePath(c.path);
   if (!selected.has(file)) throw new Error('Native OCR comment targets a file outside the selected review.');
-  const start = typeof c.start_line === 'number' && Number.isSafeInteger(c.start_line) && c.start_line > 0 ? c.start_line : 0;
+  const start = typeof c.start_line === 'number' && Number.isSafeInteger(c.start_line) && c.start_line >= 0 ? c.start_line : null;
+  if (start === null) throw new Error('Native OCR comment has an invalid line location.');
   const end = typeof c.end_line === 'number' && Number.isSafeInteger(c.end_line) && c.end_line >= start ? c.end_line : start;
-  if (start === 0) throw new Error('Native OCR comment has an invalid line location.');
   const nativeSeverity = stringField(c.severity, 40) ?? '';
   // Explicit taxonomy translation. Missing/unknown severity is not guessed.
   const severity = nativeSeverity === 'critical' ? 'critical'
@@ -124,7 +124,7 @@ function findingFromNative(value: unknown, selected: ReadonlySet<string>): Local
   if (!message) throw new Error('Native OCR comment missing the finding description.');
   const title = message.split('\n')[0].slice(0, 180);
   const suggestion = stringField(c.suggestion_code, 5000);
-  return { path: file, line: start, endLine: end, severity,
+  return { path: file, line: start === 0 ? null : start, endLine: end === 0 ? null : end, severity,
     ...(nativeSeverity ? { nativeSeverity } : {}), title, message,
     ...(suggestion ? { suggestion } : {}),
   };
@@ -186,14 +186,16 @@ export function normalizeNativeOcrResult(
   }
   const omitted = [...failed, ...waived].map(x => x.path);
   const hasNativeWarnings = Array.isArray(obj.warnings) && obj.warnings.length > 0;
+  const unanchoredFindings = findings.some(finding => finding.line === null);
   const model = observedModel ?? manifestModel;
   const complete = terminal === 'complete' && omitted.length === 0 &&
     completed.length + reused.length === selected.length && selected.length > 0 &&
-    !record(manifest.run_failure) && !hasNativeWarnings && Boolean(model);
+    !record(manifest.run_failure) && !hasNativeWarnings && !unanchoredFindings && Boolean(model);
   const status = terminal === 'complete' && !complete ? 'partial' : terminal as LocalReviewOutcome['status'];
   const summary = summaryFromFindings(findings);
   const warnings: string[] = [];
   if (hasNativeWarnings) warnings.push('Native OCR emitted warnings; inspect its local session for details.');
+  if (unanchoredFindings) warnings.push('Some native findings have no verified source location; inspect the referenced files.');
   if (!model) warnings.push('Native OCR did not establish the executed model identity.');
   return {
     schemaVersion: 1, engine: { id: 'ocr', version }, status,

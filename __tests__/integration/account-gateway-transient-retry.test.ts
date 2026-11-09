@@ -813,8 +813,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 12\b/);
-      expect(result.stdout).toMatch(/# pass 12\b/);
+      expect(result.stdout).toMatch(/# tests 14\b/);
+      expect(result.stdout).toMatch(/# pass 14\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

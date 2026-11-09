@@ -185,18 +185,21 @@ export function normalizeNativeOcrResult(
     throw new Error('Native OCR model attribution differs from manifest.');
   }
   const omitted = [...failed, ...waived].map(x => x.path);
+  const hasNativeWarnings = Array.isArray(obj.warnings) && obj.warnings.length > 0;
+  const model = observedModel ?? manifestModel;
   const complete = terminal === 'complete' && omitted.length === 0 &&
     completed.length + reused.length === selected.length && selected.length > 0 &&
-    !record(manifest.run_failure);
+    !record(manifest.run_failure) && !hasNativeWarnings && Boolean(model);
   const status = terminal === 'complete' && !complete ? 'partial' : terminal as LocalReviewOutcome['status'];
   const summary = summaryFromFindings(findings);
-  const warnings = Array.isArray(obj.warnings) && obj.warnings.length > 0
-    ? ['Native OCR emitted warnings; inspect its local session for details.'] : [];
+  const warnings: string[] = [];
+  if (hasNativeWarnings) warnings.push('Native OCR emitted warnings; inspect its local session for details.');
+  if (!model) warnings.push('Native OCR did not establish the executed model identity.');
   return {
     schemaVersion: 1, engine: { id: 'ocr', version }, status,
     input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
     coverage: { selected: selected.length, reviewed: completed.length + reused.length, omitted, complete },
-    provider: { name: stringField(llm?.provider, 150) ?? stringField(execution?.provider, 150), model: observedModel ?? manifestModel },
+    provider: { name: stringField(llm?.provider, 150) ?? stringField(execution?.provider, 150), model },
     findings, summary, blocking: summary.critical > 0 || summary.major > 0, warnings,
   };
 }

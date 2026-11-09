@@ -106,17 +106,24 @@ export class CLI {
       }
       const cancellation = new AbortController();
       const onInterrupt = (): void => cancellation.abort();
-      process.once('SIGINT', onInterrupt);
-      process.once('SIGTERM', onInterrupt);
+      // The legacy engine has no cancellation port: do not swallow its normal
+      // terminal signals by installing a handler it cannot observe.
+      const cancellable = parsed.request.engine === 'ocr';
+      if (cancellable) {
+        process.once('SIGINT', onInterrupt);
+        process.once('SIGTERM', onInterrupt);
+      }
       const result = await (async () => {
         try {
           return await runLocalReview(
-            { ...parsed.request, signal: cancellation.signal },
+            { ...parsed.request, ...(cancellable ? { signal: cancellation.signal } : {}) },
             { configFile: parsed.configFile }
           );
         } finally {
-          process.removeListener('SIGINT', onInterrupt);
-          process.removeListener('SIGTERM', onInterrupt);
+          if (cancellable) {
+            process.removeListener('SIGINT', onInterrupt);
+            process.removeListener('SIGTERM', onInterrupt);
+          }
         }
       })();
       if (parsed.format === 'json') process.stdout.write(JSON.stringify(result) + '\n');

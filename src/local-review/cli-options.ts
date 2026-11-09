@@ -77,6 +77,7 @@ export function parseLocalReviewOptions(args: readonly string[]): LocalReviewCli
   }
   return {
     request: { engine, scope, includeUntracked, preview,
+      ...(values.has('dry-run') ? { dryRun: true } : {}),
       ...(typeof values.get('provider') === 'string' ? { provider: values.get('provider') as string } : {}),
       ...(typeof values.get('model') === 'string' ? { model: values.get('model') as string } : {}),
     },

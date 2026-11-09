@@ -104,7 +104,21 @@ export class CLI {
           'Legacy JSON is not yet qualified; use --engine ocr --format json or the existing legacy terminal output.'
         );
       }
-      const result = await runLocalReview(parsed.request, { configFile: parsed.configFile });
+      const cancellation = new AbortController();
+      const onInterrupt = (): void => cancellation.abort();
+      process.once('SIGINT', onInterrupt);
+      process.once('SIGTERM', onInterrupt);
+      const result = await (async () => {
+        try {
+          return await runLocalReview(
+            { ...parsed.request, signal: cancellation.signal },
+            { configFile: parsed.configFile }
+          );
+        } finally {
+          process.removeListener('SIGINT', onInterrupt);
+          process.removeListener('SIGTERM', onInterrupt);
+        }
+      })();
       if (parsed.format === 'json') process.stdout.write(JSON.stringify(result) + '\n');
       else console.log(renderLocalReview(result));
       return exitCodeForLocalOutcome(result);

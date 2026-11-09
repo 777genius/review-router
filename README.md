@@ -71,6 +71,7 @@ Available but still experimental:
 - **PR description summary:** adds a generated `Summary`, selected files list, and walkthrough block while preserving author text above it.
 - **Merge gating:** fail the check for critical or major findings when configured.
 - **Human override:** reply `/rr skip` to a ReviewRouter inline comment to dismiss that finding after a maintainer confirms it is not actionable.
+- **Focused finding commands:** `/rr fixed` rechecks a finding against current source, and `/rr suggest fix` proposes one manually applied GitHub suggestion when the qualified managed Gateway is available. Neither auto-edits code or closes threads; see [PR comment commands](#pr-comment-commands).
 - **AI discussion replies:** with Codex auth modes, ordinary replies to ReviewRouter findings can get an AI explanation. If the model agrees a finding is likely a false positive, it suggests `/rr skip`; it does not unblock CI by itself.
 - **Large diff compaction:** compact very large, generated, lockfile, and migration diffs so they do not dominate the prompt.
 - **Review scope report:** the summary shows full-diff, compacted, metadata-only, and skipped file counts so large PRs are auditable.
@@ -342,6 +343,61 @@ ReviewRouter suppresses duplicate inline comments when a rerun reports the same 
 
 It intentionally does not delete or move existing inline discussions by default. Deleting old comments can hide review history and is easy to get wrong when a model slightly changes wording. If a future lifecycle mode is added, it should be opt-in and heavily tested.
 
+## PR comment commands
+
+ReviewRouter commands run through the **ReviewRouter Interaction** workflow, not
+through a plain PR comment alone. The managed GitHub App setup listens to PR
+conversation comments and inline review replies. The standalone
+`scripts/install.sh` interaction workflow currently listens to **inline review
+replies only**; its `/rr help`, `/rr status` and `/rr review` commands therefore
+must also be posted as inline replies unless you configure a PR-conversation
+event trigger separately.
+
+| Command | Where | What it does |
+| --- | --- | --- |
+| `/rr help` | PR conversation or inline reply, when the workflow listens there | Lists the available commands; no AI model call. |
+| `/rr status` | Same | Reports the current PR HEAD, a matching recent GitHub Actions review run and signed finding overrides; a passing run does **not** prove complete review coverage. |
+| `/rr review` | Same | Requests a review of the current HEAD (requires `write`, `maintain` or `admin`). A queued request is **not** a finished review; check PR checks for the outcome. |
+| `/rr skip [reason]` | Direct reply to a ReviewRouter inline finding | Records a permission-checked, signed finding override and requests re-evaluation of the review check. An optional reason explains the dismissal. |
+| `/rr unskip [reason]` | Direct reply to a ReviewRouter inline finding | Reverses that finding override and requests re-evaluation; it does not change code. |
+| `/rr explain` or a question | Direct inline reply | Asks about the finding when a qualified discussion provider is configured. Answers do not dismiss findings or unblock CI. |
+| `/rr fixed` | Direct inline reply to a verified ReviewRouter finding | With a qualified **managed Conversation Gateway**, rechecks one finding against the current HEAD. Replies **fixed**, **still present** or **cannot verify**, with source evidence when verifiable. Does not resolve the thread or modify code. |
+| `/rr suggest fix` | Direct inline reply to a verified ReviewRouter finding | With the same qualified managed Gateway, may produce one validated GitHub **Apply suggestion** for a single current, RIGHT-side diff line. The human applies it manually; ReviewRouter never commits, pushes or resolves the thread. |
+
+Edits to existing `/rr help` or `/rr status` comments do **not** trigger another
+response. Post a **new** comment/reply to request an updated result.
+
+The focused `/rr fixed` and `/rr suggest fix` commands require a verified
+repository maintainer, a same-repository PR, the original App-verified inline
+finding, current source evidence and an eligible managed provider. Send each
+command **alone on one line**, without suffixes or additional instructions.
+Enable published managed replies with `REVIEW_ROUTER_DISCUSSION_MODE=suggest` in
+the generated interaction workflow, or `discussion_mode: suggest` in the reusable
+interaction workflow. The reusable input defaults to `off`, which does **not**
+publish a focused reply even when the provider and finding are otherwise eligible.
+On an unsupported, stale, sensitive or unsafe anchor, ReviewRouter declines
+rather than guessing. These commands are **not** the standalone Codex discussion
+responder and do not trigger persistent Memory changes. `/rr` is the stable
+prefix regardless of the installed GitHub App login.
+
+**Optional Action Memory commands (legacy interaction backend only):** when
+the separate Action Memory backend is configured and the workflow receives an
+inline review comment, `/rr remember repo <text>` or `/rr remember workspace <text>`
+submits a candidate; `/rr remember mem_suggestion_<id>` confirms it;
+`/rr reject-memory mem_suggestion_<id>` rejects it;
+`/rr memory active` / `/rr memory pending` lists entries;
+`/rr memory edit mem_<id> <text>` updates an entry;
+`/rr disable-memory mem_<id>` retires it;
+`/rr forget mem_<id>` requests deletion, and
+`/rr memory-status <operation-uuid>` checks an asynchronous operation.
+These have separate authorization and provider requirements and may be
+unavailable in a given installation. They are handled by the **legacy Action
+Memory client**, not the managed `account-gateway` interaction: managed PR
+conversation preflight does not dispatch these commands to Action Memory, and
+managed inline replies go through the Conversation Gateway instead. For
+managed Memory changes, use the exact revision-bound confirmation text offered
+by ReviewRouter; `/rr remember` is not interchangeable with that instruction.
+
 ## Human Overrides
 
 If ReviewRouter posts a blocking finding that a maintainer has verified as not actionable, reply to that inline comment with:
@@ -397,6 +453,7 @@ The workflow validates that it is running on `main`, the exact tag does not alre
 
 ## Documentation
 
+- [PR comment commands and permissions](#pr-comment-commands)
 - [Installer guide](./docs/install.md)
 - [HTTPS context tools for managed OCR](./docs/https-mcp-context.md)
 - [Troubleshooting](./docs/TROUBLESHOOTING.md)

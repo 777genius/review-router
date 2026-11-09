@@ -58,6 +58,18 @@ describe('native OCR adapter', () => {
     const unsafe = native(); unsafe.comments[0].path = 'src/\x1b[2Jbad.ts';
     expect(() => normalizeNativeOcrResult(unsafe, [item.path], snapshot, '1.13.1')).toThrow(/unsafe/);
   });
+  it('never reports complete when native warnings or model provenance are absent', () => {
+    const withWarnings = { ...native(), warnings: [{ file: item.path, reason: 'subagent warning' }] };
+    const partial = normalizeNativeOcrResult(withWarnings, [item.path], snapshot, '1.13.1');
+    expect(partial.status).toBe('partial');
+    expect(partial.coverage.complete).toBe(false);
+    const withoutModel = native();
+    withoutModel.llm = {} as { provider: string; model: string };
+    withoutModel.manifest.execution.model = '';
+    const unknown = normalizeNativeOcrResult(withoutModel, [item.path], snapshot, '1.13.1');
+    expect(unknown.status).toBe('partial');
+    expect(unknown.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/model identity/)]));
+  });
   it('does not call the model when only a preview was requested', async () => {
     const requests: readonly string[][] = [] as string[][];
     const result = await new NativeOcrEngine(runner(native(), a => (requests as string[][]).push([...a]))).run(snapshot, { ...request, preview: true });

@@ -22,6 +22,14 @@ export class ConfigLoader {
     return this.resolve(fileConfig, envConfig);
   }
 
+  /** Explicit CLI config: fail instead of silently ignoring missing/invalid files. */
+  static loadFromPath(filePath: string): ReviewConfig {
+    const raw = fs.readFileSync(path.resolve(process.cwd(), filePath), 'utf8');
+    const parsed = yaml.load(raw) as Record<string, unknown>;
+    const validated = ReviewConfigSchema.parse(parsed);
+    return this.resolve(this.normalizeKeys(validated), this.loadFromEnv());
+  }
+
   /** Trusted native runtime configuration, without ambient env or checkout files.
    * The same parser/defaults/validation apply; this is not a caller override. */
   static loadRuntimeEnvironment(

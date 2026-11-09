@@ -39,6 +39,11 @@ func main() {
             return
         }
     }
+    modeOverride := os.Getenv("RR_FAKE_OCR_MODE")
+    if modeOverride=="malformed" { fmt.Print("{invalid JSON"); return }
+    if modeOverride=="stale" {
+        if err:=os.WriteFile(filepath.Join(flag(args,"--repo"),"src","example.ts"),[]byte("export const x=9;\\n"),0600); err!=nil { os.Exit(4) }
+    }
     status := os.Getenv("RR_FAKE_OCR_STATUS")
     if status=="" { status="complete" }
     completed := selected;failed:=[]interface{}{}
@@ -48,5 +53,8 @@ func main() {
         "manifest":map[string]interface{}{"schema_version":"ocr.run-manifest/v1","operation":"review","terminal_state":status,"input":input,
             "execution":map[string]string{"provider":"fixture","model":"mock-v1"},
             "coverage":map[string]interface{}{"selected":selected,"completed":completed,"reused":[]interface{}{},"failed":failed,"waived":[]interface{}{}}}}
+    if modeOverride=="warning" {
+        output["warnings"] = []interface{}{map[string]string{"file":file,"reason":"synthetic warning"}}
+    }
     json.NewEncoder(os.Stdout).Encode(output)
 }

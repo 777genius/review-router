@@ -1,11 +1,9 @@
 /* Verify packaged CLI entry points are present; works on every CI platform. */
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
-const npmCli = process.env.npm_execpath;
-assert(npmCli, 'npm_execpath is required for deterministic npm invocation');
-const p = spawnSync(process.execPath, [npmCli, 'pack', '--dry-run', '--json', '--ignore-scripts'], {
-  cwd: process.cwd(), encoding: 'utf8', timeout: 120_000,
+const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const p = spawnSync(npmCommand, ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+  cwd: process.cwd(), encoding: 'utf8', timeout: 120_000, shell: process.platform === 'win32',
 });
 assert.equal(p.status, 0, p.stderr || String(p.error));
 const packages = JSON.parse(p.stdout);

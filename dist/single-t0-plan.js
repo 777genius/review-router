@@ -144681,7 +144681,7 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
   if (nearby.length === 0) return reportedLine;
   const bodyTokens = tokenizeForLineScoring(commentBody);
   const riskTerms = getRiskTerms(commentBody);
-  const score2 = (candidate) => {
+  const score = (candidate) => {
     const content = candidate.content;
     const lower = content.toLowerCase();
     const codeTokens = tokenizeForLineScoring(content);
@@ -144704,11 +144704,11 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
     return proximity + overlap + riskScore + interpolationScore + callScore + declarationPenalty;
   };
   const current = nearby.find((line2) => line2.line === reportedLine);
-  const currentScore = current ? score2(current) : Number.NEGATIVE_INFINITY;
+  const currentScore = current ? score(current) : Number.NEGATIVE_INFINITY;
   const best = [...nearby].sort(
-    (a, b) => score2(b) - score2(a) || Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine)
+    (a, b) => score(b) - score(a) || Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine)
   )[0];
-  const bestScore = score2(best);
+  const bestScore = score(best);
   return bestScore > currentScore + 1 ? best.line : reportedLine;
 }
 function tokenizeForLineScoring(text3) {
@@ -193121,13 +193121,13 @@ ${JSON.stringify(outputSchema)}` : prompt;
       if (changed.has(file)) continue;
       const content = this.readRepoFileSync(file);
       if (!content) continue;
-      let score2 = 0;
+      let score = 0;
       for (const identifier2 of identifiers) {
         if (content.includes(identifier2))
-          score2 += this.contextIdentifierWeight(identifier2);
+          score += this.contextIdentifierWeight(identifier2);
       }
-      if (score2 > 0) {
-        scored.push({ file, score: score2 });
+      if (score > 0) {
+        scored.push({ file, score });
       }
     }
     return scored.sort((a, b) => b.score - a.score || a.file.localeCompare(b.file)).slice(0, 8).map((item) => item.file);
@@ -208948,75 +208948,6 @@ function unique2(values) {
   return Array.from(new Set(values));
 }
 
-// src/review-risk/domain/rank-review-hotspots.ts
-var maxCandidates = 2e3;
-var maxDisplayed = 3;
-function validDependents(value) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? Math.min(value, 999) : void 0;
-}
-function safeLine(value) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
-}
-function score(candidate) {
-  const dependents = validDependents(candidate.dependents);
-  const line2 = safeLine(candidate.line);
-  let rank;
-  let reason;
-  let priority = "attention";
-  if (candidate.severity === "critical") {
-    rank = 50;
-    reason = "critical-finding";
-  } else if (candidate.severity === "major") {
-    rank = 40;
-    reason = "major-finding";
-  } else if (dependents !== void 0 && dependents > 0) {
-    rank = 30 + Math.min(9, dependents);
-    reason = "shared-code";
-  } else if (candidate.coverage === "unreviewed" || candidate.coverage === "metadata-only") {
-    rank = 20;
-    reason = "not-reviewed";
-    priority = "unknown";
-  } else if (candidate.severity === "minor") {
-    rank = 10;
-    reason = "minor-finding";
-  } else {
-    return void 0;
-  }
-  return {
-    rank,
-    hotspot: {
-      path: candidate.path,
-      reason,
-      priority,
-      ...line2 === void 0 ? {} : { line: line2 },
-      ...dependents === void 0 || dependents === 0 ? {} : { relatedFiles: dependents }
-    }
-  };
-}
-function rankReviewHotspots(candidates, limit = maxDisplayed) {
-  const selected = /* @__PURE__ */ new Map();
-  for (let index = 0; index < candidates.length; index++) {
-    const candidate = candidates[index];
-    if (index >= maxCandidates && candidate.severity !== "critical" && candidate.severity !== "major") {
-      continue;
-    }
-    const path19 = candidate.path;
-    if (typeof path19 !== "string" || path19.trim().length === 0 || path19.length > 1024) {
-      continue;
-    }
-    const next = score(candidate);
-    if (!next) continue;
-    const previous = selected.get(path19);
-    if (!previous || next.rank > previous.rank || next.rank === previous.rank && (next.hotspot.line ?? Number.MAX_SAFE_INTEGER) < (previous.hotspot.line ?? Number.MAX_SAFE_INTEGER)) {
-      selected.set(path19, next);
-    }
-  }
-  const count2 = Number.isSafeInteger(limit) ? Math.max(0, Math.min(limit, maxDisplayed)) : maxDisplayed;
-  return [...selected.values()].sort(
-    (left, right) => right.rank - left.rank || (left.hotspot.path < right.hotspot.path ? -1 : left.hotspot.path > right.hotspot.path ? 1 : 0)
-  ).slice(0, count2).map(({ hotspot }) => hotspot);
-}
-
 // src/output/review-banner.ts
 function renderReviewBanner(baseUrl2, presentation) {
   if (!baseUrl2) return "";
@@ -209434,45 +209365,6 @@ ${safeFindingBody(line2.message)}`
     lines.push("", block);
     return true;
   };
-  const hotspots = input.hotspots ?? rankReviewHotspots(
-    input.findings.map(({ file, line: line2, severity }) => ({
-      path: file,
-      line: line2,
-      severity
-    }))
-  );
-  const addsDistinctContext = hotspots.some(
-    ({ reason }) => reason === "shared-code" || reason === "not-reviewed"
-  ) || input.findings.length > 3;
-  if (hotspots.length > 0 && addsDistinctContext) {
-    const text3 = riskHotspotCopy[locale];
-    const items = hotspots.slice(0, 3).map((hotspot) => {
-      const label = escapeCoverageManifestPath(
-        hotspot.path + (Number.isSafeInteger(hotspot.line) && (hotspot.line ?? 0) > 0 ? `:${hotspot.line}` : "")
-      );
-      const url3 = findingSourceUrl(
-        {
-          file: hotspot.path,
-          line: hotspot.line ?? 0,
-          severity: "minor",
-          title: "",
-          message: ""
-        },
-        input.source
-      );
-      const location = url3 ? `[${label}](${url3})` : label;
-      const explanation = hotspot.reason === "critical-finding" ? text3.critical : hotspot.reason === "major-finding" ? text3.major : hotspot.reason === "minor-finding" ? text3.minor : hotspot.reason === "not-reviewed" ? text3.notReviewed : text3.shared(hotspot.relatedFiles);
-      return `- ${location} \u2014 ${explanation}`;
-    });
-    append(
-      `### ${text3.heading}${input.coverage?.complete === false ? `
-
-${text3.partial}` : ""}
-
-${items.join("\n")}`,
-      maxSummaryBytes - 4e3
-    );
-  }
   const findings = [...input.findings].sort(compareSummaryFindings);
   const newFindings = findings.filter((finding) => !finding.previous);
   const previousFindings = findings.filter((finding) => finding.previous);
@@ -209542,107 +209434,6 @@ ${details.join("\n\n")}
   if (omitted) lines.push("", notice);
   return lines.join("\n");
 }
-var riskHotspotCopy = {
-  en: {
-    heading: "Where to look first",
-    critical: "Critical issue identified",
-    major: "Important issue identified",
-    minor: "Issue worth reviewing",
-    notReviewed: "Review of this file did not finish",
-    partial: "Only available evidence is shown; the review did not cover everything.",
-    shared: (n) => n ? `Possible dependency links to ${n} changed file${n === 1 ? "" : "s"}` : "Possible links to other changed files"
-  },
-  ru: {
-    heading: "\u041D\u0430 \u0447\u0442\u043E \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u044C \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
-    critical: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u043A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430",
-    major: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u0430\u044F \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430",
-    minor: "\u0415\u0441\u0442\u044C \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438",
-    notReviewed: "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u044D\u0442\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0430 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430",
-    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0438\u043C\u0435\u044E\u0449\u0438\u0435\u0441\u044F \u0434\u0430\u043D\u043D\u044B\u0435; \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0431\u044B\u043B\u0430 \u043D\u0435\u043F\u043E\u043B\u043D\u043E\u0439.",
-    shared: (n) => n ? `\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u044B\u0435 \u0441\u0432\u044F\u0437\u0438 \u0441 ${n} \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u044B\u0435 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0434\u0440\u0443\u0433\u0438\u043C\u0438 \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
-  },
-  uk: {
-    heading: "\u041D\u0430 \u0449\u043E \u0437\u0432\u0435\u0440\u043D\u0443\u0442\u0438 \u0443\u0432\u0430\u0433\u0443",
-    critical: "\u0412\u0438\u044F\u0432\u043B\u0435\u043D\u043E \u043A\u0440\u0438\u0442\u0438\u0447\u043D\u0443 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0443",
-    major: "\u0412\u0438\u044F\u0432\u043B\u0435\u043D\u043E \u0441\u0435\u0440\u0439\u043E\u0437\u043D\u0443 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0443",
-    minor: "\u0404 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F \u0434\u043B\u044F \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0438",
-    notReviewed: "\u041F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0443 \u0446\u044C\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0443 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
-    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u043E \u043D\u0430\u044F\u0432\u043D\u0456 \u0434\u0430\u043D\u0456; \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0430 \u0431\u0443\u043B\u0430 \u043D\u0435\u043F\u043E\u0432\u043D\u043E\u044E.",
-    shared: (n) => n ? `\u041C\u043E\u0436\u043B\u0438\u0432\u0456 \u0437\u0432\u2019\u044F\u0437\u043A\u0438 \u0437 ${n} \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u041C\u043E\u0436\u043B\u0438\u0432\u0456 \u0437\u0432\u2019\u044F\u0437\u043A\u0438 \u0437 \u0456\u043D\u0448\u0438\u043C\u0438 \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
-  },
-  es: {
-    heading: "D\xF3nde revisar primero",
-    critical: "Se encontr\xF3 un problema cr\xEDtico",
-    major: "Se encontr\xF3 un problema importante",
-    minor: "Hay un problema que revisar",
-    notReviewed: "No se complet\xF3 la revisi\xF3n de este archivo",
-    partial: "Solo se muestran indicios disponibles; la revisi\xF3n est\xE1 incompleta.",
-    shared: (n) => n ? `Posibles dependencias con ${n} archivos modificados` : "Posibles dependencias con otros archivos modificados"
-  },
-  pt: {
-    heading: "Onde revisar primeiro",
-    critical: "Problema cr\xEDtico identificado",
-    major: "Problema importante identificado",
-    minor: "Problema que merece revis\xE3o",
-    notReviewed: "A revis\xE3o deste arquivo n\xE3o foi conclu\xEDda",
-    partial: "Apenas sinais dispon\xEDveis s\xE3o mostrados; a revis\xE3o est\xE1 incompleta.",
-    shared: (n) => n ? `Poss\xEDveis depend\xEAncias com ${n} arquivos alterados` : "Poss\xEDveis depend\xEAncias com outros arquivos alterados"
-  },
-  fr: {
-    heading: "O\xF9 regarder en premier",
-    critical: "Probl\xE8me critique d\xE9tect\xE9",
-    major: "Probl\xE8me important d\xE9tect\xE9",
-    minor: "Point \xE0 v\xE9rifier",
-    notReviewed: "La v\xE9rification de ce fichier est incompl\xE8te",
-    partial: "Seuls les indices disponibles sont affich\xE9s ; la revue est incompl\xE8te.",
-    shared: (n) => n ? `Liens de d\xE9pendance possibles avec ${n} fichiers modifi\xE9s` : "Liens possibles avec d\u2019autres fichiers modifi\xE9s"
-  },
-  de: {
-    heading: "Worauf zuerst achten",
-    critical: "Kritisches Problem erkannt",
-    major: "Wichtiges Problem erkannt",
-    minor: "Hinweis zur Pr\xFCfung",
-    notReviewed: "Pr\xFCfung dieser Datei nicht abgeschlossen",
-    partial: "Nur verf\xFCgbare Hinweise werden angezeigt; die Pr\xFCfung ist unvollst\xE4ndig.",
-    shared: (n) => n ? `M\xF6gliche Abh\xE4ngigkeiten zu ${n} ge\xE4nderten Dateien` : "M\xF6gliche Abh\xE4ngigkeiten zu anderen ge\xE4nderten Dateien"
-  },
-  it: {
-    heading: "Dove guardare prima",
-    critical: "Problema critico rilevato",
-    major: "Problema importante rilevato",
-    minor: "Problema da verificare",
-    notReviewed: "Revisione di questo file non completata",
-    partial: "Si mostrano solo i segnali disponibili; revisione incompleta.",
-    shared: (n) => n ? `Possibili dipendenze con ${n} file modificati` : "Possibili dipendenze con altri file modificati"
-  },
-  zh: {
-    heading: "\u4F18\u5148\u67E5\u770B",
-    critical: "\u53D1\u73B0\u4E25\u91CD\u95EE\u9898",
-    major: "\u53D1\u73B0\u91CD\u8981\u95EE\u9898",
-    minor: "\u5B58\u5728\u9700\u8981\u68C0\u67E5\u7684\u95EE\u9898",
-    notReviewed: "\u6B64\u6587\u4EF6\u5C1A\u672A\u5B8C\u6210\u5BA1\u67E5",
-    partial: "\u4EC5\u663E\u793A\u73B0\u6709\u7684\u4FE1\u606F\uFF1B\u5BA1\u67E5\u5C1A\u4E0D\u5B8C\u6574\u3002",
-    shared: (n) => n ? `\u53EF\u80FD\u5173\u8054 ${n} \u4E2A\u5DF2\u66F4\u6539\u6587\u4EF6` : "\u53EF\u80FD\u4E0E\u5176\u4ED6\u5DF2\u66F4\u6539\u6587\u4EF6\u5173\u8054"
-  },
-  ja: {
-    heading: "\u512A\u5148\u3057\u3066\u78BA\u8A8D\u3059\u308B\u7B87\u6240",
-    critical: "\u91CD\u5927\u306A\u554F\u984C\u304C\u3042\u308A\u307E\u3059",
-    major: "\u91CD\u8981\u306A\u554F\u984C\u304C\u3042\u308A\u307E\u3059",
-    minor: "\u78BA\u8A8D\u304C\u5FC5\u8981\u306A\u6307\u6458\u304C\u3042\u308A\u307E\u3059",
-    notReviewed: "\u3053\u306E\u30D5\u30A1\u30A4\u30EB\u306E\u30EC\u30D3\u30E5\u30FC\u306F\u672A\u5B8C\u4E86\u3067\u3059",
-    partial: "\u5229\u7528\u53EF\u80FD\u306A\u60C5\u5831\u306E\u307F\u8868\u793A\u3057\u3066\u3044\u307E\u3059\u3002\u30EC\u30D3\u30E5\u30FC\u306F\u672A\u5B8C\u4E86\u3067\u3059\u3002",
-    shared: (n) => n ? `\u5909\u66F4\u3055\u308C\u305F ${n} \u30D5\u30A1\u30A4\u30EB\u3068\u306E\u4F9D\u5B58\u95A2\u4FC2\u306E\u53EF\u80FD\u6027` : "\u4ED6\u306E\u5909\u66F4\u30D5\u30A1\u30A4\u30EB\u3068\u306E\u95A2\u9023\u306E\u53EF\u80FD\u6027"
-  },
-  ko: {
-    heading: "\uBA3C\uC800 \uD655\uC778\uD560 \uBD80\uBD84",
-    critical: "\uCE58\uBA85\uC801\uC778 \uBB38\uC81C\uAC00 \uBC1C\uACAC\uB428",
-    major: "\uC911\uC694\uD55C \uBB38\uC81C\uAC00 \uBC1C\uACAC\uB428",
-    minor: "\uD655\uC778\uD560 \uBB38\uC81C\uAC00 \uC788\uC74C",
-    notReviewed: "\uC774 \uD30C\uC77C\uC758 \uAC80\uD1A0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC74C",
-    partial: "\uD655\uC778 \uAC00\uB2A5\uD55C \uC815\uBCF4\uB9CC \uD45C\uC2DC\uD569\uB2C8\uB2E4. \uAC80\uD1A0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
-    shared: (n) => n ? `\uBCC0\uACBD\uB41C \uD30C\uC77C ${n}\uAC1C\uC640 \uC5F0\uAD00 \uAC00\uB2A5\uC131` : "\uB2E4\uB978 \uBCC0\uACBD \uD30C\uC77C\uACFC \uC5F0\uAD00 \uAC00\uB2A5\uC131"
-  }
-};
 function renderReviewSummary(review, language, options = {}) {
   const retainedLocale = review.summary.match(
     /<!-- reviewrouter:summary-locale:([a-z]{2}) -->/
@@ -209695,7 +209486,6 @@ function renderReviewSummary(review, language, options = {}) {
     ...options,
     language: language ?? retainedLocale,
     findings: review.findings.map(toReviewerSummaryFinding),
-    ...review.riskHotspots ? { hotspots: review.riskHotspots } : {},
     metrics: review.metrics,
     incomplete: retainedIncomplete,
     ...scope ? {

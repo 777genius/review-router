@@ -162,6 +162,11 @@ describe('ReviewInteractionHandler', () => {
       expect(parseInteractionCommand(body)).toBeNull();
   });
 
+  it("leaves focused suggestion commands for qualified managed Gateway", () => {
+    for (const body of ["/rr suggest fix", "@review-router-ai suggest fix", "Предложи исправление"])
+      expect(parseInteractionCommand(body)).toBeNull();
+  });
+
   it.each(['/rr help', '@reviewrouter help', '@ReviewRouter-AI HELP'])(
     'shows help without model or review dispatch: %s',
     async (body) => {
@@ -175,6 +180,16 @@ describe('ReviewInteractionHandler', () => {
         expect.objectContaining({
           issue_number: 123,
           body: expect.stringContaining('ReviewRouter commands'),
+        })
+      );
+      expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('/rr fixed'),
+        })
+      );
+      expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('/rr suggest fix'),
         })
       );
       expect(octokit.rest.repos.getCollaboratorPermissionLevel).not.toHaveBeenCalled();

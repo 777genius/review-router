@@ -609,6 +609,7 @@ export class ReviewInteractionHandler {
       '- `/rr skip [reason]` / `/rr unskip [reason]` — permission-checked finding overrides.',
       '- `/rr explain` or an ordinary question — ask for an explanation **when the qualified managed conversation provider is enabled** (same-repository PRs only).',
       '- `/rr fixed` or @review-router-ai fixed — check one finding against the current HEAD with evidence when qualified managed Gateway is enabled; never auto-close the thread.',
+      '- `/rr suggest fix` — propose one human-applied GitHub suggestion for a verified current-HEAD inline finding through qualified managed Gateway; no automatic commits or thread resolution.',
       '',
       'Unconfigured providers and fork PRs cannot run secret-backed reviews. Review requests may be queued or rejected; the PR checks report final results.',
     ].join('\n'));

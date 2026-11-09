@@ -45,7 +45,7 @@ try {
  assert.equal(malformed.code,3);assert.equal(malformed.status,'failed');
  const stale=outcome([], {RR_FAKE_OCR_MODE:'stale'});
  assert.equal(stale.code,3);assert.equal(stale.status,'stale');
- fs.writeFileSync(path.join(repo,'src','example.ts'),'export const x=2;\\n');
+ fs.writeFileSync(path.join(repo,'src','example.ts'),'export const x=2;\n');
  fs.writeFileSync(path.join(repo,'src','new.ts'),'export const hidden=1;\n');
  const privacy=outcome([]);
  assert.equal(privacy.code,4);assert.equal(privacy.status,'failed');

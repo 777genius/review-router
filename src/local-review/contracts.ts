@@ -9,8 +9,8 @@ export type LocalReviewSeverity = 'critical' | 'major' | 'minor' | 'unclassified
 
 export interface LocalReviewFinding {
   path: string;
-  line: number;
-  endLine: number;
+  line: number | null;
+  endLine: number | null;
   severity: LocalReviewSeverity;
   nativeSeverity?: string;
   title: string;
@@ -70,7 +70,7 @@ export function renderLocalReview(result: LocalReviewOutcome): string {
     `Findings: ${result.summary.critical} critical, ${result.summary.major} major, ${result.summary.minor} minor, ${result.summary.unclassified} unclassified`,
   ];
   for (const finding of result.findings) {
-    const location = `${finding.path}:${finding.line}`;
+    const location = finding.line === null ? `${finding.path} (location unverified)` : `${finding.path}:${finding.line}`;
     lines.push(`${location} [${finding.nativeSeverity ?? finding.severity}] ${finding.title}`);
     if (finding.message !== finding.title) lines.push(`  ${finding.message}`);
   }

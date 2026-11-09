@@ -17,7 +17,9 @@ export interface HotspotCandidate {
   readonly severity?: HotspotSeverity;
   readonly line?: number;
   readonly changedLines?: number;
-  /** Only verified direct dependent files inside the analyzed graph snapshot. */
+  /** Existing path-sensitivity classification: never a defect finding. */
+  readonly sensitiveArea?: boolean;
+  /** Possible direct references within the changed-file snapshot. */
   readonly dependents?: number;
   readonly coverage?: HotspotCoverage;
 }
@@ -74,16 +76,17 @@ function score(candidate: HotspotCandidate): ScoredHotspot | undefined {
   } else if (candidate.severity === 'major') {
     rank = 40;
     reason = 'major-finding';
-  } else if (dependents !== undefined && dependents > 0) {
-    rank = 30 + Math.min(9, dependents);
-    reason = 'shared-code';
   } else if (
     candidate.coverage === 'unreviewed' ||
     candidate.coverage === 'metadata-only'
   ) {
-    rank = 20;
+    // Missing review evidence takes precedence over a possible import edge.
+    rank = candidate.sensitiveArea ? 38 : 34;
     reason = 'not-reviewed';
     priority = 'unknown';
+  } else if (dependents !== undefined && dependents > 0) {
+    rank = 30 + Math.min(3, dependents);
+    reason = 'shared-code';
   } else if (candidate.severity === 'minor') {
     rank = 10;
     reason = 'minor-finding';

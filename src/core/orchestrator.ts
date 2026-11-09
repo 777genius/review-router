@@ -1679,8 +1679,8 @@ export class ReviewOrchestrator {
         files: pr.files,
         findings: review.findings,
         coverage: review.coverage,
-        graph: codeGraph,
         contexts: staticAnalysis.context,
+        contextsAreResolved: codeGraph !== undefined,
       });
 
       const markdown = this.components.formatter.format(review);

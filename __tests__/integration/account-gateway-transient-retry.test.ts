@@ -270,7 +270,12 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
           ? JSON.stringify({ ...JSON.parse(body), max_output_tokens: 100 })
           : body;
         assert.equal(Buffer.concat(chunks).toString('utf8'), expectedBody);
-        if (withDispatch) dispatchHeaders.push(request.headers['x-reviewrouter-model-request-ordinal'] as string | undefined);
+        if (withDispatch)
+          dispatchHeaders.push(
+            request.headers['x-reviewrouter-model-request-ordinal'] as
+              | string
+              | undefined
+          );
         if (
           (mode === 'dispatch-socket-loss-terminal' ||
             mode === 'accepted-socket-loss-terminal' ||
@@ -374,35 +379,70 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
     if (withDispatch) {
       const dispatch = new PreparedModelDispatch({
         apiUrl: `https://127.0.0.1:${address.port}`,
-        authorization: () => ({ authorizationId: 'authorization', authorizationToken: token }),
+        authorization: () => ({
+          authorizationId: 'authorization',
+          authorizationToken: token,
+        }),
         capability: {
-          extensionId: 'review-model-dispatch.v2', version: 2,
-          routeIdentityHash: 'a'.repeat(64), transport: 'account_gateway',
-          wireProtocol: 'openai-responses', outputTokenLimit: 'upstream_request',
-          providerIndex: 0, model: 'fixture-model',
-          deadline: new Date(Date.now() + 60_000).toISOString(), maxRequests: 2,
-          maxConcurrentRequests: 1, maxRequestBytes: 64_000,
-          maxResponseBytes: 64_000, maxOutputTokens: 100,
+          extensionId: 'review-model-dispatch.v2',
+          version: 2,
+          routeIdentityHash: 'a'.repeat(64),
+          transport: 'account_gateway',
+          wireProtocol: 'openai-responses',
+          outputTokenLimit: 'upstream_request',
+          providerIndex: 0,
+          model: 'fixture-model',
+          deadline: new Date(Date.now() + 60_000).toISOString(),
+          maxRequests: 2,
+          maxConcurrentRequests: 1,
+          maxRequestBytes: 64_000,
+          maxResponseBytes: 64_000,
+          maxOutputTokens: 100,
         },
         fetchImpl: async (url, init) => {
-          const value = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          const value = JSON.parse(String(init?.body)) as Record<
+            string,
+            unknown
+          >;
           if (String(url).endsWith('/claim')) {
             claims++;
             claim = value;
-            return Response.json({ status: 'claimed', receiptToken: 'b'.repeat(64),
+            return Response.json({
+              status: 'claimed',
+              receiptToken: 'b'.repeat(64),
               notAfter: new Date(Date.now() + 30_000).toISOString(),
-              dispatch: { ...claim, authorizationId: 'authorization', state: 'dispatch_may_have_started' } });
+              dispatch: {
+                ...claim,
+                authorizationId: 'authorization',
+                state: 'dispatch_may_have_started',
+              },
+            });
           }
-          return Response.json({ dispatch: { ...claim, authorizationId: 'authorization',
-            state: value.state, terminalReceipt: value.receipt } });
+          return Response.json({
+            dispatch: {
+              ...claim,
+              authorizationId: 'authorization',
+              state: value.state,
+              terminalReceipt: value.receipt,
+            },
+          });
         },
       });
       transport.setModelDispatch(dispatch);
-      transport.beginInvocation(() => ({ executionId: 'execution', workSlotId: 'slot',
-        attemptOrdinal: 1, leaseId: 'lease', leaseCapability: 'capability',
-        fencingToken: '1', preparedManifestKey: 'manifest' }));
+      transport.beginInvocation(() => ({
+        executionId: 'execution',
+        workSlotId: 'slot',
+        attemptOrdinal: 1,
+        leaseId: 'lease',
+        leaseCapability: 'capability',
+        fencingToken: '1',
+        preparedManifestKey: 'manifest',
+      }));
     }
-    if (mode === 'accepted-socket-loss-terminal' || mode === 'dispatch-socket-loss-terminal') {
+    if (
+      mode === 'accepted-socket-loss-terminal' ||
+      mode === 'dispatch-socket-loss-terminal'
+    ) {
       await assert.rejects(
         bounded(transport.responses(Buffer.from(body)), 'accepted-post-loss')
       );
@@ -412,7 +452,10 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         'a fully received POST must never be replayed after header loss'
       );
       assert.equal(transport.lastFailure?.effect, 'effect_unknown');
-      if (withDispatch) { assert.equal(claims, 1); assert.deepEqual(dispatchHeaders, ['1']); }
+      if (withDispatch) {
+        assert.equal(claims, 1);
+        assert.deepEqual(dispatchHeaders, ['1']);
+      }
       return;
     }
     if (mode === 'poisoned-consumer-reopen') {
@@ -611,7 +654,10 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
     );
     assert.equal(requests, 2, 'exactly one bounded retry recovers the stream');
     assert(text.includes('"type":"response.completed"'));
-    if (withDispatch) { assert.equal(claims, 1); assert.deepEqual(dispatchHeaders, ['1', '1']); }
+    if (withDispatch) {
+      assert.equal(claims, 1);
+      assert.deepEqual(dispatchHeaders, ['1', '1']);
+    }
     assert.equal(response.requestRef, 'synthetic-recovered');
     for (const privateValue of [token, '127.0.0.1', 'synthetic edge rejection'])
       assert(
@@ -631,10 +677,16 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
 // Same typed file becomes a compiled child observer; the isolated child's
 // --probe marker travels in its env (see the jest shell below).
 if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
-  nodeTest('reserved model dispatch waits on a closed relay denial', { timeout: 20_000 },
-    () => transientRetry('dispatch-positive-denial-recovery'));
-  nodeTest('reserved model dispatch never retries an unknown effect', { timeout: 20_000 },
-    () => transientRetry('dispatch-socket-loss-terminal'));
+  nodeTest(
+    'reserved model dispatch waits on a closed relay denial',
+    { timeout: 20_000 },
+    () => transientRetry('dispatch-positive-denial-recovery')
+  );
+  nodeTest(
+    'reserved model dispatch never retries an unknown effect',
+    { timeout: 20_000 },
+    () => transientRetry('dispatch-socket-loss-terminal')
+  );
   nodeTest(
     'positive closed not-dispatched denial recovers the stream',
     { timeout: 20_000 },

@@ -1236,14 +1236,14 @@ var require_util = __commonJS({
         }
         const port = url3.port != null ? url3.port : url3.protocol === "https:" ? 443 : 80;
         let origin = url3.origin != null ? url3.origin : `${url3.protocol || ""}//${url3.hostname || ""}:${port}`;
-        let path19 = url3.path != null ? url3.path : `${url3.pathname || ""}${url3.search || ""}`;
+        let path20 = url3.path != null ? url3.path : `${url3.pathname || ""}${url3.search || ""}`;
         if (origin[origin.length - 1] === "/") {
           origin = origin.slice(0, origin.length - 1);
         }
-        if (path19 && path19[0] !== "/") {
-          path19 = `/${path19}`;
+        if (path20 && path20[0] !== "/") {
+          path20 = `/${path20}`;
         }
-        return new URL(`${origin}${path19}`);
+        return new URL(`${origin}${path20}`);
       }
       if (!isHttpOrHttpsPrefixed(url3.origin || url3.protocol)) {
         throw new InvalidArgumentError("Invalid URL protocol: the URL must start with `http:` or `https:`.");
@@ -1694,39 +1694,39 @@ var require_diagnostics = __commonJS({
       });
       diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
         const {
-          request: { method, path: path19, origin }
+          request: { method, path: path20, origin }
         } = evt;
-        debuglog("sending request to %s %s/%s", method, origin, path19);
+        debuglog("sending request to %s %s/%s", method, origin, path20);
       });
       diagnosticsChannel.channel("undici:request:headers").subscribe((evt) => {
         const {
-          request: { method, path: path19, origin },
+          request: { method, path: path20, origin },
           response: { statusCode }
         } = evt;
         debuglog(
           "received response to %s %s/%s - HTTP %d",
           method,
           origin,
-          path19,
+          path20,
           statusCode
         );
       });
       diagnosticsChannel.channel("undici:request:trailers").subscribe((evt) => {
         const {
-          request: { method, path: path19, origin }
+          request: { method, path: path20, origin }
         } = evt;
-        debuglog("trailers received from %s %s/%s", method, origin, path19);
+        debuglog("trailers received from %s %s/%s", method, origin, path20);
       });
       diagnosticsChannel.channel("undici:request:error").subscribe((evt) => {
         const {
-          request: { method, path: path19, origin },
+          request: { method, path: path20, origin },
           error: error3
         } = evt;
         debuglog(
           "request to %s %s/%s errored - %s",
           method,
           origin,
-          path19,
+          path20,
           error3.message
         );
       });
@@ -1775,9 +1775,9 @@ var require_diagnostics = __commonJS({
         });
         diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
           const {
-            request: { method, path: path19, origin }
+            request: { method, path: path20, origin }
           } = evt;
-          debuglog("sending request to %s %s/%s", method, origin, path19);
+          debuglog("sending request to %s %s/%s", method, origin, path20);
         });
       }
       diagnosticsChannel.channel("undici:websocket:open").subscribe((evt) => {
@@ -1840,7 +1840,7 @@ var require_request = __commonJS({
     var kHandler = Symbol("handler");
     var Request2 = class {
       constructor(origin, {
-        path: path19,
+        path: path20,
         method,
         body: body2,
         headers,
@@ -1855,11 +1855,11 @@ var require_request = __commonJS({
         expectContinue,
         servername
       }, handler2) {
-        if (typeof path19 !== "string") {
+        if (typeof path20 !== "string") {
           throw new InvalidArgumentError("path must be a string");
-        } else if (path19[0] !== "/" && !(path19.startsWith("http://") || path19.startsWith("https://")) && method !== "CONNECT") {
+        } else if (path20[0] !== "/" && !(path20.startsWith("http://") || path20.startsWith("https://")) && method !== "CONNECT") {
           throw new InvalidArgumentError("path must be an absolute URL or start with a slash");
-        } else if (invalidPathRegex.test(path19)) {
+        } else if (invalidPathRegex.test(path20)) {
           throw new InvalidArgumentError("invalid request path");
         }
         if (typeof method !== "string") {
@@ -1925,7 +1925,7 @@ var require_request = __commonJS({
         this.completed = false;
         this.aborted = false;
         this.upgrade = upgrade || null;
-        this.path = query ? buildURL(path19, query) : path19;
+        this.path = query ? buildURL(path20, query) : path20;
         this.origin = origin;
         this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" : idempotent;
         this.blocking = blocking == null ? false : blocking;
@@ -6618,7 +6618,7 @@ var require_client_h1 = __commonJS({
       return method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && method !== "TRACE" && method !== "CONNECT";
     }
     function writeH1(client2, request3) {
-      const { method, path: path19, host, upgrade, blocking, reset } = request3;
+      const { method, path: path20, host, upgrade, blocking, reset } = request3;
       let { body: body2, headers, contentLength: contentLength2 } = request3;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util4.isFormDataLike(body2)) {
@@ -6699,7 +6699,7 @@ var require_client_h1 = __commonJS({
       if (blocking) {
         socket[kBlocking] = true;
       }
-      let header = `${method} ${path19} HTTP/1.1\r
+      let header = `${method} ${path20} HTTP/1.1\r
 `;
       if (typeof host === "string") {
         header += `host: ${host}\r
@@ -7228,7 +7228,7 @@ var require_client_h2 = __commonJS({
     }
     function writeH2(client2, request3) {
       const session = client2[kHTTP2Session];
-      const { method, path: path19, host, upgrade, expectContinue, signal, headers: reqHeaders } = request3;
+      const { method, path: path20, host, upgrade, expectContinue, signal, headers: reqHeaders } = request3;
       let { body: body2 } = request3;
       if (upgrade) {
         util4.errorRequest(client2, request3, new Error("Upgrade not supported for H2"));
@@ -7325,7 +7325,7 @@ var require_client_h2 = __commonJS({
         });
         return true;
       }
-      headers[HTTP2_HEADER_PATH] = path19;
+      headers[HTTP2_HEADER_PATH] = path20;
       headers[HTTP2_HEADER_SCHEME] = "https";
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH";
       if (body2 && typeof body2.read === "function") {
@@ -7678,9 +7678,9 @@ var require_redirect_handler = __commonJS({
           return this.handler.onHeaders(statusCode, headers, resume, statusText);
         }
         const { origin, pathname, search } = util4.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-        const path19 = search ? `${pathname}${search}` : pathname;
+        const path20 = search ? `${pathname}${search}` : pathname;
         this.opts.headers = cleanRequestHeaders(this.opts.headers, statusCode === 303, this.opts.origin !== origin);
-        this.opts.path = path19;
+        this.opts.path = path20;
         this.opts.origin = origin;
         this.opts.maxRedirections = 0;
         this.opts.query = null;
@@ -8919,10 +8919,10 @@ var require_proxy_agent = __commonJS({
         };
         const {
           origin,
-          path: path19 = "/",
+          path: path20 = "/",
           headers = {}
         } = opts;
-        opts.path = origin + path19;
+        opts.path = origin + path20;
         if (!("host" in headers) && !("Host" in headers)) {
           const { host } = new URL2(origin);
           headers.host = host;
@@ -10894,20 +10894,20 @@ var require_mock_utils = __commonJS({
       }
       return true;
     }
-    function safeUrl(path19) {
-      if (typeof path19 !== "string") {
-        return path19;
+    function safeUrl(path20) {
+      if (typeof path20 !== "string") {
+        return path20;
       }
-      const pathSegments = path19.split("?");
+      const pathSegments = path20.split("?");
       if (pathSegments.length !== 2) {
-        return path19;
+        return path20;
       }
       const qp = new URLSearchParams(pathSegments.pop());
       qp.sort();
       return [...pathSegments, qp.toString()].join("?");
     }
-    function matchKey(mockDispatch2, { path: path19, method, body: body2, headers }) {
-      const pathMatch = matchValue(mockDispatch2.path, path19);
+    function matchKey(mockDispatch2, { path: path20, method, body: body2, headers }) {
+      const pathMatch = matchValue(mockDispatch2.path, path20);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body2) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
@@ -10929,7 +10929,7 @@ var require_mock_utils = __commonJS({
     function getMockDispatch(mockDispatches, key) {
       const basePath = key.query ? buildURL(key.path, key.query) : key.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
-      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path19 }) => matchValue(safeUrl(path19), resolvedPath));
+      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path20 }) => matchValue(safeUrl(path20), resolvedPath));
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
       }
@@ -10967,9 +10967,9 @@ var require_mock_utils = __commonJS({
       }
     }
     function buildKey(opts) {
-      const { path: path19, method, body: body2, headers, query } = opts;
+      const { path: path20, method, body: body2, headers, query } = opts;
       return {
-        path: path19,
+        path: path20,
         method,
         body: body2,
         headers,
@@ -11432,10 +11432,10 @@ var require_pending_interceptors_formatter = __commonJS({
       }
       format(pendingInterceptors) {
         const withPrettyHeaders = pendingInterceptors.map(
-          ({ method, path: path19, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
+          ({ method, path: path20, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
             Method: method,
             Origin: origin,
-            Path: path19,
+            Path: path20,
             "Status code": statusCode,
             Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
             Invocations: timesInvoked,
@@ -16314,9 +16314,9 @@ var require_util6 = __commonJS({
         }
       }
     }
-    function validateCookiePath(path19) {
-      for (let i = 0; i < path19.length; ++i) {
-        const code = path19.charCodeAt(i);
+    function validateCookiePath(path20) {
+      for (let i = 0; i < path20.length; ++i) {
+        const code = path20.charCodeAt(i);
         if (code < 32 || // exclude CTLs (0-31)
         code > 126 || // exclude DEL and non-ascii
         code === 59) {
@@ -19236,11 +19236,11 @@ var require_undici = __commonJS({
           if (typeof opts.path !== "string") {
             throw new InvalidArgumentError("invalid opts.path");
           }
-          let path19 = opts.path;
+          let path20 = opts.path;
           if (!opts.path.startsWith("/")) {
-            path19 = `/${path19}`;
+            path20 = `/${path20}`;
           }
-          url3 = new URL(util4.parseOrigin(url3).origin + path19);
+          url3 = new URL(util4.parseOrigin(url3).origin + path20);
         } else {
           if (!opts) {
             opts = typeof url3 === "object" ? url3 : {};
@@ -26396,13 +26396,13 @@ These characters are not allowed in the artifact name due to limitations with ce
   }
   info(`Artifact name is valid!`);
 }
-function validateFilePath(path19) {
-  if (!path19) {
+function validateFilePath(path20) {
+  if (!path20) {
     throw new Error(`Provided file path input during validation is empty`);
   }
   for (const [invalidCharacterKey, errorMessageForCharacter] of invalidArtifactFilePathCharacters) {
-    if (path19.includes(invalidCharacterKey)) {
-      throw new Error(`The path for one of the files in artifact is not valid: ${path19}. Contains the following character: ${errorMessageForCharacter}
+    if (path20.includes(invalidCharacterKey)) {
+      throw new Error(`The path for one of the files in artifact is not valid: ${path20}. Contains the following character: ${errorMessageForCharacter}
           
 Invalid characters include: ${Array.from(invalidArtifactFilePathCharacters.values()).toString()}
           
@@ -33346,15 +33346,15 @@ function getRequestUrl(baseUri, operationSpec, operationArguments, fallbackObjec
   let isAbsolutePath = false;
   let requestUrl = replaceAll(baseUri, urlReplacements);
   if (operationSpec.path) {
-    let path19 = replaceAll(operationSpec.path, urlReplacements);
-    if (operationSpec.path === "/{nextLink}" && path19.startsWith("/")) {
-      path19 = path19.substring(1);
+    let path20 = replaceAll(operationSpec.path, urlReplacements);
+    if (operationSpec.path === "/{nextLink}" && path20.startsWith("/")) {
+      path20 = path20.substring(1);
     }
-    if (isAbsoluteUrl(path19)) {
-      requestUrl = path19;
+    if (isAbsoluteUrl(path20)) {
+      requestUrl = path20;
       isAbsolutePath = true;
     } else {
-      requestUrl = appendPath(requestUrl, path19);
+      requestUrl = appendPath(requestUrl, path20);
     }
   }
   const { queryParams, sequenceParams } = calculateQueryParameters(operationSpec, operationArguments, fallbackObject);
@@ -33400,9 +33400,9 @@ function appendPath(url3, pathToAppend) {
   }
   const searchStart = pathToAppend.indexOf("?");
   if (searchStart !== -1) {
-    const path19 = pathToAppend.substring(0, searchStart);
+    const path20 = pathToAppend.substring(0, searchStart);
     const search = pathToAppend.substring(searchStart + 1);
-    newPath = newPath + path19;
+    newPath = newPath + path20;
     if (search) {
       parsedUrl.search = parsedUrl.search ? `${parsedUrl.search}&${search}` : search;
     }
@@ -36474,16 +36474,16 @@ var init_Matcher = __esm({
        * @returns {string|undefined}
        */
       getCurrentTag() {
-        const path19 = this._matcher.path;
-        return path19.length > 0 ? path19[path19.length - 1].tag : void 0;
+        const path20 = this._matcher.path;
+        return path20.length > 0 ? path20[path20.length - 1].tag : void 0;
       }
       /**
        * Get current namespace.
        * @returns {string|undefined}
        */
       getCurrentNamespace() {
-        const path19 = this._matcher.path;
-        return path19.length > 0 ? path19[path19.length - 1].namespace : void 0;
+        const path20 = this._matcher.path;
+        return path20.length > 0 ? path20[path20.length - 1].namespace : void 0;
       }
       /**
        * Get current node's attribute value.
@@ -36491,9 +36491,9 @@ var init_Matcher = __esm({
        * @returns {*}
        */
       getAttrValue(attrName) {
-        const path19 = this._matcher.path;
-        if (path19.length === 0) return void 0;
-        return path19[path19.length - 1].values?.[attrName];
+        const path20 = this._matcher.path;
+        if (path20.length === 0) return void 0;
+        return path20[path20.length - 1].values?.[attrName];
       }
       /**
        * Check if current node has an attribute.
@@ -36501,9 +36501,9 @@ var init_Matcher = __esm({
        * @returns {boolean}
        */
       hasAttr(attrName) {
-        const path19 = this._matcher.path;
-        if (path19.length === 0) return false;
-        const current = path19[path19.length - 1];
+        const path20 = this._matcher.path;
+        if (path20.length === 0) return false;
+        const current = path20[path20.length - 1];
         return current.values !== void 0 && attrName in current.values;
       }
       /**
@@ -36529,18 +36529,18 @@ var init_Matcher = __esm({
        * @returns {number}
        */
       getPosition() {
-        const path19 = this._matcher.path;
-        if (path19.length === 0) return -1;
-        return path19[path19.length - 1].position ?? 0;
+        const path20 = this._matcher.path;
+        if (path20.length === 0) return -1;
+        return path20[path20.length - 1].position ?? 0;
       }
       /**
        * Get current node's repeat counter (occurrence count of this tag name).
        * @returns {number}
        */
       getCounter() {
-        const path19 = this._matcher.path;
-        if (path19.length === 0) return -1;
-        return path19[path19.length - 1].counter ?? 0;
+        const path20 = this._matcher.path;
+        if (path20.length === 0) return -1;
+        return path20[path20.length - 1].counter ?? 0;
       }
       /**
        * Get current node's sibling index (alias for getPosition).
@@ -39924,11 +39924,11 @@ var init_crc64 = __esm({
           throw new Error("Module.ENVIRONMENT has been deprecated. To force the environment, use the ENVIRONMENT compile-time option (for example, -sENVIRONMENT=web or -sENVIRONMENT=node)");
         }
         var scriptDirectory = "";
-        function locateFile(path19) {
+        function locateFile(path20) {
           if (Module["locateFile"]) {
-            return Module["locateFile"](path19, scriptDirectory);
+            return Module["locateFile"](path20, scriptDirectory);
           }
-          return scriptDirectory + path19;
+          return scriptDirectory + path20;
         }
         var read_, readAsync, readBinary, setWindowTitle;
         function logExceptionOnExit(e) {
@@ -43520,9 +43520,9 @@ var init_StorageSharedKeyCredentialPolicy = __esm({
        * @param request -
        */
       getCanonicalizedResourceString(request3) {
-        const path19 = getURLPath(request3.url) || "/";
+        const path20 = getURLPath(request3.url) || "/";
         let canonicalizedResourceString = "";
-        canonicalizedResourceString += `/${this.factory.accountName}${path19}`;
+        canonicalizedResourceString += `/${this.factory.accountName}${path20}`;
         const queries = getURLQueries(request3.url);
         const lowercaseQueries = {};
         if (queries) {
@@ -44063,9 +44063,9 @@ function storageSharedKeyCredentialPolicy(options) {
     return canonicalizedHeadersStringToSign;
   }
   function getCanonicalizedResourceString(request3) {
-    const path19 = getURLPath(request3.url) || "/";
+    const path20 = getURLPath(request3.url) || "/";
     let canonicalizedResourceString = "";
-    canonicalizedResourceString += `/${options.accountName}${path19}`;
+    canonicalizedResourceString += `/${options.accountName}${path20}`;
     const queries = getURLQueries(request3.url);
     const lowercaseQueries = {};
     if (queries) {
@@ -58707,10 +58707,10 @@ var init_StorageContextClient = __esm({
 // node_modules/@azure/storage-blob/dist/esm/utils/utils.common.js
 function escapeURLPath(url3) {
   const urlParsed = new URL(url3);
-  let path19 = urlParsed.pathname;
-  path19 = path19 || "/";
-  path19 = escape3(path19);
-  urlParsed.pathname = path19;
+  let path20 = urlParsed.pathname;
+  path20 = path20 || "/";
+  path20 = escape3(path20);
+  urlParsed.pathname = path20;
   return urlParsed.toString();
 }
 function getProxyUriFromDevConnString(connectionString) {
@@ -58795,9 +58795,9 @@ function escape3(text3) {
 }
 function appendToURLPath(url3, name) {
   const urlParsed = new URL(url3);
-  let path19 = urlParsed.pathname;
-  path19 = path19 ? path19.endsWith("/") ? `${path19}${name}` : `${path19}/${name}` : name;
-  urlParsed.pathname = path19;
+  let path20 = urlParsed.pathname;
+  path20 = path20 ? path20.endsWith("/") ? `${path20}${name}` : `${path20}/${name}` : name;
+  urlParsed.pathname = path20;
   return urlParsed.toString();
 }
 function setURLParameter2(url3, name, value) {
@@ -66603,8 +66603,8 @@ var require_minimatch = __commonJS({
       return new Minimatch2(pattern, options).match(p);
     };
     module2.exports = minimatch2;
-    var path19 = require_path();
-    minimatch2.sep = path19.sep;
+    var path20 = require_path();
+    minimatch2.sep = path20.sep;
     var GLOBSTAR2 = Symbol("globstar **");
     minimatch2.GLOBSTAR = GLOBSTAR2;
     var expand3 = require_brace_expansion();
@@ -67210,8 +67210,8 @@ var require_minimatch = __commonJS({
         if (this.empty) return f === "";
         if (f === "/" && partial2) return true;
         const options = this.options;
-        if (path19.sep !== "/") {
-          f = f.split(path19.sep).join("/");
+        if (path20.sep !== "/") {
+          f = f.split(path20.sep).join("/");
         }
         f = f.split(slashSplit);
         this.debug(this.pattern, "split", f);
@@ -67309,8 +67309,8 @@ var require_readdir_glob = __commonJS({
         });
       });
     }
-    async function* exploreWalkAsync(dir, path19, followSymlinks, useStat, shouldSkip, strict) {
-      let files = await readdir3(path19 + dir, strict);
+    async function* exploreWalkAsync(dir, path20, followSymlinks, useStat, shouldSkip, strict) {
+      let files = await readdir3(path20 + dir, strict);
       for (const file of files) {
         let name = file.name;
         if (name === void 0) {
@@ -67319,7 +67319,7 @@ var require_readdir_glob = __commonJS({
         }
         const filename = dir + "/" + name;
         const relative3 = filename.slice(1);
-        const absolute = path19 + "/" + relative3;
+        const absolute = path20 + "/" + relative3;
         let stats = null;
         if (useStat || followSymlinks) {
           stats = await stat4(absolute, followSymlinks);
@@ -67333,15 +67333,15 @@ var require_readdir_glob = __commonJS({
         if (stats.isDirectory()) {
           if (!shouldSkip(relative3)) {
             yield { relative: relative3, absolute, stats };
-            yield* exploreWalkAsync(filename, path19, followSymlinks, useStat, shouldSkip, false);
+            yield* exploreWalkAsync(filename, path20, followSymlinks, useStat, shouldSkip, false);
           }
         } else {
           yield { relative: relative3, absolute, stats };
         }
       }
     }
-    async function* explore(path19, followSymlinks, useStat, shouldSkip) {
-      yield* exploreWalkAsync("", path19, followSymlinks, useStat, shouldSkip, true);
+    async function* explore(path20, followSymlinks, useStat, shouldSkip) {
+      yield* exploreWalkAsync("", path20, followSymlinks, useStat, shouldSkip, true);
     }
     function readOptions(options) {
       return {
@@ -69379,14 +69379,14 @@ var require_polyfills = __commonJS({
       fs14.fstatSync = statFixSync(fs14.fstatSync);
       fs14.lstatSync = statFixSync(fs14.lstatSync);
       if (fs14.chmod && !fs14.lchmod) {
-        fs14.lchmod = function(path19, mode, cb) {
+        fs14.lchmod = function(path20, mode, cb) {
           if (cb) process.nextTick(cb);
         };
         fs14.lchmodSync = function() {
         };
       }
       if (fs14.chown && !fs14.lchown) {
-        fs14.lchown = function(path19, uid, gid, cb) {
+        fs14.lchown = function(path20, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
         fs14.lchownSync = function() {
@@ -69453,9 +69453,9 @@ var require_polyfills = __commonJS({
         };
       }(fs14.readSync);
       function patchLchmod(fs15) {
-        fs15.lchmod = function(path19, mode, callback) {
+        fs15.lchmod = function(path20, mode, callback) {
           fs15.open(
-            path19,
+            path20,
             constants5.O_WRONLY | constants5.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -69471,8 +69471,8 @@ var require_polyfills = __commonJS({
             }
           );
         };
-        fs15.lchmodSync = function(path19, mode) {
-          var fd = fs15.openSync(path19, constants5.O_WRONLY | constants5.O_SYMLINK, mode);
+        fs15.lchmodSync = function(path20, mode) {
+          var fd = fs15.openSync(path20, constants5.O_WRONLY | constants5.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -69493,8 +69493,8 @@ var require_polyfills = __commonJS({
       }
       function patchLutimes(fs15) {
         if (constants5.hasOwnProperty("O_SYMLINK") && fs15.futimes) {
-          fs15.lutimes = function(path19, at, mt, cb) {
-            fs15.open(path19, constants5.O_SYMLINK, function(er, fd) {
+          fs15.lutimes = function(path20, at, mt, cb) {
+            fs15.open(path20, constants5.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
@@ -69506,8 +69506,8 @@ var require_polyfills = __commonJS({
               });
             });
           };
-          fs15.lutimesSync = function(path19, at, mt) {
-            var fd = fs15.openSync(path19, constants5.O_SYMLINK);
+          fs15.lutimesSync = function(path20, at, mt) {
+            var fd = fs15.openSync(path20, constants5.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -69625,11 +69625,11 @@ var require_legacy_streams = __commonJS({
         ReadStream,
         WriteStream
       };
-      function ReadStream(path19, options) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path19, options);
+      function ReadStream(path20, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path20, options);
         Stream2.call(this);
         var self2 = this;
-        this.path = path19;
+        this.path = path20;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -69674,10 +69674,10 @@ var require_legacy_streams = __commonJS({
           self2._read();
         });
       }
-      function WriteStream(path19, options) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path19, options);
+      function WriteStream(path20, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path20, options);
         Stream2.call(this);
-        this.path = path19;
+        this.path = path20;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -69820,14 +69820,14 @@ var require_graceful_fs = __commonJS({
       fs15.createWriteStream = createWriteStream2;
       var fs$readFile = fs15.readFile;
       fs15.readFile = readFile9;
-      function readFile9(path19, options, cb) {
+      function readFile9(path20, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$readFile(path19, options, cb);
-        function go$readFile(path20, options2, cb2, startTime) {
-          return fs$readFile(path20, options2, function(err) {
+        return go$readFile(path20, options, cb);
+        function go$readFile(path21, options2, cb2, startTime) {
+          return fs$readFile(path21, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path20, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path21, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -69837,14 +69837,14 @@ var require_graceful_fs = __commonJS({
       }
       var fs$writeFile = fs15.writeFile;
       fs15.writeFile = writeFile10;
-      function writeFile10(path19, data, options, cb) {
+      function writeFile10(path20, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$writeFile(path19, data, options, cb);
-        function go$writeFile(path20, data2, options2, cb2, startTime) {
-          return fs$writeFile(path20, data2, options2, function(err) {
+        return go$writeFile(path20, data, options, cb);
+        function go$writeFile(path21, data2, options2, cb2, startTime) {
+          return fs$writeFile(path21, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path20, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path21, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -69855,14 +69855,14 @@ var require_graceful_fs = __commonJS({
       var fs$appendFile = fs15.appendFile;
       if (fs$appendFile)
         fs15.appendFile = appendFile2;
-      function appendFile2(path19, data, options, cb) {
+      function appendFile2(path20, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$appendFile(path19, data, options, cb);
-        function go$appendFile(path20, data2, options2, cb2, startTime) {
-          return fs$appendFile(path20, data2, options2, function(err) {
+        return go$appendFile(path20, data, options, cb);
+        function go$appendFile(path21, data2, options2, cb2, startTime) {
+          return fs$appendFile(path21, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path20, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path21, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -69893,31 +69893,31 @@ var require_graceful_fs = __commonJS({
       var fs$readdir = fs15.readdir;
       fs15.readdir = readdir3;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir3(path19, options, cb) {
+      function readdir3(path20, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path20, options2, cb2, startTime) {
-          return fs$readdir(path20, fs$readdirCallback(
-            path20,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path21, options2, cb2, startTime) {
+          return fs$readdir(path21, fs$readdirCallback(
+            path21,
             options2,
             cb2,
             startTime
           ));
-        } : function go$readdir2(path20, options2, cb2, startTime) {
-          return fs$readdir(path20, options2, fs$readdirCallback(
-            path20,
+        } : function go$readdir2(path21, options2, cb2, startTime) {
+          return fs$readdir(path21, options2, fs$readdirCallback(
+            path21,
             options2,
             cb2,
             startTime
           ));
         };
-        return go$readdir(path19, options, cb);
-        function fs$readdirCallback(path20, options2, cb2, startTime) {
+        return go$readdir(path20, options, cb);
+        function fs$readdirCallback(path21, options2, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path20, options2, cb2],
+                [path21, options2, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -69988,7 +69988,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path19, options) {
+      function ReadStream(path20, options) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -70008,7 +70008,7 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function WriteStream(path19, options) {
+      function WriteStream(path20, options) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -70026,22 +70026,22 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function createReadStream2(path19, options) {
-        return new fs15.ReadStream(path19, options);
+      function createReadStream2(path20, options) {
+        return new fs15.ReadStream(path20, options);
       }
-      function createWriteStream2(path19, options) {
-        return new fs15.WriteStream(path19, options);
+      function createWriteStream2(path20, options) {
+        return new fs15.WriteStream(path20, options);
       }
       var fs$open = fs15.open;
       fs15.open = open3;
-      function open3(path19, flags, mode, cb) {
+      function open3(path20, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path19, flags, mode, cb);
-        function go$open(path20, flags2, mode2, cb2, startTime) {
-          return fs$open(path20, flags2, mode2, function(err, fd) {
+        return go$open(path20, flags, mode, cb);
+        function go$open(path21, flags2, mode2, cb2, startTime) {
+          return fs$open(path21, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path20, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path21, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -72146,22 +72146,22 @@ var require_lazystream = __commonJS({
 // node_modules/normalize-path/index.js
 var require_normalize_path = __commonJS({
   "node_modules/normalize-path/index.js"(exports2, module2) {
-    module2.exports = function(path19, stripTrailing) {
-      if (typeof path19 !== "string") {
+    module2.exports = function(path20, stripTrailing) {
+      if (typeof path20 !== "string") {
         throw new TypeError("expected path to be a string");
       }
-      if (path19 === "\\" || path19 === "/") return "/";
-      var len = path19.length;
-      if (len <= 1) return path19;
+      if (path20 === "\\" || path20 === "/") return "/";
+      var len = path20.length;
+      if (len <= 1) return path20;
       var prefix2 = "";
-      if (len > 4 && path19[3] === "\\") {
-        var ch = path19[2];
-        if ((ch === "?" || ch === ".") && path19.slice(0, 2) === "\\\\") {
-          path19 = path19.slice(2);
+      if (len > 4 && path20[3] === "\\") {
+        var ch = path20[2];
+        if ((ch === "?" || ch === ".") && path20.slice(0, 2) === "\\\\") {
+          path20 = path20.slice(2);
           prefix2 = "//";
         }
       }
-      var segs = path19.split(/[/\\]+/);
+      var segs = path20.split(/[/\\]+/);
       if (stripTrailing !== false && segs[segs.length - 1] === "") {
         segs.pop();
       }
@@ -81261,11 +81261,11 @@ var require_commonjs3 = __commonJS({
       return (f) => f.length === len && f !== "." && f !== "..";
     };
     var defaultPlatform2 = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-    var path19 = {
+    var path20 = {
       win32: { sep: "\\" },
       posix: { sep: "/" }
     };
-    exports2.sep = defaultPlatform2 === "win32" ? path19.win32.sep : path19.posix.sep;
+    exports2.sep = defaultPlatform2 === "win32" ? path20.win32.sep : path20.posix.sep;
     exports2.minimatch.sep = exports2.sep;
     exports2.GLOBSTAR = Symbol("globstar **");
     exports2.minimatch.GLOBSTAR = exports2.GLOBSTAR;
@@ -84587,12 +84587,12 @@ var require_commonjs6 = __commonJS({
       /**
        * Get the Path object referenced by the string path, resolved from this Path
        */
-      resolve(path19) {
-        if (!path19) {
+      resolve(path20) {
+        if (!path20) {
           return this;
         }
-        const rootPath = this.getRootString(path19);
-        const dir = path19.substring(rootPath.length);
+        const rootPath = this.getRootString(path20);
+        const dir = path20.substring(rootPath.length);
         const dirParts = dir.split(this.splitSep);
         const result2 = rootPath ? this.getRoot(rootPath).#resolveParts(dirParts) : this.#resolveParts(dirParts);
         return result2;
@@ -85345,8 +85345,8 @@ var require_commonjs6 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path19) {
-        return node_path_1.win32.parse(path19).root;
+      getRootString(path20) {
+        return node_path_1.win32.parse(path20).root;
       }
       /**
        * @internal
@@ -85393,8 +85393,8 @@ var require_commonjs6 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path19) {
-        return path19.startsWith("/") ? "/" : "";
+      getRootString(path20) {
+        return path20.startsWith("/") ? "/" : "";
       }
       /**
        * @internal
@@ -85484,11 +85484,11 @@ var require_commonjs6 = __commonJS({
       /**
        * Get the depth of a provided path, string, or the cwd
        */
-      depth(path19 = this.cwd) {
-        if (typeof path19 === "string") {
-          path19 = this.cwd.resolve(path19);
+      depth(path20 = this.cwd) {
+        if (typeof path20 === "string") {
+          path20 = this.cwd.resolve(path20);
         }
-        return path19.depth();
+        return path20.depth();
       }
       /**
        * Return the cache of child entries.  Exposed so subclasses can create
@@ -85975,9 +85975,9 @@ var require_commonjs6 = __commonJS({
         process5();
         return results;
       }
-      chdir(path19 = this.cwd) {
+      chdir(path20 = this.cwd) {
         const oldCwd = this.cwd;
-        this.cwd = typeof path19 === "string" ? this.cwd.resolve(path19) : path19;
+        this.cwd = typeof path20 === "string" ? this.cwd.resolve(path20) : path20;
         this.cwd[setAsCwd](oldCwd);
       }
     };
@@ -86365,8 +86365,8 @@ var require_processor = __commonJS({
       }
       // match, absolute, ifdir
       entries() {
-        return [...this.store.entries()].map(([path19, n]) => [
-          path19,
+        return [...this.store.entries()].map(([path20, n]) => [
+          path20,
           !!(n & 2),
           !!(n & 1)
         ]);
@@ -86584,9 +86584,9 @@ var require_walker = __commonJS({
       signal;
       maxDepth;
       includeChildMatches;
-      constructor(patterns2, path19, opts) {
+      constructor(patterns2, path20, opts) {
         this.patterns = patterns2;
-        this.path = path19;
+        this.path = path20;
         this.opts = opts;
         this.#sep = !opts.posix && opts.platform === "win32" ? "\\" : "/";
         this.includeChildMatches = opts.includeChildMatches !== false;
@@ -86605,11 +86605,11 @@ var require_walker = __commonJS({
           });
         }
       }
-      #ignored(path19) {
-        return this.seen.has(path19) || !!this.#ignore?.ignored?.(path19);
+      #ignored(path20) {
+        return this.seen.has(path20) || !!this.#ignore?.ignored?.(path20);
       }
-      #childrenIgnored(path19) {
-        return !!this.#ignore?.childrenIgnored?.(path19);
+      #childrenIgnored(path20) {
+        return !!this.#ignore?.childrenIgnored?.(path20);
       }
       // backpressure mechanism
       pause() {
@@ -86825,8 +86825,8 @@ var require_walker = __commonJS({
     exports2.GlobUtil = GlobUtil;
     var GlobWalker = class extends GlobUtil {
       matches = /* @__PURE__ */ new Set();
-      constructor(patterns2, path19, opts) {
-        super(patterns2, path19, opts);
+      constructor(patterns2, path20, opts) {
+        super(patterns2, path20, opts);
       }
       matchEmit(e) {
         this.matches.add(e);
@@ -86864,8 +86864,8 @@ var require_walker = __commonJS({
     exports2.GlobWalker = GlobWalker;
     var GlobStream = class extends GlobUtil {
       results;
-      constructor(patterns2, path19, opts) {
-        super(patterns2, path19, opts);
+      constructor(patterns2, path20, opts) {
+        super(patterns2, path20, opts);
         this.results = new minipass_1.Minipass({
           signal: this.signal,
           objectMode: true
@@ -87221,7 +87221,7 @@ var require_commonjs7 = __commonJS({
 var require_file2 = __commonJS({
   "node_modules/archiver-utils/file.js"(exports2, module2) {
     var fs14 = require_graceful_fs();
-    var path19 = require("path");
+    var path20 = require("path");
     var flatten = require_flatten();
     var difference = require_difference();
     var union2 = require_union();
@@ -87246,7 +87246,7 @@ var require_file2 = __commonJS({
       return result2;
     };
     file.exists = function() {
-      var filepath = path19.join.apply(path19, arguments);
+      var filepath = path20.join.apply(path20, arguments);
       return fs14.existsSync(filepath);
     };
     file.expand = function(...args) {
@@ -87260,7 +87260,7 @@ var require_file2 = __commonJS({
       });
       if (options.filter) {
         matches = matches.filter(function(filepath) {
-          filepath = path19.join(options.cwd || "", filepath);
+          filepath = path20.join(options.cwd || "", filepath);
           try {
             if (typeof options.filter === "function") {
               return options.filter(filepath);
@@ -87277,7 +87277,7 @@ var require_file2 = __commonJS({
     file.expandMapping = function(patterns2, destBase, options) {
       options = Object.assign({
         rename: function(destBase2, destPath) {
-          return path19.join(destBase2 || "", destPath);
+          return path20.join(destBase2 || "", destPath);
         }
       }, options);
       var files = [];
@@ -87285,14 +87285,14 @@ var require_file2 = __commonJS({
       file.expand(options, patterns2).forEach(function(src) {
         var destPath = src;
         if (options.flatten) {
-          destPath = path19.basename(destPath);
+          destPath = path20.basename(destPath);
         }
         if (options.ext) {
           destPath = destPath.replace(/(\.[^\/]*)?$/, options.ext);
         }
         var dest = options.rename(destBase, destPath, options);
         if (options.cwd) {
-          src = path19.join(options.cwd, src);
+          src = path20.join(options.cwd, src);
         }
         dest = dest.replace(pathSeparatorRe, "/");
         src = src.replace(pathSeparatorRe, "/");
@@ -87374,7 +87374,7 @@ var require_file2 = __commonJS({
 var require_archiver_utils = __commonJS({
   "node_modules/archiver-utils/index.js"(exports2, module2) {
     var fs14 = require_graceful_fs();
-    var path19 = require("path");
+    var path20 = require("path");
     var isStream = require_is_stream();
     var lazystream = require_lazystream();
     var normalizePath4 = require_normalize_path();
@@ -87462,11 +87462,11 @@ var require_archiver_utils = __commonJS({
           if (!file) {
             return callback(null, results);
           }
-          filepath = path19.join(dirpath, file);
+          filepath = path20.join(dirpath, file);
           fs14.stat(filepath, function(err2, stats) {
             results.push({
               path: filepath,
-              relative: path19.relative(base, filepath).replace(/\\/g, "/"),
+              relative: path20.relative(base, filepath).replace(/\\/g, "/"),
               stats
             });
             if (stats && stats.isDirectory()) {
@@ -87528,7 +87528,7 @@ var require_core = __commonJS({
     var fs14 = require("fs");
     var glob = require_readdir_glob();
     var async = require_async();
-    var path19 = require("path");
+    var path20 = require("path");
     var util4 = require_archiver_utils();
     var inherits = require("util").inherits;
     var ArchiverError = require_error();
@@ -87804,9 +87804,9 @@ var require_core = __commonJS({
         task.source = Buffer.concat([]);
       } else if (stats.isSymbolicLink() && this._moduleSupports("symlink")) {
         var linkPath = fs14.readlinkSync(task.filepath);
-        var dirName = path19.dirname(task.filepath);
+        var dirName = path20.dirname(task.filepath);
         task.data.type = "symlink";
-        task.data.linkname = path19.relative(dirName, path19.resolve(dirName, linkPath));
+        task.data.linkname = path20.relative(dirName, path20.resolve(dirName, linkPath));
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else {
@@ -92538,8 +92538,8 @@ var init_context = __esm({
           if ((0, import_fs3.existsSync)(process.env.GITHUB_EVENT_PATH)) {
             this.payload = JSON.parse((0, import_fs3.readFileSync)(process.env.GITHUB_EVENT_PATH, { encoding: "utf8" }));
           } else {
-            const path19 = process.env.GITHUB_EVENT_PATH;
-            process.stdout.write(`GITHUB_EVENT_PATH ${path19} does not exist${import_os4.EOL}`);
+            const path20 = process.env.GITHUB_EVENT_PATH;
+            process.stdout.write(`GITHUB_EVENT_PATH ${path20} does not exist${import_os4.EOL}`);
           }
         }
         this.eventName = process.env.GITHUB_EVENT_NAME;
@@ -103696,7 +103696,7 @@ var require_traverse = __commonJS({
       return options == null ? emptyNull : options;
     }
     function walk(root, cb) {
-      var path19 = [];
+      var path20 = [];
       var parents = [];
       var alive = true;
       var options = arguments.length > 2 ? arguments[2] : emptyNull;
@@ -103709,13 +103709,13 @@ var require_traverse = __commonJS({
         var state3 = {
           node,
           node_,
-          path: [].concat(path19),
+          path: [].concat(path20),
           parent: parents[parents.length - 1],
           parents,
-          key: path19[path19.length - 1],
+          key: path20[path20.length - 1],
           removedKeys: { __proto__: null },
-          isRoot: path19.length === 0,
-          level: path19.length,
+          isRoot: path20.length === 0,
+          level: path20.length,
           circular: null,
           update: function(x, stopHere) {
             if (!state3.isRoot && !wasSpliced(originalKey, splicedSiblings)) {
@@ -103818,7 +103818,7 @@ var require_traverse = __commonJS({
               return;
             }
             var key = shiftedKey(listedKey, splicedChildren);
-            path19[path19.length] = key;
+            path20[path20.length] = key;
             if (modifiers.pre) {
               modifiers.pre.call(state3, state3.node[key], key);
             }
@@ -103834,7 +103834,7 @@ var require_traverse = __commonJS({
             if (modifiers.post) {
               modifiers.post.call(state3, child);
             }
-            path19.pop();
+            path20.pop();
           });
           parents.pop();
         }
@@ -105016,11 +105016,11 @@ var require_unzip_stream = __commonJS({
           return requiredLength;
         case states.CENTRAL_DIRECTORY_FILE_HEADER_SUFFIX:
           var isUtf8 = (this.parsedEntity.flags & 2048) !== 0;
-          var path19 = this._decodeString(chunk.slice(0, this.parsedEntity.fileNameLength), isUtf8);
+          var path20 = this._decodeString(chunk.slice(0, this.parsedEntity.fileNameLength), isUtf8);
           var extraDataBuffer = chunk.slice(this.parsedEntity.fileNameLength, this.parsedEntity.fileNameLength + this.parsedEntity.extraFieldLength);
           var extra = this._readExtraFields(extraDataBuffer);
           if (extra && extra.parsed && extra.parsed.path && !isUtf8) {
-            path19 = extra.parsed.path;
+            path20 = extra.parsed.path;
           }
           this.parsedEntity.extra = extra.parsed;
           var isUnix = (this.parsedEntity.versionMadeBy & 65280) >> 8 === 3;
@@ -105032,7 +105032,7 @@ var require_unzip_stream = __commonJS({
           }
           if (this.options.debug) {
             const debugObj2 = Object.assign({}, this.parsedEntity, {
-              path: path19,
+              path: path20,
               flags: "0x" + this.parsedEntity.flags.toString(16),
               unixAttrs: unixAttrs && "0" + unixAttrs.toString(8),
               isSymlink,
@@ -105469,7 +105469,7 @@ var require_parser_stream = __commonJS({
 // node_modules/mkdirp/index.js
 var require_mkdirp = __commonJS({
   "node_modules/mkdirp/index.js"(exports2, module2) {
-    var path19 = require("path");
+    var path20 = require("path");
     var fs14 = require("fs");
     var _0777 = parseInt("0777", 8);
     module2.exports = mkdirP.mkdirp = mkdirP.mkdirP = mkdirP;
@@ -105489,7 +105489,7 @@ var require_mkdirp = __commonJS({
       var cb = f || /* istanbul ignore next */
       function() {
       };
-      p = path19.resolve(p);
+      p = path20.resolve(p);
       xfs.mkdir(p, mode, function(er) {
         if (!er) {
           made = made || p;
@@ -105497,8 +105497,8 @@ var require_mkdirp = __commonJS({
         }
         switch (er.code) {
           case "ENOENT":
-            if (path19.dirname(p) === p) return cb(er);
-            mkdirP(path19.dirname(p), opts, function(er2, made2) {
+            if (path20.dirname(p) === p) return cb(er);
+            mkdirP(path20.dirname(p), opts, function(er2, made2) {
               if (er2) cb(er2, made2);
               else mkdirP(p, opts, cb, made2);
             });
@@ -105525,14 +105525,14 @@ var require_mkdirp = __commonJS({
         mode = _0777;
       }
       if (!made) made = null;
-      p = path19.resolve(p);
+      p = path20.resolve(p);
       try {
         xfs.mkdirSync(p, mode);
         made = made || p;
       } catch (err0) {
         switch (err0.code) {
           case "ENOENT":
-            made = sync(path19.dirname(p), opts, made);
+            made = sync(path20.dirname(p), opts, made);
             sync(p, opts, made);
             break;
           // In the case of any other error, just see if there's a dir
@@ -105558,7 +105558,7 @@ var require_mkdirp = __commonJS({
 var require_extract2 = __commonJS({
   "node_modules/unzip-stream/lib/extract.js"(exports2, module2) {
     var fs14 = require("fs");
-    var path19 = require("path");
+    var path20 = require("path");
     var util4 = require("util");
     var mkdirp = require_mkdirp();
     var Transform3 = require("stream").Transform;
@@ -105600,8 +105600,8 @@ var require_extract2 = __commonJS({
     };
     Extract.prototype._processEntry = function(entry) {
       var self2 = this;
-      var destPath = path19.join(this.opts.path, entry.path);
-      var directory = entry.isDirectory ? destPath : path19.dirname(destPath);
+      var destPath = path20.join(this.opts.path, entry.path);
+      var directory = entry.isDirectory ? destPath : path20.dirname(destPath);
       this.unfinishedEntries++;
       var writeFileFn = function() {
         var pipedStream = fs14.createWriteStream(destPath);
@@ -105648,10 +105648,10 @@ var require_unzip = __commonJS({
 });
 
 // node_modules/@actions/artifact/lib/internal/download/download-artifact.js
-function exists2(path19) {
+function exists2(path20) {
   return __awaiter10(this, void 0, void 0, function* () {
     try {
-      yield import_promises3.default.access(path19);
+      yield import_promises3.default.access(path20);
       return true;
     } catch (error3) {
       if (error3.code === "ENOENT") {
@@ -105925,17 +105925,17 @@ function requestLog(octokit) {
     octokit.log.debug("request", options);
     const start = Date.now();
     const requestOptions = octokit.request.endpoint.parse(options);
-    const path19 = requestOptions.url.replace(options.baseUrl, "");
+    const path20 = requestOptions.url.replace(options.baseUrl, "");
     return request3(options).then((response) => {
       const requestId2 = response.headers["x-github-request-id"];
       octokit.log.info(
-        `${requestOptions.method} ${path19} - ${response.status} with id ${requestId2} in ${Date.now() - start}ms`
+        `${requestOptions.method} ${path20} - ${response.status} with id ${requestId2} in ${Date.now() - start}ms`
       );
       return response;
     }).catch((error3) => {
       const requestId2 = error3.response?.headers["x-github-request-id"] || "UNKNOWN";
       octokit.log.error(
-        `${requestOptions.method} ${path19} - ${error3.status} with id ${requestId2} in ${Date.now() - start}ms`
+        `${requestOptions.method} ${path20} - ${error3.status} with id ${requestId2} in ${Date.now() - start}ms`
       );
       throw error3;
     });
@@ -111179,8 +111179,8 @@ var require_utils3 = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path19) {
-      let input = path19;
+    function removeDotSegments(path20) {
+      let input = path20;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -111585,8 +111585,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path19 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path19 && path19 !== "/" ? path19 : void 0;
+        const path20 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path20 && path20 !== "/" ? path20 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -117236,15 +117236,15 @@ var require_dist_node9 = __commonJS({
         octokit.log.debug("request", options);
         const start = Date.now();
         const requestOptions = octokit.request.endpoint.parse(options);
-        const path19 = requestOptions.url.replace(options.baseUrl, "");
+        const path20 = requestOptions.url.replace(options.baseUrl, "");
         return request3(options).then((response) => {
           octokit.log.info(
-            `${requestOptions.method} ${path19} - ${response.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path20} - ${response.status} in ${Date.now() - start}ms`
           );
           return response;
         }).catch((error3) => {
           octokit.log.info(
-            `${requestOptions.method} ${path19} - ${error3.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path20} - ${error3.status} in ${Date.now() - start}ms`
           );
           throw error3;
         });
@@ -120363,9 +120363,9 @@ var ReviewMemorySession = class _ReviewMemorySession {
     } catch {
     }
   }
-  post(path19, body2, timeoutMs) {
+  post(path20, body2, timeoutMs) {
     return postBoundedMemoryJson({
-      url: new URL(path19, this.options.apiUrl),
+      url: new URL(path20, this.options.apiUrl),
       token: this.options.authorizationToken,
       body: body2,
       signal: this.options.signal,
@@ -125929,7 +125929,7 @@ function assertReviewSkillsExecutionInput(input, profile, baseSha) {
   if (executionDigest !== reviewSkillsDigest(preimage))
     throw new Error("review_skills_bundle_digest_mismatch");
 }
-function reviewSkillMatchesPath(scope, path19) {
+function reviewSkillMatchesPath(scope, path20) {
   const parsed = parseReviewSkillScope({
     includePaths: scope.includePaths,
     excludePaths: scope.excludePaths
@@ -125942,14 +125942,14 @@ function reviewSkillMatchesPath(scope, path19) {
     noext: true,
     nobrace: true
   };
-  return parsed.includePaths.some((pattern) => minimatch(path19, pattern, options)) && !parsed.excludePaths.some((pattern) => minimatch(path19, pattern, options));
+  return parsed.includePaths.some((pattern) => minimatch(path20, pattern, options)) && !parsed.excludePaths.some((pattern) => minimatch(path20, pattern, options));
 }
 function projectReviewSkillsForPaths(input, paths) {
   if (input.kind === "legacy") return Object.freeze([]);
   return deepFreeze(
-    [...new Set(paths)].sort(compare2).map((path19) => ({
-      path: path19,
-      instructions: input.bundle.skills.filter((skill) => reviewSkillMatchesPath(skill, path19)).map(renderReviewSkill).join("\n\n")
+    [...new Set(paths)].sort(compare2).map((path20) => ({
+      path: path20,
+      instructions: input.bundle.skills.filter((skill) => reviewSkillMatchesPath(skill, path20)).map(renderReviewSkill).join("\n\n")
     }))
   );
 }
@@ -125958,7 +125958,7 @@ function renderReviewSkillsForPaths(input, paths) {
   const reviewedPaths = [...new Set(paths)].sort(compare2);
   const applicable = input.bundle.skills.flatMap((skill) => {
     const matchingPaths = reviewedPaths.filter(
-      (path19) => reviewSkillMatchesPath(skill, path19)
+      (path20) => reviewSkillMatchesPath(skill, path20)
     );
     return matchingPaths.length > 0 ? [
       `Reviewed paths: ${JSON.stringify(matchingPaths)}
@@ -126078,16 +126078,16 @@ async function materializeReviewSkillsWithDiagnostics(input) {
   if (!/^[a-f0-9]{40}$/.test(input.baseSha) || capture.baseSha !== input.baseSha)
     fail3("review_skills_capture_mismatch");
   const trees = /* @__PURE__ */ new Map();
-  const charge = (bytes2, entries, path19, budget) => {
-    if (!budget || !(path19 === budget.root || path19.startsWith(`${budget.root}/`)) || budget.paths.has(path19))
+  const charge = (bytes2, entries, path20, budget) => {
+    if (!budget || !(path20 === budget.root || path20.startsWith(`${budget.root}/`)) || budget.paths.has(path20))
       return;
     if (budget.bytes + bytes2 > TREE_BYTES || budget.entries + entries > reviewSkillsLimits.treeEntries)
-      fail3("review_skills_git_tree_too_large", { path: path19, field: "root" });
+      fail3("review_skills_git_tree_too_large", { path: path20, field: "root" });
     budget.bytes += bytes2;
     budget.entries += entries;
-    budget.paths.add(path19);
+    budget.paths.add(path20);
   };
-  const git = async (args, maxBuffer, path19) => {
+  const git = async (args, maxBuffer, path20) => {
     input.signal?.throwIfAborted();
     try {
       const result2 = await run(
@@ -126110,27 +126110,27 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       return result2.stdout;
     } catch {
       input.signal?.throwIfAborted();
-      fail3("review_skills_git_read_failed", { path: path19 });
+      fail3("review_skills_git_read_failed", { path: path20 });
     }
   };
-  const tree = async (oid, path19, budget) => {
+  const tree = async (oid, path20, budget) => {
     const previous = trees.get(oid);
     if (previous) {
-      charge(previous.bytes, previous.entries.length, path19, budget);
+      charge(previous.bytes, previous.entries.length, path20, budget);
       return previous.entries;
     }
-    const bytes2 = await git(["ls-tree", "-z", oid], TREE_BYTES, path19);
+    const bytes2 = await git(["ls-tree", "-z", oid], TREE_BYTES, path20);
     let count2 = 0;
     for (const byte of bytes2) if (byte === 0) count2++;
     if (count2 > reviewSkillsLimits.treeEntries)
-      fail3("review_skills_git_tree_too_large", { path: path19, field: "root" });
-    charge(bytes2.byteLength, count2, path19, budget);
-    const entries = decode(bytes2, { path: path19, field: "root" }).split("\0").filter(Boolean).map((row) => {
+      fail3("review_skills_git_tree_too_large", { path: path20, field: "root" });
+    charge(bytes2.byteLength, count2, path20, budget);
+    const entries = decode(bytes2, { path: path20, field: "root" }).split("\0").filter(Boolean).map((row) => {
       const matched = /^(\d{6}) (blob|tree|commit) ([a-f0-9]{40})\t([^\0]+)$/u.exec(row);
       if (!matched || [...matched[4]].some(
         (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 || character === "/" || character === "\\"
       ))
-        fail3("review_skills_git_path_invalid", { path: path19, field: "root" });
+        fail3("review_skills_git_path_invalid", { path: path20, field: "root" });
       return {
         mode: matched[1],
         type: matched[2],
@@ -126139,14 +126139,14 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       };
     });
     if (entries.length > reviewSkillsLimits.treeEntries)
-      fail3("review_skills_git_tree_too_large", { path: path19, field: "root" });
+      fail3("review_skills_git_tree_too_large", { path: path20, field: "root" });
     trees.set(oid, { entries, bytes: bytes2.byteLength });
     return entries;
   };
-  const find = async (path19, budget) => {
+  const find = async (path20, budget) => {
     let oid = input.baseSha;
     let directory = "";
-    const parts = path19.split("/");
+    const parts = path20.split("/");
     for (let i = 0; i < parts.length; i++) {
       const entry = (await tree(oid, directory, budget)).find(
         (item) => item.name === parts[i]
@@ -126154,31 +126154,31 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       if (!entry) return null;
       if (i === parts.length - 1) return entry;
       if (entry.mode !== "040000" || entry.type !== "tree")
-        fail3("review_skills_git_nonregular", { path: path19 });
+        fail3("review_skills_git_nonregular", { path: path20 });
       oid = entry.oid;
       directory = directory ? `${directory}/${parts[i]}` : parts[i];
     }
     return null;
   };
-  const read = async (path19, limit, budget) => {
-    const entry = await find(path19, budget);
+  const read = async (path20, limit, budget) => {
+    const entry = await find(path20, budget);
     if (!entry)
-      fail3("review_skills_reference_missing", { path: path19, field: "reference" });
+      fail3("review_skills_reference_missing", { path: path20, field: "reference" });
     if (!/^100(?:644|755)$/.test(entry.mode) || entry.type !== "blob")
-      fail3("review_skills_git_nonregular", { path: path19 });
+      fail3("review_skills_git_nonregular", { path: path20 });
     const size = Number(
-      decode(await git(["cat-file", "-s", entry.oid], 128, path19), {
-        path: path19
+      decode(await git(["cat-file", "-s", entry.oid], 128, path20), {
+        path: path20
       }).trim()
     );
     if (!Number.isSafeInteger(size) || size > limit)
-      fail3("review_skills_git_blob_too_large", { path: path19 });
+      fail3("review_skills_git_blob_too_large", { path: path20 });
     const content = decode(
-      await git(["cat-file", "blob", entry.oid], limit + 1, path19),
-      { path: path19 }
+      await git(["cat-file", "blob", entry.oid], limit + 1, path20),
+      { path: path20 }
     );
     if (content.includes("\0"))
-      fail3("review_skills_git_text_invalid", { path: path19 });
+      fail3("review_skills_git_text_invalid", { path: path20 });
     return content;
   };
   const sources = [];
@@ -126327,7 +126327,7 @@ async function materializeReviewSkillsWithDiagnostics(input) {
       ...parsed,
       includePaths: ["**"],
       excludePaths: [],
-      resources: [...resources.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([path19, content2]) => ({ path: path19, content: content2 }))
+      resources: [...resources.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([path20, content2]) => ({ path: path20, content: content2 }))
     });
   }
   try {
@@ -126452,8 +126452,8 @@ var ReviewSkillsReceiptCollector = class {
     const acceptedPaths = new Set(
       input.acceptedEvidence.flatMap(
         (item) => item.coverageManifest.paths.filter(
-          (path19) => path19.kind !== "unavailable" && path19.kind !== "policy_excluded"
-        ).map((path19) => path19.path)
+          (path20) => path20.kind !== "unavailable" && path20.kind !== "policy_excluded"
+        ).map((path20) => path20.path)
       )
     );
     const witnessedByKey = /* @__PURE__ */ new Map();
@@ -126474,12 +126474,12 @@ var ReviewSkillsReceiptCollector = class {
     ];
     const changedPaths = [...new Set(input.changedPaths)];
     const status = (skill) => {
-      if (!changedPaths.some((path19) => reviewSkillMatchesPath(skill, path19)))
+      if (!changedPaths.some((path20) => reviewSkillMatchesPath(skill, path20)))
         return 3;
-      if ([...suppliedPaths].some((path19) => reviewSkillMatchesPath(skill, path19)))
+      if ([...suppliedPaths].some((path20) => reviewSkillMatchesPath(skill, path20)))
         return 0;
       return [...acceptedPaths].some(
-        (path19) => reviewSkillMatchesPath(skill, path19)
+        (path20) => reviewSkillMatchesPath(skill, path20)
       ) ? 1 : 2;
     };
     const lines = [
@@ -126517,7 +126517,7 @@ var ReviewSkillsReceiptCollector = class {
         continue;
       }
       const count2 = [...acceptedPaths].filter(
-        (path19) => reviewSkillMatchesPath(skill, path19)
+        (path20) => reviewSkillMatchesPath(skill, path20)
       ).length;
       const row = `- ${renderReviewSkillsDiagnosticText(`${directory}/SKILL.md`)} \u2014 ${statuses[status(skill)]}; matching paths in accepted scope: ${count2}`;
       if (Buffer.byteLength([...lines, row].join("\n")) > 4e3) {
@@ -126554,7 +126554,7 @@ function observeNativeReviewSkillsSupply(delegate, collector, requestCount) {
           providerInvocationKey: input.manifest.providerInvocationKey,
           payloadHash: observation.payloadHash,
           paths: input.invocation.coverageManifest.paths.map(
-            (path19) => path19.path
+            (path20) => path20.path
           )
         });
       return observation;
@@ -128067,8 +128067,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path19, errorMaps, issueData } = params;
-  const fullPath = [...path19, ...issueData.path || []];
+  const { data, path: path20, errorMaps, issueData } = params;
+  const fullPath = [...path20, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -128184,11 +128184,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path19, key) {
+  constructor(parent, value, path20, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path19;
+    this._path = path20;
     this._key = key;
   }
   get path() {
@@ -131826,10 +131826,10 @@ function assignProp(target, prop, value) {
     configurable: true
   });
 }
-function getElementAtPath(obj, path19) {
-  if (!path19)
+function getElementAtPath(obj, path20) {
+  if (!path20)
     return obj;
-  return path19.reduce((acc, key) => acc?.[key], obj);
+  return path20.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys5 = Object.keys(promisesObj);
@@ -132149,11 +132149,11 @@ function aborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path19, issues) {
+function prefixIssues(path20, issues) {
   return issues.map((iss) => {
     var _a2;
     (_a2 = iss).path ?? (_a2.path = []);
-    iss.path.unshift(path19);
+    iss.path.unshift(path20);
     return iss;
   });
 }
@@ -143632,20 +143632,20 @@ function parseOcrReviewOutcome(value) {
         detail: field("paths")
       });
     } else {
-      for (const path19 of pathsRaw) {
-        if (typeof path19 !== "string" || path19.length === 0) {
+      for (const path20 of pathsRaw) {
+        if (typeof path20 !== "string" || path20.length === 0) {
           issues.push({
             code: "outcome_group_paths_invalid",
             detail: field("paths")
           });
           continue;
         }
-        if (paths.includes(path19) || seenPaths.has(path19)) {
-          issues.push({ code: "outcome_group_paths_duplicate", detail: path19 });
+        if (paths.includes(path20) || seenPaths.has(path20)) {
+          issues.push({ code: "outcome_group_paths_duplicate", detail: path20 });
           continue;
         }
-        paths.push(path19);
-        seenPaths.add(path19);
+        paths.push(path20);
+        seenPaths.add(path20);
       }
     }
     const mainCompleted = groupRaw.main_completed;
@@ -144071,11 +144071,11 @@ var SEVERITY_MAP = {
   low: "minor"
 };
 function normalizeOcrRepoPath(raw) {
-  const path19 = raw.replace(/^\.\//u, "");
-  if (path19.length === 0 || path19.length > OCR_NORMALIZATION_LIMITS.maxPathChars || path19.includes("\\") || path19.includes("\0") || path19.startsWith("/") || path19.split("/").some((segment) => segment === ".." || segment === "")) {
+  const path20 = raw.replace(/^\.\//u, "");
+  if (path20.length === 0 || path20.length > OCR_NORMALIZATION_LIMITS.maxPathChars || path20.includes("\\") || path20.includes("\0") || path20.startsWith("/") || path20.split("/").some((segment) => segment === ".." || segment === "")) {
     return null;
   }
-  return path19;
+  return path20;
 }
 function plainTitleLine(content) {
   const firstLine = content.split(/\r\n|\r|\n/u).map((line2) => {
@@ -144093,9 +144093,9 @@ function normalizeOcrFindings(input) {
   const reasons = /* @__PURE__ */ new Set();
   const assignedPaths = input.assignedPaths ? new Set(input.assignedPaths) : void 0;
   input.comments.forEach((comment, index) => {
-    const path19 = normalizeOcrRepoPath(comment.path);
+    const path20 = normalizeOcrRepoPath(comment.path);
     const content = comment.content.trim();
-    if (path19 === null || content.length === 0 || assignedPaths && !assignedPaths.has(path19)) {
+    if (path20 === null || content.length === 0 || assignedPaths && !assignedPaths.has(path20)) {
       skipped.push({ index, reason: "invalid_native_finding" });
       return;
     }
@@ -144111,11 +144111,11 @@ function normalizeOcrFindings(input) {
     if (category.length > OCR_NORMALIZATION_LIMITS.maxCategoryChars) {
       throw new OcrOutputTooLargeError("category");
     }
-    const headContent = input.headFiles.get(path19);
+    const headContent = input.headFiles.get(path20);
     const span = headContent !== void 0 ? verifyOcrSpan({
       comment,
       headContent,
-      ...input.diffPositions ? { diffPositions: input.diffPositions.get(path19) } : {}
+      ...input.diffPositions ? { diffPositions: input.diffPositions.get(path20) } : {}
     }) : { verified: false, reason: "content_mismatch" };
     if (!span.verified && (span.reason === "content_mismatch" || span.reason === "ambiguous_match")) {
       reasons.add("unverified_native_span");
@@ -144129,7 +144129,7 @@ function normalizeOcrFindings(input) {
       throw new OcrOutputTooLargeError("suggestion");
     }
     findings.push({
-      file: path19,
+      file: path20,
       ...span.verified ? {
         startLine: span.startLine,
         line: span.startLine,
@@ -144459,15 +144459,15 @@ function acceptOcrManagedReviewResult(input) {
   const expected = new Set(input.selectedPaths);
   const observed = /* @__PURE__ */ new Set();
   for (const group of native.outcome.groups) {
-    for (const path19 of group.paths) {
-      if (!expected.has(path19) || observed.has(path19)) {
-        throw new OcrReviewAcceptanceError("coverage_mismatch", path19);
+    for (const path20 of group.paths) {
+      if (!expected.has(path20) || observed.has(path20)) {
+        throw new OcrReviewAcceptanceError("coverage_mismatch", path20);
       }
-      observed.add(path19);
+      observed.add(path20);
     }
   }
   const uncoveredPaths = Object.freeze(
-    [...expected].filter((path19) => !observed.has(path19)).sort()
+    [...expected].filter((path20) => !observed.has(path20)).sort()
   );
   let normalized;
   try {
@@ -144514,7 +144514,7 @@ function acceptOcrManagedReviewResult(input) {
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
 var import_crypto40 = require("crypto");
 var import_child_process13 = require("child_process");
-var path18 = __toESM(require("path"));
+var path19 = __toESM(require("path"));
 var import_util30 = require("util");
 var import_promises13 = require("node:timers/promises");
 
@@ -144681,7 +144681,7 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
   if (nearby.length === 0) return reportedLine;
   const bodyTokens = tokenizeForLineScoring(commentBody);
   const riskTerms = getRiskTerms(commentBody);
-  const score = (candidate) => {
+  const score2 = (candidate) => {
     const content = candidate.content;
     const lower = content.toLowerCase();
     const codeTokens = tokenizeForLineScoring(content);
@@ -144704,11 +144704,11 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
     return proximity + overlap + riskScore + interpolationScore + callScore + declarationPenalty;
   };
   const current = nearby.find((line2) => line2.line === reportedLine);
-  const currentScore = current ? score(current) : Number.NEGATIVE_INFINITY;
+  const currentScore = current ? score2(current) : Number.NEGATIVE_INFINITY;
   const best = [...nearby].sort(
-    (a, b) => score(b) - score(a) || Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine)
+    (a, b) => score2(b) - score2(a) || Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine)
   )[0];
-  const bestScore = score(best);
+  const bestScore = score2(best);
   return bestScore > currentScore + 1 ? best.line : reportedLine;
 }
 function tokenizeForLineScoring(text3) {
@@ -144942,12 +144942,12 @@ function formatSummaryOnlyChunk(chunk, file) {
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
-function unquoteGitPath(path19) {
-  if (path19.startsWith('"') && path19.endsWith('"')) {
-    path19 = path19.slice(1, -1);
+function unquoteGitPath(path20) {
+  if (path20.startsWith('"') && path20.endsWith('"')) {
+    path20 = path20.slice(1, -1);
   }
   try {
-    path19 = path19.replace(/\\([\\"tnr])/g, (_m, ch) => {
+    path20 = path20.replace(/\\([\\"tnr])/g, (_m, ch) => {
       switch (ch) {
         case "\\":
           return "\\";
@@ -144965,7 +144965,7 @@ function unquoteGitPath(path19) {
     });
   } catch {
   }
-  return path19;
+  return path20;
 }
 
 // src/utils/token-estimation.ts
@@ -146013,8 +146013,8 @@ var HIGH_RISK_PATH_TOKENS = /* @__PURE__ */ new Set([
   "workflow",
   "workflows"
 ]);
-function changedPathSemanticRiskPriority(path19) {
-  const normalized = path19.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+function changedPathSemanticRiskPriority(path20) {
+  const normalized = path20.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   if (normalized.length === 0) {
     throw new Error("review_investigation_changed_path_missing");
   }
@@ -146425,7 +146425,7 @@ function normalizeProviderObligationProposal(record7) {
     "obligation_proposal"
   );
   const kind = requireProviderProposableObligationKind(record7.kind);
-  const path19 = requireRepositoryRelativePath(
+  const path20 = requireRepositoryRelativePath(
     record7.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
@@ -146435,7 +146435,7 @@ function normalizeProviderObligationProposal(record7) {
     ReviewTurnProposalRevision,
     "obligation_requirement_revision"
   );
-  const pathHash = sha256(path19);
+  const pathHash = sha256(path20);
   return Object.freeze({
     kind,
     canonicalSubject: canonicalJson({
@@ -146446,7 +146446,7 @@ function normalizeProviderObligationProposal(record7) {
     }),
     canonicalRequirement: canonicalJson({
       kind: COMPLETE_FILE_REQUIREMENT_KIND,
-      path: path19,
+      path: path20,
       pathHash,
       requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
       revision
@@ -146460,14 +146460,14 @@ function normalizeProviderObligationProposal(record7) {
   });
 }
 function requireRepositoryRelativePath(value, field, maxLength) {
-  const path19 = requireString(value, field, maxLength);
-  const segments = path19.split("/");
-  if (path19.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path19) || path19.includes("\\") || segments.some(
+  const path20 = requireString(value, field, maxLength);
+  const segments = path20.split("/");
+  if (path20.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path20) || path20.includes("\\") || segments.some(
     (segment) => segment === "" || segment === "." || segment === ".."
   )) {
     throw new Error(`review_agent_${field}_invalid`);
   }
-  return path19;
+  return path20;
 }
 function parseCanonicalCompleteFileRequirement(value) {
   let parsed;
@@ -146485,7 +146485,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   if (requirement.kind !== COMPLETE_FILE_REQUIREMENT_KIND || requirement.requirementVersion !== COMPLETE_FILE_REQUIREMENT_VERSION) {
     throw new Error("review_agent_obligation_requirement_unsupported");
   }
-  const path19 = requireString(
+  const path20 = requireString(
     requirement.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
@@ -146494,7 +146494,7 @@ function parseCanonicalCompleteFileRequirement(value) {
     requirement.pathHash,
     "obligation_requirement_path_hash"
   );
-  if (pathHash !== sha256(path19)) {
+  if (pathHash !== sha256(path20)) {
     throw new Error("review_agent_obligation_requirement_path_hash_mismatch");
   }
   const revision = requireEnum(
@@ -146505,7 +146505,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   const normalized = Object.freeze({
     requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
     kind: COMPLETE_FILE_REQUIREMENT_KIND,
-    path: path19,
+    path: path20,
     pathHash,
     revision
   });
@@ -146852,13 +146852,13 @@ function reviewInvestigationSearchOperationInputHash(query) {
     })
   );
 }
-function reviewInvestigationBasenameFallbackQuery(path19) {
-  assertPath(path19, "review_investigation_probe_path_invalid");
-  const basename5 = basenameWithoutExtension(path19);
+function reviewInvestigationBasenameFallbackQuery(path20) {
+  assertPath(path20, "review_investigation_probe_path_invalid");
+  const basename5 = basenameWithoutExtension(path20);
   return isSpecificProbeQuery(
     "basename_fallback" /* BasenameFallback */,
     basename5
-  ) ? basename5 : path19;
+  ) ? basename5 : path20;
 }
 function createProbe(candidate) {
   const obligationKind = obligationKindFor(candidate);
@@ -146947,8 +146947,8 @@ function extractImportExportRelations(line2, add) {
     }
   }
 }
-function extractStructuredRelations(path19, line2, add) {
-  const dartSource = /\.dart$/iu.test(path19);
+function extractStructuredRelations(path20, line2, add) {
+  const dartSource = /\.dart$/iu.test(path20);
   const keyPatterns = [
     // Dart's unquoted labels and assignments are arguments/variables, not
     // external keys. Quoted map/JSON keys still provide contract evidence.
@@ -146965,7 +146965,7 @@ function extractStructuredRelations(path19, line2, add) {
       add("structured_key" /* StructuredKey */, match2[1]);
     }
   }
-  if (STRUCTURED_PATH_PATTERN.test(path19)) {
+  if (STRUCTURED_PATH_PATTERN.test(path20)) {
     for (const literal2 of quotedLiterals(line2)) {
       if (isContractLiteral(literal2)) {
         add("structured_key" /* StructuredKey */, literal2);
@@ -147067,24 +147067,24 @@ function splitDiffByDestinationPath(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match2 = matches[index];
     if (match2.index === void 0) continue;
-    const path19 = unquoteGitPath2(match2[2].trim());
+    const path20 = unquoteGitPath2(match2[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (path19.length === 0 || chunks.has(path19)) continue;
-    chunks.set(path19, diff.slice(match2.index, end));
+    if (path20.length === 0 || chunks.has(path20)) continue;
+    chunks.set(path20, diff.slice(match2.index, end));
   }
   return chunks;
 }
 function unquoteGitPath2(value) {
-  const path19 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path19.replace(/\\([\\"tnr])/gu, (_match, char) => {
+  const path20 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path20.replace(/\\([\\"tnr])/gu, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
     return char;
   });
 }
-function basenameWithoutExtension(path19) {
-  const fileName = path19.split("/").at(-1) ?? path19;
+function basenameWithoutExtension(path20) {
+  const fileName = path20.split("/").at(-1) ?? path20;
   const extension = fileName.lastIndexOf(".");
   return extension > 0 ? fileName.slice(0, extension) : fileName;
 }
@@ -147701,16 +147701,16 @@ function splitDiffByDestinationPath2(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match2 = matches[index];
     if (match2.index === void 0) continue;
-    const path19 = unquoteGitPath3(match2[2].trim());
+    const path20 = unquoteGitPath3(match2[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (!path19 || chunks.has(path19)) continue;
-    chunks.set(path19, diff.slice(match2.index, end).replace(/\n+$/, ""));
+    if (!path20 || chunks.has(path20)) continue;
+    chunks.set(path20, diff.slice(match2.index, end).replace(/\n+$/, ""));
   }
   return chunks;
 }
 function unquoteGitPath3(value) {
-  const path19 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path19.replace(/\\([\\"tnr])/g, (_match, char) => {
+  const path20 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path20.replace(/\\([\\"tnr])/g, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
@@ -149507,8 +149507,8 @@ async function readSafeErrorCode(response) {
   }
   return void 0;
 }
-function joinApiPath(apiUrl, path19) {
-  return new URL(path19, ensureTrailingSlash(apiUrl)).toString();
+function joinApiPath(apiUrl, path20) {
+  return new URL(path20, ensureTrailingSlash(apiUrl)).toString();
 }
 function ensureTrailingSlash(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -190709,14 +190709,14 @@ async function startCodexUsageRelay(input) {
   let closed = false;
   const server = (0, import_node_http4.createServer)((request3, response) => {
     const flight = (async () => {
-      const path19 = request3.url?.split("?")[0] ?? "";
+      const path20 = request3.url?.split("?")[0] ?? "";
       const prefix2 = `/${capability}`;
-      const supplied = Buffer.from(path19.slice(1, 1 + capability.length));
-      if (closed || supplied.length !== auth3.length || !(0, import_node_crypto8.timingSafeEqual)(supplied, auth3) || !path19.startsWith(prefix2 + "/") || request3.method !== "POST" || request3.url?.includes("?")) {
+      const supplied = Buffer.from(path20.slice(1, 1 + capability.length));
+      if (closed || supplied.length !== auth3.length || !(0, import_node_crypto8.timingSafeEqual)(supplied, auth3) || !path20.startsWith(prefix2 + "/") || request3.method !== "POST" || request3.url?.includes("?")) {
         response.writeHead(404).end();
         return;
       }
-      const suffix = path19.slice(prefix2.length);
+      const suffix = path20.slice(prefix2.length);
       if (![
         "/responses",
         "/chat/completions",
@@ -193121,13 +193121,13 @@ ${JSON.stringify(outputSchema)}` : prompt;
       if (changed.has(file)) continue;
       const content = this.readRepoFileSync(file);
       if (!content) continue;
-      let score = 0;
+      let score2 = 0;
       for (const identifier2 of identifiers) {
         if (content.includes(identifier2))
-          score += this.contextIdentifierWeight(identifier2);
+          score2 += this.contextIdentifierWeight(identifier2);
       }
-      if (score > 0) {
-        scored.push({ file, score });
+      if (score2 > 0) {
+        scored.push({ file, score: score2 });
       }
     }
     return scored.sort((a, b) => b.score - a.score || a.file.localeCompare(b.file)).slice(0, 8).map((item) => item.file);
@@ -194013,10 +194013,10 @@ function createReviewPromptCoverageManifest(input) {
     }
     byPath.set(fact.path, fact);
   }
-  if (byPath.size !== assigned.length || assigned.some((path19) => !byPath.has(path19))) {
+  if (byPath.size !== assigned.length || assigned.some((path20) => !byPath.has(path20))) {
     throw new Error("review_prompt_coverage_path_set_mismatch");
   }
-  const paths = Object.freeze(assigned.map((path19) => byPath.get(path19)));
+  const paths = Object.freeze(assigned.map((path20) => byPath.get(path20)));
   const canonicalFacts = canonicalJson7({
     paths,
     reviewRevisionHash: input.reviewRevisionHash,
@@ -194033,7 +194033,7 @@ function createReviewPromptCoverageManifest(input) {
 }
 function isReviewPromptCoverageComplete(manifest) {
   return manifest.paths.length > 0 && manifest.paths.every(
-    (path19) => path19.kind === "full_patch" /* FullPatch */ || path19.kind === "policy_excluded" /* PolicyExcluded */
+    (path20) => path20.kind === "full_patch" /* FullPatch */ || path20.kind === "policy_excluded" /* PolicyExcluded */
   );
 }
 function createProviderVisibleReviewCoverage(manifest) {
@@ -194260,16 +194260,16 @@ function createStableReviewAssignmentManifest(input) {
   const uncoveredPaths = canonicalPaths(input.uncoveredPaths);
   const excludedPaths = canonicalPaths(input.excludedPaths);
   const eligible = new Set(eligiblePaths);
-  for (const path19 of uncoveredPaths) {
-    if (!eligible.has(path19)) {
+  for (const path20 of uncoveredPaths) {
+    if (!eligible.has(path20)) {
       throw new Error("review_assignment_manifest_uncovered_not_eligible");
     }
   }
   const assignments = input.assignments.map((assignment) => {
     requireIdentity2(assignment.workSlotId, "work_slot_id");
     const paths = canonicalPaths(assignment.paths);
-    for (const path19 of paths) {
-      if (!eligible.has(path19)) {
+    for (const path20 of paths) {
+      if (!eligible.has(path20)) {
         throw new Error("review_assignment_manifest_assignment_not_eligible");
       }
     }
@@ -194284,19 +194284,19 @@ function createStableReviewAssignmentManifest(input) {
   const assignedPaths = new Set(
     assignments.flatMap((assignment) => assignment.paths)
   );
-  for (const path19 of uncoveredPaths) {
-    if (assignedPaths.has(path19)) {
+  for (const path20 of uncoveredPaths) {
+    if (assignedPaths.has(path20)) {
       throw new Error("review_assignment_manifest_uncovered_assigned_overlap");
     }
   }
   const uncovered = new Set(uncoveredPaths);
-  for (const path19 of eligiblePaths) {
-    if (!assignedPaths.has(path19) && !uncovered.has(path19)) {
+  for (const path20 of eligiblePaths) {
+    if (!assignedPaths.has(path20) && !uncovered.has(path20)) {
       throw new Error("review_assignment_manifest_eligible_unaccounted");
     }
   }
-  for (const path19 of excludedPaths) {
-    if (eligible.has(path19)) {
+  for (const path20 of excludedPaths) {
+    if (eligible.has(path20)) {
       throw new Error("review_assignment_manifest_excluded_eligible_overlap");
     }
   }
@@ -194328,11 +194328,11 @@ function createStableReviewAssignmentManifest(input) {
   });
 }
 function canonicalPaths(paths) {
-  for (const path19 of paths) requireNormalizedRepoPath(path19);
+  for (const path20 of paths) requireNormalizedRepoPath(path20);
   return Object.freeze([...new Set(paths)].sort(compareCodePoints4));
 }
-function requireNormalizedRepoPath(path19) {
-  if (path19.length === 0 || path19.length > assignmentManifestMaxPathLength || path19.includes("\0") || path19.includes("\\") || path19.startsWith("/") || path19.endsWith("/") || path19.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+function requireNormalizedRepoPath(path20) {
+  if (path20.length === 0 || path20.length > assignmentManifestMaxPathLength || path20.includes("\0") || path20.includes("\\") || path20.startsWith("/") || path20.endsWith("/") || path20.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
     throw new Error("review_assignment_manifest_path_invalid");
   }
 }
@@ -198409,7 +198409,7 @@ function buildReviewInvestigationSeedEnvelope(input) {
   if (changedPathFacts.size !== input.probePlan.changedPaths.length) {
     throw new Error("review_investigation_seed_changed_path_duplicate");
   }
-  if (changedPathFacts.size !== paths.length || paths.some((path19) => !changedPathFacts.has(path19))) {
+  if (changedPathFacts.size !== paths.length || paths.some((path20) => !changedPathFacts.has(path20))) {
     throw new Error("review_investigation_seed_path_set_mismatch");
   }
   const inventory = prepareCanonicalInventory(input.canonicalInventory);
@@ -199778,18 +199778,18 @@ function parseRawInventory(raw) {
       tokens[index],
       "canonical_inventory_raw_record_encoding_invalid"
     );
-    const path19 = decodeUtf8(
+    const path20 = decodeUtf8(
       tokens[index + 1],
       "canonical_inventory_path_encoding_invalid"
     );
     const match2 = RAW_RECORD.exec(record7);
-    if (!match2 || !path19 || path19.includes("\0")) {
+    if (!match2 || !path20 || path20.includes("\0")) {
       throw new Error("canonical_inventory_raw_record_invalid");
     }
     entries.push(
       Object.freeze({
         status: rawStatus(match2[5]),
-        path: path19,
+        path: path20,
         beforeMode: match2[1],
         afterMode: match2[2],
         beforeOid: requireGitOidOrZero2(match2[3]),
@@ -204910,11 +204910,11 @@ function assertWithinProjectionLimit(limitName, actual, limits) {
 }
 
 // src/review-projection/domain/review-projection.ts
-var FindingSeverity = /* @__PURE__ */ ((FindingSeverity3) => {
-  FindingSeverity3["Critical"] = "critical";
-  FindingSeverity3["Major"] = "major";
-  FindingSeverity3["Minor"] = "minor";
-  return FindingSeverity3;
+var FindingSeverity = /* @__PURE__ */ ((FindingSeverity2) => {
+  FindingSeverity2["Critical"] = "critical";
+  FindingSeverity2["Major"] = "major";
+  FindingSeverity2["Minor"] = "minor";
+  return FindingSeverity2;
 })(FindingSeverity || {});
 var LifecycleRevalidationVerdict = /* @__PURE__ */ ((LifecycleRevalidationVerdict2) => {
   LifecycleRevalidationVerdict2["Resolved"] = "resolved";
@@ -205124,11 +205124,11 @@ function hasValidTrustedResolutionMarker(target) {
     marker2 && marker2.trust === "trusted" /* Trusted */ && marker2.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker2.targetId === target.targetId && marker2.fingerprint === target.trustedMarker
   );
 }
-function summaryPlacement(lineageId, path19, reason) {
+function summaryPlacement(lineageId, path20, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path19,
+    path: path20,
     reason
   };
 }
@@ -205151,8 +205151,8 @@ function sortOccurrences(occurrences) {
     (left, right) => stateOrder[left.state] - stateOrder[right.state] || severityOrder2[left.severity] - severityOrder2[right.severity] || left.filePath.localeCompare(right.filePath) || (left.line ?? 0) - (right.line ?? 0) || left.lineageId.localeCompare(right.lineageId)
   );
 }
-function normalizePath(path19) {
-  return path19.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath(path20) {
+  return path20.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique(values) {
   return Array.from(new Set(values)).sort(
@@ -206206,10 +206206,10 @@ function toRevalidationTargets(raw, ledgerWatermark, activeSkips = []) {
   return Object.freeze(
     targets.map((target) => {
       const reasons = target.reasonCodes ?? [];
-      const path19 = target.currentPath || target.originalPath;
+      const path20 = target.currentPath || target.originalPath;
       const line2 = target.currentLine ?? target.originalLine;
       const commandDismissed = reasons.includes("command_dismissed") || activeSkips.some(
-        (skip) => skip.fingerprint === target.fingerprint || skip.legacyFingerprint === target.fingerprint || target.parentCommentDatabaseId !== void 0 && skip.parentCommentId === target.parentCommentDatabaseId || line2 !== void 0 && skip.line != null && skip.path?.toLowerCase() === path19.toLowerCase() && skip.line === line2
+        (skip) => skip.fingerprint === target.fingerprint || skip.legacyFingerprint === target.fingerprint || target.parentCommentDatabaseId !== void 0 && skip.parentCommentId === target.parentCommentDatabaseId || line2 !== void 0 && skip.line != null && skip.path?.toLowerCase() === path20.toLowerCase() && skip.line === line2
       );
       const completeWitness = typeof target.parentCommentCreatedAt === "string" && typeof target.parentCommentBodyHash === "string" && /^[a-f0-9]{64}$/.test(target.parentCommentBodyHash) && typeof target.claimHash === "string" && /^[a-f0-9]{64}$/.test(target.claimHash) && typeof target.threadStateHash === "string" && /^[a-f0-9]{64}$/.test(target.threadStateHash) && target.findingMarkerAmbiguous === false;
       return Object.freeze({
@@ -206931,7 +206931,7 @@ function buildLifecycleFacts(inventory, decisions, hints, coverage, occurrences,
       ...decision?.reasonCodes ?? [],
       ...!revisionFiles.some(
         (file) => [file.path, file.previousPath].some(
-          (path19) => path19 !== void 0 && (target.currentPath === path19 || target.originalPath === path19)
+          (path20) => path20 !== void 0 && (target.currentPath === path20 || target.originalPath === path20)
         )
       ) ? ["outside_review_scope"] : [],
       ...target.disposition === "human_reply" /* HumanReply */ ? ["human_reply"] : [],
@@ -207040,11 +207040,11 @@ function countOccurrenceStates(occurrences) {
 function publicationMarker(kind, scope) {
   return `reviewrouter:${kind}:v2:${scope.reviewRevisionHash}`;
 }
-function summaryPlacement2(lineageId, path19, reason) {
+function summaryPlacement2(lineageId, path20, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path19,
+    path: path20,
     reason
   };
 }
@@ -207180,8 +207180,8 @@ function validateGateDecision(occurrences, gate, verificationFacts) {
 function assertNonEmpty(name, value) {
   if (!value.trim()) throw new Error(`${name} must not be empty`);
 }
-function normalizePath2(path19) {
-  return path19.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath2(path20) {
+  return path20.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique2(values) {
   return Array.from(new Set(values)).sort(
@@ -208948,6 +208948,75 @@ function unique2(values) {
   return Array.from(new Set(values));
 }
 
+// src/review-risk/domain/rank-review-hotspots.ts
+var maxCandidates = 2e3;
+var maxDisplayed = 3;
+function validDependents(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? Math.min(value, 999) : void 0;
+}
+function safeLine(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
+}
+function score(candidate) {
+  const dependents = validDependents(candidate.dependents);
+  const line2 = safeLine(candidate.line);
+  let rank;
+  let reason;
+  let priority = "attention";
+  if (candidate.severity === "critical") {
+    rank = 50;
+    reason = "critical-finding";
+  } else if (candidate.severity === "major") {
+    rank = 40;
+    reason = "major-finding";
+  } else if (candidate.coverage === "unreviewed" || candidate.coverage === "metadata-only") {
+    rank = candidate.sensitiveArea ? 38 : 34;
+    reason = "not-reviewed";
+    priority = "unknown";
+  } else if (dependents !== void 0 && dependents > 0) {
+    rank = 30 + Math.min(3, dependents);
+    reason = "shared-code";
+  } else if (candidate.severity === "minor") {
+    rank = 10;
+    reason = "minor-finding";
+  } else {
+    return void 0;
+  }
+  return {
+    rank,
+    hotspot: {
+      path: candidate.path,
+      reason,
+      priority,
+      ...line2 === void 0 ? {} : { line: line2 },
+      ...dependents === void 0 || dependents === 0 ? {} : { relatedFiles: dependents }
+    }
+  };
+}
+function rankReviewHotspots(candidates, limit = maxDisplayed) {
+  const selected = /* @__PURE__ */ new Map();
+  for (let index = 0; index < candidates.length; index++) {
+    const candidate = candidates[index];
+    if (index >= maxCandidates && candidate.severity !== "critical" && candidate.severity !== "major") {
+      continue;
+    }
+    const path20 = candidate.path;
+    if (typeof path20 !== "string" || path20.trim().length === 0 || path20.length > 1024) {
+      continue;
+    }
+    const next = score(candidate);
+    if (!next) continue;
+    const previous = selected.get(path20);
+    if (!previous || next.rank > previous.rank || next.rank === previous.rank && (next.hotspot.line ?? Number.MAX_SAFE_INTEGER) < (previous.hotspot.line ?? Number.MAX_SAFE_INTEGER)) {
+      selected.set(path20, next);
+    }
+  }
+  const count2 = Number.isSafeInteger(limit) ? Math.max(0, Math.min(limit, maxDisplayed)) : maxDisplayed;
+  return [...selected.values()].sort(
+    (left, right) => right.rank - left.rank || (left.hotspot.path < right.hotspot.path ? -1 : left.hotspot.path > right.hotspot.path ? 1 : 0)
+  ).slice(0, count2).map(({ hotspot }) => hotspot);
+}
+
 // src/output/review-banner.ts
 function renderReviewBanner(baseUrl2, presentation) {
   if (!baseUrl2) return "";
@@ -209365,6 +209434,45 @@ ${safeFindingBody(line2.message)}`
     lines.push("", block);
     return true;
   };
+  const hotspots = input.hotspots ?? rankReviewHotspots(
+    input.findings.map(({ file, line: line2, severity }) => ({
+      path: file,
+      line: line2,
+      severity
+    }))
+  );
+  const addsDistinctContext = hotspots.some(
+    ({ reason }) => reason === "shared-code" || reason === "not-reviewed"
+  );
+  if (hotspots.length > 0 && addsDistinctContext) {
+    const text3 = riskHotspotCopy[locale];
+    const items = hotspots.slice(0, 3).map((hotspot) => {
+      const label = escapeCoverageManifestPath(
+        hotspot.path + (Number.isSafeInteger(hotspot.line) && (hotspot.line ?? 0) > 0 ? `:${hotspot.line}` : "")
+      );
+      const url3 = findingSourceUrl(
+        {
+          file: hotspot.path,
+          line: hotspot.line ?? 0,
+          severity: "minor",
+          title: "",
+          message: ""
+        },
+        input.source
+      );
+      const location = url3 ? `[${label}](${url3})` : label;
+      const explanation = hotspot.reason === "critical-finding" ? text3.critical : hotspot.reason === "major-finding" ? text3.major : hotspot.reason === "minor-finding" ? text3.minor : hotspot.reason === "not-reviewed" ? text3.notReviewed : text3.shared(hotspot.relatedFiles);
+      return `- ${location} \u2014 ${explanation}`;
+    });
+    append(
+      `### ${text3.heading}${input.coverage?.complete === false ? `
+
+${text3.partial}` : ""}
+
+${items.join("\n")}`,
+      maxSummaryBytes - 4e3
+    );
+  }
   const findings = [...input.findings].sort(compareSummaryFindings);
   const newFindings = findings.filter((finding) => !finding.previous);
   const previousFindings = findings.filter((finding) => finding.previous);
@@ -209434,6 +209542,107 @@ ${details.join("\n\n")}
   if (omitted) lines.push("", notice);
   return lines.join("\n");
 }
+var riskHotspotCopy = {
+  en: {
+    heading: "Where to look first",
+    critical: "Critical issue identified",
+    major: "Important issue identified",
+    minor: "Issue worth reviewing",
+    notReviewed: "Review of this file did not finish",
+    partial: "Only available evidence is shown; the review did not cover everything.",
+    shared: (n) => n ? `Possible dependency links to ${n} changed file${n === 1 ? "" : "s"}` : "Possible links to other changed files"
+  },
+  ru: {
+    heading: "\u041D\u0430 \u0447\u0442\u043E \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u044C \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
+    critical: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u043A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430",
+    major: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u0441\u0435\u0440\u044C\u0451\u0437\u043D\u0430\u044F \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430",
+    minor: "\u0415\u0441\u0442\u044C \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438",
+    notReviewed: "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u044D\u0442\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0430 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430",
+    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0438\u043C\u0435\u044E\u0449\u0438\u0435\u0441\u044F \u0434\u0430\u043D\u043D\u044B\u0435; \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0431\u044B\u043B\u0430 \u043D\u0435\u043F\u043E\u043B\u043D\u043E\u0439.",
+    shared: (n) => n ? `\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u044B\u0435 \u0441\u0432\u044F\u0437\u0438 \u0441 ${n} \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u044B\u0435 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0434\u0440\u0443\u0433\u0438\u043C\u0438 \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
+  },
+  uk: {
+    heading: "\u041D\u0430 \u0449\u043E \u0437\u0432\u0435\u0440\u043D\u0443\u0442\u0438 \u0443\u0432\u0430\u0433\u0443",
+    critical: "\u0412\u0438\u044F\u0432\u043B\u0435\u043D\u043E \u043A\u0440\u0438\u0442\u0438\u0447\u043D\u0443 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0443",
+    major: "\u0412\u0438\u044F\u0432\u043B\u0435\u043D\u043E \u0441\u0435\u0440\u0439\u043E\u0437\u043D\u0443 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0443",
+    minor: "\u0404 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F \u0434\u043B\u044F \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0438",
+    notReviewed: "\u041F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0443 \u0446\u044C\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0443 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
+    partial: "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u043E \u043D\u0430\u044F\u0432\u043D\u0456 \u0434\u0430\u043D\u0456; \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0430 \u0431\u0443\u043B\u0430 \u043D\u0435\u043F\u043E\u0432\u043D\u043E\u044E.",
+    shared: (n) => n ? `\u041C\u043E\u0436\u043B\u0438\u0432\u0456 \u0437\u0432\u2019\u044F\u0437\u043A\u0438 \u0437 ${n} \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438` : "\u041C\u043E\u0436\u043B\u0438\u0432\u0456 \u0437\u0432\u2019\u044F\u0437\u043A\u0438 \u0437 \u0456\u043D\u0448\u0438\u043C\u0438 \u0437\u043C\u0456\u043D\u0435\u043D\u0438\u043C\u0438 \u0444\u0430\u0439\u043B\u0430\u043C\u0438"
+  },
+  es: {
+    heading: "D\xF3nde revisar primero",
+    critical: "Se encontr\xF3 un problema cr\xEDtico",
+    major: "Se encontr\xF3 un problema importante",
+    minor: "Hay un problema que revisar",
+    notReviewed: "No se complet\xF3 la revisi\xF3n de este archivo",
+    partial: "Solo se muestran indicios disponibles; la revisi\xF3n est\xE1 incompleta.",
+    shared: (n) => n ? `Posibles dependencias con ${n} archivos modificados` : "Posibles dependencias con otros archivos modificados"
+  },
+  pt: {
+    heading: "Onde revisar primeiro",
+    critical: "Problema cr\xEDtico identificado",
+    major: "Problema importante identificado",
+    minor: "Problema que merece revis\xE3o",
+    notReviewed: "A revis\xE3o deste arquivo n\xE3o foi conclu\xEDda",
+    partial: "Apenas sinais dispon\xEDveis s\xE3o mostrados; a revis\xE3o est\xE1 incompleta.",
+    shared: (n) => n ? `Poss\xEDveis depend\xEAncias com ${n} arquivos alterados` : "Poss\xEDveis depend\xEAncias com outros arquivos alterados"
+  },
+  fr: {
+    heading: "O\xF9 regarder en premier",
+    critical: "Probl\xE8me critique d\xE9tect\xE9",
+    major: "Probl\xE8me important d\xE9tect\xE9",
+    minor: "Point \xE0 v\xE9rifier",
+    notReviewed: "La v\xE9rification de ce fichier est incompl\xE8te",
+    partial: "Seuls les indices disponibles sont affich\xE9s ; la revue est incompl\xE8te.",
+    shared: (n) => n ? `Liens de d\xE9pendance possibles avec ${n} fichiers modifi\xE9s` : "Liens possibles avec d\u2019autres fichiers modifi\xE9s"
+  },
+  de: {
+    heading: "Worauf zuerst achten",
+    critical: "Kritisches Problem erkannt",
+    major: "Wichtiges Problem erkannt",
+    minor: "Hinweis zur Pr\xFCfung",
+    notReviewed: "Pr\xFCfung dieser Datei nicht abgeschlossen",
+    partial: "Nur verf\xFCgbare Hinweise werden angezeigt; die Pr\xFCfung ist unvollst\xE4ndig.",
+    shared: (n) => n ? `M\xF6gliche Abh\xE4ngigkeiten zu ${n} ge\xE4nderten Dateien` : "M\xF6gliche Abh\xE4ngigkeiten zu anderen ge\xE4nderten Dateien"
+  },
+  it: {
+    heading: "Dove guardare prima",
+    critical: "Problema critico rilevato",
+    major: "Problema importante rilevato",
+    minor: "Problema da verificare",
+    notReviewed: "Revisione di questo file non completata",
+    partial: "Si mostrano solo i segnali disponibili; revisione incompleta.",
+    shared: (n) => n ? `Possibili dipendenze con ${n} file modificati` : "Possibili dipendenze con altri file modificati"
+  },
+  zh: {
+    heading: "\u4F18\u5148\u67E5\u770B",
+    critical: "\u53D1\u73B0\u4E25\u91CD\u95EE\u9898",
+    major: "\u53D1\u73B0\u91CD\u8981\u95EE\u9898",
+    minor: "\u5B58\u5728\u9700\u8981\u68C0\u67E5\u7684\u95EE\u9898",
+    notReviewed: "\u6B64\u6587\u4EF6\u5C1A\u672A\u5B8C\u6210\u5BA1\u67E5",
+    partial: "\u4EC5\u663E\u793A\u73B0\u6709\u7684\u4FE1\u606F\uFF1B\u5BA1\u67E5\u5C1A\u4E0D\u5B8C\u6574\u3002",
+    shared: (n) => n ? `\u53EF\u80FD\u5173\u8054 ${n} \u4E2A\u5DF2\u66F4\u6539\u6587\u4EF6` : "\u53EF\u80FD\u4E0E\u5176\u4ED6\u5DF2\u66F4\u6539\u6587\u4EF6\u5173\u8054"
+  },
+  ja: {
+    heading: "\u512A\u5148\u3057\u3066\u78BA\u8A8D\u3059\u308B\u7B87\u6240",
+    critical: "\u91CD\u5927\u306A\u554F\u984C\u304C\u3042\u308A\u307E\u3059",
+    major: "\u91CD\u8981\u306A\u554F\u984C\u304C\u3042\u308A\u307E\u3059",
+    minor: "\u78BA\u8A8D\u304C\u5FC5\u8981\u306A\u6307\u6458\u304C\u3042\u308A\u307E\u3059",
+    notReviewed: "\u3053\u306E\u30D5\u30A1\u30A4\u30EB\u306E\u30EC\u30D3\u30E5\u30FC\u306F\u672A\u5B8C\u4E86\u3067\u3059",
+    partial: "\u5229\u7528\u53EF\u80FD\u306A\u60C5\u5831\u306E\u307F\u8868\u793A\u3057\u3066\u3044\u307E\u3059\u3002\u30EC\u30D3\u30E5\u30FC\u306F\u672A\u5B8C\u4E86\u3067\u3059\u3002",
+    shared: (n) => n ? `\u5909\u66F4\u3055\u308C\u305F ${n} \u30D5\u30A1\u30A4\u30EB\u3068\u306E\u4F9D\u5B58\u95A2\u4FC2\u306E\u53EF\u80FD\u6027` : "\u4ED6\u306E\u5909\u66F4\u30D5\u30A1\u30A4\u30EB\u3068\u306E\u95A2\u9023\u306E\u53EF\u80FD\u6027"
+  },
+  ko: {
+    heading: "\uBA3C\uC800 \uD655\uC778\uD560 \uBD80\uBD84",
+    critical: "\uCE58\uBA85\uC801\uC778 \uBB38\uC81C\uAC00 \uBC1C\uACAC\uB428",
+    major: "\uC911\uC694\uD55C \uBB38\uC81C\uAC00 \uBC1C\uACAC\uB428",
+    minor: "\uD655\uC778\uD560 \uBB38\uC81C\uAC00 \uC788\uC74C",
+    notReviewed: "\uC774 \uD30C\uC77C\uC758 \uAC80\uD1A0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC74C",
+    partial: "\uD655\uC778 \uAC00\uB2A5\uD55C \uC815\uBCF4\uB9CC \uD45C\uC2DC\uD569\uB2C8\uB2E4. \uAC80\uD1A0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+    shared: (n) => n ? `\uBCC0\uACBD\uB41C \uD30C\uC77C ${n}\uAC1C\uC640 \uC5F0\uAD00 \uAC00\uB2A5\uC131` : "\uB2E4\uB978 \uBCC0\uACBD \uD30C\uC77C\uACFC \uC5F0\uAD00 \uAC00\uB2A5\uC131"
+  }
+};
 function renderReviewSummary(review, language, options = {}) {
   const retainedLocale = review.summary.match(
     /<!-- reviewrouter:summary-locale:([a-z]{2}) -->/
@@ -209486,6 +209695,7 @@ function renderReviewSummary(review, language, options = {}) {
     ...options,
     language: language ?? retainedLocale,
     findings: review.findings.map(toReviewerSummaryFinding),
+    ...review.riskHotspots ? { hotspots: review.riskHotspots } : {},
     metrics: review.metrics,
     incomplete: retainedIncomplete,
     ...scope ? {
@@ -209605,7 +209815,7 @@ function findingSourceUrl(finding, source) {
       return void 0;
     if (!finding.file || finding.file.includes("\\") || hasControlCharacters(finding.file) || finding.file.split("/").some((part) => !part || part === "." || part === ".."))
       return void 0;
-    const path19 = finding.file.split("/").map(
+    const path20 = finding.file.split("/").map(
       (part) => encodeURIComponent(part).replace(
         /[!'()*]/g,
         (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
@@ -209615,7 +209825,7 @@ function findingSourceUrl(finding, source) {
     const start = hasRange && finding.line > 0 ? finding.startLine : finding.line;
     const end = hasRange ? finding.endLine : start;
     const anchor = Number.isSafeInteger(start) && start > 0 ? `#L${start}${Number.isSafeInteger(end) && end > start ? `-L${end}` : ""}` : "";
-    return `${repo.origin}${repo.pathname.replace(/\/$/, "")}/blob/${source.headSha}/${path19}${anchor}`;
+    return `${repo.origin}${repo.pathname.replace(/\/$/, "")}/blob/${source.headSha}/${path20}${anchor}`;
   } catch {
     return void 0;
   }
@@ -211218,6 +211428,84 @@ function countAtOrAbove(counts, minRank) {
   );
 }
 
+// src/review-risk/application/build-review-hotspots.ts
+var path16 = __toESM(require("path"));
+var maxContextFiles = 128;
+function buildReviewHotspots(input) {
+  const changedFiles = input.files.filter((file) => file.status !== "removed");
+  const changedPaths = new Set(changedFiles.map((file) => file.filename));
+  const importDependents = changedFiles.length <= maxContextFiles ? existingImportDependents(
+    changedPaths,
+    input.contexts,
+    input.contextsAreResolved === true
+  ) : /* @__PURE__ */ new Map();
+  const coverageByPath = new Map(
+    (input.coverage?.files ?? []).map((file) => [file.path, file.status])
+  );
+  const candidates = changedFiles.map((file) => ({
+    path: file.filename,
+    changedLines: file.additions + file.deletions,
+    coverage: coverageByPath.get(file.filename),
+    sensitiveArea: classifyFileRisk(file.filename) !== "normal" /* Normal */,
+    ...importDependents.has(file.filename) ? { dependents: importDependents.get(file.filename) } : {}
+  }));
+  for (const finding of input.findings) {
+    if (!changedPaths.has(finding.file)) continue;
+    candidates.push({
+      path: finding.file,
+      severity: finding.severity,
+      line: finding.line,
+      coverage: coverageByPath.get(finding.file)
+    });
+  }
+  return rankReviewHotspots(candidates);
+}
+function existingImportDependents(changedPaths, contexts, areResolved) {
+  if (!contexts?.length) return /* @__PURE__ */ new Map();
+  const byModule = /* @__PURE__ */ new Map();
+  for (const file of changedPaths) {
+    if (!safeRepositoryPath(file)) continue;
+    const key = stripSourceExtension(file);
+    const existing = byModule.get(key) ?? [];
+    existing.push(file);
+    byModule.set(key, existing);
+  }
+  const references = /* @__PURE__ */ new Map();
+  for (const context5 of contexts.slice(0, maxContextFiles)) {
+    if (!changedPaths.has(context5.file) || !safeRepositoryPath(context5.file)) {
+      continue;
+    }
+    for (const specifier of context5.downstreamConsumers.slice(0, 16)) {
+      if (typeof specifier !== "string" || specifier.length > 512 || specifier.includes("\\") || specifier.includes("\0")) {
+        continue;
+      }
+      const isRelative = /^\.\.?\//.test(specifier);
+      if (!isRelative && (!areResolved || !specifier.includes("/") || specifier.startsWith("@"))) {
+        continue;
+      }
+      const resolved = path16.posix.normalize(
+        isRelative ? path16.posix.join(path16.posix.dirname(context5.file), specifier) : specifier
+      );
+      if (!safeRepositoryPath(resolved)) continue;
+      const matches = byModule.get(stripSourceExtension(resolved));
+      if (matches?.length !== 1 || matches[0] === context5.file) continue;
+      const target = matches[0];
+      const importers = references.get(target) ?? /* @__PURE__ */ new Set();
+      importers.add(context5.file);
+      references.set(target, importers);
+    }
+  }
+  return new Map(
+    [...references].map(([file, importers]) => [file, importers.size])
+  );
+}
+function safeRepositoryPath(file) {
+  return file.length > 0 && file !== ".." && !file.startsWith("../") && !path16.posix.isAbsolute(file) && !file.includes("\\") && !file.includes("\0") && !file.split("/").includes("..");
+}
+function stripSourceExtension(modulePath) {
+  return modulePath.replace(/\.(?:tsx?|jsx?|mjs|cjs)$/, "");
+}
+
 // src/review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter.ts
 var LegacyReviewProjectionPolicyAdapter = class {
   constructor(config2, summaryOptions = {}) {
@@ -211442,6 +211730,22 @@ var LegacyReviewProjectionPolicyAdapter = class {
         } : {},
         language: this.config.outputLanguage,
         reviewPresentation: query.reviewPresentation,
+        // T0 uses the same bounded, provider-neutral signals as the classic
+        // Action. This is presentation-only, after accepted projection facts.
+        hotspots: buildReviewHotspots({
+          files: query.revisionFiles.map((file) => ({
+            filename: file.path,
+            status: file.status === "removed" /* Removed */ ? "removed" : "modified",
+            additions: 0,
+            deletions: 0
+          })),
+          findings: currentOccurrences.map((occurrence) => ({
+            file: occurrence.filePath,
+            line: occurrence.line ?? 0,
+            severity: occurrence.severity === "critical" /* Critical */ ? "critical" : occurrence.severity === "major" /* Major */ ? "major" : "minor"
+          })),
+          coverage: { files: query.coverage.files ?? [] }
+        }),
         findings: currentOccurrences.map((occurrence) => ({
           ...toReviewerSummaryFinding(toLegacyFinding(occurrence)),
           lineageId: occurrence.lineageId,
@@ -211863,8 +212167,8 @@ function minimalLegacyReview(findings) {
     }
   };
 }
-function findRevisionFile(path19, revisionFiles) {
-  const normalized = normalizePath3(path19);
+function findRevisionFile(path20, revisionFiles) {
+  const normalized = normalizePath3(path20);
   return revisionFiles.find(
     (file) => normalizePath3(file.path) === normalized || file.previousPath && normalizePath3(file.previousPath) === normalized
   );
@@ -211886,8 +212190,8 @@ function toProjectionSeverity2(severity) {
 function toLegacySeverity(severity) {
   return severity;
 }
-function normalizePath3(path19) {
-  return path19.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath3(path20) {
+  return path20.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique3(values) {
   return Array.from(new Set(values)).sort(
@@ -212154,10 +212458,10 @@ var ProductionReviewProjectionCommandFactory = class {
       const accepted = evidence.get(assignment.workSlotId);
       if (!accepted) {
         if (assignment.required) {
-          for (const path19 of assignment.filePaths) {
+          for (const path20 of assignment.filePaths) {
             recordManifestFile(
               {
-                path: path19,
+                path: path20,
                 status: "unreviewed",
                 reason: exhaustedWorkSlots.has(assignment.workSlotId) ? "required work slot exhausted before producing accepted evidence" : "required work slot produced no accepted evidence"
               },
@@ -212167,17 +212471,17 @@ var ProductionReviewProjectionCommandFactory = class {
         }
         continue;
       }
-      for (const path19 of accepted.coverageManifest.paths) {
+      for (const path20 of accepted.coverageManifest.paths) {
         recordManifestFile(
-          promptCoverageToManifestFile(path19),
+          promptCoverageToManifestFile(path20),
           assignment.required
         );
       }
     }
-    for (const path19 of this.input.uncoveredPaths) {
+    for (const path20 of this.input.uncoveredPaths) {
       recordManifestFile(
         {
-          path: path19,
+          path: path20,
           status: "unreviewed",
           reason: "no review work slot covered this file"
         },
@@ -212220,13 +212524,13 @@ var ProductionReviewProjectionCommandFactory = class {
           `work_slot_investigation_inconclusive:${assignment.workSlotId}`
         );
       }
-      for (const path19 of manifest.paths) {
-        if (path19.kind === "full_patch" /* FullPatch */) {
-          reviewedFiles.add(path19.path);
-        } else if (path19.kind === "policy_excluded" /* PolicyExcluded */) {
-          policyExcludedFiles.add(path19.path);
+      for (const path20 of manifest.paths) {
+        if (path20.kind === "full_patch" /* FullPatch */) {
+          reviewedFiles.add(path20.path);
+        } else if (path20.kind === "policy_excluded" /* PolicyExcluded */) {
+          policyExcludedFiles.add(path20.path);
         } else {
-          coverageLimitations.push(`path_coverage:${path19.path}:${path19.kind}`);
+          coverageLimitations.push(`path_coverage:${path20.path}:${path20.kind}`);
         }
       }
       if (!isReviewPromptCoverageComplete(manifest)) {
@@ -212244,7 +212548,7 @@ var ProductionReviewProjectionCommandFactory = class {
         (omission) => `pull_request_load:${omission.reason}`
       ) : [],
       ...requiredExhaustedWorkSlotIds.map((id) => `work_slot_exhausted:${id}`),
-      ...this.input.uncoveredPaths.map((path19) => `work_slot_uncovered:${path19}`),
+      ...this.input.uncoveredPaths.map((path20) => `work_slot_uncovered:${path20}`),
       ...(this.input.lifecycleVerification ? [] : this.input.uncoveredLifecycleTargetIds).map((targetId) => `lifecycle_target_uncovered:${targetId}`),
       ...coverageLimitations
     ].sort();
@@ -212558,50 +212862,50 @@ function compareCodeUnits8(left, right) {
   if (left > right) return 1;
   return 0;
 }
-function promptCoverageToManifestFile(path19) {
-  switch (path19.kind) {
+function promptCoverageToManifestFile(path20) {
+  switch (path20.kind) {
     case "full_patch" /* FullPatch */:
-      return { path: path19.path, status: "full" };
+      return { path: path20.path, status: "full" };
     case "policy_excluded" /* PolicyExcluded */:
       return {
-        path: path19.path,
+        path: path20.path,
         status: "skipped",
         reason: "excluded by review policy"
       };
     case "summary_only" /* SummaryOnly */:
       return {
-        path: path19.path,
+        path: path20.path,
         status: "compacted",
         reason: "summary-only content in prompt"
       };
     case "trusted_read" /* TrustedRead */:
       return {
-        path: path19.path,
+        path: path20.path,
         status: "compacted",
         reason: "trusted read without full patch"
       };
     case "trimmed" /* Trimmed */:
       return {
-        path: path19.path,
+        path: path20.path,
         status: "metadata-only",
         reason: "diff trimmed in prompt"
       };
     case "metadata_only" /* MetadataOnly */:
       return {
-        path: path19.path,
+        path: path20.path,
         status: "metadata-only",
         reason: "metadata-only content in prompt"
       };
     case "unavailable" /* Unavailable */:
       return {
-        path: path19.path,
+        path: path20.path,
         status: "unreviewed",
         reason: "file content unavailable"
       };
   }
 }
-function normalizeManifestPath(path19) {
-  return path19.startsWith("./") ? path19.slice(2) : path19;
+function normalizeManifestPath(path20) {
+  return path20.startsWith("./") ? path20.slice(2) : path20;
 }
 function sha25615(value) {
   return (0, import_crypto31.createHash)("sha256").update(value).digest("hex");
@@ -212947,8 +213251,8 @@ function validateLifecycleResponse(bytes2, prepared, actualModel, requestHash, m
 }
 
 // src/finding-revalidation/application/plan-revalidation.ts
-function normalizedPath(path19) {
-  return !!path19 && !path19.includes("\\") && !path19.includes("\0") && !path19.startsWith("/") && path19.split("/").every((segment) => !!segment && segment !== "." && segment !== "..");
+function normalizedPath(path20) {
+  return !!path20 && !path20.includes("\\") && !path20.includes("\0") && !path20.startsWith("/") && path20.split("/").every((segment) => !!segment && segment !== "." && segment !== "..");
 }
 function witness(target, resolutionHistory) {
   return {
@@ -213051,18 +213355,18 @@ async function planFindingRevalidation(input, ports) {
     }
   };
   const sourceCache = /* @__PURE__ */ new Map();
-  const read = (path19, inclusionReason) => {
-    const cached2 = sourceCache.get(path19);
+  const read = (path20, inclusionReason) => {
+    const cached2 = sourceCache.get(path20);
     if (cached2) return cached2;
     const result2 = (async () => {
-      if (!normalizedPath(path19) || !ports.isPathAllowed(path19))
+      if (!normalizedPath(path20) || !ports.isPathAllowed(path20))
         return {
           source: null,
           reason: "sensitive_context_unavailable"
         };
       const result3 = await ports.sourceReader.read({
         headSha: scope.headSha,
-        path: path19,
+        path: path20,
         maxBytes: fileLimit
       });
       if (result3.kind !== "file")
@@ -213070,7 +213374,7 @@ async function planFindingRevalidation(input, ports) {
           source: null,
           reason: result3.kind === "oversized" ? "source_oversized" : result3.kind === "missing" ? "context_insufficient" : "unsupported_source"
         };
-      if (result3.headSha !== scope.headSha || result3.path !== path19 || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(result3.blobOid))
+      if (result3.headSha !== scope.headSha || result3.path !== path20 || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(result3.blobOid))
         return { source: null, reason: "unsupported_source" };
       if (result3.bytes.byteLength > fileLimit)
         return { source: null, reason: "source_oversized" };
@@ -213086,7 +213390,7 @@ async function planFindingRevalidation(input, ports) {
       return {
         source: {
           headSha: scope.headSha,
-          path: path19,
+          path: path20,
           blobOid: result3.blobOid,
           contentHash: byteHash(result3.bytes),
           content,
@@ -213098,7 +213402,7 @@ async function planFindingRevalidation(input, ports) {
         reason: "verified"
       };
     })();
-    sourceCache.set(path19, result2);
+    sourceCache.set(path20, result2);
     return result2;
   };
   const candidates = [...input.targets].sort(
@@ -213300,13 +213604,13 @@ function createGitImmutableSourceReader(input) {
     return result2.stdout;
   }
   return {
-    async read({ headSha, path: path19, maxBytes }) {
-      if (!/^[a-f0-9]{40}$/.test(headSha) || !path19 || Buffer.byteLength(path19, "utf8") > 4096 || path19.startsWith("/") || path19.includes("\\") || path19.includes("\0") || path19.split("/").some((segment) => !segment || segment === "." || segment === "..") || !Number.isInteger(maxBytes) || maxBytes <= 0)
+    async read({ headSha, path: path20, maxBytes }) {
+      if (!/^[a-f0-9]{40}$/.test(headSha) || !path20 || Buffer.byteLength(path20, "utf8") > 4096 || path20.startsWith("/") || path20.includes("\\") || path20.includes("\0") || path20.split("/").some((segment) => !segment || segment === "." || segment === "..") || !Number.isInteger(maxBytes) || maxBytes <= 0)
         return { kind: "unsupported" };
       const limit = Math.min(maxBytes, REVALIDATION_LIMITS.fileBytes);
       try {
         const tree = await git(
-          ["ls-tree", "-z", headSha, "--", `:(literal)${path19}`],
+          ["ls-tree", "-z", headSha, "--", `:(literal)${path20}`],
           16 * 1024
         );
         if (!tree.length) return { kind: "missing" };
@@ -213316,7 +213620,7 @@ function createGitImmutableSourceReader(input) {
         const entry = /^(100644|100755) blob ([a-f0-9]{40})\t([\s\S]+)$/.exec(
           entries[0]
         );
-        if (!entry || entry[3] !== path19) return { kind: "unsupported" };
+        if (!entry || entry[3] !== path20) return { kind: "unsupported" };
         const blobOid = entry[2];
         const sizeText = (await git(["cat-file", "-s", blobOid], 128)).toString("utf8").trim();
         if (!/^\d+$/.test(sizeText)) return { kind: "unsupported" };
@@ -213329,7 +213633,7 @@ function createGitImmutableSourceReader(input) {
         );
         if (bytes2.byteLength !== size || classifyUtf8Content(bytes2).kind !== "text")
           return { kind: "unsupported" };
-        return { kind: "file", headSha, path: path19, blobOid, bytes: bytes2 };
+        return { kind: "file", headSha, path: path20, blobOid, bytes: bytes2 };
       } catch {
         return { kind: "unsupported" };
       }
@@ -216065,7 +216369,7 @@ function ocrReviewFailureDiagnostic(error3, process5, gateway) {
 var import_crypto36 = require("crypto");
 var import_child_process10 = require("child_process");
 var fs13 = __toESM(require("fs"));
-var path16 = __toESM(require("path"));
+var path17 = __toESM(require("path"));
 var OCR_ADAPTER_CONTRACT_VERSION = "ocr-managed-review.v1";
 var OCR_RETRY_POLICY_VERSION = "ocr-managed-bounded-retry.v2";
 var OCR_ATTEMPT_BUDGET = 3;
@@ -216397,7 +216701,7 @@ var OcrReviewInvocationAdapter = class {
         mode: 384
       });
     }
-    const previewOutputPath = path16.join(
+    const previewOutputPath = path17.join(
       this.options.run.runDirectory,
       "preview.json"
     );
@@ -216445,18 +216749,18 @@ var OcrReviewInvocationAdapter = class {
       assignedPaths
     );
     const previewSelectedPaths = preview.selectedPaths;
-    const pathCoverage = assignedPaths.map((path19) => {
+    const pathCoverage = assignedPaths.map((path20) => {
       const file = assignment.context.files.find(
-        (candidate) => candidate.filename === path19
+        (candidate) => candidate.filename === path20
       );
       return {
-        path: path19,
+        path: path20,
         // Native preview owns selection/exclusion, not a second RR path
         // allowlist. Missing/unknown/size-limited paths remain unavailable.
-        kind: preview.coverageByPath.get(path19) ?? "unavailable" /* Unavailable */,
+        kind: preview.coverageByPath.get(path20) ?? "unavailable" /* Unavailable */,
         contentHash: sha25616(
           canonicalJson16({
-            filename: path19,
+            filename: path20,
             patch: file?.patch ?? null,
             status: file?.status ?? null
           })
@@ -216651,7 +216955,7 @@ var OcrReviewInvocationAdapter = class {
   }
   async runInvocation(input, assignment, prepared, observeProcess) {
     assertOcrInvocationLive(input);
-    const outputPath = path16.join(this.options.run.runDirectory, "result.json");
+    const outputPath = path17.join(this.options.run.runDirectory, "result.json");
     const argv = buildOcrReviewArgv({
       binaryPath: this.options.binaryPath,
       repoPath: this.options.checkoutRoot,
@@ -216707,7 +217011,7 @@ var OcrReviewInvocationAdapter = class {
     assertOcrInvocationLive(input);
     const headFiles = {
       get: (file) => {
-        const resolved = path16.join(this.options.checkoutRoot, file);
+        const resolved = path17.join(this.options.checkoutRoot, file);
         try {
           return fs13.readFileSync(resolved, "utf8");
         } catch {
@@ -216821,8 +217125,8 @@ function parseOcrPreviewCoverage(raw, assignedPaths) {
   const value = raw;
   const assigned = new Set(assignedPaths);
   const coverageByPath = new Map(
-    assignedPaths.map((path19) => [
-      path19,
+    assignedPaths.map((path20) => [
+      path20,
       "unavailable" /* Unavailable */
     ])
   );
@@ -216841,7 +217145,7 @@ function parseOcrPreviewCoverage(raw, assignedPaths) {
     if (!Array.isArray(legacyPaths)) {
       throw new Error("review_action_v2_ocr_preview_contract_invalid");
     }
-    files = legacyPaths.map((path19) => ({ path: path19, will_review: true }));
+    files = legacyPaths.map((path20) => ({ path: path20, will_review: true }));
   }
   const observed = /* @__PURE__ */ new Set();
   const selected = /* @__PURE__ */ new Set();
@@ -216855,15 +217159,15 @@ function parseOcrPreviewCoverage(raw, assignedPaths) {
     ))) {
       throw new Error("review_action_v2_ocr_preview_contract_invalid");
     }
-    const path19 = entry.path;
-    if (typeof path19 !== "string" || observed.has(path19)) {
+    const path20 = entry.path;
+    if (typeof path20 !== "string" || observed.has(path20)) {
       throw new Error("review_action_v2_ocr_preview_scope_invalid");
     }
-    observed.add(path19);
+    observed.add(path20);
     if (typeof entry.will_review !== "boolean") {
       throw new Error("review_action_v2_ocr_preview_contract_invalid");
     }
-    if (!assigned.has(path19)) {
+    if (!assigned.has(path20)) {
       if (entry.will_review || entry.exclude_reason !== "user_exclude" && (typeof entry.exclude_reason !== "string" || !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(
         entry.exclude_reason
       ))) {
@@ -216875,10 +217179,10 @@ function parseOcrPreviewCoverage(raw, assignedPaths) {
       if (entry.exclude_reason !== void 0 && entry.exclude_reason !== "") {
         throw new Error("review_action_v2_ocr_preview_contract_invalid");
       }
-      selected.add(path19);
-      coverageByPath.set(path19, "full_patch" /* FullPatch */);
+      selected.add(path20);
+      coverageByPath.set(path20, "full_patch" /* FullPatch */);
     } else if (typeof entry.exclude_reason === "string" && OCR_INTENTIONAL_EXCLUSION_REASONS.includes(entry.exclude_reason)) {
-      coverageByPath.set(path19, "policy_excluded" /* PolicyExcluded */);
+      coverageByPath.set(path20, "policy_excluded" /* PolicyExcluded */);
     }
   }
   return Object.freeze({
@@ -222170,10 +222474,10 @@ var ProductionT0ReviewRunner = class {
     this.progress = progress;
   }
   async run(input) {
-    if (input.codexBinaryPath && path18.basename(input.codexBinaryPath) !== input.codexBinaryPath) {
+    if (input.codexBinaryPath && path19.basename(input.codexBinaryPath) !== input.codexBinaryPath) {
       input = {
         ...input,
-        codexBinaryPath: path18.resolve(process.cwd(), input.codexBinaryPath)
+        codexBinaryPath: path19.resolve(process.cwd(), input.codexBinaryPath)
       };
     }
     return withRunnerEnvironment(input, async () => {
@@ -222393,7 +222697,7 @@ var ProductionT0ReviewRunner = class {
         } : void 0
       );
       await materializer.ensureAvailable({
-        checkoutRoot: path18.resolve(input.workspacePath),
+        checkoutRoot: path19.resolve(input.workspacePath),
         repository: input.repository,
         scmReadToken: await scmReadTokenProvider.getToken(),
         commitShas: [
@@ -222418,7 +222722,7 @@ var ProductionT0ReviewRunner = class {
           fetchImpl
         }),
         baseSha: authorization.facts.baseSha,
-        checkoutRoot: path18.resolve(input.workspacePath),
+        checkoutRoot: path19.resolve(input.workspacePath),
         signal
       }) : { executionInput: LEGACY_REVIEW_SKILLS, gitRoots: [] };
       const reviewSkills = skillsMaterialization.executionInput;
@@ -222668,7 +222972,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             authorization: () => controlPlane.currentAuthorization(),
             fetchImpl,
             mask: setSecret2,
-            checkoutRoot: path18.resolve(input2.workspacePath),
+            checkoutRoot: path19.resolve(input2.workspacePath),
             headSha: authorization2.facts.headSha,
             mergeBaseSha: authorization2.facts.mergeBaseSha,
             deadlineMs: Date.now() + executionDeadline.clampProviderTimeout(providerTimeoutMs),
@@ -222768,7 +223072,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               authorization: authorization2,
               plan: planned2.plan,
               repository: input2.repository,
-              checkoutRoot: path18.resolve(input2.workspacePath),
+              checkoutRoot: path19.resolve(input2.workspacePath),
               compatibilityKey: ocrCompatibilityKey,
               config: config3,
               inventory: initialLifecycle.inventory,
@@ -222849,7 +223153,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                   reviewSkills: reviewSkills2
                 }),
                 backgroundText: ocrBackgroundParts.length > 0 ? ocrBackgroundParts.join("\n\n") : null,
-                checkoutRoot: path18.resolve(input2.workspacePath),
+                checkoutRoot: path19.resolve(input2.workspacePath),
                 processRunner: runOcrReviewProcess,
                 previewRunner: runOcrReviewProcess,
                 acceptanceDiagnostic: (diagnostic) => logger7.info("Managed OCR acceptance", {
@@ -223021,7 +223325,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
         const contextGatewayOptions = resolveProductionContextGatewaySessionFactoryOptions({
           agenticContext,
           investigationRecordingEnabled,
-          checkoutRoot: path18.resolve(input2.workspacePath),
+          checkoutRoot: path19.resolve(input2.workspacePath),
           gatewayBundlePath
         });
         const contextGateway = contextGatewayOptions ? new ContextGatewayInvocationSessionFactory(
@@ -223030,7 +223334,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           requiredContextWitness
         ) : void 0;
         const contextReplayRunner = contextGateway ? new ContextAttestationReplayRunner({
-          checkoutRoot: path18.resolve(input2.workspacePath),
+          checkoutRoot: path19.resolve(input2.workspacePath),
           gatewayBundlePath
         }) : void 0;
         const prDescription = createPrDescriptionGeneration({
@@ -223081,7 +223385,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           authorization: authorization2,
           plan: planned.plan,
           repository: input2.repository,
-          checkoutRoot: path18.resolve(input2.workspacePath),
+          checkoutRoot: path19.resolve(input2.workspacePath),
           compatibilityKey,
           config: config3,
           inventory: initialLifecycle.inventory,
@@ -223231,7 +223535,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             });
           },
           {
-            workingDirectory: path18.resolve(input2.workspacePath),
+            workingDirectory: path19.resolve(input2.workspacePath),
             leaseDurationMs: providerTimeoutMs + 5 * 6e4,
             providerTimeoutMs,
             certificateTtlMs: 24 * 60 * 6e4,
@@ -223988,8 +224292,8 @@ function resolveContextGatewayBundlePath() {
   if (!entrypoint) {
     throw new Error("review_action_v2_runtime_entrypoint_missing");
   }
-  return path18.join(
-    path18.dirname(path18.resolve(entrypoint)),
+  return path19.join(
+    path19.dirname(path19.resolve(entrypoint)),
     "context-gateway.js"
   );
 }
@@ -224021,12 +224325,12 @@ async function prepareSingleT0NativeInputs(receipt, trusted) {
     throw new Error("review_action_v2_single_plan_repository_invalid");
   }
   const validateProcessContext = () => {
-    if (path18.resolve(process.cwd()) !== path18.resolve(runner.workspacePath) || process.env.CODEX_HOME !== runner.codexHome || runner.codexBinaryPath !== void 0 && process.env.REVIEWROUTER_CODEX_BINARY !== runner.codexBinaryPath) {
+    if (path19.resolve(process.cwd()) !== path19.resolve(runner.workspacePath) || process.env.CODEX_HOME !== runner.codexHome || runner.codexBinaryPath !== void 0 && process.env.REVIEWROUTER_CODEX_BINARY !== runner.codexBinaryPath) {
       throw new Error("review_action_v2_single_plan_checkout_process_required");
     }
   };
   validateProcessContext();
-  if (!path18.isAbsolute(gatewayBundlePath)) {
+  if (!path19.isAbsolute(gatewayBundlePath)) {
     throw new Error("review_action_v2_gateway_bundle_path_invalid");
   }
   const controlPlane = ReviewActionV2ControlPlaneAdapter.fromFreshAuthorizationReceipt(
@@ -224070,7 +224374,7 @@ async function prepareSingleT0NativeInputs(receipt, trusted) {
   if (pr.baseSha.toLowerCase() !== authorization.facts.baseSha || pr.headSha.toLowerCase() !== authorization.facts.headSha) {
     throw new Error("review_action_v2_single_plan_revision_not_current");
   }
-  const checkoutRoot = path18.resolve(runner.workspacePath);
+  const checkoutRoot = path19.resolve(runner.workspacePath);
   await new GitReviewRevisionMaterializer().ensureAvailable({
     checkoutRoot,
     repository: runner.repository,
@@ -224338,7 +224642,7 @@ function planAssignments(input) {
     const lifecycleTargets = input.lifecycleTargets.filter(
       (target) => batch.some(
         (file) => [file.filename, file.previousFilename].some(
-          (path19) => path19 !== void 0 && (target.currentPath === path19 || target.originalPath === path19)
+          (path20) => path20 !== void 0 && (target.currentPath === path20 || target.originalPath === path20)
         )
       )
     );
@@ -224362,7 +224666,7 @@ function planAssignments(input) {
     input.lifecycleTargets.filter(
       (target) => !assignedLifecycleTargetIds.has(target.targetId) && files.some(
         (file) => [file.filename, file.previousFilename].some(
-          (path19) => path19 !== void 0 && (target.currentPath === path19 || target.originalPath === path19)
+          (path20) => path20 !== void 0 && (target.currentPath === path20 || target.originalPath === path20)
         )
       )
     ).map((target) => target.targetId).sort()
@@ -224505,10 +224809,10 @@ async function withRunnerEnvironment(input, operation) {
   set2("REVIEWROUTER_HEAD_SHA", input.headSha.toLowerCase());
   if (input.codexBinaryPath) {
     set2("REVIEWROUTER_CODEX_BINARY", input.codexBinaryPath);
-    if (path18.isAbsolute(input.codexBinaryPath)) {
+    if (path19.isAbsolute(input.codexBinaryPath)) {
       set2(
         "PATH",
-        `${path18.dirname(input.codexBinaryPath)}${path18.delimiter}${process.env.PATH ?? ""}`
+        `${path19.dirname(input.codexBinaryPath)}${path19.delimiter}${process.env.PATH ?? ""}`
       );
     }
   }
@@ -224657,7 +224961,7 @@ function combineProductionReviewLanes(lanes, compatibilityKey, authorization) {
   const manifest = createStableReviewAssignmentManifest({
     assignments: manifests.flatMap((manifest2) => manifest2.assignments),
     eligiblePaths,
-    uncoveredPaths: eligiblePaths.filter((path19) => !assignedPaths.has(path19)),
+    uncoveredPaths: eligiblePaths.filter((path20) => !assignedPaths.has(path20)),
     excludedPaths: manifests.flatMap((manifest2) => manifest2.excludedPaths),
     ...lifecyclePlan !== void 0 ? { lifecyclePlan } : {}
   });

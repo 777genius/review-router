@@ -32,14 +32,9 @@ export async function runLocalReview(
   }
   if (before.changedFiles === 0) return emptyOutcome(before, request.engine);
   let result: LocalReviewOutcome;
-  try {
-    result = request.engine === 'ocr'
-      ? await (dependencies.ocr ?? new NativeOcrEngine()).run(before, request)
-      : await (dependencies.legacy ?? runLegacyLocalReview)(before, request, dependencies.configFile);
-  } catch (error) {
-    // CLI callers preserve errors as failures, never a green no-finding result.
-    throw error;
-  }
+  result = request.engine === 'ocr'
+    ? await (dependencies.ocr ?? new NativeOcrEngine()).run(before, request)
+    : await (dependencies.legacy ?? runLegacyLocalReview)(before, request, dependencies.configFile);
   const after = git.capture(request.scope, request.includeUntracked);
   if (after.digest !== before.digest || after.root !== before.root) {
     result = { ...result, status: 'stale', coverage: { ...result.coverage, complete: false },

@@ -7,6 +7,7 @@ import {
   currentFindingMatchesTarget,
 } from '../../../analysis/thread-lifecycle';
 import { getBlockingFindingBreakdown } from '../../../output/severity-gate';
+import { buildReviewHotspots } from '../../../review-risk/application/build-review-hotspots';
 import {
   FileChange,
   Finding,
@@ -384,6 +385,30 @@ export class LegacyReviewProjectionPolicyAdapter
           : {}),
         language: this.config.outputLanguage,
         reviewPresentation: query.reviewPresentation,
+        // T0 uses the same bounded, provider-neutral signals as the classic
+        // Action. This is presentation-only, after accepted projection facts.
+        hotspots: buildReviewHotspots({
+          files: query.revisionFiles.map((file) => ({
+            filename: file.path,
+            status:
+              file.status === RevisionFileStatus.Removed
+                ? 'removed' as const
+                : 'modified' as const,
+            additions: 0,
+            deletions: 0,
+          })),
+          findings: currentOccurrences.map((occurrence) => ({
+            file: occurrence.filePath,
+            line: occurrence.line,
+            severity:
+              occurrence.severity === FindingSeverity.Critical
+                ? 'critical' as const
+                : occurrence.severity === FindingSeverity.Major
+                  ? 'major' as const
+                  : 'minor' as const,
+          })),
+          coverage: { files: query.coverage.files ?? [] },
+        }),
         findings: currentOccurrences.map((occurrence) => ({
           ...toReviewerSummaryFinding(toLegacyFinding(occurrence)),
           lineageId: occurrence.lineageId,

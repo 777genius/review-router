@@ -646,13 +646,11 @@ export function renderReviewerSummaryMarkdown(
         severity,
       }))
     );
-  // Keep ordinary small PRs simple: the normal finding list already explains
-  // critical/major issues. Show hotspots only for additional evidence or when
-  // a larger set of findings benefits from explicit prioritization.
-  const addsDistinctContext =
-    hotspots.some(
-      ({ reason }) => reason === 'shared-code' || reason === 'not-reviewed'
-    ) || input.findings.length > 3;
+  // Even many findings on the same location should never be repeated.
+  // The extra section must carry dependency or incomplete-coverage evidence.
+  const addsDistinctContext = hotspots.some(
+    ({ reason }) => reason === 'shared-code' || reason === 'not-reviewed'
+  );
   if (hotspots.length > 0 && addsDistinctContext) {
     const text = riskHotspotCopy[locale];
     const items = hotspots.slice(0, 3).map((hotspot) => {

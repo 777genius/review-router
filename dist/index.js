@@ -132545,7 +132545,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
           clearTimeout(controlTimer);
         }
         const referenced = response.headers["x-reviewrouter-request-ref"] !== void 0;
-        if (!this.directProvider && !this.modelDispatch && !this.auxiliaryDescription && httpStatus === 503 && !referenced && /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+        if (!this.directProvider && !this.auxiliaryDescription && httpStatus === 503 && !referenced && /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
           response.headers["content-type"] ?? ""
         ) && denial !== void 0 && saturationDenial(denial, ["relay_saturated"])) {
           if (waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits || import_perf_hooks2.performance.now() + 1e3 > waitUntil)

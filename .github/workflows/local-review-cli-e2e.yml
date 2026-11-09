@@ -37,5 +37,6 @@ jobs:
           cache: false
       - run: npm ci
       - run: npm run build:cli
+      - run: node scripts/local-review-package-smoke.cjs
       - run: npm test -- __tests__/unit/local-review --runInBand --testTimeout=20000
       - run: node scripts/local-review-cli-e2e.cjs

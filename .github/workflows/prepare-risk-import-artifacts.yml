@@ -1,0 +1,39 @@
+name: One-shot Risk-Aware bundle sync
+on:
+  push:
+    branches: ['feat/risk-aware-review-lite-20261108']
+    paths: ['.github/workflows/prepare-risk-import-artifacts.yml']
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.repository == '777genius/review-router'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Build and verify the exact source
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm test -- __tests__/unit/review-risk __tests__/unit/output/risk-hotspot-summary.test.ts __tests__/unit/review-projection/legacy-review-projection-policy-adapter.test.ts --runInBand
+          npm run build
+      - name: Commit generated bundles and remove one-shot workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git add -u dist/
+          git rm .github/workflows/prepare-risk-import-artifacts.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'build: sync review-risk runtime artifacts'
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.extraheader=AUTHORIZATION: basic ${auth}" push "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${GITHUB_REF_NAME}"

@@ -7,6 +7,11 @@ import { setupComponents } from '../setup';
 import { PRContext } from '../types';
 import { logger } from '../utils/logger';
 import { generateAnalytics, printSummary } from './analytics';
+import { parseLocalReviewOptions, usesExplicitLocalOptions } from '../local-review/cli-options';
+import { LocalReviewUsageError, exitCodeForLocalOutcome, renderLocalReview } from '../local-review/contracts';
+import { runLocalReview } from '../local-review/run-local-review';
+import { NativeOcrEngine } from '../local-review/native-ocr';
+import { ConfigLoader } from '../config/loader';
 
 /**
  * CLI interface for multi-provider code review
@@ -28,7 +33,27 @@ export class CLI {
       // Parse command and arguments
       const { command, target, options } = this.parseArgs(args);
 
-      // Check we're in a git repo
+      // Global informational commands must work outside a Git checkout.
+      if (command === 'help' || command === '--help' || command === '-h') {
+        this.showHelp();
+        return 0;
+      }
+      if (command === 'version' || command === '--version' || command === '-v') {
+        this.showVersion();
+        return 0;
+      }
+      if (command === 'doctor') {
+        return this.runDoctor();
+      }
+      if (command === 'review' && args.slice(1).includes('--help')) {
+        this.showHelp();
+        return 0;
+      }
+      if (command === 'review' && usesExplicitLocalOptions(args.slice(1))) {
+        return this.runExplicitLocalReview(args.slice(1));
+      }
+
+      // Existing positional CLI remains unchanged unless new flags are explicitly selected.
       if (!this.gitReader.isGitRepo()) {
         console.error(
           this.formatter.formatMessage('Not in a git repository', 'error')
@@ -66,6 +91,47 @@ export class CLI {
     } catch (error) {
       console.error(this.formatter.formatMessage(String(error), 'error'));
       return 1;
+    }
+  }
+
+  /** Explicit local execution contract. Engine-specific IO stays in adapters. */
+  private async runExplicitLocalReview(args: string[]): Promise<number> {
+    const wantsJson = args.some((arg, i) => arg === '--format=json' || (arg === '--format' && args[i + 1] === 'json'));
+    try {
+      const parsed = parseLocalReviewOptions(args);
+      if (parsed.request.engine === 'legacy' && parsed.format === 'json') {
+        throw new LocalReviewUsageError(
+          'Legacy JSON is not yet qualified; use --engine ocr --format json or the existing legacy terminal output.'
+        );
+      }
+      const result = await runLocalReview(parsed.request, { configFile: parsed.configFile });
+      if (parsed.format === 'json') process.stdout.write(JSON.stringify(result) + '\\n');
+      else console.log(renderLocalReview(result));
+      return exitCodeForLocalOutcome(result);
+    } catch (error) {
+      const usage = error instanceof LocalReviewUsageError;
+      const message = usage ? error.message : 'Local review failed; no clean result was established.';
+      if (wantsJson) {
+        process.stdout.write(JSON.stringify({ schemaVersion: 1, status: 'failed', error: {
+          kind: usage ? 'usage' : 'execution', message
+        } }) + '\\n');
+      } else {
+        console.error(this.formatter.formatMessage(message, 'error'));
+      }
+      return usage ? 4 : 3;
+    }
+  }
+
+  private async runDoctor(): Promise<number> {
+    console.log('ReviewRouter local engines: legacy (built-in)');
+    try {
+      const version = await new NativeOcrEngine().doctor(process.cwd());
+      console.log('Native OCR: ' + version + ' (installed; authentication not probed)');
+      return 0;
+    } catch {
+      console.log('Native OCR: unavailable or incompatible (requires pinned v1.13.1)');
+      console.log('Set REVIEWROUTER_OCR_BINARY to an absolute trusted binary path, or install a compatible OCR.');
+      return 4;
     }
   }
 
@@ -130,7 +196,8 @@ export class CLI {
       // Setup components (CLI mode)
       components = await setupComponents({
         cliMode: true,
-        dryRun: (options.dryRun as boolean) || false,
+        dryRun: options['dry-run'] === true,
+        ...(typeof options.config === 'string' ? { config: ConfigLoader.loadFromPath(options.config) } : {}),
       });
 
       // Create CLI reviewer
@@ -166,7 +233,8 @@ export class CLI {
     try {
       if (subcommand === 'summary' || !subcommand) {
         // Show summary
-        const days = typeof options.days === 'number' ? options.days : 30;
+        const days = Number(options.days ?? 30);
+        if (!Number.isSafeInteger(days) || days < 1 || days > 3650) throw new LocalReviewUsageError('--days must be 1..3650.');
         await printSummary(days);
         return 0;
       } else if (subcommand === 'generate') {
@@ -174,7 +242,7 @@ export class CLI {
         await generateAnalytics({
           output: (options.output as string) || './reports',
           format: (options.format as 'html' | 'csv' | 'json') || 'html',
-          days: (options.days as number) || 30,
+          days: Number(options.days ?? 30),
         });
         return 0;
       } else {
@@ -264,6 +332,7 @@ Usage:
   review-router analytics <command> [options]
                                    Manage analytics and dashboards
   review-router help               Show this help
+  review-router doctor             Check local engines (no model call)
   review-router version            Show version
 
 Review Targets:
@@ -273,7 +342,12 @@ Review Targets:
   abc123..def456                  Review commit range
 
 Review Options:
-  --dry-run                       Preview without posting results
+  --dry-run                       No GitHub publication (still calls the model)
+  --engine=ocr                    Use native OCR (opt-in)
+  --scope=branch --base=origin/main  Review branch since merge-base
+  --scope=commit --ref=HEAD       Review one commit
+  --include-untracked             Consent to native OCR reading new files
+  --format=json                   OCR structured output for coding agents
 
 Analytics Commands:
   summary [--days=N]              Show summary statistics
@@ -317,10 +391,10 @@ if (require.main === module) {
   cli
     .run(args)
     .then((exitCode) => {
-      process.exit(exitCode);
+      process.exitCode = exitCode;
     })
     .catch((error) => {
       console.error('Fatal error:', error);
-      process.exit(1);
+      process.exitCode = 1;
     });
 }

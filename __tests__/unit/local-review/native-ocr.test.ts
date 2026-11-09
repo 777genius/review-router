@@ -1,0 +1,67 @@
+import { NativeOcrEngine, normalizeNativeOcrResult, type NativeProcessRunner } from '../../../src/local-review/native-ocr';
+import type { LocalGitSnapshot } from '../../../src/local-review/git-snapshot';
+import type { LocalReviewRunRequest } from '../../../src/local-review/contracts';
+
+const snapshot: LocalGitSnapshot = {
+  root: '/tmp/rr-local-ocr-test', scope: { kind: 'worktree' },
+  base: null, head: 'a'.repeat(40), digest: 'sha256:' + 'c'.repeat(64),
+  changedFiles: 1, dirty: true, untrackedFiles: 0, untrackedPaths: [],
+};
+const item = { item_id: 'b'.repeat(64), path: 'src/index.ts' };
+const preview = { files: [{ path: item.path, status: 'modified', will_review: true }], reviewable_count: 1 };
+function native(status: string = 'complete') {
+  return { status, llm: { provider: 'test', model: 'test-v1' }, comments: [
+    { path: item.path, start_line: 7, end_line: 8, content: 'Problem in modified code', severity: 'high', thinking: 'secret reasoning' },
+  ], manifest: { schema_version: 'ocr.run-manifest/v1', terminal_state: status, operation: 'review',
+    input: { mode: 'workspace' }, execution: { provider: 'test', model: 'test-v1' },
+    coverage: { selected: [item], completed: status === 'complete' ? [item] : [],
+      reused: [], failed: status === 'partial' ? [item] : [], waived: [] } } };
+}
+const runner = (payload: unknown, onRequest?: (args: readonly string[]) => void): NativeProcessRunner => async (_cmd, args) => {
+  onRequest?.(args);
+  return { exitCode: 0, signal: null, stderr: '',
+    stdout: args[0] === 'version' ? 'OpenCodeReview v1.13.1' : args.includes('--preview') ? JSON.stringify(preview) : JSON.stringify(payload),
+  };
+};
+const request: LocalReviewRunRequest = { engine: 'ocr', scope: { kind: 'worktree' }, includeUntracked: false, preview: false };
+
+describe('native OCR adapter', () => {
+  it('uses native CLI, preserves the real model and strips private thinking', async () => {
+    const argv: string[][] = [];
+    const result = await new NativeOcrEngine(runner(native(), a => argv.push([...a]))).run(snapshot, request);
+    expect(result.status).toBe('complete');
+    expect(result.summary.major).toBe(1);
+    expect(result.provider.model).toBe('test-v1');
+    expect(result.findings[0].nativeSeverity).toBe('high');
+    expect(JSON.stringify(result)).not.toContain('secret reasoning');
+    expect(argv[2]).toContain('--audience');
+    expect(argv[2]).not.toContain('--reviewrouter-managed');
+  });
+  it('reports partial coverage even with exit-0', async () => {
+    const result = await new NativeOcrEngine(runner(native('partial'))).run(snapshot, request);
+    expect(result.status).toBe('partial');
+    expect(result.coverage.omitted).toEqual([item.path]);
+  });
+  it('refuses a native manifest with wrong schema, unknown file, or missing coverage', () => {
+    const malformed = native();
+    malformed.manifest.schema_version = 'ocr.run-manifest/v2';
+    expect(() => normalizeNativeOcrResult(malformed, [item.path], snapshot, '1.13.1')).toThrow(/schema/);
+    const missing = native(); missing.manifest.coverage.completed = [];
+    expect(() => normalizeNativeOcrResult(missing, [item.path], snapshot, '1.13.1')).toThrow(/exhaustive/);
+    const foreign = native(); foreign.comments[0].path = '../private';
+    expect(() => normalizeNativeOcrResult(foreign, [item.path], snapshot, '1.13.1')).toThrow(/path/);
+  });
+  it('refuses mismatched model attribution and unexpected native paths', () => {
+    const mismatch = native();
+    mismatch.manifest.execution.model = 'other-model';
+    expect(() => normalizeNativeOcrResult(mismatch, [item.path], snapshot, '1.13.1')).toThrow(/attribution/);
+    const unsafe = native(); unsafe.comments[0].path = 'src/\x1b[2Jbad.ts';
+    expect(() => normalizeNativeOcrResult(unsafe, [item.path], snapshot, '1.13.1')).toThrow(/unsafe/);
+  });
+  it('does not call the model when only a preview was requested', async () => {
+    const requests: readonly string[][] = [] as string[][];
+    const result = await new NativeOcrEngine(runner(native(), a => (requests as string[][]).push([...a]))).run(snapshot, { ...request, preview: true });
+    expect(result.status).toBe('skipped');
+    expect(requests.length).toBe(2);
+  });
+});

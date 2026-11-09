@@ -54,7 +54,7 @@ function requiredRecord(value: unknown, kind: string): Record<string, unknown> {
   return obj;
 }
 function safePath(value: unknown): string {
-  if (typeof value !== 'string' || !value || value.includes('\u0000') || value.includes('\\') || path.posix.isAbsolute(value)) {
+  if (typeof value !== 'string' || !value ||  /[\x00-\x1f\x7f]/.test(value) || value.includes('\\') || path.posix.isAbsolute(value)) {
     throw new Error('Native OCR returned an unsafe path.');
   }
   const normalized = path.posix.normalize(value);
@@ -64,7 +64,7 @@ function safePath(value: unknown): string {
   return normalized;
 }
 function stringField(value: unknown, max = 4000): string | null {
-  return typeof value === 'string' ? value.slice(0, max) : null;
+  return typeof value === 'string' ? value.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').slice(0, max) : null;
 }
 function parseJson(text: string, what: string): Record<string, unknown> {
   try { return requiredRecord(JSON.parse(text), what); }
@@ -202,10 +202,11 @@ export class NativeOcrEngine {
   async doctor(root: string): Promise<string> {
     const binary = this.binary();
     const result = await this.runner(binary, ['version'], { cwd: root, timeoutMs: 10_000, maxOutput: 16_384 });
-    if (result.exitCode !== 0 || result.signal !== null || !/\b1\.13\.1(?:-rr\.\d+)?\b/.test(result.stdout)) {
+    const version = result.stdout.match(/(?:^|[^0-9A-Za-z])v?(1\.13\.1(?:-rr\.\d+)?)(?![0-9A-Za-z])/);
+    if (result.exitCode !== 0 || result.signal !== null || !version) {
       throw new LocalReviewUsageError('Native OCR v1.13.1 is required for this qualified adapter; install the pinned version.');
     }
-    return result.stdout.match(/\b1\.13\.1(?:-rr\.\d+)?\b/)![0];
+    return version[1];
   }
 
   async run(snapshot: LocalGitSnapshot, request: LocalReviewRunRequest): Promise<LocalReviewOutcome> {
@@ -247,4 +248,3 @@ export class NativeOcrEngine {
     return result;
   }
 }
-

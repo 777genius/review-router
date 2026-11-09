@@ -39,6 +39,13 @@ try {
  assert.equal(git('status','--porcelain'),before,'CLI must not write to reviewed sources');
  const partial=outcome([], {RR_FAKE_OCR_STATUS:'partial'});
  assert.equal(partial.code,3);assert.equal(partial.status,'partial');
+ const warning=outcome([], {RR_FAKE_OCR_MODE:'warning'});
+ assert.equal(warning.code,3);assert.equal(warning.status,'partial');
+ const malformed=outcome([], {RR_FAKE_OCR_MODE:'malformed'});
+ assert.equal(malformed.code,3);assert.equal(malformed.status,'failed');
+ const stale=outcome([], {RR_FAKE_OCR_MODE:'stale'});
+ assert.equal(stale.code,3);assert.equal(stale.status,'stale');
+ fs.writeFileSync(path.join(repo,'src','example.ts'),'export const x=2;\\n');
  fs.writeFileSync(path.join(repo,'src','new.ts'),'export const hidden=1;\n');
  const privacy=outcome([]);
  assert.equal(privacy.code,4);assert.equal(privacy.status,'failed');

@@ -53,8 +53,16 @@ function requiredRecord(value: unknown, kind: string): Record<string, unknown> {
   if (!obj) throw new Error(`Invalid native OCR ${kind} response.`);
   return obj;
 }
+const ANSI_ESCAPE_SEQUENCE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g');
+function containsControlCharacters(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+}
 function safePath(value: unknown): string {
-  if (typeof value !== 'string' || !value ||  /[\x00-\x1f\x7f]/.test(value) || value.includes('\\') || path.posix.isAbsolute(value)) {
+  if (typeof value !== 'string' || !value || containsControlCharacters(value) || value.includes('\\') || path.posix.isAbsolute(value)) {
     throw new Error('Native OCR returned an unsafe path.');
   }
   const normalized = path.posix.normalize(value);
@@ -64,7 +72,12 @@ function safePath(value: unknown): string {
   return normalized;
 }
 function stringField(value: unknown, max = 4000): string | null {
-  return typeof value === 'string' ? value.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').slice(0, max) : null;
+  return typeof value === 'string'
+    ? value.replace(ANSI_ESCAPE_SEQUENCE, '').split('').filter(character => {
+      const code = character.charCodeAt(0);
+      return (code >= 32 && code !== 127) || code === 9 || code === 10 || code === 13;
+    }).join('').slice(0, max)
+    : null;
 }
 function parseJson(text: string, what: string): Record<string, unknown> {
   try { return requiredRecord(JSON.parse(text), what); }

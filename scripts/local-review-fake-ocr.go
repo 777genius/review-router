@@ -42,7 +42,7 @@ func main() {
     modeOverride := os.Getenv("RR_FAKE_OCR_MODE")
     if modeOverride=="malformed" { fmt.Print("{invalid JSON"); return }
     if modeOverride=="stale" {
-        if err:=os.WriteFile(filepath.Join(flag(args,"--repo"),"src","example.ts"),[]byte("export const x=9;\\n"),0600); err!=nil { os.Exit(4) }
+        if err:=os.WriteFile(filepath.Join(flag(args,"--repo"),"src","example.ts"),[]byte("export const x=9;\n"),0600); err!=nil { os.Exit(4) }
     }
     status := os.Getenv("RR_FAKE_OCR_STATUS")
     if status=="" { status="complete" }

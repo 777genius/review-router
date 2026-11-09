@@ -1,0 +1,18 @@
+ReviewRouter GitHub Action
+Copyright 2026 ReviewRouter contributors (original contributions)
+
+This project contains a modified adaptation of "multi-provider-code-review"
+by Keith Herrington, copyright (c) 2025 Keith Herrington, originally
+licensed under the MIT License. That original copyright notice and its full
+MIT license text are retained in LICENSES/MIT-upstream.txt and continue to
+apply to the inherited portions.
+
+Original ReviewRouter changes contributed by their copyright holders and
+licensed with appropriate authority are provided under Apache License 2.0,
+whose full terms are in LICENSE. Distributions of this combined work must
+respect both the applicable Apache-2.0 and upstream MIT notices.
+
+No patent grant is asserted on behalf of upstream MIT contributors, and this
+notice does not change third-party dependencies' own terms.
+
+Upstream project: https://github.com/keithah/multi-provider-code-review

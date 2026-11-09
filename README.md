@@ -459,3 +459,9 @@ The workflow validates that it is running on `main`, the exact tag does not alre
 - [Troubleshooting](./docs/TROUBLESHOOTING.md)
 - [Security guide](./docs/SECURITY.md)
 - [Performance guide](./docs/PERFORMANCE.md)
+
+## Licensing
+
+The ReviewRouter-maintained contributions are licensed under Apache License 2.0. This repository also retains code derived from Keith Herrington's MIT-licensed `multi-provider-code-review`; the original MIT license is preserved at [`LICENSES/MIT-upstream.txt`](LICENSES/MIT-upstream.txt). See [`NOTICE`](NOTICE) for attribution and scope. Existing MIT and third-party terms are not superseded by Apache 2.0.
+
+The combined `Apache-2.0 AND MIT` package metadata records both applicable conditions; it does not relicense inherited MIT code.

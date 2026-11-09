@@ -70,6 +70,15 @@ describe('native OCR adapter', () => {
     expect(unknown.status).toBe('partial');
     expect(unknown.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/model identity/)]));
   });
+  it('preserves native file-level findings when OCR could not verify a line', () => {
+    const unanchored = native();
+    unanchored.comments[0].start_line = 0;
+    unanchored.comments[0].end_line = 0;
+    const result = normalizeNativeOcrResult(unanchored, [item.path], snapshot, '1.13.1');
+    expect(result.status).toBe('partial');
+    expect(result.findings[0]).toMatchObject({ path: item.path, line: null, endLine: null });
+    expect(result.warnings.join(' ')).toMatch(/verified source location/);
+  });
   it('does not call the model when only a preview was requested', async () => {
     const requests: readonly string[][] = [] as string[][];
     const result = await new NativeOcrEngine(runner(native(), a => (requests as string[][]).push([...a]))).run(snapshot, { ...request, preview: true });

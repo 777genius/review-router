@@ -48,6 +48,7 @@ import { RulesEngine } from '../rules/engine';
 import { ContextRetriever } from '../analysis/context';
 import { EvidenceScorer } from '../analysis/evidence';
 import { ImpactAnalyzer } from '../analysis/impact';
+import { buildReviewHotspots } from '../review-risk/application/build-review-hotspots';
 import { FeedbackTracker } from '../learning/feedback-tracker';
 import { QuietModeFilter } from '../learning/quiet-mode';
 import { CodeGraphBuilder, CodeGraph } from '../analysis/context/graph-builder';
@@ -1671,6 +1672,16 @@ export class ReviewOrchestrator {
 
         review.threadLifecycle = lifecycle;
       }
+
+      // This annotation never influences findings, status checks or publication.
+      // Reuse the already prepared optional graph; do not trigger new I/O.
+      review.riskHotspots = buildReviewHotspots({
+        files: pr.files,
+        findings: review.findings,
+        coverage: review.coverage,
+        contexts: staticAnalysis.context,
+        contextsAreResolved: codeGraph !== undefined,
+      });
 
       const markdown = this.components.formatter.format(review);
       await this.updatePullRequestDescription(pr);

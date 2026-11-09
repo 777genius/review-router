@@ -1,3 +1,5 @@
+import type { ReviewHotspot } from '../review-risk/domain/rank-review-hotspots';
+
 /**
  * Core type definitions for the multi-provider code review action.
  */
@@ -430,6 +432,8 @@ export interface Review {
   coverage?: ReviewCoverage;
   findingProvenance?: ReviewFindingProvenance;
   impactAnalysis?: ImpactAnalysis;
+  /** Presentation-only risk cues; never change severity or merge gate. */
+  riskHotspots?: readonly ReviewHotspot[];
   mermaidDiagram?: string;
   threadLifecycle?: ReviewThreadLifecycleResult;
 }

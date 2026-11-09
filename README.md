@@ -71,6 +71,7 @@ Available but still experimental:
 - **PR description summary:** adds a generated `Summary`, selected files list, and walkthrough block while preserving author text above it.
 - **Merge gating:** fail the check for critical or major findings when configured.
 - **Human override:** reply `/rr skip` to a ReviewRouter inline comment to dismiss that finding after a maintainer confirms it is not actionable.
+- **Focused finding commands:** `/rr fixed` rechecks a finding against current source, and `/rr suggest fix` proposes one manually applied GitHub suggestion when the qualified managed Gateway is available. Neither auto-edits code or closes threads; see [PR comment commands](#pr-comment-commands).
 - **AI discussion replies:** with Codex auth modes, ordinary replies to ReviewRouter findings can get an AI explanation. If the model agrees a finding is likely a false positive, it suggests `/rr skip`; it does not unblock CI by itself.
 - **Large diff compaction:** compact very large, generated, lockfile, and migration diffs so they do not dominate the prompt.
 - **Review scope report:** the summary shows full-diff, compacted, metadata-only, and skipped file counts so large PRs are auditable.
@@ -441,6 +442,7 @@ The workflow validates that it is running on `main`, the exact tag does not alre
 
 ## Documentation
 
+- [PR comment commands and permissions](#pr-comment-commands)
 - [Installer guide](./docs/install.md)
 - [HTTPS context tools for managed OCR](./docs/https-mcp-context.md)
 - [Troubleshooting](./docs/TROUBLESHOOTING.md)

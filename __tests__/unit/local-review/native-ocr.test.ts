@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { NativeOcrEngine, normalizeNativeOcrResult, type NativeProcessRunner } from '../../../src/local-review/native-ocr';
 import type { LocalGitSnapshot } from '../../../src/local-review/git-snapshot';
 import type { LocalReviewRunRequest } from '../../../src/local-review/contracts';
@@ -26,6 +27,15 @@ const runner = (payload: unknown, onRequest?: (args: readonly string[]) => void)
 const request: LocalReviewRunRequest = { engine: 'ocr', scope: { kind: 'worktree' }, includeUntracked: false, preview: false };
 
 describe('native OCR adapter', () => {
+  const previousBinary = process.env.REVIEWROUTER_OCR_BINARY;
+  beforeAll(() => {
+    // The injected fake process runner must not depend on a real installation.
+    process.env.REVIEWROUTER_OCR_BINARY = path.resolve('fixture-ocr-not-executed');
+  });
+  afterAll(() => {
+    if (previousBinary === undefined) delete process.env.REVIEWROUTER_OCR_BINARY;
+    else process.env.REVIEWROUTER_OCR_BINARY = previousBinary;
+  });
   it('uses native CLI, preserves the real model and strips private thinking', async () => {
     const argv: string[][] = [];
     const result = await new NativeOcrEngine(runner(native(), a => argv.push([...a]))).run(snapshot, request);

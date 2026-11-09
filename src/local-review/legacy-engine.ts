@@ -31,7 +31,10 @@ export async function runLegacyLocalReview(
       warnings: ['No eligible tracked changes for the legacy engine.'] };
   }
   const config = configFile ? ConfigLoader.loadFromPath(configFile) : undefined;
-  const components = await setupComponents({ cliMode: true, ...(config ? { config } : {}) });
+  const components = await setupComponents({ cliMode: true,
+    ...(request.dryRun ? { dryRun: true } : {}),
+    ...(config ? { config } : {}),
+  });
   try {
     const review = await new CLIReviewer(components).review(pr);
     const findings = review.findings.map(f => ({

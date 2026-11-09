@@ -399,7 +399,7 @@ export class LegacyReviewProjectionPolicyAdapter
           })),
           findings: currentOccurrences.map((occurrence) => ({
             file: occurrence.filePath,
-            line: occurrence.line,
+            line: occurrence.line ?? 0,
             severity:
               occurrence.severity === FindingSeverity.Critical
                 ? 'critical' as const

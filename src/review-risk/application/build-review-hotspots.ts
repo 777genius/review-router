@@ -111,7 +111,7 @@ function existingImportDependents(
       const isRelative = /^\.\.?\//.test(specifier);
       // Graph-normalized paths can lack './', but unrelated package names
       // must not become repository dependencies.
-      if (!isRelative && (!areResolved || !specifier.includes('/'))) {
+      if (!isRelative && (!areResolved || !specifier.includes('/') || specifier.startsWith('@'))) {
         continue;
       }
       const resolved = path.posix.normalize(

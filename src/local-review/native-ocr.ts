@@ -1,6 +1,7 @@
 /** Native OCR execution boundary. Never calls the hosted --reviewrouter-managed path. */
 import { spawn } from 'child_process';
 import * as path from 'path';
+import { statSync } from 'fs';
 import { LocalReviewFinding, LocalReviewOutcome, LocalReviewRunRequest, LocalReviewUsageError, LocalReviewExecutionError, LocalReviewInterruptedError, summaryFromFindings } from './contracts';
 import { LocalGitSnapshot } from './git-snapshot';
 
@@ -216,7 +217,23 @@ export class NativeOcrEngine {
     if (userOverride && !path.isAbsolute(userOverride)) {
       throw new LocalReviewUsageError('REVIEWROUTER_OCR_BINARY must be an absolute trusted executable path.');
     }
-    return userOverride || 'ocr';
+    if (userOverride) return userOverride;
+    // Do not let a repository-local binary shadow OCR on Windows or via a
+    // relative PATH entry. Only an explicitly trusted absolute override or an
+    // executable found in an absolute PATH directory may be launched.
+    const executable = process.platform === 'win32' ? 'ocr.exe' : 'ocr';
+    for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
+      if (!directory || !path.isAbsolute(directory)) continue;
+      const candidate = path.join(directory, executable);
+      try {
+        if (statSync(candidate).isFile()) return candidate;
+      } catch {
+        // PATH entries frequently refer to absent/removed directories.
+      }
+    }
+    throw new LocalReviewUsageError(
+      'Native OCR executable not found in absolute PATH directories; set REVIEWROUTER_OCR_BINARY to a trusted absolute path.'
+    );
   }
 
   async doctor(root: string): Promise<string> {

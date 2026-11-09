@@ -65,7 +65,7 @@ export class LocalGitSnapshotReader {
     h.update(`reviewrouter-local/v1\u0000${scope.kind}\u0000`);
     let base: string | null = null;
     let selectedHead = head;
-    let diff = Buffer.alloc(0);
+    let diff: Buffer = Buffer.alloc(0);
     let changedFiles = 0;
     let untrackedPaths: string[] = [];
     let untrackedFiles = 0;

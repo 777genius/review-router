@@ -37,6 +37,7 @@ export interface LocalReviewRunRequest {
   provider?: string;
   model?: string;
   preview: boolean;
+  dryRun?: boolean;
   signal?: AbortSignal;
 }
 

@@ -24,11 +24,14 @@ export async function runLegacyLocalReview(
       : await reader.getCommitChanges(snapshot.head!);
   if (pr.files.length === 0) {
     const findings: LocalReviewOutcome['findings'] = [];
-    return { schemaVersion: 1, engine: { id: 'legacy', version: null }, status: 'skipped',
+    return { schemaVersion: 1, engine: { id: 'legacy', version: null },
+      status: snapshot.changedFiles > 0 ? 'partial' : 'skipped',
       input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
-      coverage: { selected: 0, reviewed: 0, omitted: [], complete: false },
+      coverage: { selected: snapshot.changedFiles, reviewed: 0, omitted: [], complete: false },
       provider: { name: null, model: null }, findings, summary: summaryFromFindings(findings), blocking: false,
-      warnings: ['No eligible tracked changes for the legacy engine.'] };
+      warnings: [snapshot.changedFiles > 0
+        ? 'Legacy Git diff parser omitted changed files; no clean result is established.'
+        : 'No eligible tracked changes for the legacy engine.'] };
   }
   const config = configFile ? ConfigLoader.loadFromPath(configFile) : undefined;
   const components = await setupComponents({ cliMode: true,
@@ -44,12 +47,17 @@ export async function runLegacyLocalReview(
     }));
     const summary = summaryFromFindings(findings);
     const coverage = review.coverage;
-    const complete = coverage?.complete === true && review.metrics.providersSuccess > 0 && review.metrics.providersFailed === 0;
     const reviewed = coverage?.files.filter(f => f.status === 'full' || f.status === 'compacted').length ?? 0;
+    const selected = coverage?.totalFiles ?? snapshot.changedFiles;
+    // buildReviewCoverage.complete does not by itself reject metadata-only or
+    // skipped files; the legacy Git diff parser also has its own file cap.
+    const complete = coverage?.complete === true && reviewed === selected &&
+      selected === snapshot.changedFiles && pr.files.length === snapshot.changedFiles &&
+      review.metrics.providersSuccess > 0 && review.metrics.providersFailed === 0;
     return { schemaVersion: 1, engine: { id: 'legacy', version: null },
       status: complete ? 'complete' : 'partial',
       input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
-      coverage: { selected: coverage?.totalFiles ?? pr.files.length, reviewed,
+      coverage: { selected, reviewed,
         omitted: coverage?.files.filter(f => f.status === 'unreviewed' || f.status === 'skipped').map(f => f.path) ?? [], complete },
       provider: { name: null, model: null }, findings, summary,
       blocking: summary.major > 0 || summary.critical > 0 || review.actionItems.length > 0,

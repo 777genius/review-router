@@ -49,6 +49,11 @@ function emptyOutcome(snapshot: LocalGitSnapshot, engine: LocalReviewRunRequest[
     input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
     coverage: { selected: 0, reviewed: 0, omitted: [], complete: false },
     provider: { name: null, model: null }, findings, summary: summaryFromFindings(findings), blocking: false,
-    warnings: ['There are no changes in the selected Git scope; no model was called.'] };
+    warnings: [
+      'There are no tracked changes in the selected Git scope; no model was called.',
+      ...(snapshot.scope.kind === 'worktree' && snapshot.untrackedFiles > 0
+        ? [`${snapshot.untrackedFiles} untracked file(s) were excluded from this result.`]
+        : []),
+    ] };
 }
 

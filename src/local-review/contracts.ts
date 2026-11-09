@@ -42,6 +42,20 @@ export interface LocalReviewRunRequest {
 }
 
 /** These errors occur before inference and must not be treated as a review. */
+export class LocalReviewExecutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LocalReviewExecutionError';
+  }
+}
+
+export class LocalReviewInterruptedError extends Error {
+  constructor() {
+    super('Local review interrupted.');
+    this.name = 'LocalReviewInterruptedError';
+  }
+}
+
 export class LocalReviewUsageError extends Error {
   constructor(message: string) {
     super(message);

@@ -101,3 +101,24 @@ These changes preserve the strict boundary: **attention hints are not safety ver
 - **Third UX/maintainability pass:** On one or two ordinary findings, a second list merely repeated the normal review. The formatter now shows the priority section only for distinct dependency/coverage context or when more than three findings need prioritization. A real MarkdownFormatter regression asserts that a single major finding remains visible, linked to exact HEAD, and its blocking gate is unchanged. A separate same-basename path test prevents misleading source links.
 
 Bundle hygiene: the final source has been regenerated into the committed Action runtime by the one-shot CI build; keep exact-HEAD lint, typecheck, tests, output parity and GitHub E2E as mandatory merge gates.
+
+
+## 9. Architecture follow-up (2026-11-09)
+
+- Patch-only AST and suffix-based getDependents cannot validate whole-repository
+  blast radius. Risk-Aware no longer calls getDependents. It uses existing
+  ContextRetriever import hints and requires an exact, unique changed-file
+  target, with graph-normalized context distinguished from raw import syntax.
+  The hints can miss imports outside the diff and never imply a safe file.
+- The established review-execution file-risk classifier is reused only to
+  prioritize incomplete coverage in sensitive paths. A path alone never creates
+  a defect finding or a noisy summary subsection.
+- T0/Action v2 does not invoke the classic ReviewOrchestrator; both now reuse
+  the same risk adapter and Markdown renderer via the existing projection
+  policy. No new control-plane field, database, provider call, flag, or graph scan.
+- Coverage gaps outrank speculative references; critical/major findings remain
+  authoritative. A second finding list is never shown merely due to finding
+  count. Existing merge gates and GitHub publication authority remain untouched.
+- Required: tests of graph-disabled and normalized graph context, path
+  ambiguity, threshold, summary escaping, T0 projection, release bundle parity,
+  exact-HEAD CI and a qualified provider-backed GitHub run.

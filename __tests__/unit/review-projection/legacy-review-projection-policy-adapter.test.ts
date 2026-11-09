@@ -20,6 +20,55 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     inlineMinAgreement: 1,
   });
 
+  it('publishes missing-review evidence through the T0 production projection adapter', async () => {
+    const headSha = '1'.repeat(40);
+    const path = 'src/auth/session.ts';
+    const policy = new LegacyReviewProjectionPolicyAdapter(
+      { ...DEFAULT_CONFIG, outputLanguage: 'en' },
+      {
+        source: {
+          repositoryHtmlUrl: 'https://github.com/example/demo',
+          headSha,
+          availablePaths: [path],
+        },
+      }
+    );
+    const query = {
+      scope: {
+        scmRepositoryIdentityId: 'repo-1',
+        pullRequestNumber: 1,
+        baseSha: '0'.repeat(40),
+        reviewedHeadSha: headSha,
+        reviewRevisionHash: 'revision-1',
+      },
+      presentation: { title: 'Review', author: 'author', additions: 2, deletions: 0 },
+      providerExecution: { plannedProviders: 1, succeededProviders: 1 },
+      coverage: {
+        state: ProjectionCoverageState.Partial,
+        mode: 'full' as const,
+        totalFiles: 1,
+        reviewedFiles: 0,
+        unreviewedFiles: 1,
+        limitations: ['provider incomplete'],
+        files: [{ path, status: 'unreviewed' as const }],
+      },
+      occurrences: [],
+      revisionFiles: [{ path, status: RevisionFileStatus.Modified }],
+      limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+    };
+    const result = await policy.projectPresentation(query);
+    expect(result.summaryBody).toContain('Where to look first');
+    expect(result.summaryBody).toContain('Review of this file did not finish');
+    expect(result.summaryBody).toContain('/blob/' + headSha + '/' + path);
+    expect(result.checkSummary).toBe(result.summaryBody);
+    expect(policy.evaluateMergeGate({
+      failOnSeverity: FindingSeverity.Major,
+      occurrences: [],
+      coverage: query.coverage,
+      lifecycleInventoryComplete: true,
+    }).conclusion).not.toBe('pass');
+  });
+
   it.each([
     { providerIds: ['codex'], category: 'bug' },
     { providerIds: ['ocr'], category: 'maintainability' },

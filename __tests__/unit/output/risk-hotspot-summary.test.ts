@@ -138,7 +138,7 @@ describe('Risk-aware summary user experience', () => {
         availablePaths: ['safe.ts'],
       },
       hotspots: [
-        { path: 'src/evil\n@team[link].ts', reason: 'major-finding', priority: 'attention' },
+        { path: 'src/evil\n@team[link].ts', reason: 'shared-code', relatedFiles: 1, priority: 'attention' },
       ],
     });
     expect(markdown).not.toContain('\n@team');

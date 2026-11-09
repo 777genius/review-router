@@ -87,6 +87,18 @@ describe('Risk-Aware Review Lite: pure, deterministic prioritization', () => {
     ]);
   });
 
+  it('prioritizes gaps in security-sensitive paths before speculative imports', () => {
+    const ranked = rankReviewHotspots([
+      { path: 'src/ordinary.ts', dependents: 8 },
+      { path: 'src/normal.ts', coverage: 'unreviewed' },
+      { path: 'src/auth/tokens.ts', coverage: 'unreviewed', sensitiveArea: true },
+    ]);
+    expect(ranked.map((x) => x.path)).toEqual([
+      'src/auth/tokens.ts', 'src/normal.ts', 'src/ordinary.ts',
+    ]);
+    expect(ranked[0].priority).toBe('unknown');
+  });
+
   it('never trusts nonfinite dependents or malformed line numbers', () => {
     const [result] = rankReviewHotspots([
       { path: 'src/one.ts', dependents: Number.POSITIVE_INFINITY, severity: 'minor', line: -1 },

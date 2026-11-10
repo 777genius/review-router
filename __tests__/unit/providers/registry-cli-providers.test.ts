@@ -37,7 +37,7 @@ describe('ProviderRegistry - New CLI Providers', () => {
 
 
     it('instantiates the same Claude Code provider for API-key auth', () => {
-      process.env.REVIEW_AUTH_MODE = 'claude-api-key';
+      process.env.REVIEW_AUTH_MODE = ' claude-api-key ';
       const config: ReviewConfig = {
         ...DEFAULT_CONFIG,
         providers: ['claude/sonnet'],

@@ -469,4 +469,29 @@ describe('ClaudeCodeProvider', () => {
     expect(message).toContain('[REDACTED]');
     expect(message).not.toContain(apiKey);
   });
+  it('redacts selected credentials when the CLI exits zero without output', async () => {
+    const apiKey = 'sk-ant-api03-synthetic-no-output-secret';
+    process.env.ANTHROPIC_API_KEY = apiKey;
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) return createMockProcess();
+      return createMockProcess((proc) => {
+        proc.stderr.emit('data', 'Provider message included ' + apiKey);
+      });
+    });
+    const provider = new ClaudeCodeProvider('sonnet', {
+      authMode: 'claude-api-key',
+    });
+    await expect(provider.review('synthetic input', 1000)).rejects.toThrow(
+      'Claude Code CLI returned no output'
+    );
+    let thrown: string | undefined;
+    try {
+      await provider.review('synthetic input', 1000);
+    } catch (error) {
+      thrown = (error as Error).message;
+    }
+    expect(thrown).toContain('[REDACTED]');
+    expect(thrown).not.toContain(apiKey);
+  });
+
 });

@@ -285,15 +285,17 @@ export class ClaudeCodeProvider extends Provider {
       }
       return;
     }
-    if (credential !== undefined && !isClaudeSubscriptionSetupToken(credential)) {
-      throw new Error('CLAUDE_CODE_OAUTH_TOKEN is invalid for Claude subscription authentication.');
+    if (!credential || !isClaudeSubscriptionSetupToken(credential)) {
+      throw new Error('CLAUDE_CODE_OAUTH_TOKEN is missing or invalid for Claude subscription authentication.');
     }
   }
 
-  private readClaudeCodeOAuthToken(): string | undefined {
+  private readClaudeCodeOAuthToken(): string {
     const rawToken = process.env[CLAUDE_CODE_OAUTH_TOKEN_ENV];
     if (rawToken === undefined) {
-      return undefined;
+      throw new Error(
+        'CLAUDE_CODE_OAUTH_TOKEN is required for Claude subscription authentication.'
+      );
     }
 
     const token = rawToken.trim();

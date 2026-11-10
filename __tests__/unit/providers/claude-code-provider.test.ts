@@ -31,10 +31,21 @@ describe('ClaudeCodeProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-synthetic-default';
   });
 
   afterAll(() => {
     process.env = originalEnv;
+  });
+
+  it('rejects missing selected subscription token before spawning', async () => {
+    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-unselected-api-key';
+    const provider = new ClaudeCodeProvider('sonnet', { authMode: 'claude-oauth' });
+    await expect(provider.review('synthetic prompt', 1000)).rejects.toThrow(
+      'CLAUDE_CODE_OAUTH_TOKEN is required'
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   it('uses binary-only health checks by default to avoid consuming Claude usage', async () => {

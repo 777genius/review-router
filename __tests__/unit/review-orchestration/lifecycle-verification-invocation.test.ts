@@ -26,12 +26,14 @@ import {
   appendLifecycleWorkPlan,
   compositeLifecycleInvocations,
   lifecycleHash,
+  lifecycleVerificationMode,
   readLifecycleCapability,
   rebindReviewAssignmentsToWorkPlan,
   restorePersistedWorkPlan,
 } from '../../../src/review-orchestration/infrastructure/lifecycle-verification-invocation';
 import type { LocalGatewayModelTransport } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 import { priorResolutionFact } from '../../../src/review-orchestration/infrastructure/lifecycle-verification-planning';
+import { restoreProductionLifecycleVerification } from '../../../src/review-orchestration/infrastructure/restored-lifecycle-invocations';
 
 const hash = 'a'.repeat(64);
 const capability: LifecycleVerificationCapabilityV1 = {
@@ -246,6 +248,79 @@ test('zero eligible targets creates no lifecycle slots or model calls', async ()
     JSON.parse(result.plan.assignmentManifestCanonicalJson).lifecyclePlan
       .inventoryCount
   ).toBe(0);
+});
+
+test('legacy history permits a semantic packet but stays report-only, including after restore', async () => {
+  const revalidation = await plan([target], []);
+  expect(revalidation.dispositions[0]).toMatchObject({
+    disposition: 'eligible',
+    reason: 'verified',
+  });
+  const witness = revalidation.packets[0].targets[0].witness;
+  expect(witness.resolutionHistory).toEqual({
+    historyCut: 'unavailable',
+    guardVersion: '0',
+    state: 'unavailable',
+  });
+  const qualified = {
+    ...witness,
+    resolutionHistory: {
+      historyCut: '2026-10-24T00:00:00.000Z',
+      guardVersion: '1',
+      state: 'no_prior_since_creation' as const,
+    },
+  };
+  expect(lifecycleVerificationMode('resolve', [qualified])).toBe('resolve');
+  expect(lifecycleVerificationMode('resolve', [qualified, witness])).toBe(
+    'report'
+  );
+  const original = basePlan();
+  const final = appendLifecycleWorkPlan({
+    plan: original,
+    revalidation,
+    capability,
+    reviewRevisionHash: hash,
+    compatibilityKey: hash,
+    maxWorkSlots: 4,
+    maxAttemptsPerSlot: 3,
+    policyDigest: hash,
+    liveLifecycleStateHash: hash,
+  });
+  expect(final.packetsByWorkSlotId.size).toBe(1);
+  const execution: RestoredReviewExecution = {
+    executionId: 'legacy-restore',
+    authorizationId: 'authorization',
+    version: '1',
+    streamVersion: '1',
+    generation: '1',
+    state: RestoredReviewExecutionState.Running,
+    reviewRevisionHash: hash,
+    planHash: final.plan.planHash,
+    workSlots: final.plan.assignments.map(({ workSlot }) => ({
+      workSlotId: workSlot.workSlotId,
+      required: workSlot.required,
+      providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+      state: RestoredReviewWorkSlotState.Pending,
+      activeLeaseId: null,
+      acceptedObservationRefId: null,
+    })),
+    persistedPlan: {
+      compatibilityKey: hash,
+      planHash: final.plan.planHash,
+      assignmentManifestVersion: 2,
+      assignmentManifestCanonicalJson:
+        final.plan.assignmentManifestCanonicalJson,
+      assignmentManifestHash: final.plan.assignmentManifestHash,
+      workSlots: final.plan.assignments.map(({ workSlot }) => workSlot),
+      artifact: null,
+    },
+  };
+  expect(
+    restoreProductionLifecycleVerification(execution, original, {
+      ...DEFAULT_CONFIG,
+      reviewThreadLifecycle: 'resolve',
+    }).lifecycleVerification?.mode
+  ).toBe('report');
 });
 
 test.each([{ targets: [] }, { targets: [target] }])(
@@ -550,6 +625,38 @@ test('unknown/unqualified history fails closed, retained confirmed and pending f
       },
     ]).state
   ).toBe('effect_unknown');
+});
+
+test('malformed history produces a bounded unavailable witness without invalid versions', async () => {
+  const base = {
+    targetId: target.targetId,
+    threadId: target.threadId,
+    parentCommentId: target.parentId,
+    parentCreatedAt: target.parentCreatedAt,
+    parentBodyHash: target.parentBodyHash,
+    history: {
+      threadId: target.threadId,
+      version: -1,
+      historyCut: {
+        activatedAt: 123,
+        activationVersion: 1,
+        writerDigest: hash,
+      },
+      confirmed: null,
+      pending: [],
+    },
+  };
+  expect(priorResolutionFact(target, [base])).toEqual({
+    historyCut: 'unavailable',
+    guardVersion: '0',
+    state: 'unavailable',
+  });
+  const result = await plan([target], [base]);
+  expect(result.packets[0].targets[0].witness.resolutionHistory).toEqual({
+    historyCut: 'unavailable',
+    guardVersion: '0',
+    state: 'unavailable',
+  });
 });
 
 test('retirement bootstrap quarantines native pre-cut and exact-cut parents, including late-visible targets', async () => {

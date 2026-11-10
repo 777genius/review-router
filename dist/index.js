@@ -241967,9 +241967,11 @@ async function planFindingRevalidation(input, ports) {
       skip("manual", "resolution_effect_unknown");
       continue;
     }
-    if (!["no_prior_since_creation", "before_cut_unobserved"].includes(
-      history.state
-    ) || !history.historyCut || !history.guardVersion) {
+    if (![
+      "no_prior_since_creation",
+      "before_cut_unobserved",
+      "unavailable"
+    ].includes(history.state) || !history.historyCut || !history.guardVersion) {
       skip("unavailable", "verification_unavailable");
       continue;
     }
@@ -242143,6 +242145,13 @@ function createGitImmutableSourceReader(input) {
 // src/review-orchestration/infrastructure/lifecycle-verification-invocation.ts
 var lifecycleTargetWitnesses = (packet) => packet.targets.map((target) => target.witness).sort((left, right) => left.targetId.localeCompare(right.targetId));
 var lifecycleHash = (value) => (0, import_crypto49.createHash)("sha256").update(canonicalRevalidationJson(value)).digest("hex");
+function lifecycleVerificationMode(requested, witnesses) {
+  return requested === "resolve" && witnesses.every(
+    (witness2) => ["no_prior_since_creation", "before_cut_unobserved"].includes(
+      witness2.resolutionHistory.state
+    )
+  ) ? "resolve" : "report";
+}
 function readLifecycleCapability(json3, model2, providerKind, route) {
   if (!json3 || Buffer.byteLength(json3, "utf8") > 4096) return void 0;
   try {
@@ -242554,9 +242563,12 @@ function priorResolutionFact(target, facts) {
     (value) => value && typeof value === "object" && value.targetId === target.targetId
   );
   const history = bound?.history;
+  const cut = history?.historyCut?.activatedAt;
+  const safeCut = typeof cut === "string" && Number.isFinite(Date.parse(cut)) && new Date(cut).toISOString() === cut ? cut : "unavailable";
+  const safeVersion = Number.isSafeInteger(history?.version) && (history?.version ?? -1) >= 0 ? String(history.version) : "0";
   const unavailable = {
-    historyCut: history?.historyCut?.activatedAt ?? "unavailable",
-    guardVersion: String(history?.version ?? 0),
+    historyCut: safeCut,
+    guardVersion: safeVersion,
     state: "unavailable"
   };
   if (!bound || bound.threadId !== target.threadId || bound.parentCommentId !== target.parentId || bound.parentBodyHash !== target.parentBodyHash || bound.parentCreatedAt !== target.parentCreatedAt || !history || history.threadId !== target.threadId || !Number.isSafeInteger(history.version) || (history.version ?? -1) < 0 || !Array.isArray(history.pending) || !(history.confirmed === null || !!history.confirmed && typeof history.confirmed === "object"))
@@ -242565,18 +242577,18 @@ function priorResolutionFact(target, facts) {
     return { ...unavailable, state: "previously_resolved" };
   if (history.pending.length)
     return { ...unavailable, state: "effect_unknown" };
-  const cut = history.historyCut;
-  if (!cut?.activatedAt || !Number.isSafeInteger(cut.activationVersion) || (cut.activationVersion ?? 0) < 1 || typeof cut.writerDigest !== "string" || !/^[a-f0-9]{64}$/.test(cut.writerDigest) || !Number.isFinite(Date.parse(cut.activatedAt)) || new Date(cut.activatedAt).toISOString() !== cut.activatedAt)
+  const qualifiedCut = history.historyCut;
+  if (!qualifiedCut?.activatedAt || !Number.isSafeInteger(qualifiedCut.activationVersion) || (qualifiedCut.activationVersion ?? 0) < 1 || typeof qualifiedCut.writerDigest !== "string" || !/^[a-f0-9]{64}$/.test(qualifiedCut.writerDigest) || !Number.isFinite(Date.parse(qualifiedCut.activatedAt)) || new Date(qualifiedCut.activatedAt).toISOString() !== qualifiedCut.activatedAt)
     return unavailable;
-  if (cut.bootstrap !== void 0) {
-    const bootstrap = cut.bootstrap;
+  if (qualifiedCut.bootstrap !== void 0) {
+    const bootstrap = qualifiedCut.bootstrap;
     const canonicalTimestamp = (value) => typeof value === "string" && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
-    if (!bootstrap || bootstrap.qualificationSource !== "retired_legacy_writers_quarantine.v1" || typeof bootstrap.executorSetHash !== "string" || !/^[a-f0-9]{64}$/.test(bootstrap.executorSetHash) || typeof bootstrap.proofHash !== "string" || !/^[a-f0-9]{64}$/.test(bootstrap.proofHash) || !canonicalTimestamp(bootstrap.retiredAt) || !canonicalTimestamp(bootstrap.activationCut) || bootstrap.activationCut !== cut.activatedAt || Date.parse(bootstrap.retiredAt) > Date.parse(bootstrap.activationCut))
+    if (!bootstrap || bootstrap.qualificationSource !== "retired_legacy_writers_quarantine.v1" || typeof bootstrap.executorSetHash !== "string" || !/^[a-f0-9]{64}$/.test(bootstrap.executorSetHash) || typeof bootstrap.proofHash !== "string" || !/^[a-f0-9]{64}$/.test(bootstrap.proofHash) || !canonicalTimestamp(bootstrap.retiredAt) || !canonicalTimestamp(bootstrap.activationCut) || bootstrap.activationCut !== qualifiedCut.activatedAt || Date.parse(bootstrap.retiredAt) > Date.parse(bootstrap.activationCut))
       return unavailable;
     if (Date.parse(target.parentCreatedAt) <= Date.parse(bootstrap.activationCut))
       return { ...unavailable, state: "effect_unknown" };
   }
-  const state3 = Date.parse(target.parentCreatedAt) >= Date.parse(cut.activatedAt) ? "no_prior_since_creation" : "before_cut_unobserved";
+  const state3 = Date.parse(target.parentCreatedAt) >= Date.parse(qualifiedCut.activatedAt) ? "no_prior_since_creation" : "before_cut_unobserved";
   return { ...unavailable, state: state3 };
 }
 async function planProductionLifecycleVerification(input) {
@@ -242667,7 +242679,12 @@ async function planProductionLifecycleVerification(input) {
     ...appended.lifecycleVerification ? {
       lifecycleVerification: {
         ...appended.lifecycleVerification,
-        mode: input.config.reviewThreadLifecycle === "resolve" ? "resolve" : "report"
+        mode: lifecycleVerificationMode(
+          input.config.reviewThreadLifecycle === "resolve" ? "resolve" : "report",
+          [...appended.packetsByWorkSlotId.values()].flatMap(
+            lifecycleTargetWitnesses
+          )
+        )
       }
     } : {}
   };
@@ -242785,7 +242802,10 @@ function restoreProductionLifecycleVerification(restored, original, config2) {
     plannedProviderVoteKeys: frozen.participantRoster.map(
       (value) => value.providerVoteIdentityHash
     ),
-    mode: config2.reviewThreadLifecycle === "resolve" ? "resolve" : "report",
+    mode: lifecycleVerificationMode(
+      config2.reviewThreadLifecycle === "resolve" ? "resolve" : "report",
+      frozen.targets
+    ),
     witnessesByTargetId: Object.fromEntries(
       frozen.targets.map((witness2) => [
         witness2.targetId,

@@ -17,7 +17,10 @@ import {
 import type { ReviewConfig } from '../../types';
 import type { TargetWitness, VerifyPacket } from '../../finding-revalidation';
 import type { ProductionLifecycleVerificationPlan } from './production-review-projection';
-import { restorePersistedWorkPlan } from './lifecycle-verification-invocation';
+import {
+  lifecycleVerificationMode,
+  restorePersistedWorkPlan,
+} from './lifecycle-verification-invocation';
 
 /** Uses stored witness/assignment ownership; current inventory is consulted only by projection guards. */
 export function restoreProductionLifecycleVerification(
@@ -44,8 +47,10 @@ export function restoreProductionLifecycleVerification(
           plannedProviderVoteKeys: frozen.participantRoster.map(
             (value) => value.providerVoteIdentityHash
           ),
-          mode:
+          mode: lifecycleVerificationMode(
             config.reviewThreadLifecycle === 'resolve' ? 'resolve' : 'report',
+            frozen.targets
+          ),
           witnessesByTargetId: Object.fromEntries(
             frozen.targets.map((witness) => [
               witness.targetId,

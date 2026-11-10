@@ -338,10 +338,15 @@ export async function planFindingRevalidation(
       skip('manual', 'resolution_effect_unknown');
       continue;
     }
+    // Missing mutation history does not prevent an immutable, read-only
+    // semantic assessment. Its witness remains unavailable and the caller
+    // must keep the resulting verification in report-only mode.
     if (
-      !['no_prior_since_creation', 'before_cut_unobserved'].includes(
-        history.state
-      ) ||
+      ![
+        'no_prior_since_creation',
+        'before_cut_unobserved',
+        'unavailable',
+      ].includes(history.state) ||
       !history.historyCut ||
       !history.guardVersion
     ) {

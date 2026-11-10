@@ -192,7 +192,7 @@ export class ClaudeCodeProvider extends Provider {
       );
       if (!content) {
         throw new Error(
-          `Claude Code CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
+          `Claude Code CLI returned no output${stderr ? `; stderr: ${this.formatCliError(stderr, '', credential, request.authMode).slice(0, 200)}` : ''}`
         );
       }
       const parsed = parseReviewOutputStrict(content, 'Claude Code CLI');
@@ -349,7 +349,7 @@ export class ClaudeCodeProvider extends Provider {
       | undefined;
 
     try {
-      if (this.options.usageDelivery) {
+      if (this.options.usageDelivery && request.authMode === 'claude-oauth') {
         try {
           usageRelay = await startAnthropicUsageRelay(
             this.options.usageDelivery,
@@ -563,7 +563,9 @@ export class ClaudeCodeProvider extends Provider {
     mode: ClaudeCodeAuthMode = 'claude-oauth'
   ): string {
     const raw = `${stderr || stdout || 'no output'}`.trim();
-    const text = credential ? raw.replaceAll(credential, '[REDACTED]') : raw;
+    // Vendor errors can echo a full or partially substituted credential.
+    const text = (credential ? raw.replaceAll(credential, '[REDACTED]') : raw)
+      .replace(/sk-ant-(?:api[0-9]{2}|oat[0-9]{2})-[A-Za-z0-9._-]{12,}/g, '[REDACTED]');
     const hint = this.authHintFor(text, mode);
     const message = hint ? `${text}\n${hint}` : text;
     return message.length > 1600

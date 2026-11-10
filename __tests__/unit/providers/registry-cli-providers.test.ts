@@ -35,6 +35,19 @@ describe('ProviderRegistry - New CLI Providers', () => {
       expect(providers[1].name).toBe('claude/opus');
     });
 
+
+    it('instantiates the same Claude Code provider for API-key auth', () => {
+      process.env.REVIEW_AUTH_MODE = 'claude-api-key';
+      const config: ReviewConfig = {
+        ...DEFAULT_CONFIG,
+        providers: ['claude/sonnet'],
+      };
+      const providers = (registry as any).instantiate(config.providers, config);
+      expect(providers).toHaveLength(1);
+      expect(providers[0]).toBeInstanceOf(ClaudeCodeProvider);
+      expect((providers[0] as any).options.authMode).toBe('claude-api-key');
+    });
+
     it('should instantiate Codex providers', async () => {
       const config: ReviewConfig = {
         ...DEFAULT_CONFIG,

@@ -108,7 +108,9 @@ export function resolveProviderCliPlan(
       openRouterProviderRequested,
     codexOauthNeeded: authMode === 'codex-oauth',
     claudeCliNeeded:
-      authMode === 'claude-oauth' || hasProviderPrefix(providerHints, 'claude'),
+      authMode === 'claude-oauth' ||
+      authMode === 'claude-api-key' ||
+      hasProviderPrefix(providerHints, 'claude'),
   };
 }
 

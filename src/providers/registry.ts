@@ -413,6 +413,9 @@ export class ProviderRegistry {
           new ClaudeCodeProvider(model, {
             ...this.usageOptions(name),
             agenticContext: config.claudeAgenticContext,
+            authMode: process.env.REVIEW_AUTH_MODE === 'claude-api-key'
+              ? 'claude-api-key'
+              : 'claude-oauth',
           })
         );
         continue;

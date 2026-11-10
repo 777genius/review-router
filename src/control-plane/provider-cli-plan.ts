@@ -145,6 +145,7 @@ function inferredProviderFromEnv(
   const codexProvider = providerFromModel('codex', env.CODEX_MODEL);
   switch (authMode) {
     case 'claude-oauth':
+    case 'claude-api-key':
       return claudeProvider || 'claude/sonnet';
     case 'codex-oauth':
     case 'openai-api':

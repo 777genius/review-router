@@ -243,6 +243,12 @@ export function normalizeNativeOcrResult(
   if (runFailure != null && !record(runFailure)) {
     throw new Error('Native OCR run failure field has an invalid structure.');
   }
+  // A skipped run is not allowed to hide produced findings, attempted reviews, or failures
+  // behind the zero exit code reserved for an explicitly non-reviewed result.
+  if (terminal === 'skipped' &&
+      (findings.length > 0 || completed.length > 0 || reused.length > 0 || failed.length > 0 || runFailure != null)) {
+    throw new Error('Native OCR skipped result contradicts its review/failure evidence.');
+  }
   const hasNativeWarnings = Array.isArray(obj.warnings) && obj.warnings.length > 0;
   const unanchoredFindings = findings.some(finding => finding.line === null);
   const model = observedModel ?? manifestModel;

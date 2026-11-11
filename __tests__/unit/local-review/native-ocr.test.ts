@@ -178,5 +178,7 @@ describe('native OCR adapter', () => {
     const result = await new NativeOcrEngine(runner(native(), a => (requests as string[][]).push([...a]))).run(snapshot, { ...request, preview: true });
     expect(result.status).toBe('skipped');
     expect(requests.length).toBe(2);
+    expect(result.coverage.selectedPaths).toEqual([item.path]);
+    expect(result.coverage.omitted).toEqual([]);
   });
 });

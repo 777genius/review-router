@@ -74,11 +74,14 @@ export class LocalGitSnapshotReader {
     h.update(status);
 
     if (scope.kind === 'branch') {
-      if (!head) throw new LocalReviewUsageError('Branch review needs an initial commit.');
+      selectedHead = scope.head ? resolveCommit(root, scope.head) : head;
+      if (!selectedHead) throw new LocalReviewUsageError('Branch review needs a committed target.');
       const baseTip = resolveCommit(root, scope.base);
-      base = git(root, ['merge-base', baseTip, head]).toString('utf8').trim();
-      diff = git(root, ['diff', '--no-ext-diff', '--no-textconv', '--binary', base, head]);
-      changedFiles = splitNul(git(root, ['diff', '--no-ext-diff', '--name-only', '-z', base, head])).length;
+      base = scope.comparison === 'tips'
+        ? baseTip
+        : git(root, ['merge-base', baseTip, selectedHead]).toString('utf8').trim();
+      diff = git(root, ['diff', '--no-ext-diff', '--no-textconv', '--binary', base, selectedHead]);
+      changedFiles = splitNul(git(root, ['diff', '--no-ext-diff', '--name-only', '-z', base, selectedHead])).length;
       h.update(baseTip);
     } else if (scope.kind === 'commit') {
       selectedHead = resolveCommit(root, scope.ref);

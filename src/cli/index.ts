@@ -394,11 +394,15 @@ Review Targets:
 
 Review Options:
   --dry-run                       No GitHub publication (still calls the model)
-  --engine=ocr                    Use native OCR (opt-in)
-  --scope=branch --base=origin/main  Review branch since merge-base
-  --scope=commit --ref=HEAD       Review one commit
-  --include-untracked             Consent to native OCR reading new files
-  --format=json                   OCR structured output for coding agents
+  --engine=legacy|ocr             Select legacy (default) or native OCR engine
+  --scope=branch --base=main      Review branch changes since merge-base
+  --scope=commit --ref=HEAD       Review exactly one commit
+  --include-untracked             Allow native OCR to read new files
+  --preview                       Native OCR file selection, no model request
+  --provider=<name> --model=<id>  Native OCR model overrides
+  --config=<file>                 Legacy engine YAML configuration
+  --format=text|json              Human-readable or single-object agent output
+  --dry-run                       Do not publish (still calls the model)
 
 Analytics Commands:
   summary [--days=N]              Show summary statistics
@@ -408,15 +412,28 @@ Examples:
   review-router review            Review uncommitted changes
   review-router review HEAD~1     Review last commit
   review-router review main..feature
-                                   Review feature branch
+                                   Legacy: compare two branch tips
+  review-router review main..feature --format json
+                                   Agent JSON, same legacy Git range
+  review-router review --engine ocr --preview
+                                   Show files selected without using a model
+  review-router review --engine ocr --scope branch --base origin/main
+                                   OCR: review merge-base through HEAD
+  review-router review --engine ocr --format json
+                                   OCR: machine-readable result for agents
   review-router analytics summary Show analytics summary
   review-router analytics generate
                                    Generate HTML dashboard
 
-Exit Codes:
-  0    No issues or only minor issues
-  1    Major issues found
-  2    Critical issues found
+Explicit review mode exit codes:
+  0    Complete without blocking findings, or skipped (inspect JSON status)
+  1    Major findings / blocking action items
+  2    Critical findings
+  3    Partial, failed or stale review
+  4    Invalid flags, configuration or unavailable engine
+  130  Cancelled native OCR execution
+  Note: agent callers must inspect status + coverage.complete, not exit alone.
+  Without explicit options, the historical legacy exit codes remain unchanged.
 `;
 
     console.log(help);

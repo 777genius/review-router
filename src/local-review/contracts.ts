@@ -2,7 +2,7 @@
 export type LocalReviewEngineId = 'legacy' | 'ocr';
 export type LocalReviewScope =
   | Readonly<{ kind: 'worktree' }>
-  | Readonly<{ kind: 'branch'; base: string }>
+  | Readonly<{ kind: 'branch'; base: string; head?: string; comparison?: 'tips' }>
   | Readonly<{ kind: 'commit'; ref: string }>;
 export type LocalReviewStatus = 'complete' | 'partial' | 'failed' | 'stale' | 'skipped';
 export type LocalReviewSeverity = 'critical' | 'major' | 'minor' | 'unclassified';
@@ -22,7 +22,7 @@ export interface LocalReviewOutcome {
   engine: { id: LocalReviewEngineId; version: string | null };
   status: LocalReviewStatus;
   input: { scope: LocalReviewScope['kind']; base: string | null; head: string | null; snapshotDigest: string };
-  coverage: { selected: number; reviewed: number; omitted: string[]; complete: boolean };
+  coverage: { selected: number; reviewed: number; omitted: string[]; complete: boolean; selectedPaths?: string[] };
   provider: { name: string | null; model: string | null };
   findings: LocalReviewFinding[];
   summary: { critical: number; major: number; minor: number; unclassified: number };
@@ -87,6 +87,12 @@ export function renderLocalReview(result: LocalReviewOutcome): string {
     const location = finding.line === null ? `${finding.path} (location unverified)` : `${finding.path}:${finding.line}`;
     lines.push(`${location} [${finding.nativeSeverity ?? finding.severity}] ${finding.title}`);
     if (finding.message !== finding.title) lines.push(`  ${finding.message}`);
+  }
+  if (result.status === 'skipped' && result.coverage.selectedPaths?.length) {
+    const paths = result.coverage.selectedPaths;
+    lines.push(`Would review ${paths.length} file(s):`);
+    for (const file of paths.slice(0, 20)) lines.push(`  ${file}`);
+    if (paths.length > 20) lines.push(`  ... and ${paths.length - 20} more (use --format json)`);
   }
   for (const warning of result.warnings) lines.push(`Notice: ${warning}`);
   if (result.status === 'partial' || result.status === 'failed' || result.status === 'stale') {

@@ -12,6 +12,14 @@ describe('engine-neutral local review arguments', () => {
     expect(parse('--engine', 'ocr', '--scope', 'commit', '--ref', 'HEAD').request.scope)
       .toEqual({ kind: 'commit', ref: 'HEAD' });
   });
+  it('supports historical tip-to-tip ranges with JSON and native merge-base ranges', () => {
+    expect(parse('--format=json', 'main..feature').request.scope).toEqual({
+      kind: 'branch', base: 'main', head: 'feature', comparison: 'tips',
+    });
+    expect(parse('--engine=ocr', 'main..feature').request.scope).toEqual({
+      kind: 'branch', base: 'main', head: 'feature',
+    });
+  });
   it('passes legacy dry-run through the explicit engine contract', () => {
     expect(parse('--engine=legacy', '--dry-run').request.dryRun).toBe(true);
     expect(() => parse('--engine=ocr', '--dry-run')).toThrow(/dry-run/);

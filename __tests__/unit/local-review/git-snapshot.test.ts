@@ -39,6 +39,26 @@ describe('local Git scope snapshots (real git)', () => {
     expect(excluded.changedFiles).toBe(0);
     expect(() => reader.capture({ kind: 'worktree' }, true)).toThrow(/Too many untracked/);
   });
+  it('distinguishes tip-to-tip legacy input from merge-base native input', () => {
+    const initial = git(dir, 'rev-parse', 'HEAD');
+    const main = git(dir, 'branch', '--show-current');
+    git(dir, 'checkout', '-qb', 'feature');
+    writeFileSync(path.join(dir, 'source.ts'), 'export const a = 2;\n');
+    git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'feature');
+    const featureHead = git(dir, 'rev-parse', 'HEAD');
+    git(dir, 'checkout', '-q', main);
+    writeFileSync(path.join(dir, 'source.ts'), 'export const a = 3;\n');
+    git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'main progressed');
+    const mainHead = git(dir, 'rev-parse', 'HEAD');
+    const reader = new LocalGitSnapshotReader(dir);
+    const tips = reader.capture({ kind: 'branch', base: main, head: 'feature', comparison: 'tips' }, false);
+    const mergeBase = reader.capture({ kind: 'branch', base: main, head: 'feature' }, false);
+    expect(tips.base).toBe(mainHead);
+    expect(tips.head).toBe(featureHead);
+    expect(mergeBase.base).toBe(initial);
+    expect(mergeBase.head).toBe(featureHead);
+    expect(tips.digest).not.toBe(mergeBase.digest);
+  });
   it('compares branch changes from merge-base and resolves immutable commit refs', () => {
     git(dir, 'checkout', '-qb', 'feature');
     writeFileSync(path.join(dir, 'source.ts'), 'export const a = 3;\n');

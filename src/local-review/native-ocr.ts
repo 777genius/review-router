@@ -264,7 +264,7 @@ export function normalizeNativeOcrResult(
   return {
     schemaVersion: 1, engine: { id: 'ocr', version }, status,
     input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
-    coverage: { selected: selected.length, reviewed: completed.length + reused.length, omitted, complete },
+    coverage: { selected: selected.length, reviewed: completed.length + reused.length, omitted, complete, selectedPaths: paths },
     provider: { name: stringField(llm?.provider, 150) ?? stringField(execution?.provider, 150), model },
     findings, summary, blocking: summary.critical > 0 || summary.major > 0, warnings,
   };
@@ -332,7 +332,7 @@ export class NativeOcrEngine {
       return { schemaVersion: 1, engine: { id: 'ocr', version },
         status: unsupportedPaths.length > 0 ? 'partial' : 'skipped',
         input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
-        coverage: { selected: 0, reviewed: 0, omitted: unsupportedPaths, complete: false },
+        coverage: { selected: 0, reviewed: 0, omitted: unsupportedPaths, complete: false, selectedPaths: [] },
         provider: { name: request.provider ?? null, model: request.model ?? null },
         findings: empty, summary: summaryFromFindings(empty), blocking: false,
         warnings: ['No eligible files selected by native OCR; no model was called.', ...excludedWarnings] };
@@ -341,7 +341,7 @@ export class NativeOcrEngine {
       const empty: LocalReviewFinding[] = [];
       return { schemaVersion: 1, engine: { id: 'ocr', version }, status: 'skipped',
         input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
-        coverage: { selected: selected.length, reviewed: 0, omitted: [...selected, ...unsupportedPaths], complete: false },
+        coverage: { selected: selected.length, reviewed: 0, omitted: unsupportedPaths, complete: false, selectedPaths: selected },
         provider: { name: request.provider ?? null, model: request.model ?? null },
         findings: empty, summary: summaryFromFindings(empty), blocking: false,
         warnings: ['Preview only: no model was called.', ...excludedWarnings] };

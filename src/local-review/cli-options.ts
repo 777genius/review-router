@@ -47,8 +47,12 @@ export function parseLocalReviewOptions(args: readonly string[]): LocalReviewCli
       const parts = positional.split('..');
       if (parts.length !== 2 || !parts[0] || !parts[1]) throw new LocalReviewUsageError('Invalid Git range.');
       // Explicit native mode uses merge-base, legacy CLI without flags retains old tip semantics.
-      scope = { kind: 'branch', base: parts[0] };
-      if (parts[1] !== 'HEAD') throw new LocalReviewUsageError('Explicit engine range requires HEAD as its second ref; use checkout first.');
+      // Preserve the historical tip-to-tip comparison for legacy positional
+      // ranges; native OCR always uses its own merge-base semantics.
+      scope = { kind: 'branch', base: parts[0],
+        ...(parts[1] !== 'HEAD' ? { head: parts[1] } : {}),
+        ...(engine === 'legacy' ? { comparison: 'tips' as const } : {}),
+      };
     } else scope = { kind: 'commit', ref: positional };
   } else if (explicitScope === 'branch') {
     if (typeof base !== 'string') throw new LocalReviewUsageError('--scope branch requires --base.');

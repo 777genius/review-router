@@ -51,6 +51,10 @@ try {
  assert.equal(complete.engine.id,'ocr');assert.equal(complete.summary.major,1);
  assert(!JSON.stringify(complete).includes('must not escape'));
  assert.equal(git('status','--porcelain'),before,'CLI must not write to reviewed sources');
+ const previewResult=outcome(['--preview']);
+ assert.equal(previewResult.status,'skipped');
+ assert.deepEqual(previewResult.coverage.selectedPaths,['src/example.ts']);
+ assert.deepEqual(previewResult.coverage.omitted,[]);
  const partial=outcome([], {RR_FAKE_OCR_STATUS:'partial'});
  assert.equal(partial.code,3);assert.equal(partial.status,'partial');
  const warning=outcome([], {RR_FAKE_OCR_MODE:'warning'});

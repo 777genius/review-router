@@ -16,6 +16,7 @@ review-router review --engine ocr              # native OCR workspace review
 review-router review --engine ocr --include-untracked
 review-router review --engine ocr --scope branch --base origin/main
 review-router review --engine ocr --scope commit --ref HEAD
+review-router review main..feature --format json  # legacy exact-tip range with JSON
 review-router review --format json              # legacy engine in the same JSON schema
 review-router review --engine ocr --format json
 review-router review --engine ocr --preview
@@ -31,7 +32,8 @@ Native OCR requires a compatible executable reporting version `1.13.1` (includin
 | `--engine ocr` | OCR workspace mode: tracked + nonignored untracked | New files require explicit `--include-untracked` consent; without it review is refused before OCR runs |
 | `--engine ocr --scope branch --base <ref>` | `merge-base(<ref>, HEAD)..HEAD` | Requires a clean worktree; no implicit `git fetch` |
 | `--engine ocr --scope commit --ref <ref>` | Exact commit versus parent | Requires a clean worktree; no automatic commit |
-| `--engine ocr --preview` | Native model-free file selection | Does not call an LLM; result status is `skipped`, not clean |
+| `--engine ocr --preview` | Native model-free file selection | Shows selected paths in text (up to 20) and all paths in JSON `coverage.selectedPaths`; does not call an LLM |
+| `review main..feature --format json` | Legacy diff between named commit tips | The same range as legacy non-JSON; native OCR instead uses merge-base |
 
 Not in this delivery: `--scope staged`, automatic `outgoing` inference, push hooks, automatic edits, remote publication, first-party IDE extension or GitHub App. The already installed development `pre-commit` hook is **not** an AI pre-push review.
 
@@ -43,7 +45,7 @@ Not in this delivery: `--scope staged`, automatic `outgoing` inference, push hoo
 review-router review --engine ocr --scope branch --base origin/main --format json
 ```
 
-Stdout is **one versioned JSON object** for explicit JSON mode. Inspect `schemaVersion`, `status`, `coverage.complete`, `engine.id`, `input.snapshotDigest`, `summary`, `findings`, and `warnings`. Never treat an empty `findings` array as clean unless the status is `complete` and coverage is complete. `partial`, `stale`, `failed` and `skipped` mean no affirmative clean result. OCR's own terminal manifest and model attribution are validated; a native exit code 0 alone cannot prove completeness. Native preview exclusions are reported: policy-excluded files remain outside the selected review, while unsupported files (for example `too_large`) make the outcome incomplete, even if all selected files were reviewed.
+Stdout is **one versioned JSON object** for explicit JSON mode. Inspect `schemaVersion`, `status`, `coverage.complete`, `coverage.selectedPaths` (when available), `engine.id`, `input.snapshotDigest`, `summary`, `findings`, and `warnings`. Never treat an empty `findings` array as clean unless the status is `complete` and coverage is complete. `partial`, `stale`, `failed` and `skipped` mean no affirmative clean result. OCR's own terminal manifest and model attribution are validated; a native exit code 0 alone cannot prove completeness. Native preview exclusions are reported: policy-excluded files remain outside the selected review, while unsupported files (for example `too_large`) make the outcome incomplete, even if all selected files were reviewed.
 
 New explicit-mode exit codes: `0` complete without classified blocking findings (or clearly identified `skipped`); `1` complete with major findings; `2` complete with critical findings; `3` incomplete/failed/stale; `4` invalid options or unavailable requested engine; `130` interrupt when supported. Read status even when the exit code is 0. Old implicit legacy CLI behavior retains its exit codes.
 

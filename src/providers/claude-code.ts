@@ -647,7 +647,12 @@ export class ClaudeCodeProvider extends Provider {
 
   private async canRun(cmd: string, args: string[]): Promise<boolean> {
     return new Promise((resolve) => {
-      const proc = spawn(cmd, args, { stdio: 'ignore' });
+      // Version probes must not inherit both GitHub Secrets or ambient auth.
+      // The review subprocess receives only the explicitly selected credential.
+      const proc = spawn(cmd, args, {
+        stdio: 'ignore',
+        env: buildCliSafeEnv({ includeWorkspaceEnv: false }),
+      });
       proc.on('error', () => resolve(false));
       proc.on('close', (code) => resolve(code === 0));
     });

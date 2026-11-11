@@ -243,7 +243,7 @@ describe('GitHub integration mock (no network)', () => {
         selectedProvider = claude;
       }
       const selectedConfig: ReviewConfig = temp
-        ? { ...config, providers: ['claude/sonnet'] }
+        ? { ...config, providers: ['claude/sonnet'], synthesisModel: 'claude/sonnet' }
         : config;
 
     const components: ReviewComponents = {
@@ -259,7 +259,7 @@ describe('GitHub integration mock (no network)', () => {
         minSeverity: 'minor',
         maxComments: 10,
       }),
-      synthesis: new SynthesisEngine(config),
+      synthesis: new SynthesisEngine(selectedConfig),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
       cache: new CacheManager(),

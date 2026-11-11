@@ -108,7 +108,9 @@ export function resolveProviderCliPlan(
       openRouterProviderRequested,
     codexOauthNeeded: authMode === 'codex-oauth',
     claudeCliNeeded:
-      authMode === 'claude-oauth' || hasProviderPrefix(providerHints, 'claude'),
+      authMode === 'claude-oauth' ||
+      authMode === 'claude-api-key' ||
+      hasProviderPrefix(providerHints, 'claude'),
   };
 }
 
@@ -143,6 +145,7 @@ function inferredProviderFromEnv(
   const codexProvider = providerFromModel('codex', env.CODEX_MODEL);
   switch (authMode) {
     case 'claude-oauth':
+    case 'claude-api-key':
       return claudeProvider || 'claude/sonnet';
     case 'codex-oauth':
     case 'openai-api':

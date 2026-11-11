@@ -159,12 +159,15 @@ export function classifyOutcome(input: {
 function classifyMissingProviderSecret(
   env: NodeJS.ProcessEnv | undefined
 ): string | undefined {
-  const authMode = env?.REVIEW_AUTH_MODE;
+  const authMode = env?.REVIEW_AUTH_MODE?.trim();
   if (authMode === 'codex-oauth' && !env?.CODEX_AUTH_JSON) {
     return 'CODEX_AUTH_JSON GitHub Actions secret is missing.';
   }
   if (authMode === 'claude-oauth' && !env?.CLAUDE_CODE_OAUTH_TOKEN) {
     return 'CLAUDE_CODE_OAUTH_TOKEN GitHub Actions secret is missing.';
+  }
+  if (authMode === 'claude-api-key' && !env?.ANTHROPIC_API_KEY) {
+    return 'ANTHROPIC_API_KEY GitHub Actions secret is missing.';
   }
   if (authMode === 'openai-api' && !env?.OPENAI_API_KEY) {
     return 'OPENAI_API_KEY GitHub Actions secret is missing.';

@@ -15,6 +15,8 @@ import type { StableReviewWorkPlan } from '../domain';
 import {
   appendLifecycleWorkPlan,
   lifecycleHash,
+  lifecycleTargetWitnesses,
+  lifecycleVerificationMode,
 } from './lifecycle-verification-invocation';
 import { sensitivePath } from './pr-description-generation';
 
@@ -55,9 +57,20 @@ export function priorResolutionFact(
       }
     | undefined;
   const history = bound?.history;
+  const cut = history?.historyCut?.activatedAt;
+  const safeCut =
+    typeof cut === 'string' &&
+    Number.isFinite(Date.parse(cut)) &&
+    new Date(cut).toISOString() === cut
+      ? cut
+      : 'unavailable';
+  const safeVersion =
+    Number.isSafeInteger(history?.version) && (history?.version ?? -1) >= 0
+      ? String(history!.version)
+      : '0';
   const unavailable: PriorResolutionFact = {
-    historyCut: history?.historyCut?.activatedAt ?? 'unavailable',
-    guardVersion: String(history?.version ?? 0),
+    historyCut: safeCut,
+    guardVersion: safeVersion,
     state: 'unavailable',
   };
   if (
@@ -82,19 +95,20 @@ export function priorResolutionFact(
     return { ...unavailable, state: 'previously_resolved' };
   if (history.pending.length)
     return { ...unavailable, state: 'effect_unknown' };
-  const cut = history.historyCut;
+  const qualifiedCut = history.historyCut;
   if (
-    !cut?.activatedAt ||
-    !Number.isSafeInteger(cut.activationVersion) ||
-    (cut.activationVersion ?? 0) < 1 ||
-    typeof cut.writerDigest !== 'string' ||
-    !/^[a-f0-9]{64}$/.test(cut.writerDigest) ||
-    !Number.isFinite(Date.parse(cut.activatedAt)) ||
-    new Date(cut.activatedAt).toISOString() !== cut.activatedAt
+    !qualifiedCut?.activatedAt ||
+    !Number.isSafeInteger(qualifiedCut.activationVersion) ||
+    (qualifiedCut.activationVersion ?? 0) < 1 ||
+    typeof qualifiedCut.writerDigest !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(qualifiedCut.writerDigest) ||
+    !Number.isFinite(Date.parse(qualifiedCut.activatedAt)) ||
+    new Date(qualifiedCut.activatedAt).toISOString() !==
+      qualifiedCut.activatedAt
   )
     return unavailable;
-  if (cut.bootstrap !== undefined) {
-    const bootstrap = cut.bootstrap;
+  if (qualifiedCut.bootstrap !== undefined) {
+    const bootstrap = qualifiedCut.bootstrap;
     const canonicalTimestamp = (value: unknown): value is string =>
       typeof value === 'string' &&
       Number.isFinite(Date.parse(value)) &&
@@ -109,7 +123,7 @@ export function priorResolutionFact(
       !/^[a-f0-9]{64}$/.test(bootstrap.proofHash) ||
       !canonicalTimestamp(bootstrap.retiredAt) ||
       !canonicalTimestamp(bootstrap.activationCut) ||
-      bootstrap.activationCut !== cut.activatedAt ||
+      bootstrap.activationCut !== qualifiedCut.activatedAt ||
       Date.parse(bootstrap.retiredAt) > Date.parse(bootstrap.activationCut)
     )
       return unavailable;
@@ -121,7 +135,7 @@ export function priorResolutionFact(
       return { ...unavailable, state: 'effect_unknown' };
   }
   const state =
-    Date.parse(target.parentCreatedAt) >= Date.parse(cut.activatedAt)
+    Date.parse(target.parentCreatedAt) >= Date.parse(qualifiedCut.activatedAt)
       ? 'no_prior_since_creation'
       : 'before_cut_unobserved';
   return { ...unavailable, state };
@@ -238,10 +252,14 @@ export async function planProductionLifecycleVerification(input: {
       ? {
           lifecycleVerification: {
             ...appended.lifecycleVerification,
-            mode:
+            mode: lifecycleVerificationMode(
               input.config.reviewThreadLifecycle === 'resolve'
-                ? ('resolve' as const)
-                : ('report' as const),
+                ? 'resolve'
+                : 'report',
+              [...appended.packetsByWorkSlotId.values()].flatMap(
+                lifecycleTargetWitnesses
+              )
+            ),
           },
         }
       : {}),

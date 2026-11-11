@@ -14,6 +14,7 @@ import {
   prepareLifecycleRequest,
   validateLifecycleResponse,
   type RevalidationPlan,
+  type TargetWitness,
   type VerifyPacket,
 } from '../../finding-revalidation';
 import {
@@ -39,6 +40,21 @@ export const lifecycleTargetWitnesses = (packet: VerifyPacket) =>
 
 export const lifecycleHash = (value: unknown): string =>
   createHash('sha256').update(canonicalJson(value)).digest('hex');
+
+/** Unqualified history permits semantic reporting, never resolution effects. */
+export function lifecycleVerificationMode(
+  requested: 'report' | 'resolve',
+  witnesses: readonly TargetWitness[]
+): 'report' | 'resolve' {
+  return requested === 'resolve' &&
+    witnesses.every((witness) =>
+      ['no_prior_since_creation', 'before_cut_unobserved'].includes(
+        witness.resolutionHistory.state
+      )
+    )
+    ? 'resolve'
+    : 'report';
+}
 
 export function readLifecycleCapability(
   json: string | undefined,

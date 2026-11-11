@@ -48,7 +48,12 @@ describe('ClaudeCodeProvider', () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it('uses binary-only health checks by default to avoid consuming Claude usage', async () => {
+  it('uses credential-isolated binary-only health checks without consuming Claude usage', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-unselected-api-key';
+    process.env.GITHUB_TOKEN = 'synthetic-github-token';
+    process.env.INPUT_GITHUB_TOKEN = 'synthetic-input-token';
+    process.env.CLAUDE_CONFIG_DIR = '/tmp/ambient-claude-config';
+    process.env.GITHUB_WORKSPACE = '/tmp/review-workspace';
     spawnMock.mockImplementation((_cmd: string, _args: string[]) =>
       createMockProcess()
     );
@@ -59,6 +64,19 @@ describe('ClaudeCodeProvider', () => {
     expect(spawnMock).toHaveBeenCalledTimes(1);
     expect(spawnMock.mock.calls[0][0]).toBe('claude');
     expect(spawnMock.mock.calls[0][1]).toEqual(['--version']);
+    const probeEnv = spawnMock.mock.calls[0][2]?.env;
+    expect(probeEnv).toBeDefined();
+    for (const name of [
+      'CLAUDE_CODE_OAUTH_TOKEN',
+      'ANTHROPIC_API_KEY',
+      'ANTHROPIC_AUTH_TOKEN',
+      'GITHUB_TOKEN',
+      'INPUT_GITHUB_TOKEN',
+      'CLAUDE_CONFIG_DIR',
+      'GITHUB_WORKSPACE',
+    ]) {
+      expect(probeEnv[name]).toBeUndefined();
+    }
   });
 
   it('runs Claude Code through stdin with schema output and sanitized env', async () => {

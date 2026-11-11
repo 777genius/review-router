@@ -95,7 +95,7 @@ function containsControlCharacters(value: string): boolean {
   return false;
 }
 function safePath(value: unknown): string {
-  if (typeof value !== 'string' || !value || containsControlCharacters(value) || value.includes('\\') || path.posix.isAbsolute(value)) {
+  if (typeof value !== 'string' || !value || containsControlCharacters(value) || value.includes('\\') || /^[A-Za-z]:/.test(value) || path.posix.isAbsolute(value)) {
     throw new Error('Native OCR returned an unsafe path.');
   }
   const normalized = path.posix.normalize(value);

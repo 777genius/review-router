@@ -90,6 +90,10 @@ describe('native OCR adapter', () => {
     expect(() => normalizeNativeOcrResult(mismatch, [item.path], snapshot, '1.13.1')).toThrow(/attribution/);
     const unsafe = native(); unsafe.comments[0].path = 'src/\x1b[2Jbad.ts';
     expect(() => normalizeNativeOcrResult(unsafe, [item.path], snapshot, '1.13.1')).toThrow(/unsafe/);
+    const windowsAbsolute = native(); windowsAbsolute.comments[0].path = 'C:/private/secret.ts';
+    expect(() => normalizeNativeOcrResult(windowsAbsolute, [item.path], snapshot, '1.13.1')).toThrow(/unsafe/);
+    const windowsDriveRelative = native(); windowsDriveRelative.comments[0].path = 'C:secret.ts';
+    expect(() => normalizeNativeOcrResult(windowsDriveRelative, [item.path], snapshot, '1.13.1')).toThrow(/unsafe/);
   });
   it('does not silently pass an unclassified native finding', () => {
     const unknown = native();

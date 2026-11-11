@@ -32,6 +32,13 @@ try {
  git('add','.');git('commit','-qm','initial');
  fs.writeFileSync(path.join(repo,'src','example.ts'),'export const x=2;\n');
  const before=git('status','--porcelain');
+ const missingConfig=run(['review','--engine=legacy','--config','missing.yml','--format=json']);
+ assert.equal(missingConfig.status,4,missingConfig.stderr || missingConfig.stdout);
+ const missingConfigResult=JSON.parse(missingConfig.stdout);
+ assert.equal(missingConfigResult.error.kind,'usage','invalid explicit config must fail before model invocation');
+ assert.match(missingConfigResult.error.message,/--config/);
+ const invalidDays=run(['analytics','generate','--days=invalid','--format=json']);
+ assert.equal(invalidDays.status,1,'invalid analytics time filter must not produce a full-history dashboard');
  const complete=outcome([]);
  assert.equal(complete.code,1);assert.equal(complete.status,'complete');
  assert.equal(complete.engine.id,'ocr');assert.equal(complete.summary.major,1);
@@ -61,7 +68,7 @@ try {
  assert.equal(outside.status,0,'help must work outside a Git repository');
  const help=run(['help']);assert.equal(help.status,0);
  const version=run(['version']);assert.equal(version.status,0); const doctor=run(['doctor']);assert.equal(doctor.status,0,doctor.stderr);
- console.log('PASS built CLI: complete, partial, privacy consent, opted-in untracked, branch/commit, unchanged tree, help/version/doctor');
+ console.log('PASS built CLI: complete, partial, privacy, invalid-config JSON, analytics bounds, branch/commit, unchanged tree, help/version/doctor');
 } catch(error) {
  console.error(error); process.exitCode=1;
 } finally {fs.rmSync(temp,{recursive:true,force:true});}

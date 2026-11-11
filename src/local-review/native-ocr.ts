@@ -14,7 +14,10 @@ const NATIVE_MANIFEST_VERSION = 'ocr.run-manifest/v1';
 export interface NativeProcessResult { exitCode: number | null; stdout: string; stderr: string; signal: NodeJS.Signals | null }
 export type NativeProcessRunner = (command: string, args: readonly string[], options: { cwd: string; timeoutMs: number; maxOutput: number; signal?: AbortSignal }) => Promise<NativeProcessResult>;
 
-export const runNativeProcess: NativeProcessRunner = (command, args, options) => new Promise((resolve, reject) => {
+export const runNativeProcess: NativeProcessRunner = (command, args, options) => {
+  // Reject an already cancelled invocation before starting a paid/model process.
+  if (options.signal?.aborted) return Promise.reject(new LocalReviewInterruptedError());
+  return new Promise((resolve, reject) => {
   const child = spawn(command, [...args], {
     cwd: options.cwd, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
@@ -72,7 +75,8 @@ export const runNativeProcess: NativeProcessRunner = (command, args, options) =>
   });
   child.on('error', () => fail('Native OCR executable unavailable or cannot start.'));
   child.on('close', finish);
-});
+  });
+};
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -297,9 +301,9 @@ export class NativeOcrEngine {
     );
   }
 
-  async doctor(root: string): Promise<string> {
+  async doctor(root: string, signal?: AbortSignal): Promise<string> {
     const binary = this.binary();
-    const result = await this.runner(binary, ['version'], { cwd: root, timeoutMs: 10_000, maxOutput: 16_384 });
+    const result = await this.runner(binary, ['version'], { cwd: root, timeoutMs: 10_000, maxOutput: 16_384, signal });
     const version = result.stdout.match(/(?:^|[^0-9A-Za-z])v?(1\.13\.1(?:-rr\.\d+)?)(?![0-9A-Za-z])/);
     if (result.exitCode !== 0 || result.signal !== null || !version) {
       throw new LocalReviewUsageError('Native OCR v1.13.1 is required for this qualified adapter; install the pinned version.');
@@ -309,7 +313,8 @@ export class NativeOcrEngine {
 
   async run(snapshot: LocalGitSnapshot, request: LocalReviewRunRequest): Promise<LocalReviewOutcome> {
     const binary = this.binary();
-    const version = await this.doctor(snapshot.root);
+    if (request.signal?.aborted) throw new LocalReviewInterruptedError();
+    const version = await this.doctor(snapshot.root, request.signal);
     const modeArgs: string[] = [];
     if (snapshot.scope.kind === 'branch') modeArgs.push('--from', snapshot.base!, '--to', snapshot.head!);
     if (snapshot.scope.kind === 'commit') modeArgs.push('--commit', snapshot.head!);

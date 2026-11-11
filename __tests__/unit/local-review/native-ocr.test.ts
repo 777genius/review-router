@@ -36,6 +36,18 @@ describe('native OCR adapter', () => {
     if (previousBinary === undefined) delete process.env.REVIEWROUTER_OCR_BINARY;
     else process.env.REVIEWROUTER_OCR_BINARY = previousBinary;
   });
+  it('does not dispatch even the native version command after cancellation', async () => {
+    const stopped = new AbortController();
+    stopped.abort();
+    let launched = false;
+    const forbidden: NativeProcessRunner = async () => {
+      launched = true;
+      throw new Error('native executable must not launch');
+    };
+    await expect(new NativeOcrEngine(forbidden).run(snapshot, { ...request, signal: stopped.signal }))
+      .rejects.toThrow(/interrupted/);
+    expect(launched).toBe(false);
+  });
   it('uses native CLI, preserves the real model and strips private thinking', async () => {
     const argv: string[][] = [];
     const result = await new NativeOcrEngine(runner(native(), a => argv.push([...a]))).run(snapshot, request);

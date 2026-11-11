@@ -14,10 +14,10 @@ function npm(args) {
   const result = spawnSync(npmCommand, args, {
     cwd: process.cwd(),
     encoding: 'utf8',
-    timeout: 180_000,
+    timeout: args[0] === 'install' ? 600_000 : 180_000,
     shell: process.platform === 'win32',
   });
-  assert.equal(result.status, 0, result.stderr || String(result.error));
+  assert.equal(result.status, 0, [result.error?.message, result.stderr].filter(Boolean).join('\n') || 'npm command failed');
   return result.stdout;
 }
 
@@ -34,7 +34,7 @@ try {
 
   const tarball = path.join(temp, packages[0].filename);
   assert(fs.existsSync(tarball), 'npm pack must materialize its tarball');
-  npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock',
+  npm(['install', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund', '--no-package-lock',
     '--prefix', consumer, tarball]);
 
   const installedCli = path.join(consumer, 'node_modules', 'review-router', 'bin', 'mpr');

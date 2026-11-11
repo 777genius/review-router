@@ -192,3 +192,10 @@ Exit codes for new JSON/explicit-engine CLI: `0=complete with no classified bloc
 ### Out-of-scope reaffirmed after implementation
 
 No automatic pre-push hook, staged-only/outgoing snapshot engine, cloud Gateway changes, SaaS changes, default-engine flip, auto-fix, GitHub write paths, local model installer, MCP server, arbitrary engine plug-in registry or repository-wide dependency upgrades. Add those as separate tasks only when justified by real use, not as part of PR #379.
+
+### Round 12 — human/agent usability and cancellation (2026-11-11)
+
+- A normal historical `review main..feature --format json` must keep legacy tip-to-tip semantics, even when `feature` is not checked out; explicit OCR uses merge-base semantics. Capturing a resolved target SHA rather than forcing `HEAD` fixes the inconsistency without a new scope.
+- A model-free OCR preview must list its selected paths for humans and agents. The additive optional `coverage.selectedPaths` field is bounded by the existing preview inventory limit; the terminal shows at most 20 with a count.
+- A packaged consumer must run a real installed CLI review using a deterministic native fixture, not merely `help`/`version`. The Windows install sometimes takes longer than 180 seconds (one pass at ~166 seconds, another timeout): use a realistic install-only timeout with cache preference and preserve the same assertions. No CI skip or excessive retry.
+- The machine error object is a distinct result shape. Check `status` before reading `coverage`; pre-cancelled requests do not spawn even the OCR version probe. Do not add hosted services, a DI container or a new provider transport.

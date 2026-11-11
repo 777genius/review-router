@@ -21,6 +21,7 @@ if (process.env.REVIEWROUTER_OCR_REQUIRED === '1' && !available) {
     const repo = path.join(root, 'repo');
     const home = path.join(root, 'home');
     const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
     const previousXdg = process.env.XDG_CONFIG_HOME;
     const invocations: string[] = [];
     const diagnostics: string[] = [];
@@ -79,6 +80,7 @@ if (process.env.REVIEWROUTER_OCR_REQUIRED === '1' && !available) {
         telemetry: { enabled: false }, effort: 'low',
       }));
       process.env.HOME = home;
+      process.env.USERPROFILE = home;
       delete process.env.XDG_CONFIG_HOME;
       const runner: NativeProcessRunner = async (command, args, options) => {
         const output = await runNativeProcess(command, args, options);
@@ -109,6 +111,8 @@ if (process.env.REVIEWROUTER_OCR_REQUIRED === '1' && !available) {
       abort.abort();
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
       if (previousXdg === undefined) delete process.env.XDG_CONFIG_HOME;
       else process.env.XDG_CONFIG_HOME = previousXdg;
       if (server) {

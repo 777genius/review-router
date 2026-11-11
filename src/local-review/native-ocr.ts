@@ -188,12 +188,19 @@ export function normalizeNativeOcrResult(
     throw new Error('Native OCR model attribution differs from manifest.');
   }
   const omitted = [...failed, ...waived].map(x => x.path);
+  if (obj.warnings !== undefined && !Array.isArray(obj.warnings)) {
+    throw new Error('Native OCR warnings field has an invalid structure.');
+  }
+  const runFailure = manifest.run_failure;
+  if (runFailure != null && !record(runFailure)) {
+    throw new Error('Native OCR run failure field has an invalid structure.');
+  }
   const hasNativeWarnings = Array.isArray(obj.warnings) && obj.warnings.length > 0;
   const unanchoredFindings = findings.some(finding => finding.line === null);
   const model = observedModel ?? manifestModel;
   const complete = terminal === 'complete' && omitted.length === 0 &&
     completed.length + reused.length === selected.length && selected.length > 0 &&
-    !record(manifest.run_failure) && !hasNativeWarnings && !unanchoredFindings && Boolean(model);
+    runFailure == null && !hasNativeWarnings && !unanchoredFindings && Boolean(model);
   const status = terminal === 'complete' && !complete ? 'partial' : terminal as LocalReviewOutcome['status'];
   const summary = summaryFromFindings(findings);
   const warnings: string[] = [];

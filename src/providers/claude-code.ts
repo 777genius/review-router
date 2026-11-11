@@ -287,6 +287,8 @@ export class ClaudeCodeProvider extends Provider {
         credential.length < 16 ||
         credential.length > 16_384 ||
         /^sk-ant-oat/i.test(credential) ||
+        // Control-character validation is intentional for credentials.
+        // eslint-disable-next-line no-control-regex
         /[\s|\u0000-\u001f\u007f"'\x60]/.test(credential)
       ) {
         throw new Error('ANTHROPIC_API_KEY is missing or invalid for Claude API-key authentication.');

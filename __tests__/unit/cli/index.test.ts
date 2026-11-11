@@ -86,6 +86,16 @@ describe('CLI', () => {
       expect(result.options).toEqual({ d: true });
     });
 
+    it('retains legacy branch-range semantics with an explicit config', async () => {
+      const args = ['review', 'main..feature', '--config', 'review.yml'];
+      const parsed = (cli as any).parseArgs(args);
+      expect(parsed.target).toBe('main..feature');
+      expect(parsed.options.config).toBe('review.yml');
+      // No modern engine flag: the historic Git range must be preserved.
+      expect((cli as any).parseArgs(['review', 'main..feature', '--config=review.yml']).target)
+        .toBe('main..feature');
+    });
+
     it('does not mistake a separated review --config value for a revision', () => {
       const result = (cli as any).parseArgs(['review', '--config', 'review.yml']);
       expect(result.target).toBeUndefined();

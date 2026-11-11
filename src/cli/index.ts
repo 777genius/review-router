@@ -51,10 +51,16 @@ export class CLI {
       }
       if (command === 'review') {
         const reviewArgs = args.slice(1);
-        // Unknown options must never fall through to the legacy model runner.
-        // Preserve only the historical, effective --dry-run spelling.
-        if (usesExplicitLocalOptions(reviewArgs) ||
-            reviewArgs.some(arg => arg.startsWith('-') && arg !== '--dry-run')) {
+        // Preserve established legacy --config and --dry-run syntax. Any
+        // unknown option must go to strict parsing before a model can run.
+        const unknownOption = reviewArgs.some((arg, index) =>
+          arg.startsWith('-') &&
+          arg !== '--dry-run' &&
+          !(arg === '--config' && !!reviewArgs[index + 1] &&
+            !reviewArgs[index + 1].startsWith('-')) &&
+          !(arg.startsWith('--config=') && arg.length > '--config='.length)
+        );
+        if (usesExplicitLocalOptions(reviewArgs) || unknownOption) {
           return this.runExplicitLocalReview(reviewArgs);
         }
       }

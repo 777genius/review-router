@@ -128,6 +128,28 @@ describe('CLI', () => {
       consoleErrorSpy.mockRestore();
     });
 
+    it('rejects an unknown review flag before reading Git or invoking a provider', async () => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      try {
+        expect(await cli.run(['review', '--engnie=ocr'])).toBe(4);
+        expect(mockGitReader.isGitRepo).not.toHaveBeenCalled();
+        expect(mockGitReader.getUncommittedChanges).not.toHaveBeenCalled();
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('shows review help outside a Git checkout with -h', async () => {
+      mockGitReader.isGitRepo.mockReturnValue(false);
+      const logSpy = jest.spyOn(console, 'log').mockImplementation();
+      try {
+        expect(await cli.run(['review', '-h'])).toBe(0);
+        expect(mockGitReader.isGitRepo).not.toHaveBeenCalled();
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
     it('returns 1 for unknown command', async () => {
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 

@@ -45,12 +45,18 @@ export class CLI {
       if (command === 'doctor') {
         return this.runDoctor();
       }
-      if (command === 'review' && args.slice(1).includes('--help')) {
+      if (command === 'review' && args.slice(1).some(arg => arg === '--help' || arg === '-h')) {
         this.showHelp();
         return 0;
       }
-      if (command === 'review' && usesExplicitLocalOptions(args.slice(1))) {
-        return this.runExplicitLocalReview(args.slice(1));
+      if (command === 'review') {
+        const reviewArgs = args.slice(1);
+        // Unknown options must never fall through to the legacy model runner.
+        // Preserve only the historical, effective --dry-run spelling.
+        if (usesExplicitLocalOptions(reviewArgs) ||
+            reviewArgs.some(arg => arg.startsWith('-') && arg !== '--dry-run')) {
+          return this.runExplicitLocalReview(reviewArgs);
+        }
       }
 
       // Existing positional CLI remains unchanged unless new flags are explicitly selected.

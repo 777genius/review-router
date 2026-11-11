@@ -148580,6 +148580,7 @@ var ConfigLoader = class {
       case "mimo-token-plan-api":
         return "codex-mimo/mimo-v2.6-pro";
       case "claude-oauth":
+      case "claude-api-key":
         return claudeProvider || "claude/sonnet";
       case "codex-oauth":
       case "openai-api":

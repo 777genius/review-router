@@ -128301,6 +128301,7 @@ var ConfigLoader = class {
       case "mimo-token-plan-api":
         return "codex-mimo/mimo-v2.6-pro";
       case "claude-oauth":
+      case "claude-api-key":
         return claudeProvider || "claude/sonnet";
       case "codex-oauth":
       case "openai-api":
@@ -129988,6 +129989,7 @@ function isClaudeSubscriptionSetupToken(value) {
 // src/providers/claude-code.ts
 var CLAUDE_STDIN_LIMIT_BYTES = 10 * 1024 * 1024;
 var CLAUDE_CODE_OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN";
+var ANTHROPIC_API_KEY_ENV = "ANTHROPIC_API_KEY";
 var CLAUDE_SETTINGS_FILE_PLACEHOLDER = "{reviewrouter_settings_file}";
 var ClaudeCodeProvider = class extends Provider {
   constructor(model2, options = {}) {
@@ -130032,10 +130034,10 @@ var ClaudeCodeProvider = class extends Provider {
     }
   }
   async review(prompt, timeoutMs) {
-    const oauthToken = this.readClaudeCodeOAuthToken();
+    const credential = this.selectedAuthMode() === "claude-api-key" ? this.readAnthropicApiKey() : this.readClaudeCodeOAuthToken();
     const invocation = await this.prepareInvocation(prompt, timeoutMs);
     const result2 = await this.executePreparedInvocation(invocation, {
-      bearerToken: oauthToken
+      bearerToken: credential
     });
     return {
       ...result2,
@@ -130070,6 +130072,7 @@ var ClaudeCodeProvider = class extends Provider {
       timeoutMs,
       request: {
         binary: binary2,
+        authMode: this.selectedAuthMode(),
         prompt: reviewPrompt,
         argsTemplate,
         forkArgsTemplate: forkSandbox ? this.buildForkSafeArgs(CLAUDE_SETTINGS_FILE_PLACEHOLDER) : [],
@@ -130086,6 +130089,8 @@ var ClaudeCodeProvider = class extends Provider {
       this.name
     );
     const request3 = prepared.request;
+    const credential = credentialLease?.bearerToken;
+    this.validateSelectedCredential(request3.authMode, credential);
     const started = Date.now();
     logger.info(
       `Running Claude Code CLI safely: ${request3.binary} --model ${prepared.requestedModel} --print --output-format json ...`
@@ -130094,7 +130099,7 @@ var ClaudeCodeProvider = class extends Provider {
       const { stdout, stderr } = await this.runCliWithStdin(
         request3,
         prepared.timeoutMs,
-        credentialLease?.bearerToken
+        credential
       );
       const content = this.extractReviewContent(stdout);
       const durationSeconds = (Date.now() - started) / 1e3;
@@ -130103,7 +130108,7 @@ var ClaudeCodeProvider = class extends Provider {
       );
       if (!content) {
         throw new Error(
-          `Claude Code CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`
+          `Claude Code CLI returned no output${stderr ? `; stderr: ${this.formatCliError(stderr, "", credential, request3.authMode).slice(0, 200)}` : ""}`
         );
       }
       const parsed = parseReviewOutputStrict(content, "Claude Code CLI");
@@ -130161,10 +130166,39 @@ var ClaudeCodeProvider = class extends Provider {
       prompt
     ].join("\n");
   }
+  selectedAuthMode() {
+    return this.options.authMode ?? "claude-oauth";
+  }
+  /** A missing API key is never an invitation to use ambient Claude login. */
+  readAnthropicApiKey() {
+    const value = process.env[ANTHROPIC_API_KEY_ENV];
+    if (!value) {
+      throw new Error(
+        "ANTHROPIC_API_KEY is required for Claude API-key authentication."
+      );
+    }
+    this.validateSelectedCredential("claude-api-key", value);
+    return value;
+  }
+  validateSelectedCredential(mode, credential) {
+    if (mode === "claude-api-key") {
+      if (!credential || credential.length < 16 || credential.length > 16384 || /^sk-ant-oat/i.test(credential) || // Control-character validation is intentional for credentials.
+      // eslint-disable-next-line no-control-regex
+      /[\s|\u0000-\u001f\u007f"'\x60]/.test(credential)) {
+        throw new Error("ANTHROPIC_API_KEY is missing or invalid for Claude API-key authentication.");
+      }
+      return;
+    }
+    if (!credential || !isClaudeSubscriptionSetupToken(credential)) {
+      throw new Error("CLAUDE_CODE_OAUTH_TOKEN is missing or invalid for Claude subscription authentication.");
+    }
+  }
   readClaudeCodeOAuthToken() {
     const rawToken = process.env[CLAUDE_CODE_OAUTH_TOKEN_ENV];
     if (rawToken === void 0) {
-      return void 0;
+      throw new Error(
+        "CLAUDE_CODE_OAUTH_TOKEN is required for Claude subscription authentication."
+      );
     }
     const token = rawToken.trim();
     if (!token) {
@@ -130190,7 +130224,7 @@ var ClaudeCodeProvider = class extends Provider {
   hasExpectedClaudeCodeOAuthTokenShape(token) {
     return isClaudeSubscriptionSetupToken(token);
   }
-  async runCliWithStdin(request3, timeoutMs, oauthToken) {
+  async runCliWithStdin(request3, timeoutMs, credential) {
     const runId = crypto3.randomBytes(8).toString("hex");
     const tmpDir = await fs4.mkdtemp(path3.join(os.tmpdir(), "claude-code-"));
     await fs4.chmod(tmpDir, 448);
@@ -130199,7 +130233,7 @@ var ClaudeCodeProvider = class extends Provider {
     let fd;
     let usageRelay;
     try {
-      if (this.options.usageDelivery) {
+      if (this.options.usageDelivery && request3.authMode === "claude-oauth") {
         try {
           usageRelay = await startAnthropicUsageRelay(
             this.options.usageDelivery,
@@ -130236,8 +130270,8 @@ var ClaudeCodeProvider = class extends Provider {
           stdio: [fdNum, "pipe", "pipe"],
           detached: true,
           env: this.buildExecutionEnv(request3.environment, {
-            claudeConfigDir: oauthToken ? claudeConfigDir : void 0,
-            oauthToken,
+            claudeConfigDir: credential ? claudeConfigDir : void 0,
+            ...request3.authMode === "claude-api-key" ? { apiKey: credential } : { oauthToken: credential },
             usageBaseUrl: usageRelay?.baseUrl
           })
         });
@@ -130279,7 +130313,7 @@ var ClaudeCodeProvider = class extends Provider {
             if (code !== 0) {
               reject(
                 new Error(
-                  `Claude Code CLI exited with code ${code}: ${this.formatCliError(stderr, stdout)}`
+                  `Claude Code CLI exited with code ${code}: ${this.formatCliError(stderr, stdout, credential, request3.authMode)}`
                 )
               );
             } else {
@@ -130316,6 +130350,9 @@ var ClaudeCodeProvider = class extends Provider {
     }
     if (options.oauthToken) {
       environment[CLAUDE_CODE_OAUTH_TOKEN_ENV] = options.oauthToken;
+    }
+    if (options.apiKey) {
+      environment[ANTHROPIC_API_KEY_ENV] = options.apiKey;
     }
     if (options.usageBaseUrl)
       environment.ANTHROPIC_BASE_URL = options.usageBaseUrl;
@@ -130375,18 +130412,19 @@ var ClaudeCodeProvider = class extends Provider {
       }
     };
   }
-  formatCliError(stderr, stdout) {
-    const text3 = `${stderr || stdout || "no output"}`.trim();
-    const hint = this.authHintFor(text3);
+  formatCliError(stderr, stdout, credential, mode = "claude-oauth") {
+    const raw = `${stderr || stdout || "no output"}`.trim();
+    const text3 = (credential ? raw.replaceAll(credential, "[REDACTED]") : raw).replace(/sk-ant-(?:api[0-9]{2}|oat[0-9]{2})-[A-Za-z0-9._-]{12,}/g, "[REDACTED]");
+    const hint = this.authHintFor(text3, mode);
     const message = hint ? `${text3}
 ${hint}` : text3;
     return message.length > 1600 ? `${message.slice(0, 1600)}
 ... truncated ...` : message;
   }
-  authHintFor(message) {
+  authHintFor(message, mode) {
     const lower = message.toLowerCase();
     if (lower.includes("not logged in") || lower.includes("authentication") || lower.includes("oauth") || lower.includes("unauthorized") || lower.includes("401") || lower.includes("403")) {
-      return "Hint: for Claude subscription OAuth in CI, generate a token with `claude setup-token` and expose it as `CLAUDE_CODE_OAUTH_TOKEN`. Do not pass `--bare`, because bare mode does not read Claude OAuth tokens.";
+      return mode === "claude-api-key" ? "Hint: configure ANTHROPIC_API_KEY in GitHub Actions Secrets for the selected Claude API-key mode." : "Hint: for Claude subscription OAuth in CI, generate a token with `claude setup-token` and expose it as `CLAUDE_CODE_OAUTH_TOKEN`. Do not pass `--bare`, because bare mode does not read Claude OAuth tokens.";
     }
     return "";
   }
@@ -136518,10 +136556,16 @@ var ProviderRegistry = class {
       }
       if (name.startsWith("claude/")) {
         const model2 = name.replace("claude/", "");
+        const explicitMode = process.env.REVIEWROUTER_CLAUDE_AUTH_MODE?.trim();
+        const primaryMode = process.env.REVIEW_AUTH_MODE?.trim();
+        if (explicitMode !== void 0 && explicitMode !== "claude-api-key" && explicitMode !== "claude-oauth" || explicitMode !== void 0 && (primaryMode === "claude-api-key" || primaryMode === "claude-oauth") && explicitMode !== primaryMode) {
+          throw new Error("claude_auth_mode_invalid");
+        }
         list.push(
           new ClaudeCodeProvider(model2, {
             ...this.usageOptions(name),
-            agenticContext: config2.claudeAgenticContext
+            agenticContext: config2.claudeAgenticContext,
+            authMode: (explicitMode ?? primaryMode) === "claude-api-key" ? "claude-api-key" : "claude-oauth"
           })
         );
         continue;
@@ -166569,12 +166613,15 @@ function classifyOutcome(input) {
   };
 }
 function classifyMissingProviderSecret(env) {
-  const authMode = env?.REVIEW_AUTH_MODE;
+  const authMode = env?.REVIEW_AUTH_MODE?.trim();
   if (authMode === "codex-oauth" && !env?.CODEX_AUTH_JSON) {
     return "CODEX_AUTH_JSON GitHub Actions secret is missing.";
   }
   if (authMode === "claude-oauth" && !env?.CLAUDE_CODE_OAUTH_TOKEN) {
     return "CLAUDE_CODE_OAUTH_TOKEN GitHub Actions secret is missing.";
+  }
+  if (authMode === "claude-api-key" && !env?.ANTHROPIC_API_KEY) {
+    return "ANTHROPIC_API_KEY GitHub Actions secret is missing.";
   }
   if (authMode === "openai-api" && !env?.OPENAI_API_KEY) {
     return "OPENAI_API_KEY GitHub Actions secret is missing.";
@@ -166878,7 +166925,7 @@ function resolveProviderCliPlan(env = process.env) {
   return {
     codexCliNeeded: authMode === "codex-oauth" || authMode === "openai-api" || authMode === "openrouter-api" || authMode === "mimo-token-plan-api" || codexProviderRequested || mimoProviderRequested || openRouterProviderRequested,
     codexOauthNeeded: authMode === "codex-oauth",
-    claudeCliNeeded: authMode === "claude-oauth" || hasProviderPrefix(providerHints, "claude")
+    claudeCliNeeded: authMode === "claude-oauth" || authMode === "claude-api-key" || hasProviderPrefix(providerHints, "claude")
   };
 }
 function parseProviderList(value) {
@@ -166899,6 +166946,7 @@ function inferredProviderFromEnv(authMode, env) {
   const codexProvider = providerFromModel("codex", env.CODEX_MODEL);
   switch (authMode) {
     case "claude-oauth":
+    case "claude-api-key":
       return claudeProvider || "claude/sonnet";
     case "codex-oauth":
     case "openai-api":

@@ -409,10 +409,25 @@ export class ProviderRegistry {
 
       if (name.startsWith('claude/')) {
         const model = name.replace('claude/', '');
+        const explicitMode = process.env.REVIEWROUTER_CLAUDE_AUTH_MODE?.trim();
+        const primaryMode = process.env.REVIEW_AUTH_MODE?.trim();
+        if (
+          (explicitMode !== undefined &&
+            explicitMode !== 'claude-api-key' &&
+            explicitMode !== 'claude-oauth') ||
+          (explicitMode !== undefined &&
+            (primaryMode === 'claude-api-key' || primaryMode === 'claude-oauth') &&
+            explicitMode !== primaryMode)
+        ) {
+          throw new Error('claude_auth_mode_invalid');
+        }
         list.push(
           new ClaudeCodeProvider(model, {
             ...this.usageOptions(name),
             agenticContext: config.claudeAgenticContext,
+            authMode: (explicitMode ?? primaryMode) === 'claude-api-key'
+              ? 'claude-api-key'
+              : 'claude-oauth',
           })
         );
         continue;

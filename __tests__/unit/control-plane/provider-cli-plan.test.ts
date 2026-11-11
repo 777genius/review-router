@@ -81,6 +81,36 @@ describe('resolveProviderCliPlan', () => {
     expect(plan.codexOauthNeeded).toBe(false);
   });
 
+
+  it('uses the existing Claude CLI for API-key mode without demanding OAuth', () => {
+    const plan = resolveProviderCliPlan({
+      REVIEW_AUTH_MODE: ' claude-api-key ',
+      ANTHROPIC_API_KEY: 'sk-ant-api03-fixture',
+      CODEX_MODEL: 'gpt-stale-codex',
+    });
+    expect(plan).toEqual({
+      codexCliNeeded: false,
+      codexOauthNeeded: false,
+      claudeCliNeeded: true,
+    });
+  });
+
+  it('never installs an unrelated CLI when both Claude credential secrets exist', () => {
+    const plan = resolveProviderCliPlan({
+      REVIEW_AUTH_MODE: 'claude-api-key',
+      REVIEW_PROVIDERS: 'claude/sonnet',
+      CLAUDE_CODE_OAUTH_TOKEN_PRESENT: '1',
+      ANTHROPIC_API_KEY_PRESENT: '1',
+      CODEX_MODEL: 'gpt-stale-codex',
+      CLAUDE_MODEL: 'sonnet',
+    });
+    expect(plan).toEqual({
+      codexCliNeeded: false,
+      codexOauthNeeded: false,
+      claudeCliNeeded: true,
+    });
+  });
+
   it('requires Codex CLI for MiMo auth without explicit provider hints', () => {
     const plan = resolveProviderCliPlan({
       REVIEW_AUTH_MODE: 'mimo-token-plan-api',

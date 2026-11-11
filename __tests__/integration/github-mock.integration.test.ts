@@ -24,6 +24,10 @@ import { ImpactAnalyzer } from '../../src/analysis/impact';
 import { EvidenceScorer } from '../../src/analysis/evidence';
 import { MermaidGenerator } from '../../src/output/mermaid';
 import { FeedbackFilter } from '../../src/github/feedback';
+import { ClaudeCodeProvider, type ClaudeCodeAuthMode } from '../../src/providers/claude-code';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 class FakeProvider extends Provider {
   constructor() {
@@ -48,13 +52,13 @@ class FakeProvider extends Provider {
 }
 
 class StubLLMExecutor extends LLMExecutor {
-  constructor() {
+  constructor(private readonly providerOverride?: Provider) {
     // @ts-expect-error config unused in stub
     super({ providerMaxParallel: 1 });
   }
   async execute(): Promise<ProviderResult[]> {
-    const provider = new FakeProvider();
-    const result = await provider.review('prompt', 1000);
+    const provider = this.providerOverride ?? new FakeProvider();
+    const result = await provider.review('prompt', 10000);
     return [
       {
         name: provider.name,
@@ -150,7 +154,8 @@ describe('GitHub integration mock (no network)', () => {
     dryRun: false,
   };
 
-  it('uses fake octokit client to post summary and inline comments', async () => {
+  it.each(['fake', 'claude-oauth', 'claude-api-key'] as const)(
+    'uses a synthetic %s CLI/provider to post summary and inline comments', async (mode) => {
     const fakeOctokit: any = {
       rest: {
         pulls: {
@@ -204,20 +209,59 @@ describe('GitHub integration mock (no network)', () => {
       getFileContent: async () => null, // Mock getFileContent method
     } as any;
 
+    const temp = mode === 'fake'
+      ? null
+      : fs.mkdtempSync(path.join(os.tmpdir(), 'reviewrouter-claude-publication-'));
+    let selectedProvider: Provider = new FakeProvider();
+    const originalEnv = process.env;
+    try {
+      if (temp) {
+        const binary = path.join(temp, 'synthetic-claude');
+        const script = [
+          '#!/usr/bin/env node',
+          'const fs = require("fs");',
+          'const prompt = fs.readFileSync(0, "utf8");',
+          `const expected = ${JSON.stringify(mode === 'claude-api-key' ? 'api' : 'oauth')};`,
+          'const actual = process.env.ANTHROPIC_API_KEY ? "api" : "oauth";',
+          'if (Boolean(process.env.ANTHROPIC_API_KEY) === Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN)) process.exit(4);',
+          'if (actual !== expected) process.exit(6);',
+          'if (!process.env.CLAUDE_CONFIG_DIR || !prompt.trim() || process.env.GITHUB_TOKEN) process.exit(5);',
+          'const finding = {file:"src/app.ts",line:2,startLine:null,endLine:null,severity:"major",title:"Synthetic issue",message:"Review the changed line.",suggestion:null};',
+          'console.log(JSON.stringify({structured_output:{findings:[finding],revalidations:[]}}));',
+        ].join('\n') + '\n';
+        fs.writeFileSync(binary, script, { mode: 0o700 });
+        process.env = {
+          ...originalEnv,
+          ANTHROPIC_API_KEY: 'sk-ant-api03-unselected-synthetic',
+          CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-unselected-synthetic',
+        };
+        const claude = new ClaudeCodeProvider('sonnet', {
+          authMode: mode as ClaudeCodeAuthMode,
+        });
+        Object.defineProperty(claude, 'resolveBinary', {
+          configurable: true,
+          value: async () => binary,
+        });
+        selectedProvider = claude;
+      }
+      const selectedConfig: ReviewConfig = temp
+        ? { ...config, providers: ['claude/sonnet'], synthesisModel: 'claude/sonnet' }
+        : config;
+
     const components: ReviewComponents = {
-      config,
+      config: selectedConfig,
       providerRegistry: {
-        createProviders: async () => [new FakeProvider()],
+        createProviders: async () => [selectedProvider],
       } as any,
-      promptBuilder: new PromptBuilder(config),
-      llmExecutor: new StubLLMExecutor() as any,
+      promptBuilder: new PromptBuilder(selectedConfig),
+      llmExecutor: new StubLLMExecutor(selectedProvider) as any,
       deduplicator: new Deduplicator(),
       consensus: new ConsensusEngine({
         minAgreement: 1,
         minSeverity: 'minor',
         maxComments: 10,
       }),
-      synthesis: new SynthesisEngine(config),
+      synthesis: new SynthesisEngine(selectedConfig),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
       cache: new CacheManager(),
@@ -262,7 +306,12 @@ describe('GitHub integration mock (no network)', () => {
     expect(review).toBeTruthy();
     expect(fakeOctokit.issues.createComment).toHaveBeenCalled();
     expect(fakeOctokit.pulls.createReview).toHaveBeenCalled();
-  });
+    } finally {
+      process.env = originalEnv;
+      if (temp) fs.rmSync(temp, { recursive: true, force: true });
+    }
+  }, 20000);
+
 
   it('updates the existing summary comment when findings exist', async () => {
     const fakeOctokit: any = {

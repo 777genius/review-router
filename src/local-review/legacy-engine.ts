@@ -3,7 +3,7 @@ import { CLIReviewer } from '../cli/reviewer';
 import { setupComponents } from '../setup';
 import { LocalReviewOutcome, LocalReviewRunRequest, LocalReviewUsageError, summaryFromFindings } from './contracts';
 import { LocalGitSnapshot } from './git-snapshot';
-import { ConfigLoader } from '../config/loader';
+import { ExplicitLocalConfigLoader } from './explicit-config';
 
 /** Compatibility adapter only. It does not claim parity with hosted or native OCR. */
 export async function runLegacyLocalReview(
@@ -16,10 +16,10 @@ export async function runLegacyLocalReview(
   if (request.includeUntracked) {
     throw new LocalReviewUsageError('Legacy engine does not safely support untracked file review.');
   }
-  let config: ReturnType<typeof ConfigLoader.loadFromPath> | undefined;
+  let config: ReturnType<typeof ExplicitLocalConfigLoader.loadFromPath> | undefined;
   if (configFile) {
     try {
-      config = ConfigLoader.loadFromPath(configFile);
+      config = ExplicitLocalConfigLoader.loadFromPath(configFile);
     } catch {
       throw new LocalReviewUsageError('Cannot use --config: file missing, unreadable, or invalid YAML/configuration.');
     }

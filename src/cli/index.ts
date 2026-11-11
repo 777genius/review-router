@@ -11,7 +11,7 @@ import { parseLocalReviewOptions, usesExplicitLocalOptions } from '../local-revi
 import { LocalReviewUsageError, LocalReviewExecutionError, LocalReviewInterruptedError, exitCodeForLocalOutcome, renderLocalReview } from '../local-review/contracts';
 import { runLocalReview } from '../local-review/run-local-review';
 import { NativeOcrEngine } from '../local-review/native-ocr';
-import { ConfigLoader } from '../config/loader';
+import { ExplicitLocalConfigLoader } from '../local-review/explicit-config';
 
 /**
  * CLI interface for multi-provider code review
@@ -243,7 +243,7 @@ export class CLI {
       components = await setupComponents({
         cliMode: true,
         ...(options['dry-run'] === true ? { dryRun: true } : {}),
-        ...(typeof options.config === 'string' ? { config: ConfigLoader.loadFromPath(options.config) } : {}),
+        ...(typeof options.config === 'string' ? { config: ExplicitLocalConfigLoader.loadFromPath(options.config) } : {}),
       });
 
       // Create CLI reviewer

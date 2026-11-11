@@ -223,10 +223,10 @@ describe('GitHub integration mock (no network)', () => {
           'const prompt = fs.readFileSync(0, "utf8");',
           'const mode = process.env.ANTHROPIC_API_KEY ? "api" : "oauth";',
           'if (Boolean(process.env.ANTHROPIC_API_KEY) === Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN)) process.exit(4);',
-          'if (!process.env.CLAUDE_CONFIG_DIR || prompt.length < 10 || process.env.GITHUB_TOKEN) process.exit(5);',
+          'if (!process.env.CLAUDE_CONFIG_DIR || !prompt.trim() || process.env.GITHUB_TOKEN) process.exit(5);',
           'const finding = {file:"src/app.ts",line:2,startLine:null,endLine:null,severity:"major",title:"Synthetic issue",message:"Review the changed line.",suggestion:null};',
           'console.log(JSON.stringify({structured_output:{findings:[finding],revalidations:[]}}));',
-        ].join('\\n') + '\\n';
+        ].join('\n') + '\n';
         fs.writeFileSync(binary, script, { mode: 0o700 });
         process.env = {
           ...originalEnv,

@@ -305,7 +305,7 @@ export class NativeOcrEngine {
   async doctor(root: string, signal?: AbortSignal): Promise<string> {
     const binary = this.binary();
     const result = await this.runner(binary, ['version'], { cwd: root, timeoutMs: 10_000, maxOutput: 16_384, signal });
-    const version = result.stdout.match(/(?:^|[^0-9A-Za-z])v?(1\.13\.1(?:-rr\.\d+)?)(?![0-9A-Za-z])/);
+    const version = result.stdout.match(/(?:^|[^0-9A-Za-z])v?(1\.13\.1(?:-rr\.\d+)?)(?![0-9A-Za-z.+-])/);
     if (result.exitCode !== 0 || result.signal !== null || !version) {
       throw new LocalReviewUsageError('Native OCR v1.13.1 is required for this qualified adapter; install the pinned version.');
     }

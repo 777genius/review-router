@@ -36,6 +36,17 @@ describe('native OCR adapter', () => {
     if (previousBinary === undefined) delete process.env.REVIEWROUTER_OCR_BINARY;
     else process.env.REVIEWROUTER_OCR_BINARY = previousBinary;
   });
+  it('rejects unqualified OCR version suffixes', async () => {
+    const response = (version: string): NativeProcessRunner => async () => ({
+      exitCode: 0, signal: null, stderr: '', stdout: `OpenCodeReview v${version}`,
+    });
+    await expect(new NativeOcrEngine(response('1.13.1-unsupported')).doctor(snapshot.root))
+      .rejects.toThrow(/v1\.13\.1 is required/);
+    await expect(new NativeOcrEngine(response('1.13.1+unqualified')).doctor(snapshot.root))
+      .rejects.toThrow(/v1\.13\.1 is required/);
+    await expect(new NativeOcrEngine(response('1.13.1-rr.2')).doctor(snapshot.root))
+      .resolves.toBe('1.13.1-rr.2');
+  });
   it('does not dispatch even the native version command after cancellation', async () => {
     const stopped = new AbortController();
     stopped.abort();

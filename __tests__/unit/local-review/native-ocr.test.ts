@@ -104,11 +104,11 @@ describe('native OCR adapter', () => {
     expect(() => normalizeNativeOcrResult(reviewedButSkipped, [item.path], snapshot, '1.13.1'))
       .toThrow(/skipped result contradicts/);
 
-    const waivedButFailed = native('skipped');
-    waivedButFailed.comments = [];
-    waivedButFailed.manifest.coverage.waived = [item];
-    const failedEnvelope = { ...waivedButFailed, manifest: {
-      ...waivedButFailed.manifest, run_failure: { classification: 'provider', reason: 'failed' },
+    const skipped = native('skipped');
+    const failedEnvelope = { ...skipped, comments: [], manifest: {
+      ...skipped.manifest,
+      coverage: { ...skipped.manifest.coverage, waived: [item] },
+      run_failure: { classification: 'provider', reason: 'failed' },
     } };
     expect(() => normalizeNativeOcrResult(failedEnvelope, [item.path], snapshot, '1.13.1'))
       .toThrow(/skipped result contradicts/);

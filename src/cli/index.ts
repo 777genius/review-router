@@ -402,7 +402,6 @@ Review Options:
   --provider=<name> --model=<id>  Native OCR model overrides
   --config=<file>                 Legacy engine YAML configuration
   --format=text|json              Human-readable or single-object agent output
-  --dry-run                       Do not publish (still calls the model)
 
 Analytics Commands:
   summary [--days=N]              Show summary statistics

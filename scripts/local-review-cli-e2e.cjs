@@ -78,6 +78,7 @@ try {
  const outside=spawnSync(process.execPath,[path.join(projectRoot,'bin','mpr'),'help'],{cwd:temp,encoding:'utf8',timeout:30000});
  assert.equal(outside.status,0,'help must work outside a Git repository');
  const help=run(['help']);assert.equal(help.status,0);
+ assert.equal((help.stdout.match(/--dry-run/g) || []).length,1,'Help must list --dry-run only once');
  const version=run(['version']);assert.equal(version.status,0); const doctor=run(['doctor']);assert.equal(doctor.status,0,doctor.stderr);
  console.log('PASS built CLI: complete, partial, privacy, invalid-config JSON, analytics bounds, branch/commit, unchanged tree, help/version/doctor');
 } catch(error) {

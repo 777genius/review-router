@@ -7,6 +7,11 @@ import { setupComponents } from '../setup';
 import { PRContext } from '../types';
 import { logger } from '../utils/logger';
 import { generateAnalytics, printSummary } from './analytics';
+import { parseLocalReviewOptions, usesExplicitLocalOptions } from '../local-review/cli-options';
+import { LocalReviewUsageError, LocalReviewExecutionError, LocalReviewInterruptedError, exitCodeForLocalOutcome, renderLocalReview } from '../local-review/contracts';
+import { runLocalReview } from '../local-review/run-local-review';
+import { NativeOcrEngine } from '../local-review/native-ocr';
+import { ExplicitLocalConfigLoader } from '../local-review/explicit-config';
 
 /**
  * CLI interface for multi-provider code review
@@ -28,7 +33,39 @@ export class CLI {
       // Parse command and arguments
       const { command, target, options } = this.parseArgs(args);
 
-      // Check we're in a git repo
+      // Global informational commands must work outside a Git checkout.
+      if (command === 'help' || command === '--help' || command === '-h') {
+        this.showHelp();
+        return 0;
+      }
+      if (command === 'version' || command === '--version' || command === '-v') {
+        this.showVersion();
+        return 0;
+      }
+      if (command === 'doctor') {
+        return this.runDoctor();
+      }
+      if (command === 'review' && args.slice(1).some(arg => arg === '--help' || arg === '-h')) {
+        this.showHelp();
+        return 0;
+      }
+      if (command === 'review') {
+        const reviewArgs = args.slice(1);
+        // Preserve established legacy --config and --dry-run syntax. Any
+        // unknown option must go to strict parsing before a model can run.
+        const unknownOption = reviewArgs.some((arg, index) =>
+          arg.startsWith('-') &&
+          arg !== '--dry-run' &&
+          !(arg === '--config' && !!reviewArgs[index + 1] &&
+            !reviewArgs[index + 1].startsWith('-')) &&
+          !(arg.startsWith('--config=') && arg.length > '--config='.length)
+        );
+        if (usesExplicitLocalOptions(reviewArgs) || unknownOption) {
+          return this.runExplicitLocalReview(reviewArgs);
+        }
+      }
+
+      // Existing positional CLI remains unchanged unless new flags are explicitly selected.
       if (!this.gitReader.isGitRepo()) {
         console.error(
           this.formatter.formatMessage('Not in a git repository', 'error')
@@ -66,6 +103,81 @@ export class CLI {
     } catch (error) {
       console.error(this.formatter.formatMessage(String(error), 'error'));
       return 1;
+    }
+  }
+
+  /** Explicit local execution contract. Engine-specific IO stays in adapters. */
+  private async runExplicitLocalReview(args: string[]): Promise<number> {
+    const wantsJson = args.some((arg, i) => arg === '--format=json' || (arg === '--format' && args[i + 1] === 'json'));
+    try {
+      const parsed = parseLocalReviewOptions(args);
+      const cancellation = new AbortController();
+      const onInterrupt = (): void => cancellation.abort();
+      // The legacy engine has no cancellation port: do not swallow its normal
+      // terminal signals by installing a handler it cannot observe.
+      const cancellable = parsed.request.engine === 'ocr';
+      if (cancellable) {
+        process.once('SIGINT', onInterrupt);
+        process.once('SIGTERM', onInterrupt);
+      }
+      // Legacy components may log progress through console.log/info. Preserve the
+      // single-object stdout contract; diagnostics still remain visible on stderr.
+      const originalConsole = { log: console.log, info: console.info, debug: console.debug, warn: console.warn };
+      if (parsed.format === 'json') {
+        const diagnostic = (...values: unknown[]): void => console.error(...values);
+        console.log = diagnostic;
+        console.info = diagnostic;
+        console.debug = diagnostic;
+        console.warn = diagnostic;
+      }
+      const result = await (async () => {
+        try {
+          return await runLocalReview(
+            { ...parsed.request, ...(cancellable ? { signal: cancellation.signal } : {}) },
+            { configFile: parsed.configFile }
+          );
+        } finally {
+          if (parsed.format === 'json') {
+            console.log = originalConsole.log;
+            console.info = originalConsole.info;
+            console.debug = originalConsole.debug;
+            console.warn = originalConsole.warn;
+          }
+          if (cancellable) {
+            process.removeListener('SIGINT', onInterrupt);
+            process.removeListener('SIGTERM', onInterrupt);
+          }
+        }
+      })();
+      if (parsed.format === 'json') process.stdout.write(JSON.stringify(result) + '\n');
+      else console.log(renderLocalReview(result));
+      return exitCodeForLocalOutcome(result);
+    } catch (error) {
+      const usage = error instanceof LocalReviewUsageError;
+      const interrupted = error instanceof LocalReviewInterruptedError;
+      const message = usage || interrupted || error instanceof LocalReviewExecutionError
+        ? error.message : 'Local review failed; no clean result was established.';
+      if (wantsJson) {
+        process.stdout.write(JSON.stringify({ schemaVersion: 1, status: 'failed', error: {
+          kind: interrupted ? 'interrupted' : usage ? 'usage' : 'execution', message
+        } }) + '\n');
+      } else {
+        console.error(this.formatter.formatMessage(message, 'error'));
+      }
+      return interrupted ? 130 : usage ? 4 : 3;
+    }
+  }
+
+  private async runDoctor(): Promise<number> {
+    console.log('ReviewRouter local engines: legacy (built-in)');
+    try {
+      const version = await new NativeOcrEngine().doctor(process.cwd());
+      console.log('Native OCR: ' + version + ' (installed; authentication not probed)');
+      return 0;
+    } catch {
+      console.log('Native OCR: unavailable or incompatible (requires pinned v1.13.1)');
+      console.log('Set REVIEWROUTER_OCR_BINARY to an absolute trusted binary path, or install a compatible OCR.');
+      return 4;
     }
   }
 
@@ -130,7 +242,8 @@ export class CLI {
       // Setup components (CLI mode)
       components = await setupComponents({
         cliMode: true,
-        dryRun: (options.dryRun as boolean) || false,
+        ...(options['dry-run'] === true ? { dryRun: true } : {}),
+        ...(typeof options.config === 'string' ? { config: ExplicitLocalConfigLoader.loadFromPath(options.config) } : {}),
       });
 
       // Create CLI reviewer
@@ -166,15 +279,18 @@ export class CLI {
     try {
       if (subcommand === 'summary' || !subcommand) {
         // Show summary
-        const days = typeof options.days === 'number' ? options.days : 30;
+        const days = Number(options.days ?? 30);
+        if (!Number.isSafeInteger(days) || days < 1 || days > 3650) throw new LocalReviewUsageError('--days must be 1..3650.');
         await printSummary(days);
         return 0;
       } else if (subcommand === 'generate') {
         // Generate dashboard
+        const days = Number(options.days ?? 30);
+        if (!Number.isSafeInteger(days) || days < 1 || days > 3650) throw new LocalReviewUsageError('--days must be 1..3650.');
         await generateAnalytics({
           output: (options.output as string) || './reports',
           format: (options.format as 'html' | 'csv' | 'json') || 'html',
-          days: (options.days as number) || 30,
+          days,
         });
         return 0;
       } else {
@@ -234,7 +350,10 @@ Examples:
     for (let i = 1; i < args.length; i++) {
       const arg = args[i];
 
-      if (arg.startsWith('--')) {
+      if (command === 'review' && arg === '--config' && args[i + 1] && !args[i + 1].startsWith('-')) {
+        // Keep the legacy parser from misclassifying a separated config path as a revision.
+        options.config = args[++i];
+      } else if (arg.startsWith('--')) {
         // Long option
         const [key, value] = arg.substring(2).split('=');
         options[key] = value || true;
@@ -264,6 +383,7 @@ Usage:
   review-router analytics <command> [options]
                                    Manage analytics and dashboards
   review-router help               Show this help
+  review-router doctor             Check local engines (no model call)
   review-router version            Show version
 
 Review Targets:
@@ -273,7 +393,15 @@ Review Targets:
   abc123..def456                  Review commit range
 
 Review Options:
-  --dry-run                       Preview without posting results
+  --dry-run                       No GitHub publication (still calls the model)
+  --engine=legacy|ocr             Select legacy (default) or native OCR engine
+  --scope=branch --base=main      Review branch changes since merge-base
+  --scope=commit --ref=HEAD       Review exactly one commit
+  --include-untracked             Allow native OCR to read new files
+  --preview                       Native OCR file selection, no model request
+  --provider=<name> --model=<id>  Native OCR model overrides
+  --config=<file>                 Legacy engine YAML configuration
+  --format=text|json              Human-readable or single-object agent output
 
 Analytics Commands:
   summary [--days=N]              Show summary statistics
@@ -283,15 +411,28 @@ Examples:
   review-router review            Review uncommitted changes
   review-router review HEAD~1     Review last commit
   review-router review main..feature
-                                   Review feature branch
+                                   Legacy: compare two branch tips
+  review-router review main..feature --format json
+                                   Agent JSON, same legacy Git range
+  review-router review --engine ocr --preview
+                                   Show files selected without using a model
+  review-router review --engine ocr --scope branch --base origin/main
+                                   OCR: review merge-base through HEAD
+  review-router review --engine ocr --format json
+                                   OCR: machine-readable result for agents
   review-router analytics summary Show analytics summary
   review-router analytics generate
                                    Generate HTML dashboard
 
-Exit Codes:
-  0    No issues or only minor issues
-  1    Major issues found
-  2    Critical issues found
+Explicit review mode exit codes:
+  0    Complete without blocking findings, or skipped (inspect JSON status)
+  1    Major findings / blocking action items
+  2    Critical findings
+  3    Partial, failed or stale review
+  4    Invalid flags, configuration or unavailable engine
+  130  Cancelled native OCR execution
+  Note: agent callers must inspect status + coverage.complete, not exit alone.
+  Without explicit options, the historical legacy exit codes remain unchanged.
 `;
 
     console.log(help);
@@ -317,10 +458,10 @@ if (require.main === module) {
   cli
     .run(args)
     .then((exitCode) => {
-      process.exit(exitCode);
+      process.exitCode = exitCode;
     })
     .catch((error) => {
       console.error('Fatal error:', error);
-      process.exit(1);
+      process.exitCode = 1;
     });
 }

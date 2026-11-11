@@ -34,7 +34,7 @@ export class ConfigLoader {
     );
   }
 
-  private static resolve(
+  protected static resolve(
     fileConfig: Partial<ReviewConfig>,
     envConfig: Partial<ReviewConfig>
   ): ReviewConfig {
@@ -89,7 +89,7 @@ export class ConfigLoader {
     return {};
   }
 
-  private static loadFromEnv(
+  protected static loadFromEnv(
     env: Readonly<Record<string, string | undefined>> = process.env,
     modelTransport = false
   ): Partial<ReviewConfig> {
@@ -225,7 +225,7 @@ export class ConfigLoader {
     };
   }
 
-  private static normalizeKeys(
+  protected static normalizeKeys(
     config: ReviewConfigFile
   ): Partial<ReviewConfig> {
     return {

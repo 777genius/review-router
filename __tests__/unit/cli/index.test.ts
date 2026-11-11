@@ -86,6 +86,22 @@ describe('CLI', () => {
       expect(result.options).toEqual({ d: true });
     });
 
+    it('retains legacy branch-range semantics with an explicit config', async () => {
+      const args = ['review', 'main..feature', '--config', 'review.yml'];
+      const parsed = (cli as any).parseArgs(args);
+      expect(parsed.target).toBe('main..feature');
+      expect(parsed.options.config).toBe('review.yml');
+      // No modern engine flag: the historic Git range must be preserved.
+      expect((cli as any).parseArgs(['review', 'main..feature', '--config=review.yml']).target)
+        .toBe('main..feature');
+    });
+
+    it('does not mistake a separated review --config value for a revision', () => {
+      const result = (cli as any).parseArgs(['review', '--config', 'review.yml']);
+      expect(result.target).toBeUndefined();
+      expect(result.options.config).toBe('review.yml');
+    });
+
     it('parses long options with values', () => {
       const result = (cli as any).parseArgs(['review', '--config=custom.yml']);
       expect(result.command).toBe('review');
@@ -126,6 +142,28 @@ describe('CLI', () => {
       expect(consoleErrorSpy).toHaveBeenCalled();
 
       consoleErrorSpy.mockRestore();
+    });
+
+    it('rejects an unknown review flag before reading Git or invoking a provider', async () => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      try {
+        expect(await cli.run(['review', '--engnie=ocr'])).toBe(4);
+        expect(mockGitReader.isGitRepo).not.toHaveBeenCalled();
+        expect(mockGitReader.getUncommittedChanges).not.toHaveBeenCalled();
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('shows review help outside a Git checkout with -h', async () => {
+      mockGitReader.isGitRepo.mockReturnValue(false);
+      const logSpy = jest.spyOn(console, 'log').mockImplementation();
+      try {
+        expect(await cli.run(['review', '-h'])).toBe(0);
+        expect(mockGitReader.isGitRepo).not.toHaveBeenCalled();
+      } finally {
+        logSpy.mockRestore();
+      }
     });
 
     it('returns 1 for unknown command', async () => {

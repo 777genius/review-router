@@ -2,6 +2,8 @@
 
 ReviewRouter is a GitHub Action for pull request review with Codex, OpenRouter, and experimental CLI providers for Claude Code, Gemini, and OpenCode.
 
+Local developer/agent CLI: [local code review with native OpenCodeReview or legacy engines](docs/local-review-cli.md) (experimental; native engine is explicit opt-in).
+
 The production-focused installer currently hardens the Codex and OpenRouter paths first. The other provider adapters are still available through `REVIEW_PROVIDERS`, but they are not yet the recommended zero-config setup path.
 
 Current focus: a practical PR reviewer that can run from GitHub Actions, post a PR summary, post a small number of inline findings, and optionally fail the check on serious issues. The Codex path is designed to use a ChatGPT subscription OAuth login instead of OpenAI API billing.

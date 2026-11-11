@@ -71,6 +71,10 @@ jobs:
           REVIEWROUTER_TEST_APPROVED_OCR_BINARY="$RUNNER_TEMP/reviewrouter-ocr/opencodereview" \
             npm test -- __tests__/unit/context-tools/ocr-native.test.ts --runInBand
       - run: npm run build
+      - name: Qualify local CLI preview against pinned native OCR (no model)
+        env:
+          REVIEWROUTER_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview
+        run: node scripts/local-review-pinned-preview-e2e.cjs
       - name: Verify committed runtime artifacts
         run: |
           npm run check:context-gateway-release-metadata

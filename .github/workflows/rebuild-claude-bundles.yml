@@ -1,0 +1,47 @@
+name: One-time Claude Action bundle refresh
+
+on:
+  push:
+    branches: [feat/claude-api-key-cli-e2e-20261111]
+    paths:
+      - .github/workflows/rebuild-claude-bundles.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: claude-bundle-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.repository == '777genius/review-router' && github.ref == 'refs/heads/feat/claude-api-key-cli-e2e-20261111' && github.actor == '777genius'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/claude-api-key-cli-e2e-20261111
+          persist-credentials: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Regenerate source-pinned bundles
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          npm run check:context-gateway-release-metadata
+          git diff --exit-code -- . ':!dist'
+      - name: Commit built artifacts back to this branch
+        run: |
+          set -euo pipefail
+          git config user.name "ReviewRouter bundle builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add dist
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(action): refresh committed Claude dual-auth runtime bundles"
+            git push origin HEAD:refs/heads/feat/claude-api-key-cli-e2e-20261111
+          fi

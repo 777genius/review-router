@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'src/cli/**'
+      - '.npmignore'
+      - 'package.json'
       - 'src/local-review/**'
       - 'src/config/loader.ts'
       - 'bin/mpr'

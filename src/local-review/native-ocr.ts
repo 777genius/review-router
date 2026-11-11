@@ -22,9 +22,42 @@ export const runNativeProcess: NativeProcessRunner = (command, args, options) =>
   const out: Buffer[] = [], err: Buffer[] = [];
   let outSize = 0, errSize = 0;
   let abortReason: string | null = null;
-  const fail = (reason: string): void => { abortReason = reason; child.kill(); };
-  const timeout = setTimeout(() => fail('Native OCR exceeded the local review timeout.'), options.timeoutMs);
+  let finished = false;
+  let forceTimer: ReturnType<typeof setTimeout> | undefined;
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
   const abort = (): void => fail('Local review interrupted.');
+  const finish = (exitCode: number | null, signal: NodeJS.Signals | null): void => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timeout);
+    if (forceTimer) clearTimeout(forceTimer);
+    if (fallbackTimer) clearTimeout(fallbackTimer);
+    options.signal?.removeEventListener('abort', abort);
+    if (abortReason === 'Local review interrupted.') reject(new LocalReviewInterruptedError());
+    else if (abortReason === 'Native OCR executable unavailable or cannot start.') reject(new LocalReviewUsageError(abortReason));
+    else if (abortReason) reject(new LocalReviewExecutionError(abortReason));
+    else resolve({ exitCode, signal, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8') });
+  };
+  const fail = (reason: string): void => {
+    if (finished || abortReason) return;
+    abortReason = reason;
+    try { child.kill('SIGTERM'); } catch { /* Close/error or fallback settles below. */ }
+    forceTimer = setTimeout(() => {
+      if (!finished) {
+        try { child.kill('SIGKILL'); } catch { /* Fallback still settles. */ }
+      }
+    }, 750);
+    fallbackTimer = setTimeout(() => {
+      if (!finished) {
+        // Descendants can hold inherited stdio open even after their parent dies.
+        child.stdout.destroy();
+        child.stderr.destroy();
+        child.unref();
+        finish(null, null);
+      }
+    }, 1500);
+  };
+  const timeout = setTimeout(() => fail('Native OCR exceeded the local review timeout.'), options.timeoutMs);
   options.signal?.addEventListener('abort', abort, { once: true });
   if (options.signal?.aborted) abort();
   child.stdout.on('data', (chunk: Buffer) => {
@@ -37,15 +70,8 @@ export const runNativeProcess: NativeProcessRunner = (command, args, options) =>
     if (errSize > MAX_STDERR) fail('Native OCR diagnostics exceeded the output limit.');
     else err.push(chunk);
   });
-  child.on('error', () => { abortReason = 'Native OCR executable unavailable or cannot start.'; });
-  child.on('close', (exitCode, signal) => {
-    clearTimeout(timeout);
-    options.signal?.removeEventListener('abort', abort);
-    if (abortReason === 'Local review interrupted.') reject(new LocalReviewInterruptedError());
-    else if (abortReason === 'Native OCR executable unavailable or cannot start.') reject(new LocalReviewUsageError(abortReason));
-    else if (abortReason) reject(new LocalReviewExecutionError(abortReason));
-    else resolve({ exitCode, signal, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8') });
-  });
+  child.on('error', () => fail('Native OCR executable unavailable or cannot start.'));
+  child.on('close', finish);
 });
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -86,20 +112,42 @@ function parseJson(text: string, what: string): Record<string, unknown> {
   try { return requiredRecord(JSON.parse(text), what); }
   catch { throw new Error(`Native OCR ${what} was not a valid JSON object.`); }
 }
-function previewSelected(preview: Record<string, unknown>): string[] {
+type PreviewExclusion = { path: string; reason: string };
+function previewSelected(preview: Record<string, unknown>): {
+  selected: string[]; policyExcluded: PreviewExclusion[]; unsupported: PreviewExclusion[]
+} {
   if (!Array.isArray(preview.files) || preview.files.length > 5000) {
     throw new Error('Native OCR preview omitted the bounded file inventory.');
   }
   const selected: string[] = [];
+  const policyExcluded: PreviewExclusion[] = [];
+  const unsupported: PreviewExclusion[] = [];
+  const seen = new Set<string>();
+  const policyReasons = new Set(['user_exclude', 'default_path', 'secret_exclude', 'provider_directory', 'deleted']);
   for (const item of preview.files) {
     const f = requiredRecord(item, 'preview file');
     if (typeof f.will_review !== 'boolean') throw new Error('Native OCR preview file has no selection decision.');
-    if (f.will_review) selected.push(safePath(f.path));
+    const file = safePath(f.path);
+    if (seen.has(file)) throw new Error('Native OCR preview contains duplicate paths.');
+    seen.add(file);
+    const reason = f.exclude_reason === undefined ? '' : f.exclude_reason;
+    if (typeof reason !== 'string' || reason.length > 80 || containsControlCharacters(reason)) {
+      throw new Error('Native OCR preview has an invalid exclusion reason.');
+    }
+    if (f.will_review) {
+      if (reason) throw new Error('Native OCR selected file has an exclusion reason.');
+      selected.push(file);
+    } else {
+      // Unknown or unsupported exclusions cannot be silently treated as clean.
+      (policyReasons.has(reason) ? policyExcluded : unsupported).push({ path: file, reason: reason || 'unknown' });
+    }
   }
-  if (new Set(selected).size !== selected.length || preview.reviewable_count !== selected.length) {
+  if (preview.reviewable_count !== selected.length ||
+      (preview.excluded_count !== undefined && preview.excluded_count !== policyExcluded.length + unsupported.length) ||
+      (preview.total_files !== undefined && preview.total_files !== seen.size)) {
     throw new Error('Native OCR preview file selection is inconsistent.');
   }
-  return selected.sort();
+  return { selected: selected.sort(), policyExcluded, unsupported };
 }
 function coverageSet(value: unknown, name: string): { itemId: string; path: string }[] {
   if (!Array.isArray(value) || value.length > 5000) throw new Error(`Invalid OCR manifest ${name} set.`);
@@ -264,24 +312,33 @@ export class NativeOcrEngine {
     if (request.model) args.push('--model', request.model);
     const preview = await this.runner(binary, [...args, '--preview'], { cwd: snapshot.root, timeoutMs: PREVIEW_TIMEOUT_MS, maxOutput: MAX_STDOUT, signal: request.signal });
     if (preview.exitCode !== 0 || preview.signal !== null) throw new Error('Native OCR could not preview the selected files.');
-    const selected = previewSelected(parseJson(preview.stdout, 'preview'));
+    const selection = previewSelected(parseJson(preview.stdout, 'preview'));
+    const selected = selection.selected;
+    const unsupportedPaths = selection.unsupported.map(entry => entry.path);
+    const excludedWarnings = [
+      ...selection.unsupported.map(entry => `Native OCR excluded ${entry.path} (${entry.reason}); coverage is incomplete.`),
+      ...(selection.policyExcluded.length > 0
+        ? [`Native OCR intentionally excluded ${selection.policyExcluded.length} file(s) under its configured policy.`]
+        : []),
+    ];
     if (selected.length === 0) {
       const empty: LocalReviewFinding[] = [];
-      return { schemaVersion: 1, engine: { id: 'ocr', version }, status: 'skipped',
+      return { schemaVersion: 1, engine: { id: 'ocr', version },
+        status: unsupportedPaths.length > 0 ? 'partial' : 'skipped',
         input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
-        coverage: { selected: 0, reviewed: 0, omitted: [], complete: false },
+        coverage: { selected: 0, reviewed: 0, omitted: unsupportedPaths, complete: false },
         provider: { name: request.provider ?? null, model: request.model ?? null },
         findings: empty, summary: summaryFromFindings(empty), blocking: false,
-        warnings: ['No eligible files selected by native OCR; no model was called.'] };
+        warnings: ['No eligible files selected by native OCR; no model was called.', ...excludedWarnings] };
     }
     if (request.preview) {
       const empty: LocalReviewFinding[] = [];
       return { schemaVersion: 1, engine: { id: 'ocr', version }, status: 'skipped',
         input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
-        coverage: { selected: selected.length, reviewed: 0, omitted: selected, complete: false },
+        coverage: { selected: selected.length, reviewed: 0, omitted: [...selected, ...unsupportedPaths], complete: false },
         provider: { name: request.provider ?? null, model: request.model ?? null },
         findings: empty, summary: summaryFromFindings(empty), blocking: false,
-        warnings: ['Preview only: no model was called.'] };
+        warnings: ['Preview only: no model was called.', ...excludedWarnings] };
     }
     const actual = await this.runner(binary, args, { cwd: snapshot.root, timeoutMs: REVIEW_TIMEOUT_MS, maxOutput: MAX_STDOUT, signal: request.signal });
     if (actual.exitCode !== 0 || actual.signal !== null) throw new Error('Native OCR process did not complete successfully.');
@@ -289,6 +346,12 @@ export class NativeOcrEngine {
     if (request.model && result.provider.model && result.provider.model !== request.model) {
       throw new Error('Observed native OCR model differed from the explicit model request.');
     }
-    return result;
+    if (unsupportedPaths.length === 0 && excludedWarnings.length === 0) return result;
+    return { ...result,
+      status: unsupportedPaths.length > 0 && result.status === 'complete' ? 'partial' : result.status,
+      coverage: { ...result.coverage, complete: result.coverage.complete && unsupportedPaths.length === 0,
+        omitted: [...result.coverage.omitted, ...unsupportedPaths] },
+      warnings: [...result.warnings, ...excludedWarnings],
+    };
   }
 }

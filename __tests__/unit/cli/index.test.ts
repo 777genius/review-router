@@ -86,6 +86,12 @@ describe('CLI', () => {
       expect(result.options).toEqual({ d: true });
     });
 
+    it('does not mistake a separated review --config value for a revision', () => {
+      const result = (cli as any).parseArgs(['review', '--config', 'review.yml']);
+      expect(result.target).toBeUndefined();
+      expect(result.options.config).toBe('review.yml');
+    });
+
     it('parses long options with values', () => {
       const result = (cli as any).parseArgs(['review', '--config=custom.yml']);
       expect(result.command).toBe('review');

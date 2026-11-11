@@ -33,7 +33,14 @@ export async function runLegacyLocalReview(
         ? 'Legacy Git diff parser omitted changed files; no clean result is established.'
         : 'No eligible tracked changes for the legacy engine.'] };
   }
-  const config = configFile ? ConfigLoader.loadFromPath(configFile) : undefined;
+  let config: ReturnType<typeof ConfigLoader.loadFromPath> | undefined;
+  if (configFile) {
+    try {
+      config = ConfigLoader.loadFromPath(configFile);
+    } catch {
+      throw new LocalReviewUsageError('Cannot use --config: file missing, unreadable, or invalid YAML/configuration.');
+    }
+  }
   const components = await setupComponents({ cliMode: true,
     ...(request.dryRun ? { dryRun: true } : {}),
     ...(config ? { config } : {}),

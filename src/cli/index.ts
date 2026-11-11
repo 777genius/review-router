@@ -114,6 +114,16 @@ export class CLI {
         process.once('SIGINT', onInterrupt);
         process.once('SIGTERM', onInterrupt);
       }
+      // Legacy components may log progress through console.log/info. Preserve the
+      // single-object stdout contract; diagnostics still remain visible on stderr.
+      const originalConsole = { log: console.log, info: console.info, debug: console.debug, warn: console.warn };
+      if (parsed.format === 'json') {
+        const diagnostic = (...values: unknown[]): void => console.error(...values);
+        console.log = diagnostic;
+        console.info = diagnostic;
+        console.debug = diagnostic;
+        console.warn = diagnostic;
+      }
       const result = await (async () => {
         try {
           return await runLocalReview(
@@ -121,6 +131,12 @@ export class CLI {
             { configFile: parsed.configFile }
           );
         } finally {
+          if (parsed.format === 'json') {
+            console.log = originalConsole.log;
+            console.info = originalConsole.info;
+            console.debug = originalConsole.debug;
+            console.warn = originalConsole.warn;
+          }
           if (cancellable) {
             process.removeListener('SIGINT', onInterrupt);
             process.removeListener('SIGTERM', onInterrupt);
@@ -220,7 +236,7 @@ export class CLI {
       // Setup components (CLI mode)
       components = await setupComponents({
         cliMode: true,
-        dryRun: options['dry-run'] === true,
+        ...(options['dry-run'] === true ? { dryRun: true } : {}),
         ...(typeof options.config === 'string' ? { config: ConfigLoader.loadFromPath(options.config) } : {}),
       });
 
@@ -263,10 +279,12 @@ export class CLI {
         return 0;
       } else if (subcommand === 'generate') {
         // Generate dashboard
+        const days = Number(options.days ?? 30);
+        if (!Number.isSafeInteger(days) || days < 1 || days > 3650) throw new LocalReviewUsageError('--days must be 1..3650.');
         await generateAnalytics({
           output: (options.output as string) || './reports',
           format: (options.format as 'html' | 'csv' | 'json') || 'html',
-          days: Number(options.days ?? 30),
+          days,
         });
         return 0;
       } else {
@@ -326,7 +344,10 @@ Examples:
     for (let i = 1; i < args.length; i++) {
       const arg = args[i];
 
-      if (arg.startsWith('--')) {
+      if (command === 'review' && arg === '--config' && args[i + 1] && !args[i + 1].startsWith('-')) {
+        // Keep the legacy parser from misclassifying a separated config path as a revision.
+        options.config = args[++i];
+      } else if (arg.startsWith('--')) {
         // Long option
         const [key, value] = arg.substring(2).split('=');
         options[key] = value || true;

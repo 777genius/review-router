@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { NativeOcrEngine, normalizeNativeOcrResult, type NativeProcessRunner } from '../../../src/local-review/native-ocr';
+import { NativeOcrEngine, normalizeNativeOcrResult, runNativeProcess, type NativeProcessRunner } from '../../../src/local-review/native-ocr';
 import type { LocalGitSnapshot } from '../../../src/local-review/git-snapshot';
 import type { LocalReviewRunRequest } from '../../../src/local-review/contracts';
 
@@ -106,6 +106,46 @@ describe('native OCR adapter', () => {
     expect(result.status).toBe('partial');
     expect(result.findings[0]).toMatchObject({ path: item.path, line: null, endLine: null });
     expect(result.warnings.join(' ')).toMatch(/verified source location/);
+  });
+  it('fails closed when OCR excludes a changed file as too large, preserving its reason', async () => {
+    const custom: NativeProcessRunner = async (cmd, args, options) => {
+      const response = await runner(native())(cmd, args, options);
+      if (!args.includes('--preview')) return response;
+      return { ...response, stdout: JSON.stringify({
+        files: [
+          ...preview.files,
+          { path: 'src/large.ts', status: 'modified', will_review: false, exclude_reason: 'too_large' },
+        ],
+        reviewable_count: 1, excluded_count: 1, total_files: 2,
+      }) };
+    };
+    const result = await new NativeOcrEngine(custom).run(snapshot, request);
+    expect(result.status).toBe('partial');
+    expect(result.coverage.complete).toBe(false);
+    expect(result.coverage.omitted).toContain('src/large.ts');
+    expect(result.warnings.join(' ')).toMatch(/src\/large.ts \(too_large\)/);
+  });
+  it('reports policy-excluded files but does not count them as inference failures', async () => {
+    const custom: NativeProcessRunner = async (cmd, args, options) => {
+      const response = await runner(native())(cmd, args, options);
+      if (!args.includes('--preview')) return response;
+      return { ...response, stdout: JSON.stringify({
+        files: [
+          ...preview.files,
+          { path: 'src/secret.env', status: 'modified', will_review: false, exclude_reason: 'secret_exclude' },
+        ],
+        reviewable_count: 1, excluded_count: 1, total_files: 2,
+      }) };
+    };
+    const result = await new NativeOcrEngine(custom).run(snapshot, request);
+    expect(result.status).toBe('complete');
+    expect(result.coverage.omitted).toEqual([]);
+    expect(result.warnings.join(' ')).toMatch(/intentionally excluded/);
+  });
+  it('bounds a child that does not terminate gracefully', async () => {
+    await expect(runNativeProcess(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);'], {
+      cwd: process.cwd(), timeoutMs: 100, maxOutput: 16384,
+    })).rejects.toThrow(/timeout/);
   });
   it('does not call the model when only a preview was requested', async () => {
     const requests: readonly string[][] = [] as string[][];

@@ -80,6 +80,24 @@ describe('native OCR adapter', () => {
     expect(unknown.status).toBe('partial');
     expect(unknown.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/model identity/)]));
   });
+  it('does not accept malformed or contradictory native warning/failure envelopes', () => {
+    const malformedWarnings = { ...native(), warnings: 'not an array' };
+    expect(() => normalizeNativeOcrResult(malformedWarnings, [item.path], snapshot, '1.13.1'))
+      .toThrow(/warnings field/);
+
+    const malformedFailure = { ...native(), manifest: {
+      ...native().manifest, run_failure: true,
+    } };
+    expect(() => normalizeNativeOcrResult(malformedFailure, [item.path], snapshot, '1.13.1'))
+      .toThrow(/run failure field/);
+
+    const reportedFailure = { ...native(), manifest: {
+      ...native().manifest, run_failure: { classification: 'provider', reason: 'synthetic_failure' },
+    } };
+    const result = normalizeNativeOcrResult(reportedFailure, [item.path], snapshot, '1.13.1');
+    expect(result.status).toBe('partial');
+    expect(result.coverage.complete).toBe(false);
+  });
   it('preserves native file-level findings when OCR could not verify a line', () => {
     const unanchored = native();
     unanchored.comments[0].start_line = 0;

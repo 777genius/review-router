@@ -50,7 +50,7 @@ describe('Claude CLI credential isolation - actual subprocess / synthetic output
   it.each([
     {
       mode: 'claude-api-key' as const,
-      credential: 'sk-ant-api03-synthetic-key-only',
+      credential: 'sk-ant-api-v4-synthetic-key-only',
     },
     {
       mode: 'claude-oauth' as const,

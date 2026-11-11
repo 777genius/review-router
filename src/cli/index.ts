@@ -99,11 +99,6 @@ export class CLI {
     const wantsJson = args.some((arg, i) => arg === '--format=json' || (arg === '--format' && args[i + 1] === 'json'));
     try {
       const parsed = parseLocalReviewOptions(args);
-      if (parsed.request.engine === 'legacy' && parsed.format === 'json') {
-        throw new LocalReviewUsageError(
-          'Legacy JSON is not yet qualified; use --engine ocr --format json or the existing legacy terminal output.'
-        );
-      }
       const cancellation = new AbortController();
       const onInterrupt = (): void => cancellation.abort();
       // The legacy engine has no cancellation port: do not swallow its normal

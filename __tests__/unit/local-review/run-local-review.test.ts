@@ -47,6 +47,19 @@ describe('local review application boundary', () => {
     expect(exitCodeForLocalOutcome(result)).toBe(0);
   });
 
+  it('uses the same normalized contract for the legacy engine without invoking OCR', async () => {
+    const legacy = { ...accepted, engine: { id: 'legacy' as const, version: null }, status: 'partial' as const,
+      coverage: { ...accepted.coverage, complete: false } };
+    const result = await runLocalReview({ ...request, engine: 'legacy' }, {
+      git: new FakeGit(base, base),
+      ocr: { run: async () => { throw new Error('OCR was not selected'); } },
+      legacy: async () => legacy,
+    });
+    expect(result.engine.id).toBe('legacy');
+    expect(result.status).toBe('partial');
+    expect(exitCodeForLocalOutcome(result)).toBe(3);
+  });
+
   it('fails closed when files or refs change while model inference runs', async () => {
     const changed = { ...base, digest: 'sha256:' + 'c'.repeat(64) };
     const result = await runLocalReview(request, {

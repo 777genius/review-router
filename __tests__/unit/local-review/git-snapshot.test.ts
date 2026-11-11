@@ -29,6 +29,16 @@ describe('local Git scope snapshots (real git)', () => {
     writeFileSync(path.join(dir, 'new.ts'), 'export const secret = false;\n');
     expect(reader.capture({ kind: 'worktree' }, true).digest).not.toBe(all.digest);
   });
+  it('does not impose the included-file cap on excluded untracked files', () => {
+    for (let i = 0; i < 2001; i++) {
+      writeFileSync(path.join(dir, `untracked-${i}.ts`), '// not reviewed\\n');
+    }
+    const reader = new LocalGitSnapshotReader(dir);
+    const excluded = reader.capture({ kind: 'worktree' }, false);
+    expect(excluded.untrackedFiles).toBe(2001);
+    expect(excluded.changedFiles).toBe(0);
+    expect(() => reader.capture({ kind: 'worktree' }, true)).toThrow(/Too many untracked/);
+  });
   it('compares branch changes from merge-base and resolves immutable commit refs', () => {
     git(dir, 'checkout', '-qb', 'feature');
     writeFileSync(path.join(dir, 'source.ts'), 'export const a = 3;\n');

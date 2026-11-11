@@ -16,6 +16,7 @@ review-router review --engine ocr              # native OCR workspace review
 review-router review --engine ocr --include-untracked
 review-router review --engine ocr --scope branch --base origin/main
 review-router review --engine ocr --scope commit --ref HEAD
+review-router review --format json              # legacy engine in the same JSON schema
 review-router review --engine ocr --format json
 review-router review --engine ocr --preview
 ```

@@ -97,7 +97,7 @@ export class LocalGitSnapshotReader {
         ? ['diff', '--no-ext-diff', '--name-only', '-z', 'HEAD']
         : ['ls-files', '--cached', '-z'])).length;
       untrackedPaths = splitNul(git(root, ['ls-files', '--others', '--exclude-standard', '-z']));
-      if (untrackedPaths.length > MAX_UNTRACKED_FILES) {
+      if (includeUntracked && untrackedPaths.length > MAX_UNTRACKED_FILES) {
         throw new LocalReviewUsageError('Too many untracked files for bounded local review.');
       }
       untrackedFiles = untrackedPaths.length;

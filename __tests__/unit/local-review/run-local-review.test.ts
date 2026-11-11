@@ -47,6 +47,11 @@ describe('local review application boundary', () => {
     expect(exitCodeForLocalOutcome(result)).toBe(0);
   });
 
+  it('preserves the legacy gate for action items without major or critical findings', () => {
+    expect(exitCodeForLocalOutcome({ ...accepted, blocking: true })).toBe(1);
+    expect(exitCodeForLocalOutcome({ ...accepted, blocking: false })).toBe(0);
+  });
+
   it('uses the same normalized contract for the legacy engine without invoking OCR', async () => {
     const legacy = { ...accepted, engine: { id: 'legacy' as const, version: null }, status: 'partial' as const,
       coverage: { ...accepted.coverage, complete: false } };

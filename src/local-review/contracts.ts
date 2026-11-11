@@ -73,7 +73,7 @@ export function exitCodeForLocalOutcome(result: LocalReviewOutcome): number {
   if (result.status === 'partial' || result.status === 'failed' || result.status === 'stale') return 3;
   if (result.status === 'skipped') return 0; // status remains explicit, not a green review
   if (result.summary.critical > 0) return 2;
-  if (result.summary.major > 0) return 1;
+  if (result.summary.major > 0 || result.blocking) return 1;
   return 0;
 }
 

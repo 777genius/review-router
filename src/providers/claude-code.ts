@@ -264,7 +264,7 @@ export class ClaudeCodeProvider extends Provider {
 
   /** A missing API key is never an invitation to use ambient Claude login. */
   private readAnthropicApiKey(): string {
-    const value = process.env[ANTHROPIC_API_KEY_ENV]?.trim();
+    const value = process.env[ANTHROPIC_API_KEY_ENV];
     if (!value) {
       throw new Error(
         'ANTHROPIC_API_KEY is required for Claude API-key authentication.'

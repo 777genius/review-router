@@ -80,6 +80,17 @@ describe('native OCR adapter', () => {
     expect(unknown.status).toBe('partial');
     expect(unknown.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/model identity/)]));
   });
+  it('rejects provider substitution or absent provenance for an explicit provider choice', async () => {
+    await expect(new NativeOcrEngine(runner(native())).run(snapshot, {
+      ...request, provider: 'different-provider',
+    })).rejects.toThrow(/provider differed/);
+    const withoutProvider = native();
+    withoutProvider.llm.provider = '';
+    withoutProvider.manifest.execution.provider = '';
+    await expect(new NativeOcrEngine(runner(withoutProvider)).run(snapshot, {
+      ...request, provider: 'test',
+    })).rejects.toThrow(/provider differed/);
+  });
   it('does not accept malformed or contradictory native warning/failure envelopes', () => {
     const malformedWarnings = { ...native(), warnings: 'not an array' };
     expect(() => normalizeNativeOcrResult(malformedWarnings, [item.path], snapshot, '1.13.1'))

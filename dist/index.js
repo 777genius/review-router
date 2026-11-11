@@ -130461,7 +130461,10 @@ ${hint}` : text3;
   }
   async canRun(cmd, args) {
     return new Promise((resolve6) => {
-      const proc = (0, import_child_process2.spawn)(cmd, args, { stdio: "ignore" });
+      const proc = (0, import_child_process2.spawn)(cmd, args, {
+        stdio: "ignore",
+        env: buildCliSafeEnv({ includeWorkspaceEnv: false })
+      });
       proc.on("error", () => resolve6(false));
       proc.on("close", (code) => resolve6(code === 0));
     });

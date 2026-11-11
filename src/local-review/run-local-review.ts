@@ -30,7 +30,11 @@ export async function runLocalReview(
   if (request.engine === 'ocr' && request.scope.kind !== 'worktree' && before.dirty) {
     throw new LocalReviewUsageError('Native OCR branch/commit review requires a clean working tree; its agent reads local context files.');
   }
-  if (before.changedFiles === 0) return emptyOutcome(before, request.engine);
+  // Explicit legacy configs are validated even for an empty diff: a missing or
+  // invalid config cannot quietly produce a successful skipped review.
+  if (before.changedFiles === 0 && !(request.engine === 'legacy' && dependencies.configFile)) {
+    return emptyOutcome(before, request.engine);
+  }
   let result: LocalReviewOutcome;
   result = request.engine === 'ocr'
     ? await (dependencies.ocr ?? new NativeOcrEngine()).run(before, request)

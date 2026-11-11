@@ -16,6 +16,14 @@ export async function runLegacyLocalReview(
   if (request.includeUntracked) {
     throw new LocalReviewUsageError('Legacy engine does not safely support untracked file review.');
   }
+  let config: ReturnType<typeof ConfigLoader.loadFromPath> | undefined;
+  if (configFile) {
+    try {
+      config = ConfigLoader.loadFromPath(configFile);
+    } catch {
+      throw new LocalReviewUsageError('Cannot use --config: file missing, unreadable, or invalid YAML/configuration.');
+    }
+  }
   const reader = new GitReader();
   const pr = snapshot.scope.kind === 'worktree'
     ? await reader.getUncommittedChanges()
@@ -32,14 +40,6 @@ export async function runLegacyLocalReview(
       warnings: [snapshot.changedFiles > 0
         ? 'Legacy Git diff parser omitted changed files; no clean result is established.'
         : 'No eligible tracked changes for the legacy engine.'] };
-  }
-  let config: ReturnType<typeof ConfigLoader.loadFromPath> | undefined;
-  if (configFile) {
-    try {
-      config = ConfigLoader.loadFromPath(configFile);
-    } catch {
-      throw new LocalReviewUsageError('Cannot use --config: file missing, unreadable, or invalid YAML/configuration.');
-    }
   }
   const components = await setupComponents({ cliMode: true,
     ...(request.dryRun ? { dryRun: true } : {}),

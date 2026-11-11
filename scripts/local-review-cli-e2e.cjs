@@ -37,6 +37,13 @@ try {
  const missingConfigResult=JSON.parse(missingConfig.stdout);
  assert.equal(missingConfigResult.error.kind,'usage','invalid explicit config must fail before model invocation');
  assert.match(missingConfigResult.error.message,/--config/);
+ // The same rejecting contract holds when no files changed.
+ const cleanFile=path.join(repo,'src','example.ts');
+ fs.writeFileSync(cleanFile,'export const x=1;\n');
+ const missingConfigClean=run(['review','--engine=legacy','--config','missing.yml','--format=json']);
+ assert.equal(missingConfigClean.status,4,missingConfigClean.stderr || missingConfigClean.stdout);
+ assert.equal(JSON.parse(missingConfigClean.stdout).error.kind,'usage');
+ fs.writeFileSync(cleanFile,'export const x=2;\n');
  const invalidDays=run(['analytics','generate','--days=invalid','--format=json']);
  assert.equal(invalidDays.status,1,'invalid analytics time filter must not produce a full-history dashboard');
  const complete=outcome([]);

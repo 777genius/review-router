@@ -1,0 +1,40 @@
+# One-off PR #379 build-artifact sync; remove immediately after generated commit.
+name: PR379 temporary committed-dist refresh
+
+on:
+  push:
+    branches:
+      - feat/local-review-engine-neutral-cli-20261109
+    paths:
+      - .github/workflows/pr379-refresh-committed-dist.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.repository == '777genius/review-router' && github.ref == 'refs/heads/feat/local-review-engine-neutral-cli-20261109'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/local-review-engine-neutral-cli-20261109
+          persist-credentials: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Commit only rebuilt tracked runtime artifacts
+        run: |
+          git add -u -- dist
+          if git diff --cached --quiet; then
+            echo "Committed runtime artifacts already match the build"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(build): synchronize committed runtime artifacts'
+          git push origin HEAD:refs/heads/feat/local-review-engine-neutral-cli-20261109

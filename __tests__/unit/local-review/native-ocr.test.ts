@@ -98,6 +98,21 @@ describe('native OCR adapter', () => {
     expect(result.status).toBe('partial');
     expect(result.coverage.complete).toBe(false);
   });
+  it('rejects skipped manifests that conceal reviewed work or provider failures', () => {
+    const reviewedButSkipped = native('skipped');
+    reviewedButSkipped.manifest.coverage.completed = [item];
+    expect(() => normalizeNativeOcrResult(reviewedButSkipped, [item.path], snapshot, '1.13.1'))
+      .toThrow(/skipped result contradicts/);
+
+    const waivedButFailed = native('skipped');
+    waivedButFailed.comments = [];
+    waivedButFailed.manifest.coverage.waived = [item];
+    const failedEnvelope = { ...waivedButFailed, manifest: {
+      ...waivedButFailed.manifest, run_failure: { classification: 'provider', reason: 'failed' },
+    } };
+    expect(() => normalizeNativeOcrResult(failedEnvelope, [item.path], snapshot, '1.13.1'))
+      .toThrow(/skipped result contradicts/);
+  });
   it('preserves native file-level findings when OCR could not verify a line', () => {
     const unanchored = native();
     unanchored.comments[0].start_line = 0;

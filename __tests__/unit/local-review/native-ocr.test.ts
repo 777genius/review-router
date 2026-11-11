@@ -80,6 +80,15 @@ describe('native OCR adapter', () => {
     const unsafe = native(); unsafe.comments[0].path = 'src/\x1b[2Jbad.ts';
     expect(() => normalizeNativeOcrResult(unsafe, [item.path], snapshot, '1.13.1')).toThrow(/unsafe/);
   });
+  it('does not silently pass an unclassified native finding', () => {
+    const unknown = native();
+    unknown.comments[0].severity = 'new-future-severity';
+    const result = normalizeNativeOcrResult(unknown, [item.path], snapshot, '1.13.1');
+    expect(result.status).toBe('complete');
+    expect(result.summary.unclassified).toBe(1);
+    expect(result.blocking).toBe(true);
+    expect(result.findings[0].nativeSeverity).toBe('new-future-severity');
+  });
   it('never reports complete when native warnings or model provenance are absent', () => {
     const withWarnings = { ...native(), warnings: [{ file: item.path, reason: 'subagent warning' }] };
     const partial = normalizeNativeOcrResult(withWarnings, [item.path], snapshot, '1.13.1');

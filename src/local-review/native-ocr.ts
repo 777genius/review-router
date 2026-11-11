@@ -270,7 +270,8 @@ export function normalizeNativeOcrResult(
     input: { scope: snapshot.scope.kind, base: snapshot.base, head: snapshot.head, snapshotDigest: snapshot.digest },
     coverage: { selected: selected.length, reviewed: completed.length + reused.length, omitted, complete, selectedPaths: paths },
     provider: { name: stringField(llm?.provider, 150) ?? stringField(execution?.provider, 150), model },
-    findings, summary, blocking: summary.critical > 0 || summary.major > 0, warnings,
+    // Unknown native severities remain unclassified; they must not silently clear the local gate.
+    findings, summary, blocking: summary.critical > 0 || summary.major > 0 || summary.unclassified > 0, warnings,
   };
 }
 

@@ -279,8 +279,16 @@ export class ClaudeCodeProvider extends Provider {
     credential: string | undefined
   ): void {
     if (mode === 'claude-api-key') {
-      if (!credential || credential.length > 16_384 ||
-          !/^sk-ant-api[0-9]{2}-[A-Za-z0-9._-]+$/.test(credential)) {
+      // API-key wire format is provider-owned and can change. Reject known
+      // Claude subscription setup-tokens, shell input and malformed values;
+      // the unmodified Claude CLI authenticates the key with Anthropic.
+      if (
+        !credential ||
+        credential.length < 16 ||
+        credential.length > 16_384 ||
+        /^sk-ant-oat/i.test(credential) ||
+        /[\s|\u0000-\u001f\u007f"'\x60]/.test(credential)
+      ) {
         throw new Error('ANTHROPIC_API_KEY is missing or invalid for Claude API-key authentication.');
       }
       return;

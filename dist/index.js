@@ -130171,7 +130171,7 @@ var ClaudeCodeProvider = class extends Provider {
   }
   /** A missing API key is never an invitation to use ambient Claude login. */
   readAnthropicApiKey() {
-    const value = process.env[ANTHROPIC_API_KEY_ENV]?.trim();
+    const value = process.env[ANTHROPIC_API_KEY_ENV];
     if (!value) {
       throw new Error(
         "ANTHROPIC_API_KEY is required for Claude API-key authentication."
@@ -130182,7 +130182,9 @@ var ClaudeCodeProvider = class extends Provider {
   }
   validateSelectedCredential(mode, credential) {
     if (mode === "claude-api-key") {
-      if (!credential || credential.length > 16384 || !/^sk-ant-api[0-9]{2}-[A-Za-z0-9._-]+$/.test(credential)) {
+      if (!credential || credential.length < 16 || credential.length > 16384 || /^sk-ant-oat/i.test(credential) || // Control-character validation is intentional for credentials.
+      // eslint-disable-next-line no-control-regex
+      /[\s|\u0000-\u001f\u007f"'\x60]/.test(credential)) {
         throw new Error("ANTHROPIC_API_KEY is missing or invalid for Claude API-key authentication.");
       }
       return;
@@ -166611,12 +166613,15 @@ function classifyOutcome(input) {
   };
 }
 function classifyMissingProviderSecret(env) {
-  const authMode = env?.REVIEW_AUTH_MODE;
+  const authMode = env?.REVIEW_AUTH_MODE?.trim();
   if (authMode === "codex-oauth" && !env?.CODEX_AUTH_JSON) {
     return "CODEX_AUTH_JSON GitHub Actions secret is missing.";
   }
   if (authMode === "claude-oauth" && !env?.CLAUDE_CODE_OAUTH_TOKEN) {
     return "CLAUDE_CODE_OAUTH_TOKEN GitHub Actions secret is missing.";
+  }
+  if (authMode === "claude-api-key" && !env?.ANTHROPIC_API_KEY) {
+    return "ANTHROPIC_API_KEY GitHub Actions secret is missing.";
   }
   if (authMode === "openai-api" && !env?.OPENAI_API_KEY) {
     return "OPENAI_API_KEY GitHub Actions secret is missing.";

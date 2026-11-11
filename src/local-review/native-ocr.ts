@@ -349,6 +349,9 @@ export class NativeOcrEngine {
     const actual = await this.runner(binary, args, { cwd: snapshot.root, timeoutMs: REVIEW_TIMEOUT_MS, maxOutput: MAX_STDOUT, signal: request.signal });
     if (actual.exitCode !== 0 || actual.signal !== null) throw new Error('Native OCR process did not complete successfully.');
     const result = normalizeNativeOcrResult(parseJson(actual.stdout, 'result'), selected, snapshot, version);
+    if (request.provider && result.provider.name !== request.provider) {
+      throw new Error('Observed native OCR provider differed from the explicit provider request.');
+    }
     if (request.model && result.provider.model && result.provider.model !== request.model) {
       throw new Error('Observed native OCR model differed from the explicit model request.');
     }

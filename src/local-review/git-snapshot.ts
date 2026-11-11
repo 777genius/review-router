@@ -61,6 +61,8 @@ export class LocalGitSnapshotReader {
   capture(scope: LocalReviewScope, includeUntracked: boolean): LocalGitSnapshot {
     const root = this.root();
     const head = optionalGit(root, ['rev-parse', '--verify', 'HEAD']);
+    // A pinned target can stay unchanged while the checkout context changes.
+    const checkoutRef = optionalGit(root, ['symbolic-ref', '--quiet', 'HEAD']);
     const h = createHash('sha256');
     h.update(`reviewrouter-local/v1\u0000${scope.kind}\u0000`);
     let base: string | null = null;
@@ -127,6 +129,7 @@ export class LocalGitSnapshotReader {
         changedFiles += untrackedFiles;
       }
     }
+    h.update(head ?? '').update('\u0000').update(checkoutRef ?? '').update('\u0000');
     h.update(base ?? '').update('\u0000').update(selectedHead ?? '').update('\u0000').update(diff);
     return {
       root, scope, digest: `sha256:${h.digest('hex')}`,

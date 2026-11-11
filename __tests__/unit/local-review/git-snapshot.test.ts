@@ -59,6 +59,22 @@ describe('local Git scope snapshots (real git)', () => {
     expect(mergeBase.head).toBe(featureHead);
     expect(tips.digest).not.toBe(mergeBase.digest);
   });
+  it('invalidates pinned reviews when the clean checkout branch changes', () => {
+    const reader = new LocalGitSnapshotReader(dir);
+    const commit = git(dir, 'rev-parse', 'HEAD');
+    git(dir, 'branch', 'alternate-checkout');
+    const pinnedBranch = { kind: 'branch' as const, base: commit, head: commit, comparison: 'tips' as const };
+    const pinnedCommit = { kind: 'commit' as const, ref: commit };
+    const branchBefore = reader.capture(pinnedBranch, false);
+    const commitBefore = reader.capture(pinnedCommit, false);
+    git(dir, 'checkout', '-q', 'alternate-checkout');
+    const branchAfter = reader.capture(pinnedBranch, false);
+    const commitAfter = reader.capture(pinnedCommit, false);
+    expect(branchAfter.head).toBe(commit);
+    expect(commitAfter.head).toBe(commit);
+    expect(branchAfter.digest).not.toBe(branchBefore.digest);
+    expect(commitAfter.digest).not.toBe(commitBefore.digest);
+  });
   it('compares branch changes from merge-base and resolves immutable commit refs', () => {
     git(dir, 'checkout', '-qb', 'feature');
     writeFileSync(path.join(dir, 'source.ts'), 'export const a = 3;\n');

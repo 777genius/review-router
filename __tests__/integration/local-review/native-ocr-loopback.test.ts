@@ -47,19 +47,22 @@ if (process.env.REVIEWROUTER_OCR_REQUIRED === '1' && !available) {
         const id = invocations.length;
         request.resume();
         request.once('end', () => {
-          const event = {
+          // OCR v1.13.1 reconstructs streaming tool calls from output_item.done,
+          // not from the terminal response's output array.
+          const item = { type: 'function_call', id: `fc_${id}`,
+            call_id: `call_${id}`, name: 'task_done',
+            arguments: '{"state":"DONE"}', status: 'completed' };
+          const itemDone = { type: 'response.output_item.done', output_index: 0, item };
+          const completed = {
             type: 'response.completed',
             response: {
               id: `resp_${id}`, object: 'response', status: 'completed',
-              model: 'stub-model',
-              output: [{ type: 'function_call', id: `fc_${id}`,
-                call_id: `call_${id}`, name: 'task_done',
-                arguments: '{"state":"DONE"}' }],
+              model: 'stub-model', output: [],
               usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
             },
           };
           response.writeHead(200, { 'content-type': 'text/event-stream' });
-          response.end(`event: response.completed\ndata: ${JSON.stringify(event)}\n\n`);
+          response.end(`event: response.output_item.done\ndata: ${JSON.stringify(itemDone)}\n\nevent: response.completed\ndata: ${JSON.stringify(completed)}\n\n`);
         });
       });
       const activeServer = server;
@@ -104,7 +107,7 @@ if (process.env.REVIEWROUTER_OCR_REQUIRED === '1' && !available) {
       expect(invocations.every(value => value === 'POST /responses Bearer local-fixture-only')).toBe(true);
       expect(git('status', '--porcelain')).toBe('');
     } catch (error) {
-      throw new Error(`Real OCR loopback E2E: ${(error as Error).message}; ${diagnostics.join(' | ')}`);
+      throw new Error(`Real OCR loopback E2E: ${(error as Error).message}; requests=${invocations.length}; ${diagnostics.join(' | ')}`);
     } finally {
       if (watchdog) clearTimeout(watchdog);
       abort.abort();

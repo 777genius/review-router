@@ -102,6 +102,16 @@ describe('native OCR adapter', () => {
     await expect(new NativeOcrEngine(runner(withoutProvider)).run(snapshot, {
       ...request, provider: 'test',
     })).rejects.toThrow(/provider differed/);
+    const conflictingManifest = native();
+    conflictingManifest.manifest.execution.provider = 'substituted-provider';
+    await expect(new NativeOcrEngine(runner(conflictingManifest)).run(snapshot, {
+      ...request, provider: 'test',
+    })).rejects.toThrow(/provider differed/);
+    const conflictingLlm = native();
+    conflictingLlm.llm.provider = 'substituted-provider';
+    await expect(new NativeOcrEngine(runner(conflictingLlm)).run(snapshot, {
+      ...request, provider: 'test',
+    })).rejects.toThrow(/provider differed/);
   });
   it('does not accept malformed or contradictory native warning/failure envelopes', () => {
     const malformedWarnings = { ...native(), warnings: 'not an array' };

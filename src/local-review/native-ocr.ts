@@ -353,9 +353,17 @@ export class NativeOcrEngine {
     }
     const actual = await this.runner(binary, args, { cwd: snapshot.root, timeoutMs: REVIEW_TIMEOUT_MS, maxOutput: MAX_STDOUT, signal: request.signal });
     if (actual.exitCode !== 0 || actual.signal !== null) throw new Error('Native OCR process did not complete successfully.');
-    const result = normalizeNativeOcrResult(parseJson(actual.stdout, 'result'), selected, snapshot, version);
-    if (request.provider && result.provider.name !== request.provider) {
-      throw new Error('Observed native OCR provider differed from the explicit provider request.');
+    const nativeOutput = parseJson(actual.stdout, 'result');
+    const result = normalizeNativeOcrResult(nativeOutput, selected, snapshot, version);
+    if (request.provider) {
+      // Do not let one matching attribution field conceal a contradictory other field.
+      const llmProvider = stringField(record(nativeOutput.llm)?.provider, 150);
+      const executionProvider = stringField(record(record(nativeOutput.manifest)?.execution)?.provider, 150);
+      const providers = [llmProvider, executionProvider];
+      if (!providers.some(Boolean) ||
+          providers.some(provider => Boolean(provider) && provider !== request.provider)) {
+        throw new Error('Observed native OCR provider differed from the explicit provider request.');
+      }
     }
     if (request.model && result.provider.model && result.provider.model !== request.model) {
       throw new Error('Observed native OCR model differed from the explicit model request.');

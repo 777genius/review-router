@@ -107,6 +107,23 @@ describe('classifyOutcome', () => {
     });
   });
 
+  it.each([
+    ['claude-api-key', { CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-not-selected' }, 'ANTHROPIC_API_KEY'],
+    [' claude-api-key ', { CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-not-selected' }, 'ANTHROPIC_API_KEY'],
+    ['claude-oauth', { ANTHROPIC_API_KEY: 'sk-ant-api03-not-selected' }, 'CLAUDE_CODE_OAUTH_TOKEN'],
+  ])('reports missing selected Claude credential for %s despite an alternate secret', (authMode, otherCredentials, requiredName) => {
+    expect(
+      classifyOutcome({
+        env: { REVIEW_AUTH_MODE: authMode, ...otherCredentials },
+      })
+    ).toEqual({
+      providerSetupState: 'missing',
+      providerHealth: 'failed',
+      safeErrorCategory: 'provider_auth_missing',
+      safeErrorSummary: `${requiredName} GitHub Actions secret is missing.`,
+    });
+  });
+
   it('classifies provider auth errors without leaking raw error text', () => {
     expect(
       classifyOutcome({

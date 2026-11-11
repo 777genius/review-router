@@ -50,6 +50,7 @@ describe('ClaudeCodeProvider', () => {
 
   it('uses credential-isolated binary-only health checks without consuming Claude usage', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-unselected-api-key';
+    process.env.ANTHROPIC_AUTH_TOKEN = 'synthetic-auth-token';
     process.env.GITHUB_TOKEN = 'synthetic-github-token';
     process.env.INPUT_GITHUB_TOKEN = 'synthetic-input-token';
     process.env.CLAUDE_CONFIG_DIR = '/tmp/ambient-claude-config';

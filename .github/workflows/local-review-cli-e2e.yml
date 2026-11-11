@@ -1,6 +1,19 @@
-name: Local CLI E2E
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/cli/**'
+      - '.npmignore'
+      - 'package.json'
+      - 'src/local-review/**'
+      - 'src/config/loader.ts'
+      - 'bin/mpr'
+      - 'scripts/local-review-*'
+      - '__tests__/unit/local-review/**'
+      - '__tests__/integration/local-review/**'
+      - 'dist/cli/**'
+      - '.github/workflows/local-review-cli-e2e.yml'
   pull_request:
     paths:
       - 'src/cli/**'
@@ -11,6 +24,8 @@ on:
       - 'bin/mpr'
       - 'scripts/local-review-*'
       - '__tests__/unit/local-review/**'
+      - '__tests__/integration/local-review/**'
+      - 'dist/cli/**'
       - '.github/workflows/local-review-cli-e2e.yml'
 permissions:
   contents: read

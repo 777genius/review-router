@@ -568,6 +568,13 @@ export class AccountGatewayModelTransport {
           response.providerRequestEnvelopeHash ??
           createHash('sha256').update(bytes).digest('hex'),
       });
+    } catch (error) {
+      if (
+        auxiliary.lastFailure?.code === 'output_truncated' &&
+        auxiliary.lastFailure.effect === 'completed'
+      )
+        this.failure = auxiliary.lastFailure;
+      throw error;
     } finally {
       clearTimeout(timer);
       this.held.delete(abort);
@@ -687,6 +694,7 @@ export class AccountGatewayModelTransport {
     let currentRequestRef: string | undefined;
     let ticket: PreparedModelDispatchTicket | undefined;
     let completedResponse: unknown;
+    let outputTruncated = false;
     let nativeCompleted:
       | ReturnType<typeof decodeCodexSubscriptionCompletedResponse>
       | undefined;
@@ -856,6 +864,7 @@ export class AccountGatewayModelTransport {
               : this.directProvider?.streamFrameBytes,
             usage?.observe,
             (value) => {
+              outputTruncated = knownOutputLimitTerminal(value);
               if (ticket) {
                 const terminal = value as {
                   status?: unknown;
@@ -865,14 +874,14 @@ export class AccountGatewayModelTransport {
                 } | null;
                 if (
                   !terminal ||
-                  terminal.status !== 'completed' ||
+                  (terminal.status !== 'completed' && !outputTruncated) ||
                   !Array.isArray(terminal.output) ||
                   terminal.error != null ||
-                  terminal.incomplete_details != null
+                  (!outputTruncated && terminal.incomplete_details != null)
                 )
                   throw new Error('model_dispatch_terminal_invalid');
                 completedResponse = value;
-                if (nativeRequest && cap)
+                if (nativeRequest && cap && !outputTruncated)
                   nativeCompleted = decodeCodexSubscriptionCompletedResponse({
                     response: value,
                     expectedModel: cap.model,
@@ -887,7 +896,11 @@ export class AccountGatewayModelTransport {
                     allowedToolNames: nativeRequest.allowedToolNames,
                   });
               }
-              this.completedDescriptionResponse?.(value, nativeCompleted?.body);
+              if (!outputTruncated)
+                this.completedDescriptionResponse?.(
+                  value,
+                  nativeCompleted?.body
+                );
             },
             !!ticket
           )
@@ -912,8 +925,12 @@ export class AccountGatewayModelTransport {
               // Native clients can stop at response.completed without reading
               // HTTP EOF. Hold the terminal frame's final bytes until the
               // durable fully-consumed receipt is confirmed by the control plane.
-              if (ticket && isStream && audit?.hasCompleted()) {
-                terminalChunks.push(Buffer.from(chunk));
+              if (
+                (ticket || outputTruncated) &&
+                isStream &&
+                audit?.hasCompleted()
+              ) {
+                if (!outputTruncated) terminalChunks.push(Buffer.from(chunk));
                 done();
               } else done(null, chunk); // Original bytes, no conversion.
             } catch {
@@ -923,6 +940,11 @@ export class AccountGatewayModelTransport {
         flush: (done) => {
           void (async () => {
             audit?.finish();
+            if (
+              outputTruncated &&
+              (!response.complete || !audit?.hasDone() || !this.actualModel)
+            )
+              throw new Error('model_dispatch_terminal_unconfirmed');
             if (ticket) {
               if (!isStream) await ticket.failed();
               else {
@@ -944,12 +966,26 @@ export class AccountGatewayModelTransport {
                       }
                     : terminalUsage(completedResponse),
                 });
-                for (const chunk of terminalChunks) bounded.push(chunk);
+                if (!outputTruncated)
+                  for (const chunk of terminalChunks) bounded.push(chunk);
               }
+            }
+            if (outputTruncated) {
+              this.failure = {
+                code: 'output_truncated',
+                effect: 'completed',
+                ...(requestRef ? { requestRef } : {}),
+              };
+              throw new ModelOutputTruncatedError();
             }
           })().then(
             () => done(),
-            () => done(new Error('account_gateway_stream_unknown'))
+            (error) =>
+              done(
+                error instanceof ModelOutputTruncatedError
+                  ? error
+                  : new Error('account_gateway_stream_unknown')
+              )
           );
         },
       });
@@ -979,7 +1015,8 @@ export class AccountGatewayModelTransport {
           return;
         }
         this.inferenceDenied = true;
-        if (ticket) this.trackSettlement(ticket.failed());
+        if (ticket && !ticket.isCompleted())
+          this.trackSettlement(ticket.failed());
         if (!streamFailureObserved) {
           streamFailureObserved = true;
           observeTransport(
@@ -1897,6 +1934,7 @@ function responsesStreamAudit(
   let data: string[] = [];
   let event = '';
   let completed = false;
+  let done = false;
   let frameBytes = 0;
   let rawLineBytes = 0;
   let rawLineLastByte = 0;
@@ -1904,7 +1942,10 @@ function responsesStreamAudit(
     if (!line) {
       if (data.length) {
         const joined = data.join('\n');
-        if (joined !== '[DONE]') {
+        if (joined === '[DONE]') {
+          if (strictTerminal && !completed) throw new Error();
+          done = completed;
+        } else {
           if (strictTerminal && completed) throw new Error();
           const raw: unknown = JSON.parse(joined);
           if (
@@ -1964,6 +2005,7 @@ function responsesStreamAudit(
   }
   return {
     hasCompleted: () => completed,
+    hasDone: () => done,
     accept(bytes: Uint8Array) {
       // Match the native raw SSE budget: LF/CRLF separators and comments count
       // toward the current event before its terminating blank line resets it.
@@ -1990,6 +2032,60 @@ function responsesStreamAudit(
       if (line || data.length || !completed) throw new Error();
     },
   };
+}
+
+class ModelOutputTruncatedError extends Error {
+  constructor() {
+    super('model_output_truncated');
+  }
+}
+
+/** A known provider terminal is not a valid model result or executable tool call. */
+function knownOutputLimitTerminal(raw: unknown): boolean {
+  const value = raw as {
+    status?: unknown;
+    output?: unknown;
+    error?: unknown;
+    incomplete_details?: { reason?: unknown };
+  } | null;
+  return (
+    value?.status === 'incomplete' &&
+    value.error == null &&
+    value.incomplete_details?.reason === 'max_output_tokens' &&
+    Object.keys(value.incomplete_details).length === 1 &&
+    Array.isArray(value.output) &&
+    value.output.every((item: unknown) => {
+      if (!item || typeof item !== 'object') return false;
+      const row = item as Record<string, unknown>;
+      if (row.type === 'reasoning')
+        return (
+          Array.isArray(row.summary) &&
+          row.summary.every(
+            (part: unknown) =>
+              !!part &&
+              typeof part === 'object' &&
+              'type' in part &&
+              part.type === 'summary_text' &&
+              'text' in part &&
+              typeof part.text === 'string'
+          )
+        );
+      return (
+        row.type === 'message' &&
+        row.role === 'assistant' &&
+        Array.isArray(row.content) &&
+        row.content.every(
+          (part: unknown) =>
+            !!part &&
+            typeof part === 'object' &&
+            'type' in part &&
+            part.type === 'output_text' &&
+            'text' in part &&
+            typeof part.text === 'string'
+        )
+      );
+    })
+  );
 }
 
 function terminalUsage(value: unknown): {

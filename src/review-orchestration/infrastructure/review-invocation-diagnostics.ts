@@ -124,6 +124,8 @@ export function classifySafeInvocationFailureReason(
   if (/prepared_invocation_(?:identity_mismatch|invalid|missing)/i.test(text)) {
     return 'prepared_invocation_invalid';
   }
+  if (/\bmodel_output_truncated\b/.test(text))
+    return 'provider_output_truncated';
   if (/\b(?:timed out|timeout)\b/i.test(text)) return 'provider_timeout';
   if (/\b(?:schema|structured output|valid review JSON)\b/i.test(text)) {
     return 'provider_output_invalid';

@@ -12,6 +12,7 @@ import type { ReviewModelDispatchCapability } from '../../control-plane/generate
 import {
   canonicalRevalidationJson as canonicalJson,
   prepareLifecycleRequest,
+  LifecycleResponseInvalidError,
   validateLifecycleResponse,
   type RevalidationPlan,
   type TargetWitness,
@@ -331,6 +332,7 @@ export function compositeLifecycleInvocations(input: {
   reviewRevisionHash: string;
   liveLifecycleStateHash: string;
   transport: LocalGatewayModelTransport;
+  onInvalidResponse?: () => void;
 }): PreparedReviewInvocationPort {
   const prepared = new Map<
     string,
@@ -442,8 +444,10 @@ export function compositeLifecycleInvocations(input: {
         receipt.providerRequestEnvelopeHash,
         input.capability.maxResponseBytes
       );
-      if (!result.valid)
-        throw new Error('lifecycle_verification_response_invalid');
+      if (!result.valid) {
+        input.onInvalidResponse?.();
+        throw new LifecycleResponseInvalidError(result.diagnosticCode);
+      }
       return normalizeReviewObservation({
         workSlotId: request.invocation.workSlotId,
         attemptOrdinal: 1,

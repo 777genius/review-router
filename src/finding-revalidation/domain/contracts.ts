@@ -205,6 +205,24 @@ export interface LifecycleInference {
 }
 export type RevalidationEvidence = LifecycleVerificationEvidenceV1;
 export type AcceptedRevalidation = LifecycleVerificationResultV1;
+export const lifecycleResponseValidationCodes = [
+  'response_bound',
+  'model_mismatch',
+  'request_binding_invalid',
+  'json_invalid',
+  'envelope_invalid',
+  'result_invalid',
+  'evidence_invalid',
+  'evidence_ungrounded',
+  'verdict_unsupported',
+] as const;
+export type LifecycleResponseValidationCode =
+  (typeof lifecycleResponseValidationCodes)[number];
+
 export type PacketValidation =
   | Readonly<{ valid: true; results: readonly AcceptedRevalidation[] }>
-  | Readonly<{ valid: false; reason: 'missing_or_invalid_verdict' }>;
+  | Readonly<{
+      valid: false;
+      reason: 'missing_or_invalid_verdict';
+      diagnosticCode: LifecycleResponseValidationCode;
+    }>;

@@ -1,3 +1,4 @@
+import { LifecycleResponseInvalidError } from '../../../src/finding-revalidation';
 import {
   ReviewInvocationConfigurationMismatchError,
   ReviewInvocationConfigurationMismatchReason,
@@ -97,6 +98,37 @@ describe('review invocation diagnostics', () => {
       workSlotId: 'slot-1',
     });
     expect(JSON.stringify(warn.mock.calls)).not.toContain('secret-bearing');
+  });
+
+  it('retains only a finite lifecycle validation code as output-invalid', () => {
+    const warn = jest.fn();
+    const diagnostics = new LoggingReviewInvocationDiagnostics({ warn });
+    const error = new LifecycleResponseInvalidError('evidence_ungrounded');
+    error.message = 'secret-bearing provider text';
+    const input = {
+      invocation: {
+        workSlotId: 'slot',
+        attemptOrdinal: 1,
+        provider: 'lifecycle/ocr',
+        requestedModel: 'model',
+      } as never,
+      attemptBudget: 1,
+      failureClass: ReviewInvocationFailureClass.Retryable,
+      error,
+    };
+    diagnostics.recordFailure(input);
+    expect(warn).toHaveBeenLastCalledWith(
+      'Review provider attempt failed',
+      expect.objectContaining({
+        safeReason: 'provider_output_invalid',
+        validationCode: 'evidence_ungrounded',
+      })
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('secret-bearing');
+    Object.assign(error, { diagnosticCode: 'secret-injected-code' });
+    diagnostics.recordFailure(input);
+    expect(warn.mock.calls[1][1]).not.toHaveProperty('validationCode');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('secret-injected');
   });
 
   it('labels configuration mismatches without exposing transport details', () => {

@@ -462,6 +462,7 @@ test('validates packet citations before normalized zero-finding evidence and sen
         .digest('hex'),
     })
   );
+  const onInvalidResponse = jest.fn();
   const invocations = compositeLifecycleInvocations({
     discovery,
     packetsByWorkSlotId: result.packetsByWorkSlotId,
@@ -469,6 +470,7 @@ test('validates packet citations before normalized zero-finding evidence and sen
     outputCap: 4096,
     reviewRevisionHash: hash,
     liveLifecycleStateHash: hash,
+    onInvalidResponse,
     transport: {
       generateLifecycleVerification: generate,
     } as unknown as LocalGatewayModelTransport,
@@ -526,6 +528,7 @@ test('validates packet citations before normalized zero-finding evidence and sen
     signal: new AbortController().signal,
   });
   expect(observation.findingCount).toBe(0);
+  expect(onInvalidResponse).not.toHaveBeenCalled();
   expect(
     JSON.parse(observation.payloadCanonicalJson)
       .normalizedLifecycleRevalidations[0].verdict
@@ -570,7 +573,11 @@ test('validates packet citations before normalized zero-finding evidence and sen
       sourceReviewRevisionHash: hash,
       signal: new AbortController().signal,
     })
-  ).rejects.toThrow('response_invalid');
+  ).rejects.toMatchObject({
+    name: 'LifecycleResponseInvalidError',
+    diagnosticCode: 'envelope_invalid',
+  });
+  expect(onInvalidResponse).toHaveBeenCalledTimes(1);
 });
 
 test('near manifest limit disables companion without displacing discovery', async () => {

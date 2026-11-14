@@ -275,27 +275,31 @@ describe('bounded finding revalidation safety contracts', () => {
         'saved-model',
         prepared.requestHash
       )
-    ).toEqual({ valid: false, reason: 'missing_or_invalid_verdict' });
+    ).toEqual({
+      valid: false,
+      reason: 'missing_or_invalid_verdict',
+      diagnosticCode: 'evidence_invalid',
+    });
   });
 
   it.each([
-    'missing',
-    'duplicate',
-    'unknown',
-    'quote',
-    'path',
-    'blob',
-    'range',
-    'extra-key',
-    'model',
-    'hash',
-    'zero-evidence',
-    'utf8',
-    'truncated',
-    'verdict-type',
+    ['missing', 'envelope_invalid'],
+    ['duplicate', 'result_invalid'],
+    ['unknown', 'result_invalid'],
+    ['quote', 'evidence_ungrounded'],
+    ['path', 'evidence_invalid'],
+    ['blob', 'evidence_ungrounded'],
+    ['range', 'evidence_ungrounded'],
+    ['extra-key', 'result_invalid'],
+    ['model', 'model_mismatch'],
+    ['hash', 'request_binding_invalid'],
+    ['zero-evidence', 'verdict_unsupported'],
+    ['utf8', 'json_invalid'],
+    ['truncated', 'json_invalid'],
+    ['verdict-type', 'result_invalid'],
   ])(
     'rejects the whole packet on %s rather than accepting a sibling fix',
-    async (fault) => {
+    async (fault, diagnosticCode) => {
       const plan = await planFindingRevalidation(
         input([target(0), target(1)]),
         ports()
@@ -338,6 +342,7 @@ describe('bounded finding revalidation safety contracts', () => {
       expect(validation).toEqual({
         valid: false,
         reason: 'missing_or_invalid_verdict',
+        diagnosticCode,
       });
     }
   );

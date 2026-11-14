@@ -133389,7 +133389,7 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
         const joined = data.join("\n");
         if (joined === "[DONE]") {
           if (strictTerminal && !completed) throw new Error();
-          done = true;
+          done = completed;
         } else {
           if (strictTerminal && completed) throw new Error();
           const raw = JSON.parse(joined);

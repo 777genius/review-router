@@ -1944,7 +1944,7 @@ function responsesStreamAudit(
         const joined = data.join('\n');
         if (joined === '[DONE]') {
           if (strictTerminal && !completed) throw new Error();
-          done = true;
+          done = completed;
         } else {
           if (strictTerminal && completed) throw new Error();
           const raw: unknown = JSON.parse(joined);

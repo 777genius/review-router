@@ -244,6 +244,8 @@ type ProbeMode =
   | 'unreferenced-timeout-terminal'
   | 'referenced-rejection-terminal'
   | 'mid-stream-terminal'
+  | 'incomplete-known-legacy-preterminal-done'
+  | 'dispatch-incomplete-preterminal-done'
   | 'incomplete-known-legacy'
   | 'dispatch-incomplete-model'
   | 'dispatch-incomplete-known'
@@ -262,7 +264,7 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
   const settlements: unknown[] = [];
   const incompleteProbe =
     mode.startsWith('dispatch-incomplete-') ||
-    mode === 'incomplete-known-legacy';
+    mode.startsWith('incomplete-known-legacy');
   let claim: Record<string, unknown> = {};
   const dispatchHeaders: Array<string | undefined> = [];
   const withDispatch = mode.startsWith('dispatch-');
@@ -386,11 +388,13 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
             ];
           if (mode === 'dispatch-incomplete-malformed')
             terminal.response.incomplete_details.reason = 'unknown';
+          const terminalFrame = `event: response.completed\ndata: ${JSON.stringify(terminal)}\n\n`;
+          const done = 'data: [DONE]\n\n';
           reply.end(
-            `event: response.completed\ndata: ${JSON.stringify(terminal)}\n\n` +
-              (mode === 'dispatch-incomplete-missing-done'
-                ? ''
-                : 'data: [DONE]\n\n')
+            mode.endsWith('preterminal-done')
+              ? done + terminalFrame
+              : terminalFrame +
+                  (mode === 'dispatch-incomplete-missing-done' ? '' : done)
           );
           return;
         }
@@ -784,6 +788,8 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
 // --probe marker travels in its env (see the jest shell below).
 if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
   for (const mode of [
+    'incomplete-known-legacy-preterminal-done',
+    'dispatch-incomplete-preterminal-done',
     'incomplete-known-legacy',
     'dispatch-incomplete-model',
     'dispatch-incomplete-known',
@@ -932,8 +938,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 22\b/);
-      expect(result.stdout).toMatch(/# pass 22\b/);
+      expect(result.stdout).toMatch(/# tests 24\b/);
+      expect(result.stdout).toMatch(/# pass 24\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -1,3 +1,7 @@
+import {
+  confirmedProviderFailure,
+  providerFailureMessage,
+} from '../../src/review-execution/domain/provider-failure';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -13,6 +17,7 @@ import {
   AccountGatewayModelTransport,
   type GatewayTransportDiagnostic,
 } from '../../src/review-orchestration/infrastructure/account-gateway-model-transport';
+import { parseReviewModelDispatchSettlementV2 } from '../../src/control-plane/generated/review-action-v2/review-model-dispatch-contract';
 import { PreparedModelDispatch } from '../../src/review-orchestration/infrastructure/prepared-model-dispatch';
 import { OcrReviewInvocationAdapter } from '../../src/review-orchestration/infrastructure/ocr-review-invocation-adapter';
 import {
@@ -238,7 +243,15 @@ type ProbeMode =
   | 'reopen-after-close-denied'
   | 'unreferenced-timeout-terminal'
   | 'referenced-rejection-terminal'
-  | 'mid-stream-terminal';
+  | 'mid-stream-terminal'
+  | 'incomplete-known-legacy'
+  | 'dispatch-incomplete-model'
+  | 'dispatch-incomplete-known'
+  | 'dispatch-incomplete-empty'
+  | 'dispatch-incomplete-missing-done'
+  | 'dispatch-incomplete-tool'
+  | 'dispatch-incomplete-malformed'
+  | 'dispatch-incomplete-lifecycle';
 
 async function transientRetry(mode: ProbeMode): Promise<void> {
   const root = process.env.RR_TRANSIENT_RETRY_PROBE_ROOT;
@@ -246,6 +259,10 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
   const diagnostics: GatewayTransportDiagnostic[] = [];
   let requests = 0;
   let claims = 0;
+  const settlements: unknown[] = [];
+  const incompleteProbe =
+    mode.startsWith('dispatch-incomplete-') ||
+    mode === 'incomplete-known-legacy';
   let claim: Record<string, unknown> = {};
   const dispatchHeaders: Array<string | undefined> = [];
   const withDispatch = mode.startsWith('dispatch-');
@@ -351,6 +368,32 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
           'content-type': 'text/event-stream',
           'x-reviewrouter-request-ref': 'synthetic-recovered',
         });
+        if (incompleteProbe) {
+          const terminal = JSON.parse(
+            completed('truncated').split('data: ')[1]!.trim()
+          );
+          terminal.response.status = 'incomplete';
+          if (mode === 'dispatch-incomplete-model')
+            terminal.response.model = 'mismatched-model';
+          terminal.response.incomplete_details = {
+            reason: 'max_output_tokens',
+          };
+          if (mode === 'dispatch-incomplete-empty')
+            terminal.response.output = [];
+          if (mode === 'dispatch-incomplete-tool')
+            terminal.response.output = [
+              { type: 'function_call', name: 'not_executable', arguments: '{' },
+            ];
+          if (mode === 'dispatch-incomplete-malformed')
+            terminal.response.incomplete_details.reason = 'unknown';
+          reply.end(
+            `event: response.completed\ndata: ${JSON.stringify(terminal)}\n\n` +
+              (mode === 'dispatch-incomplete-missing-done'
+                ? ''
+                : 'data: [DONE]\n\n')
+          );
+          return;
+        }
         reply.end(completed('transient-recovered'));
       })().catch(() => reply.destroy());
     }
@@ -418,6 +461,7 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
               },
             });
           }
+          settlements.push(value);
           return Response.json({
             dispatch: {
               ...claim,
@@ -573,6 +617,63 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
       );
       return;
     }
+    if (incompleteProbe) {
+      if (mode === 'dispatch-incomplete-lifecycle') {
+        await assert.rejects(
+          transport.generateLifecycleVerification({
+            requestBody: Buffer.from(
+              JSON.stringify({ ...JSON.parse(body), max_output_tokens: 100 })
+            ),
+            dispatch: {
+              dispatchId: 'companion',
+              executionId: 'execution',
+              workSlotId: 'slot',
+              attemptOrdinal: 1,
+              leaseId: 'lease',
+              leaseCapability: 'capability',
+              fencingToken: '1',
+              preparedManifestKey: 'manifest',
+            },
+            signal: new AbortController().signal,
+            maxResponseBytes: 32000,
+            maxOutputTokens: 100,
+            deadlineMs: 60000,
+          }),
+          /model_output_truncated/u
+        );
+      } else {
+        const response = await bounded(
+          transport.responses(Buffer.from(body)),
+          'incomplete-response'
+        );
+        const text = await bounded(drain(response.body), 'incomplete-drain');
+        assert(
+          !text.includes('response.completed'),
+          'no incomplete terminal is exposed as valid output'
+        );
+      }
+      await transport.drainSettlements();
+      const known = [
+        'dispatch-incomplete-known',
+        'dispatch-incomplete-empty',
+        'dispatch-incomplete-lifecycle',
+        'incomplete-known-legacy',
+      ].includes(mode);
+      assert.equal(requests, 1, 'no paid retry');
+      assert.equal(claims, withDispatch ? 1 : 0);
+      assert.equal(settlements.length, withDispatch ? 1 : 0);
+      if (withDispatch) {
+        const settlement = parseReviewModelDispatchSettlementV2(settlements[0]);
+        assert.equal(settlement.state, known ? 'completed' : 'effect_unknown');
+      }
+      assert.equal(
+        transport.lastFailure?.effect,
+        known ? 'completed' : 'effect_unknown'
+      );
+      if (known) assert.equal(transport.lastFailure?.code, 'output_truncated');
+      assert.equal(transport.releaseRetrySafeFailure(), false);
+      return;
+    }
     const response = await bounded(
       transport.responses(Buffer.from(body)),
       'transient-responses'
@@ -677,6 +778,19 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
 // Same typed file becomes a compiled child observer; the isolated child's
 // --probe marker travels in its env (see the jest shell below).
 if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
+  for (const mode of [
+    'incomplete-known-legacy',
+    'dispatch-incomplete-model',
+    'dispatch-incomplete-known',
+    'dispatch-incomplete-empty',
+    'dispatch-incomplete-missing-done',
+    'dispatch-incomplete-tool',
+    'dispatch-incomplete-malformed',
+    'dispatch-incomplete-lifecycle',
+  ] as const) {
+    nodeTest(mode, { timeout: 20000 }, () => transientRetry(mode));
+  }
+
   nodeTest(
     'reserved model dispatch waits on a closed relay denial',
     { timeout: 20_000 },
@@ -813,8 +927,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 14\b/);
-      expect(result.stdout).toMatch(/# pass 14\b/);
+      expect(result.stdout).toMatch(/# tests 22\b/);
+      expect(result.stdout).toMatch(/# pass 22\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

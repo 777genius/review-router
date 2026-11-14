@@ -4,13 +4,16 @@ import { confirmedProviderQuota } from './provider-quota';
 export type ProviderFailureNotice =
   | 'upstream_failure'
   | 'upstream_failure_unknown'
-  | 'request_outcome_unknown';
+  | 'request_outcome_unknown'
+  | 'output_truncated';
 
 export function confirmedProviderFailure(
   fact: unknown
 ): ProviderFailureNotice | undefined {
   if (!fact || typeof fact !== 'object') return undefined;
   const value = fact as Record<string, unknown>;
+  if (value.code === 'output_truncated' && value.effect === 'completed')
+    return 'output_truncated';
   if (
     value.effect === 'effect_unknown' ||
     value.effect === 'dispatch_started' ||
@@ -34,6 +37,8 @@ export function providerFailureMessage(
   notice: unknown,
   incompleteReview = false
 ): string | undefined {
+  if (notice === 'output_truncated')
+    return 'The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes.';
   if (
     notice !== 'upstream_failure' &&
     notice !== 'upstream_failure_unknown' &&

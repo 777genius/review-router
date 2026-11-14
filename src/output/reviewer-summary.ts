@@ -377,8 +377,17 @@ export function renderReviewerSummaryMarkdown(
   }
   const quota = parseProviderQuota(input.providerQuota);
   if (incomplete && quota) lines.push('', providerQuotaMessage(quota));
-  const providerFailure = providerFailureMessage(input.providerFailure, true);
-  if (incomplete && providerFailure) lines.push('', providerFailure);
+  const providerFailure = providerFailureMessage(
+    input.providerFailure,
+    incomplete
+  );
+  if (
+    providerFailure &&
+    (incomplete ||
+      input.providerFailure === 'output_invalid' ||
+      input.providerFailure === 'output_truncated')
+  )
+    lines.push('', providerFailure);
   if (incomplete && severityLine) lines.push('', severityLine);
   const chrome = compactCopy[locale];
   const banner = renderReviewerBanner(input, incomplete, counts);

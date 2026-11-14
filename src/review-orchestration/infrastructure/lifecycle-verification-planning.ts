@@ -1,3 +1,4 @@
+import type { LifecycleRequestEncoder } from '../../finding-revalidation/domain/packet';
 import { createConfiguredTrivialDetector } from '../../analysis/trivial-detector';
 import { lifecycleVerificationContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import type { LifecycleVerificationCapability } from '../../control-plane/generated/review-action-v2/review-lifecycle-verification-v2';
@@ -142,6 +143,7 @@ export function priorResolutionFact(
 }
 
 export async function planProductionLifecycleVerification(input: {
+  encodeLifecycleRequest?: LifecycleRequestEncoder;
   capability: LifecycleVerificationCapability;
   authorization: ReviewRunAuthorization;
   plan: StableReviewWorkPlan;
@@ -209,6 +211,7 @@ export async function planProductionLifecycleVerification(input: {
       renames: input.renames,
     },
     {
+      encodeRequest: input.encodeLifecycleRequest,
       sourceReader: createGitImmutableSourceReader({
         repositoryRoot: input.checkoutRoot,
       }),

@@ -1,3 +1,5 @@
+import Ajv from 'ajv';
+import { encodeStructuredLifecycleRequest } from '../../../src/finding-revalidation/domain/packet';
 import {
   AcceptedRevalidation,
   byteHash,
@@ -346,6 +348,92 @@ describe('bounded finding revalidation safety contracts', () => {
       });
     }
   );
+
+  it('binds the qualified strict output schema before hashing while retaining literal grounding', async () => {
+    const plan = await planFindingRevalidation(input([target(0)]), ports());
+    const prepared = prepareLifecycleRequest(
+      plan.packets[0]!,
+      plan.outputCap,
+      undefined,
+      encodeStructuredLifecycleRequest
+    );
+    const wire = JSON.parse(Buffer.from(prepared.requestBytes).toString());
+    expect(wire.text.format).toMatchObject({
+      type: 'json_schema',
+      name: 'codex_output_schema',
+      strict: true,
+    });
+    expect(prepared.requestHash).toBe(byteHash(prepared.requestBytes));
+    expect(JSON.parse(wire.input[0].content[0].text).packetHash).toBe(
+      prepared.packet.packetHash
+    );
+    const check = new Ajv({ strict: true }).compile(wire.text.format.schema);
+    const valid = JSON.parse(
+      Buffer.from(response(prepared.packet.packetHash, [result(0)])).toString()
+    );
+    expect(check(valid)).toBe(true);
+    const missing = structuredClone(valid);
+    delete missing.results[0].fingerprint;
+    expect(check(missing)).toBe(false);
+    expect(check({ ...valid, extra: 'untrusted' })).toBe(false);
+    const ungrounded = {
+      ...result(0),
+      evidence: [{ ...result(0).evidence[0]!, quote: 'invented' }],
+    };
+    expect(
+      validateLifecycleResponse(
+        response(prepared.packet.packetHash, [ungrounded]),
+        prepared,
+        'saved-model',
+        prepared.requestHash
+      )
+    ).toMatchObject({ valid: false, diagnosticCode: 'evidence_ungrounded' });
+    expect(
+      validateLifecycleResponse(
+        Buffer.from('```json\n{}\n```'),
+        prepared,
+        'saved-model',
+        prepared.requestHash
+      )
+    ).toMatchObject({ valid: false, diagnosticCode: 'json_invalid' });
+    const legacy = prepareLifecycleRequest(plan.packets[0]!, plan.outputCap);
+    expect(
+      JSON.parse(Buffer.from(legacy.requestBytes).toString())
+    ).not.toHaveProperty('text');
+    expect(legacy.requestHash).not.toBe(prepared.requestHash);
+  });
+
+  it('budgets the selected schema codec during packing before any provider preparation', async () => {
+    const seed = input([target(0)]);
+    const initial = await planFindingRevalidation(seed, ports());
+    const packet = initial.packets[0]!;
+    const plain = prepareLifecycleRequest(packet, initial.outputCap);
+    const structured = prepareLifecycleRequest(
+      packet,
+      initial.outputCap,
+      undefined,
+      encodeStructuredLifecycleRequest
+    );
+    const limit = plain.requestBytes.byteLength + 1;
+    expect(structured.requestBytes.byteLength).toBeGreaterThan(limit);
+    const bounded = {
+      ...seed,
+      limits: { ...seed.limits, maxRequestBytes: limit },
+    };
+    expect(
+      (await planFindingRevalidation(bounded, ports())).packets
+    ).toHaveLength(1);
+    const planned = await planFindingRevalidation(
+      bounded,
+      Object.assign(ports(), {
+        encodeRequest: encodeStructuredLifecycleRequest,
+      })
+    );
+    expect(planned.packets).toHaveLength(0);
+    expect(planned.dispositions[0]).toMatchObject({
+      reason: 'request_oversized',
+    });
+  });
 
   it('preserves BOM and CRLF bytes in full source packets', async () => {
     const content = '\uFEFFconst fixed = true;\r\n';

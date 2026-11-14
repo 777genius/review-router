@@ -1,3 +1,4 @@
+import { encodeStructuredLifecycleRequest } from '../../../src/finding-revalidation/domain/packet';
 import {
   confirmedProviderFailure,
   providerFailureMessage,
@@ -76,8 +77,38 @@ function mockUpstream(status: number, body: string, contentType: string) {
 test.each([undefined, 'reviewer-primary'])(
   'parent transport forwards exact normalized hashed bytes and complete lease dispatch context once for reviewer=%s',
   async (reviewerId) => {
+    const requestBody = reviewerId
+      ? Buffer.from(
+          encodeStructuredLifecycleRequest({
+            model: 'saved-model',
+            instructions: 'verify',
+            userText: 'packet',
+            outputCap: 4096,
+            maxRequestBytes: 96000,
+          })
+        )
+      : bytes;
     const output = '{"version":1,"packetHash":"packet","results":[]}';
-    const sse = `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { status: 'completed', model: 'saved-model', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: output }] }] } })}\n\n`;
+    const sse = `event: response.completed\ndata: ${JSON.stringify({
+      type: 'response.completed',
+      response: {
+        status: 'completed',
+        model: 'saved-model',
+        output: [
+          {
+            type: 'reasoning',
+            summary: [
+              { type: 'summary_text', text: 'analysis is not a JSON answer' },
+            ],
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: output }],
+          },
+        ],
+      },
+    })}\n\n`;
     const upstream = mockUpstream(200, sse, 'text/event-stream');
     try {
       const transport = new AccountGatewayModelTransport(
@@ -91,7 +122,7 @@ test.each([undefined, 'reviewer-primary'])(
         reviewerId
       );
       const result = await transport.generateLifecycleVerification({
-        requestBody: bytes,
+        requestBody,
         dispatch,
         signal: new AbortController().signal,
         maxResponseBytes: 32768,
@@ -102,7 +133,7 @@ test.each([undefined, 'reviewer-primary'])(
       expect(upstream.seen[0].headers['x-reviewrouter-reviewer-id']).toBe(
         reviewerId
       );
-      expect(Buffer.from(upstream.seen[0].body).equals(bytes)).toBe(true);
+      expect(Buffer.from(upstream.seen[0].body).equals(requestBody)).toBe(true);
       expect(upstream.seen[0].url.pathname).toBe(
         '/api/action/v2/account-gateway/responses'
       );
@@ -118,7 +149,7 @@ test.each([undefined, 'reviewer-primary'])(
         body: Buffer.from(output),
         actualModel: 'saved-model',
         providerRequestEnvelopeHash: createHash('sha256')
-          .update(bytes)
+          .update(requestBody)
           .digest('hex'),
       });
     } finally {

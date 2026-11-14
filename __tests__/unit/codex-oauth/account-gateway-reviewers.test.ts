@@ -1,6 +1,7 @@
 import * as core from '../../../src/actions/core';
 import {
   ACCOUNT_GATEWAY_BOUNDS,
+  gatewayLifecycleRequestEncoder,
   type AccountGatewayModelTransport,
 } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 import { CONTEXT_TOOLS_PLAN_ENV } from '../../../src/context-tools/contract';
@@ -70,6 +71,115 @@ describe('isolated Gateway reviewer sessions', () => {
       registerCleanup: (cleanup) => cleanups.push(cleanup),
       registerTransport: () => {},
     });
+
+  it('does not borrow a global or primary profile for missing/malformed/unsupported captured lanes', () => {
+    const primary = {
+      REVIEW_ROUTER_GATEWAY_PROFILE_REF: 'nvidia-build-chat-apikey-v1',
+    };
+    for (const raw of [
+      undefined,
+      '{',
+      'null',
+      '[]',
+      '{}',
+      '{"other":"nvidia-build-chat-apikey-v1"}',
+      '{"lane":{"profile":"nvidia-build-chat-apikey-v1"}}',
+      '{"lane":"openrouter-openai-responses-apikey-v1"}',
+    ]) {
+      expect(
+        gatewayLifecycleRequestEncoder(
+          { ...primary, REVIEW_ROUTER_GATEWAY_REVIEWER_PROFILES_JSON: raw },
+          'lane'
+        )
+      ).toBeUndefined();
+    }
+    expect(gatewayLifecycleRequestEncoder(primary, 'toString')).toBeUndefined();
+    expect(gatewayLifecycleRequestEncoder(primary)).toBeDefined();
+    const mixed = Object.fromEntries(
+      Array.from({ length: 20 }, (_, i) => [`sibling-${i}`, null])
+    );
+    expect(
+      gatewayLifecycleRequestEncoder(
+        {
+          REVIEW_ROUTER_GATEWAY_REVIEWER_PROFILES_JSON: JSON.stringify({
+            ...mixed,
+            lane: 'nvidia-build-chat-apikey-v1',
+          }),
+        },
+        'lane'
+      )
+    ).toBeDefined();
+    for (const profile of [
+      'openrouter-openai-responses-apikey-v1',
+      'grok-subscription-responses-oauth-v1',
+      'openai-codex-oauth-responses-v1',
+      'mimo-token-plan-api',
+      'unknown',
+    ])
+      expect(
+        gatewayLifecycleRequestEncoder({
+          REVIEW_ROUTER_GATEWAY_PROFILE_REF: profile,
+        })
+      ).toBeUndefined();
+  });
+
+  it.each(['first', 'second'])(
+    'selects structured lifecycle wire only for the exact captured NVIDIA lane: %s',
+    async (selected) => {
+      const parent = parentRuntime();
+      const runtimeConfig = {
+        ...parent,
+        runtimeEnv: {
+          ...parent.runtimeEnv,
+          REVIEW_ROUTER_GATEWAY_REVIEWER_PROFILES_JSON: JSON.stringify({
+            first:
+              selected === 'first'
+                ? 'nvidia-build-chat-apikey-v1'
+                : 'openrouter-openai-responses-apikey-v1',
+            second:
+              selected === 'second'
+                ? 'nvidia-build-chat-apikey-v1'
+                : 'grok-subscription-responses-oauth-v1',
+          }),
+          REVIEW_ROUTER_GATEWAY_PROFILE_REF: 'nvidia-build-chat-apikey-v1',
+        },
+      };
+      for (const id of ['first', 'second']) {
+        const session = await prepareAccountGatewayReviewerSession({
+          apiUrl: 'https://api.reviewrouter.invalid',
+          authorization: () => 'synthetic-run-token',
+          runtimeConfig,
+          reviewer: reviewer(id, `model-${id}`, 'high'),
+          signal: new AbortController().signal,
+          registerCleanup: (cleanup) => cleanups.push(cleanup),
+          registerTransport: () => {},
+        });
+        const encode = session.modelTransport.encodeLifecycleRequest;
+        if (id !== selected) {
+          expect(encode).toBeUndefined();
+          continue;
+        }
+        expect(encode).toBeDefined();
+        const wire = JSON.parse(
+          Buffer.from(
+            encode!({
+              model: `model-${id}`,
+              instructions: 'verify',
+              userText: '{"packetHash":"packet"}',
+              outputCap: 4096,
+              maxRequestBytes: 96000,
+            })
+          ).toString()
+        );
+        expect(wire.text.format).toMatchObject({
+          type: 'json_schema',
+          name: 'codex_output_schema',
+          strict: true,
+        });
+        expect(wire.input[0].content[0].text).toBe('{"packetHash":"packet"}');
+      }
+    }
+  );
 
   it('keeps separate private homes, loopback capabilities and captured models/settings without changing global environment', async () => {
     const original = { ...process.env };

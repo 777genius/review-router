@@ -155,7 +155,9 @@ describe('production review projection coverage', () => {
     expect(soloEnvelope.publishing.summary.body).toContain(
       '**Reviewer agreement:** 1'
     );
-    expect(soloEnvelope.publishing.summary.body).toContain('Wrong return value');
+    expect(soloEnvelope.publishing.summary.body).toContain(
+      'Wrong return value'
+    );
     expect(soloEnvelope.mergeGate.conclusion).toBe('fail');
 
     const both = await builder.build({
@@ -176,7 +178,9 @@ describe('production review projection coverage', () => {
     expect(confirmed.occurrences[0].providerVoteKeys).toHaveLength(2);
     expect(confirmed.occurrences[0].placement.kind).toBe('inline');
     expect(confirmed.publishing.inlineReviewChunks).toHaveLength(1);
-    expect(confirmed.publishing.summary.body).not.toContain('**Reviewer agreement:**');
+    expect(confirmed.publishing.summary.body).not.toContain(
+      '**Reviewer agreement:**'
+    );
   });
 
   it('publishes confirmed quota reset only for incomplete coverage', async () => {
@@ -2424,6 +2428,8 @@ async function projectNativeOcrComments(
 }
 
 it('derives verifier confirmations from accepted restored slots, keeping companion absence outside discovery coverage', async () => {
+  let notice: 'output_invalid' | 'output_truncated' = 'output_invalid';
+  let failedVerification = false;
   const inventory = completeLifecycleInventory();
   const marker = 'a'.repeat(24);
   const commentStateHash = 'b'.repeat(64);
@@ -2438,8 +2444,8 @@ it('derives verifier confirmations from accepted restored slots, keeping compani
         title: 'Tax divisor is zero',
         message: 'A valid input causes division by zero.',
         severity: FindingSeverity.Major,
-        originalPath: 'src/tax.ts',
-        currentPath: 'src/tax.ts',
+        originalPath: 'src/a.ts',
+        currentPath: 'src/a.ts',
         parentCommentUpdatedAt: parentUpdatedAt,
         threadCommentCount: 1,
         threadStateHash: commentStateHash,
@@ -2454,6 +2460,7 @@ it('derives verifier confirmations from accepted restored slots, keeping compani
     filePaths: [],
   };
   const builder = createProductionReviewProjectionBuilder({
+    providerFailure: () => (failedVerification ? notice : undefined),
     authorizationFacts,
     pr,
     config: {
@@ -2464,7 +2471,7 @@ it('derives verifier confirmations from accepted restored slots, keeping compani
     protocolLimits,
     assignments: [assignment('discovery-slot', true), verifierSlot],
     uncoveredPaths: [],
-    uncoveredLifecycleTargetIds: ['old-tax'],
+    uncoveredLifecycleTargetIds: [],
     lifecycleInventory: inventory,
     lifecycleVerification: {
       plannedProviderVoteKeys: [
@@ -2525,17 +2532,64 @@ it('derives verifier confirmations from accepted restored slots, keeping compani
     confirmationState: 'confirmed_open',
     observationIds: ['observation-verifier-slot'],
   });
-  const missing = await builder.build({
-    acceptedEvidence: [discovery],
-    exhaustedWorkSlotIds: ['verifier-slot'],
-    reviewRevisionHash: authorizationFacts.reviewRevisionHash,
-  });
-  const missingProjection = JSON.parse(missing.projectionEnvelopeCanonicalJson);
-  expect(missingProjection.coverage.state).toBe('complete');
-  expect(
-    missingProjection.publishing.lifecycle[0].verification.confirmationState
-  ).toBe('unverified');
-  expect(missingProjection.publishing.summary.allClear).toBe(false);
+  failedVerification = true;
+  for (notice of ['output_invalid', 'output_truncated'] as const) {
+    const missing = await builder.build({
+      comparisonBaseline: {
+        schemaVersion: 'comparison_baseline.v1',
+        sourceReviewedHeadSha: '0'.repeat(40),
+        sourceReviewRevisionHash: 'a'.repeat(64),
+        sourceExecutionGeneration: '1',
+        snapshotVersion: 1,
+        projectionPolicyVersion: 'review-projection-policy.v6-comparison',
+        projectionEnvelopeVersion: 'review_projection.v1',
+        appliedResolutions: [],
+        priorLineageHints: [
+          {
+            lineageId: marker,
+            category: 'correctness',
+            normalizedFailureModeHash: 'a'.repeat(64),
+            severity: FindingSeverity.Major,
+            title: 'Tax divisor is zero',
+            message: 'Prior bug',
+            filePath: 'src/a.ts',
+            line: 1,
+            firstSeenHeadSha: '0'.repeat(40),
+            lastSeenHeadSha: '0'.repeat(40),
+            active: true,
+          },
+        ],
+      },
+      acceptedEvidence: [discovery],
+      exhaustedWorkSlotIds: ['verifier-slot'],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const missingProjection = JSON.parse(
+      missing.projectionEnvelopeCanonicalJson
+    );
+    expect(missingProjection.coverage.state).toBe('complete');
+    expect(
+      missingProjection.publishing.lifecycle[0].verification.confirmationState
+    ).toBe('unverified');
+    expect(missingProjection.publishing.summary.allClear).toBe(false);
+    const body = missingProjection.publishing.summary.body;
+    expect(body).toContain(
+      notice === 'output_invalid'
+        ? 'A verification response did not satisfy the required format or evidence checks.'
+        : 'The provider reached its output token limit'
+    );
+    expect(body).toContain('1 previous issue not verified');
+    expect(body).toContain('<!-- reviewrouter:review-status:complete -->');
+    expect(body).not.toContain('This review is incomplete');
+    expect(body).toContain(
+      notice === 'output_invalid'
+        ? 'The affected findings remain unverified'
+        : 'The affected result is incomplete.'
+    );
+    expect(missingProjection.publishing.lifecycle[0].mutationEligible).toBe(
+      false
+    );
+  }
 });
 
 it.each(['removed', 'changed'] as const)(

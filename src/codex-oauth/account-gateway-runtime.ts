@@ -26,6 +26,7 @@ import {
   AccountGatewayModelTransport,
   createAccountGatewayRunFetch,
   startLocalGatewayModelTransport,
+  gatewayLifecycleRequestEncoder,
   ACCOUNT_GATEWAY_BOUNDS,
   LOCAL_MODEL_CAPABILITY_ENV,
   type AccountGatewayCheckoutRequest,
@@ -406,7 +407,9 @@ async function runAccountGatewayRuntimeInternal(
       phase = 'local_transport';
       bridge = await startLocalGatewayModelTransport(
         transport,
-        observeTransport
+        observeTransport,
+        undefined,
+        gatewayLifecycleRequestEncoder(capability.runtimeConfig.runtimeEnv)
       );
       if (ocrAgent) {
         // Managed OCR run layout (§5.2): private run dir, HOME 0700 and

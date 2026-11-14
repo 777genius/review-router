@@ -7,9 +7,9 @@ describe('unknown request outcome diagnostics', () => {
   it('explains a semantic invalid response without inventing a transport failure', () => {
     const message = providerFailureMessage('output_invalid', true)!;
     expect(message).toContain(
-      'response did not satisfy the required review format'
+      'verification response did not satisfy the required format'
     );
-    expect(message).toContain('This review is incomplete');
+    expect(message).toContain('The affected findings remain unverified');
     expect(message).not.toMatch(/unreachable|unknown|retry|quota/i);
   });
   it.each(['effect_unknown', 'dispatch_started', 'response_started'])(

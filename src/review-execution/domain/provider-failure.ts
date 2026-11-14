@@ -39,9 +39,11 @@ export function providerFailureMessage(
   incompleteReview = false
 ): string | undefined {
   if (notice === 'output_invalid')
-    return 'The provider response did not satisfy the required review format or evidence checks. This review is incomplete and does not approve the changes.';
+    return 'A verification response did not satisfy the required format or evidence checks. The affected findings remain unverified and are not confirmed as fixed.';
   if (notice === 'output_truncated')
-    return 'The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes.';
+    return incompleteReview
+      ? 'The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes.'
+      : 'The provider reached its output token limit before completing a response. The affected result is incomplete.';
   if (
     notice !== 'upstream_failure' &&
     notice !== 'upstream_failure_unknown' &&

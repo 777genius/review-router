@@ -14,6 +14,7 @@ import {
 import {
   AccountGatewayModelTransport,
   startLocalGatewayModelTransport,
+  gatewayLifecycleRequestEncoder,
   ACCOUNT_GATEWAY_BOUNDS,
   LOCAL_MODEL_CAPABILITY_ENV,
   type LocalGatewayModelTransport,
@@ -114,7 +115,12 @@ export async function prepareAccountGatewayReviewerSession(input: {
   signal.throwIfAborted();
   const bridge = await startLocalGatewayModelTransport(
     transport,
-    observeTransport
+    observeTransport,
+    undefined,
+    gatewayLifecycleRequestEncoder(
+      runtimeConfig.runtimeEnv,
+      reviewer.reviewerId
+    )
   );
   let privateHome: string | undefined;
   let cli: PreparedCodexCli | undefined;

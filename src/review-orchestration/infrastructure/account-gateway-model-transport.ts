@@ -930,7 +930,7 @@ export class AccountGatewayModelTransport {
                 isStream &&
                 audit?.hasCompleted()
               ) {
-                terminalChunks.push(Buffer.from(chunk));
+                if (!outputTruncated) terminalChunks.push(Buffer.from(chunk));
                 done();
               } else done(null, chunk); // Original bytes, no conversion.
             } catch {

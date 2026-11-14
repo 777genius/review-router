@@ -132670,7 +132670,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
               responseDigest.update(chunk);
               if (!isStream) diagnostic.push(chunk);
               if ((ticket || outputTruncated) && isStream && audit?.hasCompleted()) {
-                terminalChunks.push(Buffer.from(chunk));
+                if (!outputTruncated) terminalChunks.push(Buffer.from(chunk));
                 done();
               } else done(null, chunk);
             } catch {

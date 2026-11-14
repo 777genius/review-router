@@ -1,3 +1,4 @@
+import { encodeStructuredLifecycleRequest } from '../../../src/finding-revalidation/domain/packet';
 import {
   AccountGatewayModelTransport,
   type GatewayTransportDiagnostic,
@@ -49,6 +50,17 @@ const request = (fields: Record<string, unknown> = {}) =>
   );
 
 it('normalizes Gateway discovery before claiming and preserves exact verifier bytes', () => {
+  const structured = encodeStructuredLifecycleRequest({
+    model: 'synthetic-model',
+    instructions: 'Verify exact source',
+    userText: '{"packetHash":"synthetic"}',
+    outputCap: 100,
+    maxRequestBytes: 64000,
+  });
+  expect(controller().normalizeResponsesRequest(structured)).toEqual(
+    Buffer.from(structured)
+  );
+
   const dispatch = controller();
   const normalized = dispatch.normalizeResponsesRequest(
     request({ reasoning: null, max_output_tokens: 999 })

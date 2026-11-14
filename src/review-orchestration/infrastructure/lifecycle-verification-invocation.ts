@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { createHash } from 'crypto';
 import {
   lifecycleVerificationContract as contract,
@@ -12,6 +13,7 @@ import type { ReviewModelDispatchCapability } from '../../control-plane/generate
 import {
   canonicalRevalidationJson as canonicalJson,
   prepareLifecycleRequest,
+  encodeStructuredLifecycleRequest,
   LifecycleResponseInvalidError,
   validateLifecycleResponse,
   type RevalidationPlan,
@@ -362,6 +364,15 @@ export function compositeLifecycleInvocations(input: {
         input.capability.maxPromptBytes,
         input.transport.encodeLifecycleRequest
       );
+      logger.info('Lifecycle verification request prepared', {
+        workSlotId: request.workSlot.workSlotId,
+        outputFormat:
+          input.transport.encodeLifecycleRequest ===
+          encodeStructuredLifecycleRequest
+            ? 'json_schema'
+            : 'existing_codec',
+        providerRequestEnvelopeHash: value.requestHash,
+      });
       prepared.set(request.workSlot.workSlotId, value);
       return Object.freeze({
         workSlotId: request.workSlot.workSlotId,

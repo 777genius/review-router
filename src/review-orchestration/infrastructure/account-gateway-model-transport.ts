@@ -1,3 +1,4 @@
+import { encodeStructuredLifecycleRequest } from '../../finding-revalidation/domain/packet';
 import {
   confirmedProviderQuota,
   type ProviderQuota,
@@ -1399,12 +1400,41 @@ export function normalizeCodexGatewayServiceTier(bytes: Uint8Array): Buffer {
   return normalized;
 }
 
+/** Only captured checkout metadata selects a qualified codec; never global env or model aliases. */
+export function gatewayLifecycleRequestEncoder(
+  runtimeEnv: Readonly<Record<string, string | undefined>>,
+  reviewerId?: string
+): LifecycleRequestEncoder | undefined {
+  let profile: unknown;
+  if (reviewerId !== undefined) {
+    try {
+      const raw = runtimeEnv.REVIEW_ROUTER_GATEWAY_REVIEWER_PROFILES_JSON;
+      if (!raw || raw.length > 16384) return undefined;
+      const map: unknown = JSON.parse(raw);
+      if (
+        !map ||
+        typeof map !== 'object' ||
+        Array.isArray(map) ||
+        !Object.hasOwn(map, reviewerId)
+      )
+        return undefined;
+      profile = (map as Record<string, unknown>)[reviewerId];
+    } catch {
+      return undefined;
+    }
+  } else profile = runtimeEnv.REVIEW_ROUTER_GATEWAY_PROFILE_REF;
+  return profile === 'nvidia-build-chat-apikey-v1'
+    ? encodeStructuredLifecycleRequest
+    : undefined;
+}
+
 /** Tiny per-run loopback adapter for CLI clients that capture auth once. Only
  * POST /responses exists; destinations/headers are never supplied by the CLI. */
 export async function startLocalGatewayModelTransport(
   transport: AccountGatewayModelTransport,
   observe?: ObserveTransport,
-  directProvider?: DirectProviderApiLimits
+  directProvider?: DirectProviderApiLimits,
+  lifecycleEncoder?: LifecycleRequestEncoder
 ): Promise<LocalGatewayModelTransport> {
   const capability = randomBytes(32).toString('hex');
   let stopping = false;
@@ -1590,6 +1620,7 @@ export async function startLocalGatewayModelTransport(
     },
     beginInvocation: (scope) => transport.beginInvocation(scope),
     generatePrDescription: (input) => transport.generatePrDescription(input),
+    ...(lifecycleEncoder ? { encodeLifecycleRequest: lifecycleEncoder } : {}),
     generateLifecycleVerification: (input) => {
       const flight = transport.generateLifecycleVerification(input);
       flights.add(flight);

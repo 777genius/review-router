@@ -23,6 +23,7 @@ import {
   prepareLifecycleRequest,
   REVALIDATION_LIMITS,
   revalidationHash,
+  type LifecycleRequestEncoder,
 } from '../domain/packet';
 
 export type PlanRevalidationInput = Readonly<{
@@ -38,6 +39,7 @@ export type PlanRevalidationInput = Readonly<{
   renames?: readonly Readonly<{ previousFilename: string; filename: string }>[];
 }>;
 export type RevalidationPlanningPorts = Readonly<{
+  encodeRequest?: LifecycleRequestEncoder;
   sourceReader: ImmutableSourceReader;
   priorResolutionHistory: PriorResolutionHistory;
   /** Composes the existing sensitive-path predicate and repository exclusions. */
@@ -189,7 +191,12 @@ export async function planFindingRevalidation(
   });
   const requestFits = (packet: VerifyPacket): boolean => {
     try {
-      prepareLifecycleRequest(packet, outputCap, requestLimit);
+      prepareLifecycleRequest(
+        packet,
+        outputCap,
+        requestLimit,
+        ports.encodeRequest
+      );
       return true;
     } catch {
       return false;

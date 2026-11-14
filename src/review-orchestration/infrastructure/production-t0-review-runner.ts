@@ -1078,6 +1078,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 )
               : lifecycleCapability
                 ? await planProductionLifecycleVerification({
+                    encodeLifecycleRequest:
+                      modelTransport.encodeLifecycleRequest,
                     capability: lifecycleCapability,
                     authorization,
                     plan: planned.plan,
@@ -1501,6 +1503,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             )
           : lifecycleCapability
             ? await planProductionLifecycleVerification({
+                encodeLifecycleRequest:
+                  preparedRoute?.modelTransport.encodeLifecycleRequest,
                 capability: lifecycleCapability,
                 authorization,
                 plan: planned.plan,

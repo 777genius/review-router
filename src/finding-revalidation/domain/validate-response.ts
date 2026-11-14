@@ -1,14 +1,26 @@
 import {
   AcceptedRevalidation,
   PacketValidation,
+  LifecycleResponseValidationCode,
   PreparedPacket,
   RevalidationEvidence,
 } from './contracts';
 import { byteHash, REVALIDATION_LIMITS } from './packet';
 
-const invalid = (): PacketValidation => ({
+/** Closed metadata only: never retain provider text, source or response bytes. */
+export class LifecycleResponseInvalidError extends Error {
+  constructor(readonly diagnosticCode: LifecycleResponseValidationCode) {
+    super('lifecycle_verification_response_invalid');
+    this.name = 'LifecycleResponseInvalidError';
+  }
+}
+
+const invalid = (
+  diagnosticCode: LifecycleResponseValidationCode
+): PacketValidation => ({
   valid: false,
   reason: 'missing_or_invalid_verdict',
+  diagnosticCode,
 });
 function exactRecord(
   value: unknown,
@@ -36,19 +48,23 @@ export function validateLifecycleResponse(
 ): PacketValidation {
   if (
     bytes.byteLength >
-      Math.min(maxResponseBytes, REVALIDATION_LIMITS.responseBytes) ||
-    actualModel !== prepared.packet.participant.model ||
+    Math.min(maxResponseBytes, REVALIDATION_LIMITS.responseBytes)
+  )
+    return invalid('response_bound');
+  if (actualModel !== prepared.packet.participant.model)
+    return invalid('model_mismatch');
+  if (
     requestHash !== prepared.requestHash ||
     byteHash(prepared.requestBytes) !== prepared.requestHash
   )
-    return invalid();
+    return invalid('request_binding_invalid');
   let output: unknown;
   try {
     output = JSON.parse(
       new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     );
   } catch {
-    return invalid();
+    return invalid('json_invalid');
   }
   if (
     !exactRecord(output, ['version', 'packetHash', 'results']) ||
@@ -57,7 +73,7 @@ export function validateLifecycleResponse(
     !Array.isArray(output.results) ||
     output.results.length !== prepared.packet.targets.length
   )
-    return invalid();
+    return invalid('envelope_invalid');
   const known = new Map(
     prepared.packet.targets.map((target) => [target.witness.targetId, target])
   );
@@ -78,7 +94,7 @@ export function validateLifecycleResponse(
       typeof raw.targetId !== 'string' ||
       seen.has(raw.targetId)
     )
-      return invalid();
+      return invalid('result_invalid');
     const target = known.get(raw.targetId);
     if (
       !target ||
@@ -95,7 +111,7 @@ export function validateLifecycleResponse(
       !Array.isArray(raw.evidence) ||
       raw.evidence.length > 6
     )
-      return invalid();
+      return invalid('result_invalid');
     seen.add(raw.targetId);
     const evidence: RevalidationEvidence[] = [];
     for (const citation of raw.evidence) {
@@ -118,7 +134,7 @@ export function validateLifecycleResponse(
         !boundedText(citation.reason) ||
         !citation.reason.trim()
       )
-        return invalid();
+        return invalid('evidence_invalid');
       const source = prepared.packet.sources.find(
         (source) =>
           source.path === citation.path &&
@@ -138,7 +154,7 @@ export function validateLifecycleResponse(
           .join('\n')
           .includes(citation.quote)
       )
-        return invalid();
+        return invalid('evidence_ungrounded');
       evidence.push(citation as RevalidationEvidence);
     }
     const verdict = raw.verdict as AcceptedRevalidation['verdict'];
@@ -148,13 +164,13 @@ export function validateLifecycleResponse(
         !raw.failureCondition.trim() ||
         !raw.fixExplanation.trim())
     )
-      return invalid();
+      return invalid('verdict_unsupported');
     if (
       verdict === 'uncertain' &&
       !raw.fixExplanation.trim() &&
       !raw.failureCondition.trim()
     )
-      return invalid();
+      return invalid('verdict_unsupported');
     // Insufficient scope or confidence is abstention, never a positive fix.
     const acceptedVerdict =
       verdict === 'resolved' &&

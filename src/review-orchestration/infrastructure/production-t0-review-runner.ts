@@ -677,12 +677,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             })
           )
         : undefined;
+      let lifecycleOutputInvalid = false;
       const prepareLane = async (
         input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
         reviewer?: ReviewReviewerPlanReviewerV1,
         slotBudget?: ReviewerSlotBudget,
         bootstrapFailure = false
       ): Promise<ProductionReviewLane> => {
+        let laneLifecycleOutputInvalid = false;
         const preparedRoute =
           input.preparedRoute ?? input.accountGateway ?? input.providerApi;
         const admittedRuntime = preparedRoute?.runtimeConfig;
@@ -1249,6 +1251,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                         liveLifecycleStateHash:
                           lifecycle.liveLifecycleStateHash,
                         transport: modelTransport,
+                        onInvalidResponse: () => {
+                          laneLifecycleOutputInvalid = true;
+                          lifecycleOutputInvalid = true;
+                        },
                       })
                     : discoveryInvocations,
                 memoryAdmission,
@@ -1264,7 +1270,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
                 projectionBuilder: createProductionReviewProjectionBuilder({
                   providerFailure: () =>
-                    confirmedProviderFailure(modelTransport.failureFact()),
+                    confirmedProviderFailure(modelTransport.failureFact()) ??
+                    (laneLifecycleOutputInvalid ? 'output_invalid' : undefined),
                   providerQuota: () =>
                     confirmedProviderQuota(modelTransport.failureFact()),
                   authorizationFacts: authorization.facts,
@@ -1746,6 +1753,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                     reviewRevisionHash: authorization.facts.reviewRevisionHash,
                     liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
                     transport: preparedRoute!.modelTransport,
+                    onInvalidResponse: () => {
+                      laneLifecycleOutputInvalid = true;
+                      lifecycleOutputInvalid = true;
+                    },
                   })
                 : nativeDiscoveryInvocations,
             memoryAdmission,
@@ -1768,7 +1779,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               providerFailure: () =>
                 confirmedProviderFailure(
                   preparedRoute?.modelTransport.failureFact()
-                ),
+                ) ??
+                (laneLifecycleOutputInvalid ? 'output_invalid' : undefined),
               providerQuota: () =>
                 confirmedProviderQuota(
                   preparedRoute?.modelTransport.failureFact()
@@ -2032,7 +2044,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                     .map((transport) =>
                       confirmedProviderFailure(transport.failureFact())
                     )
-                    .find((notice) => notice !== undefined),
+                    .find((notice) => notice !== undefined) ??
+                  (lifecycleOutputInvalid ? 'output_invalid' : undefined),
                 providerQuota: () =>
                   [...modelTransports.values()]
                     .map((transport) =>

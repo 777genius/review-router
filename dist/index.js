@@ -143016,6 +143016,8 @@ function confirmedProviderFailure(fact) {
   return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
 }
 function providerFailureMessage(notice, incompleteReview = false) {
+  if (notice === "output_invalid")
+    return "The provider response did not satisfy the required review format or evidence checks. This review is incomplete and does not approve the changes.";
   if (notice === "output_truncated")
     return "The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes.";
   if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown" && notice !== "request_outcome_unknown")
@@ -165891,7 +165893,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.236",
+  version: "1.0.237",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -238806,6 +238808,509 @@ var ProviderInvocationFailureClassifier = class {
   }
 };
 
+// src/finding-revalidation/domain/contracts.ts
+var lifecycleResponseValidationCodes = [
+  "response_bound",
+  "model_mismatch",
+  "request_binding_invalid",
+  "json_invalid",
+  "envelope_invalid",
+  "result_invalid",
+  "evidence_invalid",
+  "evidence_ungrounded",
+  "verdict_unsupported"
+];
+
+// src/finding-revalidation/domain/validate-response.ts
+var LifecycleResponseInvalidError = class extends Error {
+  constructor(diagnosticCode) {
+    super("lifecycle_verification_response_invalid");
+    this.diagnosticCode = diagnosticCode;
+    this.name = "LifecycleResponseInvalidError";
+  }
+};
+var invalid4 = (diagnosticCode) => ({
+  valid: false,
+  reason: "missing_or_invalid_verdict",
+  diagnosticCode
+});
+function exactRecord(value, keys5) {
+  return !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === keys5.length && keys5.every((key) => Object.hasOwn(value, key));
+}
+function boundedText2(value, max = 2048) {
+  return typeof value === "string" && Buffer.byteLength(value, "utf8") <= max;
+}
+function validateLifecycleResponse(bytes2, prepared, actualModel, requestHash, maxResponseBytes = REVALIDATION_LIMITS.responseBytes) {
+  if (bytes2.byteLength > Math.min(maxResponseBytes, REVALIDATION_LIMITS.responseBytes))
+    return invalid4("response_bound");
+  if (actualModel !== prepared.packet.participant.model)
+    return invalid4("model_mismatch");
+  if (requestHash !== prepared.requestHash || byteHash(prepared.requestBytes) !== prepared.requestHash)
+    return invalid4("request_binding_invalid");
+  let output;
+  try {
+    output = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
+    );
+  } catch {
+    return invalid4("json_invalid");
+  }
+  if (!exactRecord(output, ["version", "packetHash", "results"]) || output.version !== 1 || output.packetHash !== prepared.packet.packetHash || !Array.isArray(output.results) || output.results.length !== prepared.packet.targets.length)
+    return invalid4("envelope_invalid");
+  const known = new Map(
+    prepared.packet.targets.map((target) => [target.witness.targetId, target])
+  );
+  const seen = /* @__PURE__ */ new Set();
+  const results = [];
+  for (const raw of output.results) {
+    if (!exactRecord(raw, [
+      "targetId",
+      "fingerprint",
+      "verdict",
+      "confidence",
+      "scopeSufficient",
+      "failureCondition",
+      "fixExplanation",
+      "evidence"
+    ]) || typeof raw.targetId !== "string" || seen.has(raw.targetId))
+      return invalid4("result_invalid");
+    const target = known.get(raw.targetId);
+    if (!target || raw.fingerprint !== target.witness.fingerprint || typeof raw.verdict !== "string" || !["resolved", "still_valid", "uncertain"].includes(raw.verdict) || typeof raw.confidence !== "number" || !Number.isFinite(raw.confidence) || raw.confidence < 0 || raw.confidence > 1 || typeof raw.scopeSufficient !== "boolean" || !boundedText2(raw.failureCondition) || !boundedText2(raw.fixExplanation) || !Array.isArray(raw.evidence) || raw.evidence.length > 6)
+      return invalid4("result_invalid");
+    seen.add(raw.targetId);
+    const evidence = [];
+    for (const citation of raw.evidence) {
+      if (!exactRecord(citation, [
+        "path",
+        "blobOid",
+        "startLine",
+        "endLine",
+        "quote",
+        "reason"
+      ]) || typeof citation.path !== "string" || citation.path !== target.sourcePath || typeof citation.blobOid !== "string" || !Number.isInteger(citation.startLine) || !Number.isInteger(citation.endLine) || !boundedText2(citation.quote, 4096) || !citation.quote.trim() || !boundedText2(citation.reason) || !citation.reason.trim())
+        return invalid4("evidence_invalid");
+      const source = prepared.packet.sources.find(
+        (source2) => source2.path === citation.path && source2.blobOid === citation.blobOid && source2.headSha === prepared.packet.scope.headSha
+      );
+      const start = citation.startLine;
+      const end = citation.endLine;
+      if (!source || start < 1 || end < start || end > source.lineCount || !source.content.split("\n").slice(start - 1, end).join("\n").includes(citation.quote))
+        return invalid4("evidence_ungrounded");
+      evidence.push(citation);
+    }
+    const verdict = raw.verdict;
+    if (verdict !== "uncertain" && (!evidence.length || !raw.failureCondition.trim() || !raw.fixExplanation.trim()))
+      return invalid4("verdict_unsupported");
+    if (verdict === "uncertain" && !raw.fixExplanation.trim() && !raw.failureCondition.trim())
+      return invalid4("verdict_unsupported");
+    const acceptedVerdict = verdict === "resolved" && (!raw.scopeSufficient || raw.confidence < prepared.packet.resolveConfidenceThresholds[target.witness.severity]) ? "uncertain" : verdict;
+    results.push({
+      targetId: raw.targetId,
+      fingerprint: raw.fingerprint,
+      verdict: acceptedVerdict,
+      confidence: raw.confidence,
+      scopeSufficient: raw.scopeSufficient,
+      failureCondition: raw.failureCondition,
+      fixExplanation: raw.fixExplanation,
+      evidence
+    });
+  }
+  return { valid: true, results };
+}
+
+// src/finding-revalidation/application/plan-revalidation.ts
+function normalizedPath(path40) {
+  return !!path40 && !path40.includes("\\") && !path40.includes("\0") && !path40.startsWith("/") && path40.split("/").every((segment) => !!segment && segment !== "." && segment !== "..");
+}
+function witness(target, resolutionHistory) {
+  return {
+    targetId: target.targetId,
+    threadId: target.threadId,
+    fingerprint: target.fingerprint,
+    parentId: target.parentId,
+    parentCreatedAt: target.parentCreatedAt,
+    parentUpdatedAt: target.parentUpdatedAt,
+    parentBodyHash: target.parentBodyHash,
+    claimHash: target.claimHash,
+    commentStateHash: target.commentStateHash,
+    ledgerWatermark: target.ledgerWatermark,
+    originalPath: target.originalPath,
+    currentPath: target.currentPath,
+    originalLine: target.originalLine,
+    currentLine: target.currentLine,
+    severity: target.severity,
+    resolutionHistory: { ...resolutionHistory }
+  };
+}
+function ineligible(target) {
+  if (target.isResolved) return "native_resolved";
+  if (!target.trusted || target.markerAmbiguous) return "untrusted_target";
+  if (target.hasHumanReply) return "human_discussion";
+  if (target.commandDismissed) return "command_dismissed";
+  if (target.parentEdited) return "parent_changed";
+  if (!target.targetId || !target.threadId || !target.fingerprint || !target.parentId || !target.parentBodyHash || !target.claimHash || !target.commentStateHash || !target.ledgerWatermark || !Number.isFinite(Date.parse(target.parentUpdatedAt)) || !Number.isFinite(Date.parse(target.parentCreatedAt)))
+    return "untrusted_target";
+  return null;
+}
+var severityOrder = { critical: 0, major: 1, minor: 2, unknown: 3 };
+var lexical = (a2, b2) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0;
+function parentTimestamp(target) {
+  const parsed = Date.parse(target.parentCreatedAt);
+  return Number.isFinite(parsed) ? parsed : Infinity;
+}
+async function planFindingRevalidation(input, ports) {
+  const scope = { ...input.scope };
+  const resolveConfidenceThresholds = resolveRevalidationConfidenceThresholds(
+    input.resolveConfidenceThresholds
+  );
+  const participant = input.participant ? { ...input.participant } : null;
+  const outputCap = Math.min(
+    REVALIDATION_LIMITS.outputTokens,
+    input.limits.gatewayOutputTokens,
+    input.limits.modelOutputTokens
+  );
+  const inventoryHash = revalidationHash("inventory", {
+    scope,
+    inventoryComplete: input.inventoryComplete,
+    targets: [...input.targets].sort((a2, b2) => lexical(a2.targetId, b2.targetId))
+  });
+  const dispositions = [];
+  const groups = [];
+  const slots = Math.max(
+    0,
+    Math.min(
+      REVALIDATION_LIMITS.packets,
+      Math.floor(input.limits.remainingWorkSlots)
+    )
+  );
+  const targetLimit = Math.min(
+    REVALIDATION_LIMITS.targets,
+    Math.floor(outputCap / REVALIDATION_LIMITS.targetOutputTokens)
+  );
+  const requestLimit = Math.min(
+    REVALIDATION_LIMITS.requestBytes,
+    input.limits.maxRequestBytes ?? Infinity
+  );
+  const sourceLimit = Math.min(
+    REVALIDATION_LIMITS.sourceBytes,
+    input.limits.maxSourceBytes ?? Infinity
+  );
+  const fileLimit = Math.min(
+    REVALIDATION_LIMITS.fileBytes,
+    input.limits.maxFileBytes ?? Infinity
+  );
+  const claimLimit = Math.min(
+    REVALIDATION_LIMITS.claimBytes,
+    input.limits.maxClaimBytes ?? Infinity
+  );
+  const maxResponseBytes = Math.min(
+    REVALIDATION_LIMITS.responseBytes,
+    input.limits.maxResponseBytes ?? Infinity
+  );
+  const configValid = participant && participant.model.trim() && participant.voteIdentityHash && participant.capabilityDigest && input.policyDigest && Number.isInteger(input.limits.gatewayOutputTokens) && Number.isInteger(input.limits.modelOutputTokens) && Number.isInteger(input.limits.remainingWorkSlots) && input.limits.remainingWorkSlots >= 0 && Number.isInteger(outputCap) && outputCap >= REVALIDATION_LIMITS.targetOutputTokens && Number.isInteger(slots) && Number.isInteger(requestLimit) && requestLimit > 0 && Number.isInteger(sourceLimit) && sourceLimit > 0 && Number.isInteger(fileLimit) && fileLimit > 0 && Number.isInteger(claimLimit) && claimLimit > 0 && Number.isInteger(maxResponseBytes) && maxResponseBytes > 0;
+  const seen = /* @__PURE__ */ new Set();
+  const duplicateInventory = input.targets.some((target) => {
+    if (seen.has(target.targetId)) return true;
+    seen.add(target.targetId);
+    return false;
+  });
+  const requestFits = (packet) => {
+    try {
+      prepareLifecycleRequest(packet, outputCap, requestLimit);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const sourceCache = /* @__PURE__ */ new Map();
+  const read = (path40, inclusionReason) => {
+    const cached2 = sourceCache.get(path40);
+    if (cached2) return cached2;
+    const result2 = (async () => {
+      if (!normalizedPath(path40) || !ports.isPathAllowed(path40))
+        return {
+          source: null,
+          reason: "sensitive_context_unavailable"
+        };
+      const result3 = await ports.sourceReader.read({
+        headSha: scope.headSha,
+        path: path40,
+        maxBytes: fileLimit
+      });
+      if (result3.kind !== "file")
+        return {
+          source: null,
+          reason: result3.kind === "oversized" ? "source_oversized" : result3.kind === "missing" ? "context_insufficient" : "unsupported_source"
+        };
+      if (result3.headSha !== scope.headSha || result3.path !== path40 || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(result3.blobOid))
+        return { source: null, reason: "unsupported_source" };
+      if (result3.bytes.byteLength > fileLimit)
+        return { source: null, reason: "source_oversized" };
+      const classified = classifyUtf8Content(Buffer.from(result3.bytes));
+      if (classified.kind !== "text")
+        return { source: null, reason: "unsupported_source" };
+      const content = classified.text;
+      if (redactSensitiveText(content) !== content)
+        return {
+          source: null,
+          reason: "sensitive_context_unavailable"
+        };
+      return {
+        source: {
+          headSha: scope.headSha,
+          path: path40,
+          blobOid: result3.blobOid,
+          contentHash: byteHash(result3.bytes),
+          content,
+          byteCount: result3.bytes.byteLength,
+          lineCount: classified.lineCount,
+          complete: true,
+          inclusionReason
+        },
+        reason: "verified"
+      };
+    })();
+    sourceCache.set(path40, result2);
+    return result2;
+  };
+  const candidates = [...input.targets].sort(
+    (a2, b2) => severityOrder[a2.severity] - severityOrder[b2.severity] || parentTimestamp(a2) - parentTimestamp(b2) || lexical(a2.targetId, b2.targetId)
+  );
+  for (const target of candidates) {
+    const skip = (disposition, reason2) => {
+      dispositions.push({
+        targetId: target.targetId,
+        disposition,
+        reason: reason2,
+        packetHash: null
+      });
+    };
+    const reason = ineligible(target);
+    if (reason) {
+      skip(reason === "native_resolved" ? "resolved" : "manual", reason);
+      continue;
+    }
+    if (!input.inventoryComplete || duplicateInventory) {
+      skip("unavailable", "inventory_incomplete");
+      continue;
+    }
+    if (!participant) {
+      skip("unavailable", "verification_unavailable");
+      continue;
+    }
+    if (!configValid) {
+      skip("unavailable", "verification_configuration_invalid");
+      continue;
+    }
+    if (groups.reduce((n2, group) => n2 + group.targets.length, 0) >= slots * targetLimit) {
+      skip("capped", "verification_capped");
+      continue;
+    }
+    const claim = {
+      title: target.title,
+      message: target.message,
+      diffHunk: target.diffHunk
+    };
+    if ([claim.title, claim.message, claim.diffHunk ?? ""].some(
+      (value) => redactSensitiveText(value) !== value
+    )) {
+      skip("unavailable", "sensitive_context_unavailable");
+      continue;
+    }
+    if (Buffer.byteLength(JSON.stringify(claim), "utf8") > claimLimit) {
+      skip("unsupported", "claim_oversized");
+      continue;
+    }
+    let history;
+    try {
+      history = await ports.priorResolutionHistory.read(target, scope);
+    } catch {
+      skip("unavailable", "verification_unavailable");
+      continue;
+    }
+    if (history.state === "previously_resolved") {
+      skip("manual", "previously_resolved_thread_reopened");
+      continue;
+    }
+    if (history.state === "effect_unknown") {
+      skip("manual", "resolution_effect_unknown");
+      continue;
+    }
+    if (![
+      "no_prior_since_creation",
+      "before_cut_unobserved",
+      "unavailable"
+    ].includes(history.state) || !history.historyCut || !history.guardVersion) {
+      skip("unavailable", "verification_unavailable");
+      continue;
+    }
+    let selected;
+    try {
+      selected = await read(
+        target.currentPath ?? target.originalPath,
+        "target_file"
+      );
+      if (!selected.source && selected.reason === "context_insufficient" && target.currentPath && target.currentPath !== target.originalPath)
+        selected = await read(target.originalPath, "target_file");
+      if (!selected.source && selected.reason === "context_insufficient") {
+        const renames = [
+          ...new Set(
+            (input.renames ?? []).filter(
+              (rename7) => rename7.previousFilename === target.originalPath
+            ).map((rename7) => rename7.filename)
+          )
+        ];
+        if (renames.length === 1)
+          selected = await read(renames[0], "native_rename");
+      }
+    } catch {
+      skip("unavailable", "verification_unavailable");
+      continue;
+    }
+    if (!selected.source) {
+      skip("unsupported", selected.reason);
+      continue;
+    }
+    const source = selected.source;
+    const packetTarget = {
+      witness: witness(target, history),
+      claim,
+      sourcePath: source.path
+    };
+    if (source.byteCount > sourceLimit) {
+      skip("unsupported", "source_oversized");
+      continue;
+    }
+    const singleTargetPacket = makeVerifyPacket({
+      scope,
+      participant,
+      targets: [packetTarget],
+      sources: [source],
+      policyDigest: input.policyDigest,
+      resolveConfidenceThresholds
+    });
+    if (!requestFits(singleTargetPacket)) {
+      skip("unsupported", "request_oversized");
+      continue;
+    }
+    const availableGroups = groups.map((group, index) => ({ group, index })).sort(
+      (a2, b2) => Number(b2.group.sources.some((item) => item.path === source.path)) - Number(a2.group.sources.some((item) => item.path === source.path)) || a2.index - b2.index
+    );
+    let packed = false;
+    for (const { group } of [
+      ...availableGroups,
+      ...groups.length < slots ? [
+        {
+          group: {
+            targets: [],
+            sources: []
+          },
+          index: groups.length
+        }
+      ] : []
+    ]) {
+      const sources = group.sources.some((item) => item.path === source.path) ? group.sources : [...group.sources, source];
+      const targets = [...group.targets, packetTarget];
+      if (targets.length > targetLimit || sources.length > REVALIDATION_LIMITS.files || sources.reduce((n2, item) => n2 + item.byteCount, 0) > sourceLimit)
+        continue;
+      const packet = makeVerifyPacket({
+        scope,
+        participant,
+        targets,
+        sources,
+        policyDigest: input.policyDigest,
+        resolveConfidenceThresholds
+      });
+      if (!requestFits(packet)) continue;
+      if (!groups.includes(group)) groups.push(group);
+      group.targets = targets;
+      group.sources = sources;
+      packed = true;
+      break;
+    }
+    if (!packed) skip("capped", "verification_capped");
+  }
+  const packets = groups.map(
+    (group) => makeVerifyPacket({
+      scope,
+      participant,
+      targets: group.targets,
+      sources: group.sources,
+      policyDigest: input.policyDigest,
+      resolveConfidenceThresholds
+    })
+  );
+  for (const packet of packets)
+    for (const target of packet.targets)
+      dispositions.push({
+        targetId: target.witness.targetId,
+        disposition: "eligible",
+        reason: "verified",
+        packetHash: packet.packetHash
+      });
+  dispositions.sort((a2, b2) => lexical(a2.targetId, b2.targetId));
+  return {
+    packets,
+    dispositions,
+    inventoryHash,
+    inventoryCount: input.targets.length,
+    participantRoster: participant ? [participant] : [],
+    outputCap,
+    maxResponseBytes
+  };
+}
+
+// src/finding-revalidation/infrastructure/git-immutable-source-reader.ts
+var import_child_process18 = require("child_process");
+var import_util34 = require("util");
+var execFileAsync7 = (0, import_util34.promisify)(import_child_process18.execFile);
+function createGitImmutableSourceReader(input) {
+  async function git(args, maxBuffer) {
+    const result2 = await execFileAsync7(
+      "git",
+      ["--no-replace-objects", "-C", input.repositoryRoot, ...args],
+      { encoding: "buffer", maxBuffer, timeout: 1e4 }
+    );
+    return result2.stdout;
+  }
+  return {
+    async read({ headSha, path: path40, maxBytes }) {
+      if (!/^[a-f0-9]{40}$/.test(headSha) || !path40 || Buffer.byteLength(path40, "utf8") > 4096 || path40.startsWith("/") || path40.includes("\\") || path40.includes("\0") || path40.split("/").some((segment) => !segment || segment === "." || segment === "..") || !Number.isInteger(maxBytes) || maxBytes <= 0)
+        return { kind: "unsupported" };
+      const limit = Math.min(maxBytes, REVALIDATION_LIMITS.fileBytes);
+      try {
+        const tree = await git(
+          ["ls-tree", "-z", headSha, "--", `:(literal)${path40}`],
+          16 * 1024
+        );
+        if (!tree.length) return { kind: "missing" };
+        const entries = tree.toString("utf8").split("\0");
+        if (entries.length !== 2 || entries[1] !== "")
+          return { kind: "unsupported" };
+        const entry = /^(100644|100755) blob ([a-f0-9]{40})\t([\s\S]+)$/.exec(
+          entries[0]
+        );
+        if (!entry || entry[3] !== path40) return { kind: "unsupported" };
+        const blobOid = entry[2];
+        const sizeText = (await git(["cat-file", "-s", blobOid], 128)).toString("utf8").trim();
+        if (!/^\d+$/.test(sizeText)) return { kind: "unsupported" };
+        const size = Number(sizeText);
+        if (!Number.isSafeInteger(size) || size > limit)
+          return { kind: "oversized" };
+        const bytes2 = await git(
+          ["cat-file", "blob", blobOid],
+          Math.max(1, limit)
+        );
+        if (bytes2.byteLength !== size || classifyUtf8Content(bytes2).kind !== "text")
+          return { kind: "unsupported" };
+        return { kind: "file", headSha, path: path40, blobOid, bytes: bytes2 };
+      } catch {
+        return { kind: "unsupported" };
+      }
+    }
+  };
+}
+
 // src/review-orchestration/infrastructure/review-invocation-diagnostics.ts
 var LoggingReviewInvocationDiagnostics = class {
   constructor(logger8) {
@@ -238824,6 +239329,7 @@ var LoggingReviewInvocationDiagnostics = class {
           input.error,
           input.failureClass
         ),
+        ...input.error instanceof LifecycleResponseInvalidError && lifecycleResponseValidationCodes.includes(input.error.diagnosticCode) ? { validationCode: input.error.diagnosticCode } : {},
         workSlotId: input.invocation.workSlotId
       }
     );
@@ -238877,6 +239383,8 @@ function classifySafeInvocationFailureReason(error4, failureClass) {
     return "authentication_unavailable";
   }
   if (failureClass === "admission_limited") return "admission_limited";
+  if (error4 instanceof LifecycleResponseInvalidError)
+    return "provider_output_invalid";
   const text3 = diagnosticText(error4);
   if (error4 instanceof ReviewInvocationConfigurationMismatchError) {
     return error4.reason;
@@ -238914,7 +239422,7 @@ function diagnosticText(error4) {
 // src/review-orchestration/infrastructure/git-review-revision-materializer.ts
 var import_node_child_process3 = require("node:child_process");
 var import_node_util6 = require("node:util");
-var execFileAsync7 = (0, import_node_util6.promisify)(import_node_child_process3.execFile);
+var execFileAsync8 = (0, import_node_util6.promisify)(import_node_child_process3.execFile);
 var COMMIT_SHA = /^[a-f0-9]{40}$/;
 var GITHUB_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 var GitReviewRevisionMaterializer = class {
@@ -238993,7 +239501,7 @@ function hardenedGitEnvironment() {
   };
 }
 async function runGitCommand(args, options) {
-  await execFileAsync7("git", args, {
+  await execFileAsync8("git", args, {
     cwd: options.cwd,
     env: options.env,
     timeout: 6e4,
@@ -241726,7 +242234,7 @@ var lifecycleVerificationContractV2 = Object.freeze({
 });
 var lifecycleVerificationDescriptorDigestV2 = "sha256:20a13b73ea31192e95c01ad66cf8df545d3714504520bf3e786f7735e818c12f";
 function parseLifecycleVerificationCapabilityV2(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) invalid4();
+  if (!value || typeof value !== "object" || Array.isArray(value)) invalid5();
   const row = value;
   const keys5 = [
     "extensionId",
@@ -241750,7 +242258,7 @@ function parseLifecycleVerificationCapabilityV2(value) {
     row.modelTransport,
     row.protocol
   ) || row.providerIndex !== 0 || typeof row.providerKind !== "string" || !row.providerKind || row.providerKind.length > 64 || typeof row.model !== "string" || !row.model.trim() || row.model.length > 256 || row.maxDispatches !== lifecycleVerificationContract.maxPackets || row.attemptBudget !== 1)
-    invalid4();
+    invalid5();
   for (const key of [
     "maxPromptBytes",
     "maxResponseBytes",
@@ -241759,492 +242267,14 @@ function parseLifecycleVerificationCapabilityV2(value) {
   ]) {
     const bound = row[key];
     if (typeof bound !== "number" || !Number.isSafeInteger(bound) || bound <= 0 || bound > lifecycleVerificationContract[key])
-      invalid4();
+      invalid5();
   }
   if (Number(row.maxOutputTokens) < lifecycleVerificationContract.minOutputTokensPerTarget)
-    invalid4();
+    invalid5();
   return Object.freeze({ ...row });
 }
-function invalid4() {
+function invalid5() {
   throw new Error("lifecycle_verification_v2_capability_invalid");
-}
-
-// src/finding-revalidation/domain/validate-response.ts
-var invalid5 = () => ({
-  valid: false,
-  reason: "missing_or_invalid_verdict"
-});
-function exactRecord(value, keys5) {
-  return !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === keys5.length && keys5.every((key) => Object.hasOwn(value, key));
-}
-function boundedText2(value, max = 2048) {
-  return typeof value === "string" && Buffer.byteLength(value, "utf8") <= max;
-}
-function validateLifecycleResponse(bytes2, prepared, actualModel, requestHash, maxResponseBytes = REVALIDATION_LIMITS.responseBytes) {
-  if (bytes2.byteLength > Math.min(maxResponseBytes, REVALIDATION_LIMITS.responseBytes) || actualModel !== prepared.packet.participant.model || requestHash !== prepared.requestHash || byteHash(prepared.requestBytes) !== prepared.requestHash)
-    return invalid5();
-  let output;
-  try {
-    output = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
-    );
-  } catch {
-    return invalid5();
-  }
-  if (!exactRecord(output, ["version", "packetHash", "results"]) || output.version !== 1 || output.packetHash !== prepared.packet.packetHash || !Array.isArray(output.results) || output.results.length !== prepared.packet.targets.length)
-    return invalid5();
-  const known = new Map(
-    prepared.packet.targets.map((target) => [target.witness.targetId, target])
-  );
-  const seen = /* @__PURE__ */ new Set();
-  const results = [];
-  for (const raw of output.results) {
-    if (!exactRecord(raw, [
-      "targetId",
-      "fingerprint",
-      "verdict",
-      "confidence",
-      "scopeSufficient",
-      "failureCondition",
-      "fixExplanation",
-      "evidence"
-    ]) || typeof raw.targetId !== "string" || seen.has(raw.targetId))
-      return invalid5();
-    const target = known.get(raw.targetId);
-    if (!target || raw.fingerprint !== target.witness.fingerprint || typeof raw.verdict !== "string" || !["resolved", "still_valid", "uncertain"].includes(raw.verdict) || typeof raw.confidence !== "number" || !Number.isFinite(raw.confidence) || raw.confidence < 0 || raw.confidence > 1 || typeof raw.scopeSufficient !== "boolean" || !boundedText2(raw.failureCondition) || !boundedText2(raw.fixExplanation) || !Array.isArray(raw.evidence) || raw.evidence.length > 6)
-      return invalid5();
-    seen.add(raw.targetId);
-    const evidence = [];
-    for (const citation of raw.evidence) {
-      if (!exactRecord(citation, [
-        "path",
-        "blobOid",
-        "startLine",
-        "endLine",
-        "quote",
-        "reason"
-      ]) || typeof citation.path !== "string" || citation.path !== target.sourcePath || typeof citation.blobOid !== "string" || !Number.isInteger(citation.startLine) || !Number.isInteger(citation.endLine) || !boundedText2(citation.quote, 4096) || !citation.quote.trim() || !boundedText2(citation.reason) || !citation.reason.trim())
-        return invalid5();
-      const source = prepared.packet.sources.find(
-        (source2) => source2.path === citation.path && source2.blobOid === citation.blobOid && source2.headSha === prepared.packet.scope.headSha
-      );
-      const start = citation.startLine;
-      const end = citation.endLine;
-      if (!source || start < 1 || end < start || end > source.lineCount || !source.content.split("\n").slice(start - 1, end).join("\n").includes(citation.quote))
-        return invalid5();
-      evidence.push(citation);
-    }
-    const verdict = raw.verdict;
-    if (verdict !== "uncertain" && (!evidence.length || !raw.failureCondition.trim() || !raw.fixExplanation.trim()))
-      return invalid5();
-    if (verdict === "uncertain" && !raw.fixExplanation.trim() && !raw.failureCondition.trim())
-      return invalid5();
-    const acceptedVerdict = verdict === "resolved" && (!raw.scopeSufficient || raw.confidence < prepared.packet.resolveConfidenceThresholds[target.witness.severity]) ? "uncertain" : verdict;
-    results.push({
-      targetId: raw.targetId,
-      fingerprint: raw.fingerprint,
-      verdict: acceptedVerdict,
-      confidence: raw.confidence,
-      scopeSufficient: raw.scopeSufficient,
-      failureCondition: raw.failureCondition,
-      fixExplanation: raw.fixExplanation,
-      evidence
-    });
-  }
-  return { valid: true, results };
-}
-
-// src/finding-revalidation/application/plan-revalidation.ts
-function normalizedPath(path40) {
-  return !!path40 && !path40.includes("\\") && !path40.includes("\0") && !path40.startsWith("/") && path40.split("/").every((segment) => !!segment && segment !== "." && segment !== "..");
-}
-function witness(target, resolutionHistory) {
-  return {
-    targetId: target.targetId,
-    threadId: target.threadId,
-    fingerprint: target.fingerprint,
-    parentId: target.parentId,
-    parentCreatedAt: target.parentCreatedAt,
-    parentUpdatedAt: target.parentUpdatedAt,
-    parentBodyHash: target.parentBodyHash,
-    claimHash: target.claimHash,
-    commentStateHash: target.commentStateHash,
-    ledgerWatermark: target.ledgerWatermark,
-    originalPath: target.originalPath,
-    currentPath: target.currentPath,
-    originalLine: target.originalLine,
-    currentLine: target.currentLine,
-    severity: target.severity,
-    resolutionHistory: { ...resolutionHistory }
-  };
-}
-function ineligible(target) {
-  if (target.isResolved) return "native_resolved";
-  if (!target.trusted || target.markerAmbiguous) return "untrusted_target";
-  if (target.hasHumanReply) return "human_discussion";
-  if (target.commandDismissed) return "command_dismissed";
-  if (target.parentEdited) return "parent_changed";
-  if (!target.targetId || !target.threadId || !target.fingerprint || !target.parentId || !target.parentBodyHash || !target.claimHash || !target.commentStateHash || !target.ledgerWatermark || !Number.isFinite(Date.parse(target.parentUpdatedAt)) || !Number.isFinite(Date.parse(target.parentCreatedAt)))
-    return "untrusted_target";
-  return null;
-}
-var severityOrder = { critical: 0, major: 1, minor: 2, unknown: 3 };
-var lexical = (a2, b2) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0;
-function parentTimestamp(target) {
-  const parsed = Date.parse(target.parentCreatedAt);
-  return Number.isFinite(parsed) ? parsed : Infinity;
-}
-async function planFindingRevalidation(input, ports) {
-  const scope = { ...input.scope };
-  const resolveConfidenceThresholds = resolveRevalidationConfidenceThresholds(
-    input.resolveConfidenceThresholds
-  );
-  const participant = input.participant ? { ...input.participant } : null;
-  const outputCap = Math.min(
-    REVALIDATION_LIMITS.outputTokens,
-    input.limits.gatewayOutputTokens,
-    input.limits.modelOutputTokens
-  );
-  const inventoryHash = revalidationHash("inventory", {
-    scope,
-    inventoryComplete: input.inventoryComplete,
-    targets: [...input.targets].sort((a2, b2) => lexical(a2.targetId, b2.targetId))
-  });
-  const dispositions = [];
-  const groups = [];
-  const slots = Math.max(
-    0,
-    Math.min(
-      REVALIDATION_LIMITS.packets,
-      Math.floor(input.limits.remainingWorkSlots)
-    )
-  );
-  const targetLimit = Math.min(
-    REVALIDATION_LIMITS.targets,
-    Math.floor(outputCap / REVALIDATION_LIMITS.targetOutputTokens)
-  );
-  const requestLimit = Math.min(
-    REVALIDATION_LIMITS.requestBytes,
-    input.limits.maxRequestBytes ?? Infinity
-  );
-  const sourceLimit = Math.min(
-    REVALIDATION_LIMITS.sourceBytes,
-    input.limits.maxSourceBytes ?? Infinity
-  );
-  const fileLimit = Math.min(
-    REVALIDATION_LIMITS.fileBytes,
-    input.limits.maxFileBytes ?? Infinity
-  );
-  const claimLimit = Math.min(
-    REVALIDATION_LIMITS.claimBytes,
-    input.limits.maxClaimBytes ?? Infinity
-  );
-  const maxResponseBytes = Math.min(
-    REVALIDATION_LIMITS.responseBytes,
-    input.limits.maxResponseBytes ?? Infinity
-  );
-  const configValid = participant && participant.model.trim() && participant.voteIdentityHash && participant.capabilityDigest && input.policyDigest && Number.isInteger(input.limits.gatewayOutputTokens) && Number.isInteger(input.limits.modelOutputTokens) && Number.isInteger(input.limits.remainingWorkSlots) && input.limits.remainingWorkSlots >= 0 && Number.isInteger(outputCap) && outputCap >= REVALIDATION_LIMITS.targetOutputTokens && Number.isInteger(slots) && Number.isInteger(requestLimit) && requestLimit > 0 && Number.isInteger(sourceLimit) && sourceLimit > 0 && Number.isInteger(fileLimit) && fileLimit > 0 && Number.isInteger(claimLimit) && claimLimit > 0 && Number.isInteger(maxResponseBytes) && maxResponseBytes > 0;
-  const seen = /* @__PURE__ */ new Set();
-  const duplicateInventory = input.targets.some((target) => {
-    if (seen.has(target.targetId)) return true;
-    seen.add(target.targetId);
-    return false;
-  });
-  const requestFits = (packet) => {
-    try {
-      prepareLifecycleRequest(packet, outputCap, requestLimit);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const sourceCache = /* @__PURE__ */ new Map();
-  const read = (path40, inclusionReason) => {
-    const cached2 = sourceCache.get(path40);
-    if (cached2) return cached2;
-    const result2 = (async () => {
-      if (!normalizedPath(path40) || !ports.isPathAllowed(path40))
-        return {
-          source: null,
-          reason: "sensitive_context_unavailable"
-        };
-      const result3 = await ports.sourceReader.read({
-        headSha: scope.headSha,
-        path: path40,
-        maxBytes: fileLimit
-      });
-      if (result3.kind !== "file")
-        return {
-          source: null,
-          reason: result3.kind === "oversized" ? "source_oversized" : result3.kind === "missing" ? "context_insufficient" : "unsupported_source"
-        };
-      if (result3.headSha !== scope.headSha || result3.path !== path40 || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(result3.blobOid))
-        return { source: null, reason: "unsupported_source" };
-      if (result3.bytes.byteLength > fileLimit)
-        return { source: null, reason: "source_oversized" };
-      const classified = classifyUtf8Content(Buffer.from(result3.bytes));
-      if (classified.kind !== "text")
-        return { source: null, reason: "unsupported_source" };
-      const content = classified.text;
-      if (redactSensitiveText(content) !== content)
-        return {
-          source: null,
-          reason: "sensitive_context_unavailable"
-        };
-      return {
-        source: {
-          headSha: scope.headSha,
-          path: path40,
-          blobOid: result3.blobOid,
-          contentHash: byteHash(result3.bytes),
-          content,
-          byteCount: result3.bytes.byteLength,
-          lineCount: classified.lineCount,
-          complete: true,
-          inclusionReason
-        },
-        reason: "verified"
-      };
-    })();
-    sourceCache.set(path40, result2);
-    return result2;
-  };
-  const candidates = [...input.targets].sort(
-    (a2, b2) => severityOrder[a2.severity] - severityOrder[b2.severity] || parentTimestamp(a2) - parentTimestamp(b2) || lexical(a2.targetId, b2.targetId)
-  );
-  for (const target of candidates) {
-    const skip = (disposition, reason2) => {
-      dispositions.push({
-        targetId: target.targetId,
-        disposition,
-        reason: reason2,
-        packetHash: null
-      });
-    };
-    const reason = ineligible(target);
-    if (reason) {
-      skip(reason === "native_resolved" ? "resolved" : "manual", reason);
-      continue;
-    }
-    if (!input.inventoryComplete || duplicateInventory) {
-      skip("unavailable", "inventory_incomplete");
-      continue;
-    }
-    if (!participant) {
-      skip("unavailable", "verification_unavailable");
-      continue;
-    }
-    if (!configValid) {
-      skip("unavailable", "verification_configuration_invalid");
-      continue;
-    }
-    if (groups.reduce((n2, group) => n2 + group.targets.length, 0) >= slots * targetLimit) {
-      skip("capped", "verification_capped");
-      continue;
-    }
-    const claim = {
-      title: target.title,
-      message: target.message,
-      diffHunk: target.diffHunk
-    };
-    if ([claim.title, claim.message, claim.diffHunk ?? ""].some(
-      (value) => redactSensitiveText(value) !== value
-    )) {
-      skip("unavailable", "sensitive_context_unavailable");
-      continue;
-    }
-    if (Buffer.byteLength(JSON.stringify(claim), "utf8") > claimLimit) {
-      skip("unsupported", "claim_oversized");
-      continue;
-    }
-    let history;
-    try {
-      history = await ports.priorResolutionHistory.read(target, scope);
-    } catch {
-      skip("unavailable", "verification_unavailable");
-      continue;
-    }
-    if (history.state === "previously_resolved") {
-      skip("manual", "previously_resolved_thread_reopened");
-      continue;
-    }
-    if (history.state === "effect_unknown") {
-      skip("manual", "resolution_effect_unknown");
-      continue;
-    }
-    if (![
-      "no_prior_since_creation",
-      "before_cut_unobserved",
-      "unavailable"
-    ].includes(history.state) || !history.historyCut || !history.guardVersion) {
-      skip("unavailable", "verification_unavailable");
-      continue;
-    }
-    let selected;
-    try {
-      selected = await read(
-        target.currentPath ?? target.originalPath,
-        "target_file"
-      );
-      if (!selected.source && selected.reason === "context_insufficient" && target.currentPath && target.currentPath !== target.originalPath)
-        selected = await read(target.originalPath, "target_file");
-      if (!selected.source && selected.reason === "context_insufficient") {
-        const renames = [
-          ...new Set(
-            (input.renames ?? []).filter(
-              (rename7) => rename7.previousFilename === target.originalPath
-            ).map((rename7) => rename7.filename)
-          )
-        ];
-        if (renames.length === 1)
-          selected = await read(renames[0], "native_rename");
-      }
-    } catch {
-      skip("unavailable", "verification_unavailable");
-      continue;
-    }
-    if (!selected.source) {
-      skip("unsupported", selected.reason);
-      continue;
-    }
-    const source = selected.source;
-    const packetTarget = {
-      witness: witness(target, history),
-      claim,
-      sourcePath: source.path
-    };
-    if (source.byteCount > sourceLimit) {
-      skip("unsupported", "source_oversized");
-      continue;
-    }
-    const singleTargetPacket = makeVerifyPacket({
-      scope,
-      participant,
-      targets: [packetTarget],
-      sources: [source],
-      policyDigest: input.policyDigest,
-      resolveConfidenceThresholds
-    });
-    if (!requestFits(singleTargetPacket)) {
-      skip("unsupported", "request_oversized");
-      continue;
-    }
-    const availableGroups = groups.map((group, index) => ({ group, index })).sort(
-      (a2, b2) => Number(b2.group.sources.some((item) => item.path === source.path)) - Number(a2.group.sources.some((item) => item.path === source.path)) || a2.index - b2.index
-    );
-    let packed = false;
-    for (const { group } of [
-      ...availableGroups,
-      ...groups.length < slots ? [
-        {
-          group: {
-            targets: [],
-            sources: []
-          },
-          index: groups.length
-        }
-      ] : []
-    ]) {
-      const sources = group.sources.some((item) => item.path === source.path) ? group.sources : [...group.sources, source];
-      const targets = [...group.targets, packetTarget];
-      if (targets.length > targetLimit || sources.length > REVALIDATION_LIMITS.files || sources.reduce((n2, item) => n2 + item.byteCount, 0) > sourceLimit)
-        continue;
-      const packet = makeVerifyPacket({
-        scope,
-        participant,
-        targets,
-        sources,
-        policyDigest: input.policyDigest,
-        resolveConfidenceThresholds
-      });
-      if (!requestFits(packet)) continue;
-      if (!groups.includes(group)) groups.push(group);
-      group.targets = targets;
-      group.sources = sources;
-      packed = true;
-      break;
-    }
-    if (!packed) skip("capped", "verification_capped");
-  }
-  const packets = groups.map(
-    (group) => makeVerifyPacket({
-      scope,
-      participant,
-      targets: group.targets,
-      sources: group.sources,
-      policyDigest: input.policyDigest,
-      resolveConfidenceThresholds
-    })
-  );
-  for (const packet of packets)
-    for (const target of packet.targets)
-      dispositions.push({
-        targetId: target.witness.targetId,
-        disposition: "eligible",
-        reason: "verified",
-        packetHash: packet.packetHash
-      });
-  dispositions.sort((a2, b2) => lexical(a2.targetId, b2.targetId));
-  return {
-    packets,
-    dispositions,
-    inventoryHash,
-    inventoryCount: input.targets.length,
-    participantRoster: participant ? [participant] : [],
-    outputCap,
-    maxResponseBytes
-  };
-}
-
-// src/finding-revalidation/infrastructure/git-immutable-source-reader.ts
-var import_child_process18 = require("child_process");
-var import_util34 = require("util");
-var execFileAsync8 = (0, import_util34.promisify)(import_child_process18.execFile);
-function createGitImmutableSourceReader(input) {
-  async function git(args, maxBuffer) {
-    const result2 = await execFileAsync8(
-      "git",
-      ["--no-replace-objects", "-C", input.repositoryRoot, ...args],
-      { encoding: "buffer", maxBuffer, timeout: 1e4 }
-    );
-    return result2.stdout;
-  }
-  return {
-    async read({ headSha, path: path40, maxBytes }) {
-      if (!/^[a-f0-9]{40}$/.test(headSha) || !path40 || Buffer.byteLength(path40, "utf8") > 4096 || path40.startsWith("/") || path40.includes("\\") || path40.includes("\0") || path40.split("/").some((segment) => !segment || segment === "." || segment === "..") || !Number.isInteger(maxBytes) || maxBytes <= 0)
-        return { kind: "unsupported" };
-      const limit = Math.min(maxBytes, REVALIDATION_LIMITS.fileBytes);
-      try {
-        const tree = await git(
-          ["ls-tree", "-z", headSha, "--", `:(literal)${path40}`],
-          16 * 1024
-        );
-        if (!tree.length) return { kind: "missing" };
-        const entries = tree.toString("utf8").split("\0");
-        if (entries.length !== 2 || entries[1] !== "")
-          return { kind: "unsupported" };
-        const entry = /^(100644|100755) blob ([a-f0-9]{40})\t([\s\S]+)$/.exec(
-          entries[0]
-        );
-        if (!entry || entry[3] !== path40) return { kind: "unsupported" };
-        const blobOid = entry[2];
-        const sizeText = (await git(["cat-file", "-s", blobOid], 128)).toString("utf8").trim();
-        if (!/^\d+$/.test(sizeText)) return { kind: "unsupported" };
-        const size = Number(sizeText);
-        if (!Number.isSafeInteger(size) || size > limit)
-          return { kind: "oversized" };
-        const bytes2 = await git(
-          ["cat-file", "blob", blobOid],
-          Math.max(1, limit)
-        );
-        if (bytes2.byteLength !== size || classifyUtf8Content(bytes2).kind !== "text")
-          return { kind: "unsupported" };
-        return { kind: "file", headSha, path: path40, blobOid, bytes: bytes2 };
-      } catch {
-        return { kind: "unsupported" };
-      }
-    }
-  };
 }
 
 // src/review-orchestration/infrastructure/lifecycle-verification-invocation.ts
@@ -242565,8 +242595,10 @@ function compositeLifecycleInvocations(input) {
         receipt.providerRequestEnvelopeHash,
         input.capability.maxResponseBytes
       );
-      if (!result2.valid)
-        throw new Error("lifecycle_verification_response_invalid");
+      if (!result2.valid) {
+        input.onInvalidResponse?.();
+        throw new LifecycleResponseInvalidError(result2.diagnosticCode);
+      }
       return normalizeReviewObservation({
         workSlotId: request3.invocation.workSlotId,
         attemptOrdinal: 1,
@@ -246803,7 +246835,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           }
         })
       ) : void 0;
+      let lifecycleOutputInvalid = false;
       const prepareLane = async (input2, reviewer, slotBudget, bootstrapFailure = false) => {
+        let laneLifecycleOutputInvalid = false;
         const preparedRoute2 = input2.preparedRoute ?? input2.accountGateway ?? input2.providerApi;
         const admittedRuntime2 = preparedRoute2?.runtimeConfig;
         const dispatchJson2 = admittedRuntime2?.runtimeEnv[reviewModelDispatchContract.capabilityRuntimeEnvKey];
@@ -247224,7 +247258,11 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                   outputCap: lifecycle2.outputCap,
                   reviewRevisionHash: authorization2.facts.reviewRevisionHash,
                   liveLifecycleStateHash: lifecycle2.liveLifecycleStateHash,
-                  transport: modelTransport
+                  transport: modelTransport,
+                  onInvalidResponse: () => {
+                    laneLifecycleOutputInvalid = true;
+                    lifecycleOutputInvalid = true;
+                  }
                 }) : discoveryInvocations,
                 memoryAdmission,
                 invocationFailureClassifier: new ProviderInvocationFailureClassifier(
@@ -247236,7 +247274,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(logger),
                 leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
                 projectionBuilder: createProductionReviewProjectionBuilder({
-                  providerFailure: () => confirmedProviderFailure(modelTransport.failureFact()),
+                  providerFailure: () => confirmedProviderFailure(modelTransport.failureFact()) ?? (laneLifecycleOutputInvalid ? "output_invalid" : void 0),
                   providerQuota: () => confirmedProviderQuota(modelTransport.failureFact()),
                   authorizationFacts: authorization2.facts,
                   pr: pr2,
@@ -247610,7 +247648,11 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               outputCap: lifecycle.outputCap,
               reviewRevisionHash: authorization2.facts.reviewRevisionHash,
               liveLifecycleStateHash: lifecycle.liveLifecycleStateHash,
-              transport: preparedRoute2.modelTransport
+              transport: preparedRoute2.modelTransport,
+              onInvalidResponse: () => {
+                laneLifecycleOutputInvalid = true;
+                lifecycleOutputInvalid = true;
+              }
             }) : nativeDiscoveryInvocations,
             memoryAdmission,
             ...investigationInvocationAdapter ? { investigationInvocations: investigationInvocationAdapter } : {},
@@ -247628,7 +247670,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             projectionBuilder: createProductionReviewProjectionBuilder({
               providerFailure: () => confirmedProviderFailure(
                 preparedRoute2?.modelTransport.failureFact()
-              ),
+              ) ?? (laneLifecycleOutputInvalid ? "output_invalid" : void 0),
               providerQuota: () => confirmedProviderQuota(
                 preparedRoute2?.modelTransport.failureFact()
               ),
@@ -247834,7 +247876,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
               (notice) => notice === "upstream_failure_unknown" || notice === "request_outcome_unknown"
             ) ?? [...modelTransports.values()].map(
               (transport) => confirmedProviderFailure(transport.failureFact())
-            ).find((notice) => notice !== void 0),
+            ).find((notice) => notice !== void 0) ?? (lifecycleOutputInvalid ? "output_invalid" : void 0),
             providerQuota: () => [...modelTransports.values()].map(
               (transport) => confirmedProviderQuota(transport.failureFact())
             ).filter((quota) => quota !== void 0).sort((a2, b2) => b2.resetAt.localeCompare(a2.resetAt))[0],

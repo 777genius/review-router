@@ -1,3 +1,7 @@
+import {
+  LifecycleResponseInvalidError,
+  lifecycleResponseValidationCodes,
+} from '../../finding-revalidation';
 import type { LogMetadata } from '../../utils/logger';
 import {
   ReviewInvocationConfigurationMismatchError,
@@ -35,6 +39,10 @@ export class LoggingReviewInvocationDiagnostics implements ReviewInvocationDiagn
           input.error,
           input.failureClass
         ),
+        ...(input.error instanceof LifecycleResponseInvalidError &&
+        lifecycleResponseValidationCodes.includes(input.error.diagnosticCode)
+          ? { validationCode: input.error.diagnosticCode }
+          : {}),
         workSlotId: input.invocation.workSlotId,
       }
     );
@@ -107,6 +115,8 @@ export function classifySafeInvocationFailureReason(
   }
   if (failureClass === 'admission_limited') return 'admission_limited';
 
+  if (error instanceof LifecycleResponseInvalidError)
+    return 'provider_output_invalid';
   const text = diagnosticText(error);
   if (error instanceof ReviewInvocationConfigurationMismatchError) {
     return error.reason;

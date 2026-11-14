@@ -670,7 +670,12 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         transport.lastFailure?.effect,
         known ? 'completed' : 'effect_unknown'
       );
-      if (known) assert.equal(transport.lastFailure?.code, 'output_truncated');
+      if (known) {
+        assert.equal(transport.lastFailure?.code, 'output_truncated');
+        const notice = confirmedProviderFailure(transport.lastFailure);
+        assert.equal(notice, 'output_truncated');
+        assert(providerFailureMessage(notice)?.includes('output token limit'));
+      }
       assert.equal(transport.releaseRetrySafeFailure(), false);
       return;
     }

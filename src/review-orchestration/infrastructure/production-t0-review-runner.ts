@@ -1,7 +1,10 @@
 import { confirmedProviderFailure } from '../../review-execution/domain/provider-failure';
 import { confirmedProviderQuota } from '../../review-execution/domain/provider-quota';
 import type { AccountGatewayReviewerRuntime } from '../../codex-oauth/account-gateway-reviewer-session';
-import type { ReviewReviewerPlanReviewerV1 } from '../../control-plane/generated/review-action-v2/review-reviewer-plan';
+import type {
+  ReviewReviewerPlan,
+  ReviewReviewerPlanReviewerV1,
+} from '../../control-plane/generated/review-action-v2/review-reviewer-plan';
 import type {
   RunT0ReviewOrchestrationDependencies,
   RunT0ReviewOrchestrationCommand,
@@ -2023,19 +2026,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                         ?.failureFact()
                     : undefined
                 ),
-              reviewerScheduling: {
-                ...(reviewerPlan.planVersion === 2
-                  ? { providerMode: reviewerPlan.providerMode }
-                  : {}),
-                maxParallelReviewers: reviewerPlan.maxParallelReviewers,
-                reviewers: reviewerPlan.reviewers,
-                concurrencyGroups: reviewerPlan.concurrencyGroups.map(
-                  (group) => ({
-                    id: group.concurrencyGroupId,
-                    maxParallel: group.maxParallel,
-                  })
-                ),
-              },
+              reviewerScheduling: reviewerSchedulingFromPlan(reviewerPlan),
               projectionBuilder: createProductionReviewProjectionBuilder({
                 providerFailure: () =>
                   [...modelTransports.values()]
@@ -2121,6 +2112,21 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       await usageDelivery?.cleanup();
     }
   }
+}
+
+/** The parent schedule of an admitted reviewer plan, its mode included. */
+export function reviewerSchedulingFromPlan(
+  plan: ReviewReviewerPlan
+): NonNullable<RunT0ReviewOrchestrationDependencies['reviewerScheduling']> {
+  return {
+    ...(plan.planVersion === 2 ? { providerMode: plan.providerMode } : {}),
+    maxParallelReviewers: plan.maxParallelReviewers,
+    reviewers: plan.reviewers,
+    concurrencyGroups: plan.concurrencyGroups.map((group) => ({
+      id: group.concurrencyGroupId,
+      maxParallel: group.maxParallel,
+    })),
+  };
 }
 
 export function resolveProductionContextGatewayPolicyVersion(input: {

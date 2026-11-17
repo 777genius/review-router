@@ -212012,6 +212012,7 @@ var RunT0ReviewOrchestration = class {
         type: "execution_started" /* ExecutionStarted */
       });
       const acceptedEvidence = [];
+      const restoredExhaustedVotes = /* @__PURE__ */ new Set();
       const exhaustedWorkSlotIds = [];
       const exhaustedWorkSlotReasons = /* @__PURE__ */ new Map();
       const busyPollsByProviderLane = /* @__PURE__ */ new Map();
@@ -212098,6 +212099,8 @@ var RunT0ReviewOrchestration = class {
             workSlot.workSlotId,
             "restored_terminal" /* RestoredTerminal */
           );
+          if (restoredSlot.state === "exhausted" /* Exhausted */)
+            restoredExhaustedVotes.add(workSlot.providerVoteIdentityHash);
           state3 = evolveReviewOrchestration(state3, {
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: workSlot.workSlotId
@@ -212350,7 +212353,9 @@ var RunT0ReviewOrchestration = class {
                         lane.slots,
                         acceptedEvidence
                       ),
-                      stopReasons.get(lane.providerVoteIdentityHash)
+                      stopReasons.get(lane.providerVoteIdentityHash) ?? (restoredExhaustedVotes.has(
+                        lane.providerVoteIdentityHash
+                      ) ? "attempt_budget_exhausted" /* AttemptBudgetExhausted */ : void 0)
                     )
                   );
               })().catch((error4) => {
@@ -212391,7 +212396,7 @@ var RunT0ReviewOrchestration = class {
       );
       const fallbackCoverage = orderedFallbackCoverage(fallbackOutcomes);
       const quotaSkippedVotes = new Set(
-        fallbackOutcomes.size > 0 ? [] : providerQuotaSkippedVotes({
+        this.dependencies.reviewerScheduling?.providerMode === "fallback" ? [] : providerQuotaSkippedVotes({
           requiredWorkSlots: command.workSlots.filter(
             (slot) => slot.required
           ),
@@ -248185,17 +248190,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
           invocationFailureClassifier: new ProviderInvocationFailureClassifier(
             (context5) => context5 ? modelTransports.get(context5.workSlot.providerVoteIdentityHash)?.failureFact() : void 0
           ),
-          reviewerScheduling: {
-            ...reviewerPlan.planVersion === 2 ? { providerMode: reviewerPlan.providerMode } : {},
-            maxParallelReviewers: reviewerPlan.maxParallelReviewers,
-            reviewers: reviewerPlan.reviewers,
-            concurrencyGroups: reviewerPlan.concurrencyGroups.map(
-              (group) => ({
-                id: group.concurrencyGroupId,
-                maxParallel: group.maxParallel
-              })
-            )
-          },
+          reviewerScheduling: reviewerSchedulingFromPlan(reviewerPlan),
           projectionBuilder: createProductionReviewProjectionBuilder({
             providerFailure: () => [...modelTransports.values()].map(
               (transport) => confirmedProviderFailure(transport.failureFact())
@@ -248265,6 +248260,17 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
     }
   }
 };
+function reviewerSchedulingFromPlan(plan) {
+  return {
+    ...plan.planVersion === 2 ? { providerMode: plan.providerMode } : {},
+    maxParallelReviewers: plan.maxParallelReviewers,
+    reviewers: plan.reviewers,
+    concurrencyGroups: plan.concurrencyGroups.map((group) => ({
+      id: group.concurrencyGroupId,
+      maxParallel: group.maxParallel
+    }))
+  };
+}
 function resolveProductionContextGatewayPolicyVersion(input) {
   return input.agenticContext ? CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION : null;
 }

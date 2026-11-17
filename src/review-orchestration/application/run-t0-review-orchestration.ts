@@ -446,6 +446,8 @@ export class RunT0ReviewOrchestration {
       });
 
       const acceptedEvidence: AcceptedReviewWorkSlotEvidence[] = [];
+      // Reviewer votes with a slot already exhausted by an earlier attempt.
+      const restoredExhaustedVotes = new Set<string>();
       const exhaustedWorkSlotIds: string[] = [];
       const exhaustedWorkSlotReasons = new Map<
         string,
@@ -569,6 +571,9 @@ export class RunT0ReviewOrchestration {
             workSlot.workSlotId,
             ReviewWorkSlotExhaustionReason.RestoredTerminal
           );
+          // An earlier attempt of this execution used up the reviewer's work.
+          if (restoredSlot.state === RestoredReviewWorkSlotState.Exhausted)
+            restoredExhaustedVotes.add(workSlot.providerVoteIdentityHash);
           state = evolveReviewOrchestration(state, {
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: workSlot.workSlotId,
@@ -900,7 +905,12 @@ export class RunT0ReviewOrchestration {
                         lane.slots,
                         acceptedEvidence
                       ),
-                      stopReasons.get(lane.providerVoteIdentityHash)
+                      stopReasons.get(lane.providerVoteIdentityHash) ??
+                        (restoredExhaustedVotes.has(
+                          lane.providerVoteIdentityHash
+                        )
+                          ? ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted
+                          : undefined)
                     )
                   );
               })()
@@ -944,7 +954,7 @@ export class RunT0ReviewOrchestration {
       );
       const fallbackCoverage = orderedFallbackCoverage(fallbackOutcomes);
       const quotaSkippedVotes = new Set(
-        fallbackOutcomes.size > 0
+        this.dependencies.reviewerScheduling?.providerMode === 'fallback'
           ? []
           : providerQuotaSkippedVotes({
               requiredWorkSlots: command.workSlots.filter(

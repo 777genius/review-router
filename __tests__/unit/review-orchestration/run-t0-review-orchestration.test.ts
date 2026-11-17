@@ -4838,6 +4838,39 @@ describe('exact reviewer concurrency in the parent orchestration', () => {
       });
     });
 
+    it('hands over on resume when an earlier attempt exhausted the first reviewer', async () => {
+      const fixture = fallbackFixture();
+      failing(fixture, [], ReviewInvocationFailureClass.CapacityUnavailable);
+      const start =
+        fixture.controlPlane.startExecution.getMockImplementation()!;
+      fixture.controlPlane.startExecution.mockImplementation(
+        async (request) => {
+          const started = await start(request);
+          return {
+            ...started,
+            restoredExecution: {
+              ...started.restoredExecution,
+              workSlots: started.restoredExecution.workSlots.map((slot) =>
+                slot.workSlotId === 'slot-1'
+                  ? { ...slot, state: RestoredReviewWorkSlotState.Exhausted }
+                  : slot
+              ),
+            },
+          };
+        }
+      );
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        allowPartial: true,
+      });
+      expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+      expect(executed(fixture)).toEqual(['slot-2']);
+      expect(fallbackReviewers(fixture)).toEqual({
+        failedVotes: new Set([hash('vote-a')]),
+        unusedVotes: new Set([hash('vote-c')]),
+      });
+    });
+
     it('decides the chain from why each reviewer stopped', () => {
       // Used-up attempts cover timeouts and invalid output (attempt budget 1).
       for (const reason of [

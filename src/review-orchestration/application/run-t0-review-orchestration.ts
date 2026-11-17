@@ -126,8 +126,10 @@ export type ReviewOrchestrationResult = {
   readonly mergeGateConclusion?: MergeGateConclusion;
 };
 
-enum ReviewWorkSlotExhaustionReason {
+export enum ReviewWorkSlotExhaustionReason {
   AttemptBudgetExhausted = 'attempt_budget_exhausted',
+  /** An ordered fallback ended before this reviewer was needed. */
+  FallbackUnused = 'fallback_unused',
   NotRunnable = 'not_runnable',
   ProviderLaneBusy = 'provider_lane_busy',
   InvestigationDeferred = 'investigation_deferred',
@@ -165,6 +167,8 @@ export type RunT0ReviewOrchestrationDependencies = {
   readonly signal?: AbortSignal;
   /** One serial batch stream per exact reviewer and permits for its captured allowance. */
   readonly reviewerScheduling?: Readonly<{
+    /** Ordered fallback: one reviewer at a time, the next only after a failure. */
+    providerMode?: 'fallback';
     maxParallelReviewers: number;
     reviewers: readonly Readonly<{
       reviewerId: string;
@@ -442,6 +446,8 @@ export class RunT0ReviewOrchestration {
       });
 
       const acceptedEvidence: AcceptedReviewWorkSlotEvidence[] = [];
+      // Reviewer votes with a slot already exhausted by an earlier attempt.
+      const restoredExhaustedVotes = new Set<string>();
       const exhaustedWorkSlotIds: string[] = [];
       const exhaustedWorkSlotReasons = new Map<
         string,
@@ -565,6 +571,14 @@ export class RunT0ReviewOrchestration {
             workSlot.workSlotId,
             ReviewWorkSlotExhaustionReason.RestoredTerminal
           );
+          // An earlier attempt of this execution used up the reviewer's
+          // required work. The server keeps no failure class, so this hands
+          // over even when that attempt stopped on an admission limit.
+          if (
+            workSlot.required &&
+            restoredSlot.state === RestoredReviewWorkSlotState.Exhausted
+          )
+            restoredExhaustedVotes.add(workSlot.providerVoteIdentityHash);
           state = evolveReviewOrchestration(state, {
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: workSlot.workSlotId,
@@ -672,12 +686,16 @@ export class RunT0ReviewOrchestration {
           )
             throw new ReviewScopedInvocationFailure(
               'reviewer',
-              new Error('review_reviewer_work_exhausted')
+              new Error('review_reviewer_work_exhausted'),
+              undefined,
+              outcome.exhaustionReason
             );
         }
       };
       // Reviewer vote -> confirmed quota that stopped it (parallel reviewers only).
       const providerQuotaVotes = new Map<string, ProviderQuota>();
+      // Ordered fallback lanes in plan order -> how each one ended.
+      const fallbackOutcomes = new Map<string, FallbackLaneOutcome>();
       if (!this.dependencies.reviewerScheduling) {
         for (const slot of command.workSlots.filter(
           (slot) => slot.taskKind !== ReviewTaskKind.PrDescription
@@ -728,6 +746,9 @@ export class RunT0ReviewOrchestration {
           throw new Error('review_reviewer_scheduling_group_invalid');
         const busyGroups = new Map<string, number>();
         const stoppedVotes = new Set<string>();
+        // Ordered fallback: why each reviewer stopped, and how each lane ended.
+        const fallback = scheduling.providerMode === 'fallback';
+        const stopReasons = new Map<string, ReviewerStopReason | undefined>();
         const pending = [...lanes];
         const active = new Set<Promise<void>>();
         let parentFailure: unknown;
@@ -738,7 +759,10 @@ export class RunT0ReviewOrchestration {
           once: true,
         });
         if (this.dependencies.signal?.aborted) stopRun();
-        const markExhausted = (slot: ReviewWorkSlotPlan) => {
+        const markExhausted = (
+          slot: ReviewWorkSlotPlan,
+          reason = ReviewWorkSlotExhaustionReason.AdmissionLimited
+        ) => {
           if (
             acceptedEvidence.some(
               (item) => item.workSlotId === slot.workSlotId
@@ -747,10 +771,7 @@ export class RunT0ReviewOrchestration {
           )
             return;
           exhaustedWorkSlotIds.push(slot.workSlotId);
-          exhaustedWorkSlotReasons.set(
-            slot.workSlotId,
-            ReviewWorkSlotExhaustionReason.AdmissionLimited
-          );
+          exhaustedWorkSlotReasons.set(slot.workSlotId, reason);
           state = evolveReviewOrchestration(state, {
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: slot.workSlotId,
@@ -765,19 +786,47 @@ export class RunT0ReviewOrchestration {
             while (
               !parentFailure &&
               !this.runAbort.signal.aborted &&
-              active.size < scheduling.maxParallelReviewers
+              active.size < (fallback ? 1 : scheduling.maxParallelReviewers)
             ) {
+              // The next fallback reviewer starts only after the previous one
+              // stopped on a failure another reviewer can recover from.
+              if (fallback && fallbackChainSettled(fallbackOutcomes)) {
+                for (const lane of pending.splice(0)) {
+                  for (const slot of lane.slots)
+                    markExhausted(
+                      slot,
+                      ReviewWorkSlotExhaustionReason.FallbackUnused
+                    );
+                  fallbackOutcomes.set(
+                    lane.providerVoteIdentityHash,
+                    FallbackLaneOutcome.Unused
+                  );
+                }
+                break;
+              }
               // Choose a ready allocation before taking global capacity.
-              const index = pending.findIndex(
-                (lane) =>
-                  stoppedVotes.has(lane.providerVoteIdentityHash) ||
-                  (busyGroups.get(lane.concurrencyGroupId) ?? 0) <
-                    groups.get(lane.concurrencyGroupId)!
-              );
+              const index = fallback
+                ? pending.length > 0
+                  ? 0
+                  : -1
+                : pending.findIndex(
+                    (lane) =>
+                      stoppedVotes.has(lane.providerVoteIdentityHash) ||
+                      (busyGroups.get(lane.concurrencyGroupId) ?? 0) <
+                        groups.get(lane.concurrencyGroupId)!
+                  );
               if (index < 0) break;
               const lane = pending.splice(index, 1)[0];
               if (stoppedVotes.has(lane.providerVoteIdentityHash)) {
-                lane.slots.forEach(markExhausted);
+                for (const slot of lane.slots) markExhausted(slot);
+                if (fallback)
+                  fallbackOutcomes.set(
+                    lane.providerVoteIdentityHash,
+                    fallbackLaneOutcome(
+                      false,
+                      stopReasons.get(lane.providerVoteIdentityHash)
+                    )
+                  );
                 continue;
               }
               busyGroups.set(
@@ -803,7 +852,12 @@ export class RunT0ReviewOrchestration {
                         ? error
                         : error instanceof
                             ReviewInvocationConfigurationMismatchError
-                          ? new ReviewScopedInvocationFailure('reviewer', error)
+                          ? new ReviewScopedInvocationFailure(
+                              'reviewer',
+                              error,
+                              undefined,
+                              ReviewInvocationFailureClass.ConfigurationMismatch
+                            )
                           : undefined;
                     if (
                       !scopedFailure &&
@@ -837,12 +891,33 @@ export class RunT0ReviewOrchestration {
                           sibling.providerVoteIdentityHash,
                           scopedFailure.providerQuota
                         );
+                      if (!stoppedVotes.has(sibling.providerVoteIdentityHash))
+                        stopReasons.set(
+                          sibling.providerVoteIdentityHash,
+                          scopedFailure?.stopReason
+                        );
                       stoppedVotes.add(sibling.providerVoteIdentityHash);
                       sibling.abort.abort(error);
                     }
                     markExhausted(slot);
                   }
                 }
+                if (fallback)
+                  fallbackOutcomes.set(
+                    lane.providerVoteIdentityHash,
+                    fallbackLaneOutcome(
+                      reviewerCompletedRequiredWork(
+                        lane.slots,
+                        acceptedEvidence
+                      ),
+                      stopReasons.get(lane.providerVoteIdentityHash) ??
+                        (restoredExhaustedVotes.has(
+                          lane.providerVoteIdentityHash
+                        )
+                          ? ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted
+                          : undefined)
+                    )
+                  );
               })()
                 .catch((error) => {
                   parentFailure ??= error;
@@ -882,12 +957,17 @@ export class RunT0ReviewOrchestration {
       const acceptedWorkSlotIds = new Set(
         acceptedEvidence.map((item) => item.workSlotId)
       );
+      const fallbackCoverage = orderedFallbackCoverage(fallbackOutcomes);
       const quotaSkippedVotes = new Set(
-        providerQuotaSkippedVotes({
-          requiredWorkSlots: command.workSlots.filter((slot) => slot.required),
-          acceptedWorkSlotIds,
-          quotaVotes: new Set(providerQuotaVotes.keys()),
-        })
+        this.dependencies.reviewerScheduling?.providerMode === 'fallback'
+          ? []
+          : providerQuotaSkippedVotes({
+              requiredWorkSlots: command.workSlots.filter(
+                (slot) => slot.required
+              ),
+              acceptedWorkSlotIds,
+              quotaVotes: new Set(providerQuotaVotes.keys()),
+            })
       );
       // The server excuses only terminal slots, so close the skipped
       // reviewer's open required work first; any failure keeps it partial.
@@ -913,7 +993,10 @@ export class RunT0ReviewOrchestration {
           .filter(
             (workSlot) =>
               workSlot.required &&
-              !quotaSkippedVotes.has(workSlot.providerVoteIdentityHash)
+              !quotaSkippedVotes.has(workSlot.providerVoteIdentityHash) &&
+              !fallbackCoverage?.excusedVotes.has(
+                workSlot.providerVoteIdentityHash
+              )
           )
           .map((workSlot) => workSlot.workSlotId)
       );
@@ -985,10 +1068,21 @@ export class RunT0ReviewOrchestration {
               ),
             }
           : {}),
+        ...(fallbackCoverage
+          ? {
+              fallbackReviewers: {
+                failedVotes: fallbackCoverage.failedVotes,
+                unusedVotes: fallbackCoverage.unusedVotes,
+              },
+            }
+          : {}),
       });
       this.dependencies.progress?.report({ type: 'assembling' });
       let partial =
         requiredExhaustedWorkSlotIds.length > 0 || !projection.coverageComplete;
+      const serverExcusedCoverage =
+        quotaSkippedVotes.size > 0 ||
+        (fallbackCoverage?.excusedVotes.size ?? 0) > 0;
       let partialFailureCode = derivePartialFailureCode({
         requiredExhaustedWorkSlotIds,
         exhaustedWorkSlotReasons,
@@ -1066,12 +1160,12 @@ export class RunT0ReviewOrchestration {
         ]),
         execution,
         projection,
-        // A quota skip leaves required slots open on the server, which decides
-        // from its own recorded facts. Permit partial so a disagreement still
-        // publishes, then report whatever the server actually finalized.
-        allowPartial: partial || quotaSkippedVotes.size > 0,
+        // A quota skip or a fallback leaves required slots open on the
+        // server, which decides from its own facts. Permit partial so a
+        // disagreement still publishes, then report what it finalized.
+        allowPartial: partial || serverExcusedCoverage,
       });
-      if (!partial && quotaSkippedVotes.size > 0) {
+      if (!partial && serverExcusedCoverage) {
         const finalizedExecution =
           await this.dependencies.controlPlane.restoreExecution({
             authorization,
@@ -1521,7 +1615,23 @@ export class RunT0ReviewOrchestration {
                     this.failureContext(input.workSlot)
                   )
                 : undefined;
-              if (scope) throw new ReviewScopedInvocationFailure(scope, error);
+              if (scope) {
+                // Only a confirmed provider class here lets a fallback reviewer
+                // take over; any other investigation failure ends the chain.
+                const failureClass =
+                  this.dependencies.invocationFailureClassifier.classify(
+                    error,
+                    this.failureContext(input.workSlot)
+                  );
+                throw new ReviewScopedInvocationFailure(
+                  scope,
+                  error,
+                  undefined,
+                  failureClass === ReviewInvocationFailureClass.Retryable
+                    ? undefined
+                    : failureClass
+                );
+              }
               throw error;
             }
             this.recordInvestigationDiagnostic({
@@ -1891,7 +2001,8 @@ export class RunT0ReviewOrchestration {
                     ? this.dependencies.invocationFailureClassifier.providerQuota?.(
                         context
                       )
-                    : undefined
+                    : undefined,
+                  failureClass
                 );
             }
             if (
@@ -3584,8 +3695,112 @@ class ReviewScopedInvocationFailure extends Error {
     readonly scope: ReviewInvocationFailureScope,
     cause: unknown,
     /** Gateway-confirmed quota that stopped this reviewer, if any. */
-    readonly providerQuota?: ProviderQuota
+    readonly providerQuota?: ProviderQuota,
+    /** The failure class or exhaustion that stopped the reviewer. */
+    readonly stopReason?: ReviewerStopReason
   ) {
     super('review_invocation_scoped_failure', { cause });
   }
+}
+
+/** Why a reviewer stopped: its last failure class or work exhaustion. */
+export type ReviewerStopReason =
+  | ReviewInvocationFailureClass
+  | ReviewWorkSlotExhaustionReason;
+
+export enum FallbackLaneOutcome {
+  /** Every work slot of the reviewer was accepted: it reviewed the change. */
+  Accepted = 'accepted',
+  /** The reviewer could not finish for a reason the next one may not share. */
+  Failed = 'failed',
+  /** The reviewer stopped for a reason that ends the whole chain. */
+  Stopped = 'stopped',
+  /** The chain ended before this reviewer was needed. */
+  Unused = 'unused',
+}
+
+/**
+ * Failures that belong to one reviewer's provider or engine: quota and
+ * capacity, sign-in, an unavailable reviewer (model, allocation or engine),
+ * and attempts used up on timeouts or invalid output. Admission limits,
+ * deferred investigations and the run deadline end the chain instead.
+ */
+export function fallbackEligibleStop(
+  reason: ReviewerStopReason | undefined
+): boolean {
+  switch (reason) {
+    case ReviewInvocationFailureClass.CapacityUnavailable:
+    case ReviewInvocationFailureClass.AuthenticationUnavailable:
+    case ReviewInvocationFailureClass.ConfigurationMismatch:
+    case ReviewInvocationFailureClass.Retryable:
+    case ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted:
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function fallbackLaneOutcome(
+  accepted: boolean,
+  stopReason: ReviewerStopReason | undefined
+): FallbackLaneOutcome {
+  if (accepted) return FallbackLaneOutcome.Accepted;
+  return fallbackEligibleStop(stopReason)
+    ? FallbackLaneOutcome.Failed
+    : FallbackLaneOutcome.Stopped;
+}
+
+/**
+ * A reviewer reviewed the change when it has required work and all of it was
+ * accepted; optional lifecycle work never decides the fallback chain.
+ */
+export function reviewerCompletedRequiredWork(
+  slots: readonly Pick<ReviewWorkSlotPlan, 'workSlotId' | 'required'>[],
+  accepted: readonly Pick<AcceptedReviewWorkSlotEvidence, 'workSlotId'>[]
+): boolean {
+  const required = slots.filter((slot) => slot.required);
+  return (
+    required.length > 0 &&
+    required.every((slot) =>
+      accepted.some((item) => item.workSlotId === slot.workSlotId)
+    )
+  );
+}
+
+/** The chain is settled once a reviewer was accepted or one stopped it. */
+export function fallbackChainSettled(
+  outcomes: ReadonlyMap<string, FallbackLaneOutcome>
+): boolean {
+  const last = [...outcomes.values()].at(-1);
+  return last !== undefined && last !== FallbackLaneOutcome.Failed;
+}
+
+/**
+ * With an accepted reviewer, the other reviewers of the chain no longer
+ * decide coverage: earlier ones failed and later ones were not needed.
+ * Without one, every reviewer stays required and the review is incomplete.
+ */
+export function orderedFallbackCoverage(
+  outcomes: ReadonlyMap<string, FallbackLaneOutcome>
+):
+  | Readonly<{
+      excusedVotes: ReadonlySet<string>;
+      failedVotes: ReadonlySet<string>;
+      unusedVotes: ReadonlySet<string>;
+    }>
+  | undefined {
+  const entries = [...outcomes];
+  if (!entries.some(([, outcome]) => outcome === FallbackLaneOutcome.Accepted))
+    return undefined;
+  const votes = (wanted: (outcome: FallbackLaneOutcome) => boolean) =>
+    new Set(entries.filter(([, outcome]) => wanted(outcome)).map(([v]) => v));
+  return Object.freeze({
+    excusedVotes: votes((outcome) => outcome !== FallbackLaneOutcome.Accepted),
+    failedVotes: votes(
+      (outcome) =>
+        outcome === FallbackLaneOutcome.Failed ||
+        outcome === FallbackLaneOutcome.Stopped
+    ),
+    unusedVotes: votes((outcome) => outcome === FallbackLaneOutcome.Unused),
+  });
 }

@@ -166,16 +166,30 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
     readonly reviewRevisionHash: string;
     readonly providerQuotaSkippedVotes?: ReadonlyMap<string, ProviderQuota>;
+    /** Ordered fallback around the accepted reviewer: failed and unused votes. */
+    readonly fallbackReviewers?: Readonly<{
+      failedVotes: ReadonlySet<string>;
+      unusedVotes: ReadonlySet<string>;
+    }>;
   }): Promise<BuildCurrentReviewProjectionCommand> {
     const skipped =
       input.providerQuotaSkippedVotes ?? new Map<string, ProviderQuota>();
-    // A quota-skipped reviewer still counts as a failed provider, but its work
-    // no longer decides required coverage.
-    const assignments = this.input.assignments.map((assignment) =>
-      skipped.has(assignment.providerVoteIdentityHash ?? '')
-        ? { ...assignment, required: false }
-        : assignment
-    );
+    const fallback = input.fallbackReviewers;
+    // A quota-skipped reviewer, or one that failed before the accepted
+    // fallback reviewer, still counts as a failed provider, but its work no
+    // longer decides required coverage. A fallback reviewer that was never
+    // needed is not part of this review at all.
+    const assignments = this.input.assignments
+      .filter(
+        (assignment) =>
+          !fallback?.unusedVotes.has(assignment.providerVoteIdentityHash ?? '')
+      )
+      .map((assignment) =>
+        skipped.has(assignment.providerVoteIdentityHash ?? '') ||
+        fallback?.failedVotes.has(assignment.providerVoteIdentityHash ?? '')
+          ? { ...assignment, required: false }
+          : assignment
+      );
     const evidence = validateAcceptedEvidence({
       assignments,
       evidence: input.acceptedEvidence,

@@ -160,7 +160,7 @@ export interface CodexOAuthV2ReviewRunnerPort {
       readonly credentialLease: () => import('../providers/prepared-invocation').ProviderCredentialLease;
     };
     readonly accountGateway?: {
-      readonly reviewerPlan?: import('../control-plane/generated/review-action-v2/review-reviewer-plan').ReviewReviewerPlanV1;
+      readonly reviewerPlan?: import('../control-plane/generated/review-action-v2/review-reviewer-plan').ReviewReviewerPlan;
       readonly reviewers?: readonly import('./account-gateway-reviewer-session').AccountGatewayReviewerRuntime[];
       readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
       readonly signal?: AbortSignal;

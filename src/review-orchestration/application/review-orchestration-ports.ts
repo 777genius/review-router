@@ -782,6 +782,11 @@ export interface CurrentReviewProjectionBuilderPort {
     readonly prDescription?: GeneratedPrDescription;
     /** Reviewer vote -> quota; their required work is skipped, not missing. */
     readonly providerQuotaSkippedVotes?: ReadonlyMap<string, ProviderQuota>;
+    /** Ordered fallback around the accepted reviewer: failed and unused votes. */
+    readonly fallbackReviewers?: Readonly<{
+      failedVotes: ReadonlySet<string>;
+      unusedVotes: ReadonlySet<string>;
+    }>;
   }): Promise<CurrentReviewProjection>;
 }
 

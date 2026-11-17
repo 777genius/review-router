@@ -152,6 +152,39 @@ describe('production review projection coverage', () => {
     expect(summary).not.toContain('Review incomplete');
   });
 
+  it('completes an ordered fallback on the reviewer that finished', async () => {
+    const vote = (letter: string) => letter.repeat(64);
+    const assignments = [
+      { ...assignment('first', true), providerVoteIdentityHash: vote('a') },
+      { ...assignment('second', true), providerVoteIdentityHash: vote('b') },
+      { ...assignment('third', true), providerVoteIdentityHash: vote('c') },
+    ];
+    const accepted = acceptedEvidence('second', fullCoverageManifest('second'));
+    const built = await projectionBuilder(assignments).build({
+      acceptedEvidence: [
+        {
+          ...accepted,
+          observation: {
+            ...accepted.observation,
+            providerVoteIdentityHash: vote('b'),
+          },
+        },
+      ],
+      exhaustedWorkSlotIds: ['first', 'third'],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      fallbackReviewers: {
+        failedVotes: new Set([vote('a')]),
+        unusedVotes: new Set([vote('c')]),
+      },
+    });
+    expect(built.coverageComplete).toBe(true);
+    const summary = JSON.parse(built.projectionEnvelopeCanonicalJson).publishing
+      .summary.body;
+    // The failed first reviewer stays counted; the unused third is not.
+    expect(summary).toContain('1/2');
+    expect(summary).not.toContain('Review incomplete');
+  });
+
   it('enforces inline quorum in the final artifact while reporting solo findings', async () => {
     const first = {
       ...assignment('first', true),

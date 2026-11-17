@@ -3,8 +3,12 @@ import type { ProviderFailureNotice } from '../review-execution/domain/provider-
 import {
   parseProviderQuota,
   providerQuotaMessage,
+  providerQuotaSkipMessage,
 } from '../review-execution/domain/provider-quota';
-import type { ProviderQuota } from '../review-execution/domain/provider-quota';
+import type {
+  ProviderQuota,
+  ProviderQuotaSkippedReviewer,
+} from '../review-execution/domain/provider-quota';
 import { Finding, PRContext, Review, ReviewMetrics, Severity } from '../types';
 import { isLinkedCurrentFinding } from '../analysis/thread-lifecycle';
 import { coverageManifestFileStatusRank } from '../review-projection/domain';
@@ -251,6 +255,7 @@ export type ReviewerSummaryInput = ReviewerSummaryOptions & {
   readonly incomplete?: boolean;
   readonly incompleteCauses?: readonly string[];
   readonly providerQuota?: ProviderQuota;
+  readonly providerQuotaSkippedReviewers?: readonly ProviderQuotaSkippedReviewer[];
   readonly providerFailure?: ProviderFailureNotice;
   readonly coverage?: {
     readonly complete: boolean;
@@ -375,8 +380,12 @@ export function renderReviewerSummaryMarkdown(
       lines.push(`- ${copy.incompleteCauses[code]}`);
     }
   }
+  const skipped = input.providerQuotaSkippedReviewers ?? [];
+  for (const reviewer of skipped)
+    lines.push('', providerQuotaSkipMessage(reviewer));
   const quota = parseProviderQuota(input.providerQuota);
-  if (incomplete && quota) lines.push('', providerQuotaMessage(quota));
+  if (incomplete && quota && !skipped.length)
+    lines.push('', providerQuotaMessage(quota));
   const providerFailure = providerFailureMessage(
     input.providerFailure,
     incomplete

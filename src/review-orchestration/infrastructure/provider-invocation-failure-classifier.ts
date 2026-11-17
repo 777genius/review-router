@@ -35,6 +35,10 @@ export class ProviderInvocationFailureClassifier implements ReviewInvocationFail
     return fact ? (fact.failureScope ?? 'reviewer') : undefined;
   }
 
+  providerQuota(context: ReviewInvocationFailureContext) {
+    return confirmedProviderQuota(this.gatewayFailureFact(context));
+  }
+
   classify(
     error: unknown,
     context?: ReviewInvocationFailureContext

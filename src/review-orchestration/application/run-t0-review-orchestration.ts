@@ -68,6 +68,10 @@ import {
 } from '../../review-investigation/application/run-investigation-work-slot';
 import type { MergeGateConclusion } from '../../review-projection/domain';
 import type { ExecutionDeadline } from '../../review-execution/domain/execution-deadline';
+import {
+  providerQuotaSkippedVotes,
+  type ProviderQuota,
+} from '../../review-execution/domain/provider-quota';
 
 export enum ReviewOrchestrationResultStatus {
   Completed = 'completed',
@@ -462,6 +466,67 @@ export class RunT0ReviewOrchestration {
       )
         throw new Error('review_orchestration_description_plan_invalid');
       this.coordinatedExecution = execution;
+      const terminalizeSlot = async (
+        workSlotId: string,
+        terminal: Parameters<
+          ReviewActionV2ControlPlanePort['terminalizeWorkSlot']
+        >[0]['terminal']
+      ): Promise<void> => {
+        const terminalizedResult = await this.parentCommand(
+          {
+            authorization: authorization!,
+            execution: execution!,
+            revision: command,
+          },
+          async (parentExecution) => {
+            let execution = parentExecution;
+            const latestExecution =
+              await this.dependencies.controlPlane.restoreExecution({
+                authorization: authorization!,
+                reviewRevisionHash: command.reviewRevisionHash,
+              });
+            execution = refreshExecutionAdmission(execution!, latestExecution);
+            const latestSlot = execution!.restoredExecution.workSlots.find(
+              (slot) => slot.workSlotId === workSlotId
+            );
+            // Releasing the final provider attempt already exhausts the server slot.
+            const alreadyExhausted =
+              execution!.restoredExecution.state ===
+                RestoredReviewExecutionState.Running &&
+              latestSlot?.state === RestoredReviewWorkSlotState.Exhausted &&
+              latestSlot.activeLeaseId === null;
+            if (!alreadyExhausted) {
+              const terminalized =
+                await this.dependencies.controlPlane.terminalizeWorkSlot({
+                  authorization: authorization!,
+                  idempotencyKey: this.idempotencyKey('slot-terminalize', [
+                    execution.executionId,
+                    execution.generation,
+                    workSlotId,
+                    terminal.terminalState,
+                    terminal.reasonCode,
+                  ]),
+                  execution: execution!,
+                  reviewRevisionHash: command.reviewRevisionHash,
+                  workSlotId,
+                  terminal,
+                });
+              execution = {
+                ...execution,
+                streamVersion: terminalized.streamVersion,
+              };
+            }
+            return { streamVersion: execution.streamVersion };
+          }
+        );
+        execution = {
+          ...execution!,
+          streamVersion: maxVersion(
+            execution!.streamVersion,
+            terminalizedResult.streamVersion
+          ),
+        };
+      };
       const runWorkSlot = async (
         workSlot: ReviewWorkSlotPlan
       ): Promise<void> => {
@@ -596,65 +661,7 @@ export class RunT0ReviewOrchestration {
             workSlotId: workSlot.workSlotId,
           });
           const terminal = terminalizeCommand(outcome.exhaustionReason);
-          if (terminal) {
-            const terminalizedResult = await this.parentCommand(
-              {
-                authorization: authorization!,
-                execution: execution!,
-                revision: command,
-              },
-              async (parentExecution) => {
-                let execution = parentExecution;
-                const latestExecution =
-                  await this.dependencies.controlPlane.restoreExecution({
-                    authorization: authorization!,
-                    reviewRevisionHash: command.reviewRevisionHash,
-                  });
-                execution = refreshExecutionAdmission(
-                  execution!,
-                  latestExecution
-                );
-                const latestSlot = execution!.restoredExecution.workSlots.find(
-                  (slot) => slot.workSlotId === workSlot.workSlotId
-                );
-                // Releasing the final provider attempt already exhausts the server slot.
-                const alreadyExhausted =
-                  execution!.restoredExecution.state ===
-                    RestoredReviewExecutionState.Running &&
-                  latestSlot?.state === RestoredReviewWorkSlotState.Exhausted &&
-                  latestSlot.activeLeaseId === null;
-                if (!alreadyExhausted) {
-                  const terminalized =
-                    await this.dependencies.controlPlane.terminalizeWorkSlot({
-                      authorization: authorization!,
-                      idempotencyKey: this.idempotencyKey('slot-terminalize', [
-                        execution.executionId,
-                        execution.generation,
-                        workSlot.workSlotId,
-                        terminal.terminalState,
-                        terminal.reasonCode,
-                      ]),
-                      execution: execution!,
-                      reviewRevisionHash: command.reviewRevisionHash,
-                      workSlotId: workSlot.workSlotId,
-                      terminal,
-                    });
-                  execution = {
-                    ...execution,
-                    streamVersion: terminalized.streamVersion,
-                  };
-                }
-                return { streamVersion: execution.streamVersion };
-              }
-            );
-            execution = {
-              ...execution!,
-              streamVersion: maxVersion(
-                execution!.streamVersion,
-                terminalizedResult.streamVersion
-              ),
-            };
-          }
+          if (terminal) await terminalizeSlot(workSlot.workSlotId, terminal);
           if (
             this.dependencies.reviewerScheduling &&
             [
@@ -669,6 +676,8 @@ export class RunT0ReviewOrchestration {
             );
         }
       };
+      // Reviewer vote -> confirmed quota that stopped it (parallel reviewers only).
+      const providerQuotaVotes = new Map<string, ProviderQuota>();
       if (!this.dependencies.reviewerScheduling) {
         for (const slot of command.workSlots.filter(
           (slot) => slot.taskKind !== ReviewTaskKind.PrDescription
@@ -812,6 +821,22 @@ export class RunT0ReviewOrchestration {
                           )
                         : [lane];
                     for (const sibling of affected) {
+                      // Quota belongs to the account, so it stops the whole
+                      // allocation. A reviewer stopped earlier, or with required
+                      // work already lost for another reason, keeps that cause.
+                      if (
+                        scopedFailure?.providerQuota &&
+                        !stoppedVotes.has(sibling.providerVoteIdentityHash) &&
+                        !sibling.slots.some(
+                          (candidate) =>
+                            candidate.required &&
+                            exhaustedWorkSlotIds.includes(candidate.workSlotId)
+                        )
+                      )
+                        providerQuotaVotes.set(
+                          sibling.providerVoteIdentityHash,
+                          scopedFailure.providerQuota
+                        );
                       stoppedVotes.add(sibling.providerVoteIdentityHash);
                       sibling.abort.abort(error);
                     }
@@ -854,9 +879,42 @@ export class RunT0ReviewOrchestration {
         }
       }
 
+      const acceptedWorkSlotIds = new Set(
+        acceptedEvidence.map((item) => item.workSlotId)
+      );
+      const quotaSkippedVotes = new Set(
+        providerQuotaSkippedVotes({
+          requiredWorkSlots: command.workSlots.filter((slot) => slot.required),
+          acceptedWorkSlotIds,
+          quotaVotes: new Set(providerQuotaVotes.keys()),
+        })
+      );
+      // The server excuses only terminal slots, so close the skipped
+      // reviewer's open required work first; any failure keeps it partial.
+      for (const vote of quotaSkippedVotes) {
+        try {
+          for (const slot of command.workSlots)
+            if (
+              slot.required &&
+              slot.providerVoteIdentityHash === vote &&
+              !acceptedWorkSlotIds.has(slot.workSlotId)
+            )
+              await terminalizeSlot(slot.workSlotId, {
+                terminalState: 'exhausted',
+                reasonCode: 'attempt_budget_exhausted',
+              });
+        } catch {
+          this.dependencies.signal?.throwIfAborted();
+          quotaSkippedVotes.delete(vote);
+        }
+      }
       const requiredWorkSlotIds = new Set(
         command.workSlots
-          .filter((workSlot) => workSlot.required)
+          .filter(
+            (workSlot) =>
+              workSlot.required &&
+              !quotaSkippedVotes.has(workSlot.providerVoteIdentityHash)
+          )
           .map((workSlot) => workSlot.workSlotId)
       );
       const requiredExhaustedWorkSlotIds = exhaustedWorkSlotIds.filter(
@@ -917,11 +975,21 @@ export class RunT0ReviewOrchestration {
         exhaustedWorkSlotReasons,
         reviewRevisionHash: command.reviewRevisionHash,
         ...(prDescription ? { prDescription } : {}),
+        ...(quotaSkippedVotes.size
+          ? {
+              providerQuotaSkippedVotes: new Map(
+                [...quotaSkippedVotes].map((vote) => [
+                  vote,
+                  providerQuotaVotes.get(vote)!,
+                ])
+              ),
+            }
+          : {}),
       });
       this.dependencies.progress?.report({ type: 'assembling' });
-      const partial =
+      let partial =
         requiredExhaustedWorkSlotIds.length > 0 || !projection.coverageComplete;
-      const partialFailureCode = derivePartialFailureCode({
+      let partialFailureCode = derivePartialFailureCode({
         requiredExhaustedWorkSlotIds,
         exhaustedWorkSlotReasons,
         projectionCoverageComplete: projection.coverageComplete,
@@ -998,8 +1066,24 @@ export class RunT0ReviewOrchestration {
         ]),
         execution,
         projection,
-        allowPartial: partial,
+        // A quota skip leaves required slots open on the server, which decides
+        // from its own recorded facts. Permit partial so a disagreement still
+        // publishes, then report whatever the server actually finalized.
+        allowPartial: partial || quotaSkippedVotes.size > 0,
       });
+      if (!partial && quotaSkippedVotes.size > 0) {
+        const finalizedExecution =
+          await this.dependencies.controlPlane.restoreExecution({
+            authorization,
+            reviewRevisionHash: command.reviewRevisionHash,
+          });
+        if (
+          finalizedExecution?.state !== RestoredReviewExecutionState.Completed
+        ) {
+          partial = true;
+          partialFailureCode = 'required_review_coverage_incomplete';
+        }
+      }
       await this.assertRevisionCurrent(command);
       this.assertExecutionDeadlineAvailable(
         FINAL_PUBLICATION_STATUS_RESERVE_MS
@@ -1799,7 +1883,16 @@ export class RunT0ReviewOrchestration {
                 scope !== 'reviewer' ||
                 failureClass !== ReviewInvocationFailureClass.Retryable
               )
-                throw new ReviewScopedInvocationFailure(scope, error);
+                throw new ReviewScopedInvocationFailure(
+                  scope,
+                  error,
+                  failureClass ===
+                    ReviewInvocationFailureClass.CapacityUnavailable
+                    ? this.dependencies.invocationFailureClassifier.providerQuota?.(
+                        context
+                      )
+                    : undefined
+                );
             }
             if (
               failureClass === ReviewInvocationFailureClass.CapacityUnavailable
@@ -3489,7 +3582,9 @@ function maxVersion(left: string, right: string): string {
 class ReviewScopedInvocationFailure extends Error {
   constructor(
     readonly scope: ReviewInvocationFailureScope,
-    cause: unknown
+    cause: unknown,
+    /** Gateway-confirmed quota that stopped this reviewer, if any. */
+    readonly providerQuota?: ProviderQuota
   ) {
     super('review_invocation_scoped_failure', { cause });
   }

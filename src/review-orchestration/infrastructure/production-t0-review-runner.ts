@@ -2060,6 +2060,12 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                     )
                     .filter((quota) => quota !== undefined)
                     .sort((a, b) => b.resetAt.localeCompare(a.resetAt))[0],
+                reviewerModels: new Map(
+                  reviewerPlan.reviewers.map((reviewer) => [
+                    reviewer.providerVoteIdentityHash,
+                    reviewer.requestedModel,
+                  ])
+                ),
                 authorizationFacts: authorization.facts,
                 pr,
                 config: {

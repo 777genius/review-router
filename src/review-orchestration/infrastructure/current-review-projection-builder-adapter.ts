@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import type { ProviderQuota } from '../../review-execution/domain/provider-quota';
 import { REVIEW_SKILLS_RECEIPT_UNAVAILABLE } from '../../review-skills/review-skills-receipt';
 import {
   BuildCurrentReviewProjection,
@@ -27,6 +28,7 @@ export interface ReviewProjectionCommandFactoryPort {
     readonly exhaustedWorkSlotIds: readonly string[];
     readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
     readonly reviewRevisionHash: string;
+    readonly providerQuotaSkippedVotes?: ReadonlyMap<string, ProviderQuota>;
   }): Promise<BuildCurrentReviewProjectionCommand>;
 }
 

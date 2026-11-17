@@ -981,9 +981,9 @@ export class RunT0ReviewOrchestration {
           : {}),
       });
       this.dependencies.progress?.report({ type: 'assembling' });
-      const partial =
+      let partial =
         requiredExhaustedWorkSlotIds.length > 0 || !projection.coverageComplete;
-      const partialFailureCode = derivePartialFailureCode({
+      let partialFailureCode = derivePartialFailureCode({
         requiredExhaustedWorkSlotIds,
         exhaustedWorkSlotReasons,
         projectionCoverageComplete: projection.coverageComplete,
@@ -1060,11 +1060,24 @@ export class RunT0ReviewOrchestration {
         ]),
         execution,
         projection,
-        // A quota skip leaves required slots open on the server. The server
-        // completes coverage from this projection's own complete state; if it
-        // disagrees, a partial publication beats a rejected finalization.
+        // A quota skip leaves required slots open on the server, which decides
+        // from its own recorded facts. Permit partial so a disagreement still
+        // publishes, then report whatever the server actually finalized.
         allowPartial: partial || quotaSkippedVotes.size > 0,
       });
+      if (!partial && quotaSkippedVotes.size > 0) {
+        const finalizedExecution =
+          await this.dependencies.controlPlane.restoreExecution({
+            authorization,
+            reviewRevisionHash: command.reviewRevisionHash,
+          });
+        if (
+          finalizedExecution?.state !== RestoredReviewExecutionState.Completed
+        ) {
+          partial = true;
+          partialFailureCode = 'required_review_coverage_incomplete';
+        }
+      }
       await this.assertRevisionCurrent(command);
       this.assertExecutionDeadlineAvailable(
         FINAL_PUBLICATION_STATUS_RESERVE_MS

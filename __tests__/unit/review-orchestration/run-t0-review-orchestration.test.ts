@@ -4535,6 +4535,22 @@ describe('exact reviewer concurrency in the parent orchestration', () => {
     remaining: 0 as const,
     resetAt: '2026-11-18T00:00:00.000Z',
   };
+  // The server decides the finalized coverage from its own facts.
+  const finalizeAs = (
+    fixture: ReturnType<typeof concurrentFixture>,
+    state: RestoredReviewExecutionState
+  ) => {
+    const restore =
+      fixture.controlPlane.restoreExecution.getMockImplementation()!;
+    fixture.controlPlane.restoreExecution.mockImplementation(
+      async (request) => {
+        const restored = await restore(request);
+        return fixture.controlPlane.finalizeExecution.mock.calls.length
+          ? { ...restored!, state }
+          : restored;
+      }
+    );
+  };
   it.each([
     [
       'skips a required reviewer stopped by confirmed quota',
@@ -4576,6 +4592,7 @@ describe('exact reviewer concurrency in the parent orchestration', () => {
       scope: jest.fn(() => 'allocation'),
       providerQuota: jest.fn(() => providerQuota),
     });
+    finalizeAs(fixture, RestoredReviewExecutionState.Completed);
     jest
       .mocked(fixture.dependencies.invocations.execute)
       .mockImplementation(async ({ invocation }) => {
@@ -4616,6 +4633,36 @@ describe('exact reviewer concurrency in the parent orchestration', () => {
           ]
         : []
     );
+  });
+
+  it('reports partial coverage when the server does not accept the skip', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'b'],
+      { a: 'a', b: 'b' },
+      { a: 1, b: 1 },
+      2
+    );
+    Object.assign(fixture.dependencies.invocationFailureClassifier, {
+      classify: jest.fn(() => ReviewInvocationFailureClass.CapacityUnavailable),
+      scope: jest.fn(() => 'allocation'),
+      providerQuota: jest.fn(() => quota),
+    });
+    finalizeAs(fixture, RestoredReviewExecutionState.Partial);
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ invocation }) => {
+        if (invocation.workSlotId === 'slot-1')
+          throw new Error('provider_quota_exhausted');
+        return observationPayload;
+      });
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      allowPartial: true,
+    });
+    expect(result.status).toBe(
+      ReviewOrchestrationResultStatus.PartialCompleted
+    );
+    expect(result.failureCode).toBe('required_review_coverage_incomplete');
   });
 
   it('keeps coverage partial when the skipped reviewer cannot be closed on the server', async () => {

@@ -63,6 +63,13 @@ export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   inFlight: 1,
   localConnections: 4,
   cliOutputBytes: 8_388_608,
+  // OCR prompt-token ceiling (`--max-tokens`) for runs through the relay,
+  // whose request limit (RR relay `ingressBytes`, Gateway `requestBytes`) is
+  // 1 MiB. OCR compresses its history at 60% and stops a group at 80% of it.
+  // It counts cl100k tokens, and escaped JSON code reached ~8.7 bytes per
+  // counted token in production, so 1 MiB / 12 keeps a margin. Lower it if
+  // that server limit is ever lowered.
+  ocrMaxTokens: Math.floor(1_048_576 / 12),
 });
 // Closed pre-dispatch saturation denials a later attempt may retry once released.
 const RELEASABLE_SATURATION_CODES: readonly string[] = [

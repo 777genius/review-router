@@ -1,7 +1,7 @@
 {
   "canonicalizerDigest": "bf61d04d42e158b26e4b651b62700b10212496487d7e20ac6e705272dc1d6a5f",
   "contractExportVersion": 1,
-  "expectedPublicActionBaseCommit": "b3f1e9c83ba14b29dad52f77e4af3b9a7350bde0",
+  "expectedPublicActionBaseCommit": "c11f550ca8bc91fdc2cc8d5a1535ab721dbde9ba",
   "generatedFileDigests": {
     "companion-contracts.ts": "6394d8b5b1b922da6ae6fa6fec7897bb414676dbb847f9ba9e80192ce293749b",
     "conversation.ts": "d31309c5667a8aa37d9ef8e59b055d3ffdfeb59ba6bb7723fad09fb137d1493b",

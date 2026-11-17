@@ -22,6 +22,11 @@ import {
   ReviewTaskKind,
   RetryableReviewContextInspectionFailure,
   RunT0ReviewOrchestration,
+  FallbackLaneOutcome,
+  ReviewWorkSlotExhaustionReason,
+  fallbackLaneOutcome,
+  orderedFallbackCoverage,
+  reviewerCompletedRequiredWork,
   canonicalizeReviewWorkSlots,
   type ReviewActionV2ControlPlanePort,
   type ReviewOrchestrationDelayPort,
@@ -4698,6 +4703,190 @@ describe('exact reviewer concurrency in the parent orchestration', () => {
       jest.mocked(fixture.dependencies.projectionBuilder.build).mock.calls[0][0]
         .providerQuotaSkippedVotes
     ).toBeUndefined();
+  });
+
+  describe('ordered fallback', () => {
+    // Three reviewers on their own allocations, run one at a time in order.
+    const fallbackFixture = (
+      groups: Readonly<Record<string, string>> = { a: 'a', b: 'b', c: 'c' }
+    ) => {
+      const fixture = concurrentFixture(
+        ['a', 'b', 'c'],
+        groups,
+        Object.fromEntries(Object.values(groups).map((group) => [group, 1])),
+        1
+      );
+      Object.assign(fixture.dependencies, {
+        reviewerScheduling: {
+          ...fixture.dependencies.reviewerScheduling!,
+          providerMode: 'fallback',
+        },
+      });
+      finalizeAs(fixture, RestoredReviewExecutionState.Completed);
+      return fixture;
+    };
+    const failing = (
+      fixture: ReturnType<typeof concurrentFixture>,
+      slots: readonly string[],
+      failureClass: ReviewInvocationFailureClass,
+      scope: 'reviewer' | 'allocation' = 'reviewer'
+    ) => {
+      Object.assign(fixture.dependencies.invocationFailureClassifier, {
+        classify: jest.fn(() => failureClass),
+        scope: jest.fn(() => scope),
+      });
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mockImplementation(async ({ invocation }) => {
+          if (slots.includes(invocation.workSlotId))
+            throw new Error('reviewer_unavailable');
+          return observationPayload;
+        });
+    };
+    const executed = (fixture: ReturnType<typeof concurrentFixture>) =>
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mock.calls.map(([request]) => request.invocation.workSlotId);
+    const fallbackReviewers = (fixture: ReturnType<typeof concurrentFixture>) =>
+      jest.mocked(fixture.dependencies.projectionBuilder.build).mock.calls[0][0]
+        .fallbackReviewers;
+
+    it('stops at the first reviewer that finishes', async () => {
+      const fixture = fallbackFixture();
+      failing(fixture, [], ReviewInvocationFailureClass.CapacityUnavailable);
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        allowPartial: true,
+      });
+      expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+      expect(executed(fixture)).toEqual(['slot-1']);
+      expect(fallbackReviewers(fixture)).toEqual({
+        failedVotes: new Set(),
+        unusedVotes: new Set([hash('vote-b'), hash('vote-c')]),
+      });
+      // The unused reviewers leave open slots the server decides on.
+      expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledWith(
+        expect.objectContaining({ allowPartial: true })
+      );
+    });
+
+    it.each([
+      ReviewInvocationFailureClass.CapacityUnavailable,
+      ReviewInvocationFailureClass.AuthenticationUnavailable,
+      ReviewInvocationFailureClass.ConfigurationMismatch,
+    ])('starts the next reviewer after %s', async (failureClass) => {
+      const fixture = fallbackFixture();
+      failing(fixture, ['slot-1'], failureClass);
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        allowPartial: true,
+      });
+      expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+      expect(executed(fixture)).toEqual(['slot-1', 'slot-2']);
+      expect(fallbackReviewers(fixture)).toEqual({
+        failedVotes: new Set([hash('vote-a')]),
+        unusedVotes: new Set([hash('vote-c')]),
+      });
+    });
+
+    it('decides the chain from why each reviewer stopped', () => {
+      // Used-up attempts cover timeouts and invalid output (attempt budget 1).
+      for (const reason of [
+        ReviewInvocationFailureClass.CapacityUnavailable,
+        ReviewInvocationFailureClass.AuthenticationUnavailable,
+        ReviewInvocationFailureClass.ConfigurationMismatch,
+        ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted,
+      ])
+        expect(fallbackLaneOutcome(false, reason)).toBe(
+          FallbackLaneOutcome.Failed
+        );
+      for (const reason of [
+        undefined,
+        ReviewInvocationFailureClass.AdmissionLimited,
+        ReviewWorkSlotExhaustionReason.InvestigationDeferred,
+        ReviewWorkSlotExhaustionReason.DeadlineReached,
+        ReviewWorkSlotExhaustionReason.ProviderLaneBusy,
+      ])
+        expect(fallbackLaneOutcome(false, reason)).toBe(
+          FallbackLaneOutcome.Stopped
+        );
+      expect(fallbackLaneOutcome(true, undefined)).toBe(
+        FallbackLaneOutcome.Accepted
+      );
+      // Optional work never makes a reviewer count as finished.
+      expect(
+        reviewerCompletedRequiredWork(
+          [{ workSlotId: 'lifecycle', required: false }],
+          [{ workSlotId: 'lifecycle' }]
+        )
+      ).toBe(false);
+      expect(
+        orderedFallbackCoverage(
+          new Map([
+            ['a', FallbackLaneOutcome.Failed],
+            ['b', FallbackLaneOutcome.Stopped],
+          ])
+        )
+      ).toBeUndefined();
+    });
+
+    it('ends the chain when admission limits the review', async () => {
+      const fixture = fallbackFixture();
+      failing(
+        fixture,
+        ['slot-1'],
+        ReviewInvocationFailureClass.AdmissionLimited
+      );
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        allowPartial: true,
+      });
+      expect(result.status).toBe(
+        ReviewOrchestrationResultStatus.PartialCompleted
+      );
+      expect(executed(fixture)).toEqual(['slot-1']);
+      expect(fallbackReviewers(fixture)).toBeUndefined();
+    });
+
+    it('stays incomplete when every reviewer fails', async () => {
+      const fixture = fallbackFixture();
+      failing(
+        fixture,
+        ['slot-1', 'slot-2', 'slot-3'],
+        ReviewInvocationFailureClass.CapacityUnavailable
+      );
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        allowPartial: true,
+      });
+      expect(result.status).toBe(
+        ReviewOrchestrationResultStatus.PartialCompleted
+      );
+      expect(executed(fixture)).toEqual(['slot-1', 'slot-2', 'slot-3']);
+      expect(fallbackReviewers(fixture)).toBeUndefined();
+    });
+
+    it('skips a reviewer on the same exhausted account', async () => {
+      const fixture = fallbackFixture({ a: 'shared', b: 'shared', c: 'c' });
+      failing(
+        fixture,
+        ['slot-1'],
+        ReviewInvocationFailureClass.CapacityUnavailable,
+        'allocation'
+      );
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        allowPartial: true,
+      });
+      expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+      expect(executed(fixture)).toEqual(['slot-1', 'slot-3']);
+      expect(fallbackReviewers(fixture)).toEqual({
+        failedVotes: new Set([hash('vote-a'), hash('vote-b')]),
+        unusedVotes: new Set(),
+      });
+      // The parallel quota skip does not apply to a fallback chain.
+      expect(fixture.controlPlane.terminalizeWorkSlot).not.toHaveBeenCalled();
+    });
   });
 
   it('aborts every child and waits for settlement before returning a parent authority failure', async () => {

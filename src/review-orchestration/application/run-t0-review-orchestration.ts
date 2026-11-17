@@ -126,8 +126,10 @@ export type ReviewOrchestrationResult = {
   readonly mergeGateConclusion?: MergeGateConclusion;
 };
 
-enum ReviewWorkSlotExhaustionReason {
+export enum ReviewWorkSlotExhaustionReason {
   AttemptBudgetExhausted = 'attempt_budget_exhausted',
+  /** An ordered fallback ended before this reviewer was needed. */
+  FallbackUnused = 'fallback_unused',
   NotRunnable = 'not_runnable',
   ProviderLaneBusy = 'provider_lane_busy',
   InvestigationDeferred = 'investigation_deferred',
@@ -747,7 +749,10 @@ export class RunT0ReviewOrchestration {
           once: true,
         });
         if (this.dependencies.signal?.aborted) stopRun();
-        const markExhausted = (slot: ReviewWorkSlotPlan) => {
+        const markExhausted = (
+          slot: ReviewWorkSlotPlan,
+          reason = ReviewWorkSlotExhaustionReason.AdmissionLimited
+        ) => {
           if (
             acceptedEvidence.some(
               (item) => item.workSlotId === slot.workSlotId
@@ -756,10 +761,7 @@ export class RunT0ReviewOrchestration {
           )
             return;
           exhaustedWorkSlotIds.push(slot.workSlotId);
-          exhaustedWorkSlotReasons.set(
-            slot.workSlotId,
-            ReviewWorkSlotExhaustionReason.AdmissionLimited
-          );
+          exhaustedWorkSlotReasons.set(slot.workSlotId, reason);
           state = evolveReviewOrchestration(state, {
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: slot.workSlotId,
@@ -779,11 +781,17 @@ export class RunT0ReviewOrchestration {
               // The next fallback reviewer starts only after the previous one
               // stopped on a failure another reviewer can recover from.
               if (fallback && fallbackChainSettled(fallbackOutcomes)) {
-                for (const lane of pending.splice(0))
+                for (const lane of pending.splice(0)) {
+                  for (const slot of lane.slots)
+                    markExhausted(
+                      slot,
+                      ReviewWorkSlotExhaustionReason.FallbackUnused
+                    );
                   fallbackOutcomes.set(
                     lane.providerVoteIdentityHash,
                     FallbackLaneOutcome.Unused
                   );
+                }
                 break;
               }
               // Choose a ready allocation before taking global capacity.
@@ -800,7 +808,7 @@ export class RunT0ReviewOrchestration {
               if (index < 0) break;
               const lane = pending.splice(index, 1)[0];
               if (stoppedVotes.has(lane.providerVoteIdentityHash)) {
-                lane.slots.forEach(markExhausted);
+                for (const slot of lane.slots) markExhausted(slot);
                 if (fallback)
                   fallbackOutcomes.set(
                     lane.providerVoteIdentityHash,
@@ -882,10 +890,9 @@ export class RunT0ReviewOrchestration {
                   fallbackOutcomes.set(
                     lane.providerVoteIdentityHash,
                     fallbackLaneOutcome(
-                      lane.slots.every((slot) =>
-                        acceptedEvidence.some(
-                          (item) => item.workSlotId === slot.workSlotId
-                        )
+                      reviewerCompletedRequiredWork(
+                        lane.slots,
+                        acceptedEvidence
                       ),
                       stopReasons.get(lane.providerVoteIdentityHash)
                     )
@@ -1587,16 +1594,23 @@ export class RunT0ReviewOrchestration {
                     this.failureContext(input.workSlot)
                   )
                 : undefined;
-              if (scope)
+              if (scope) {
+                // Only a confirmed provider class here lets a fallback reviewer
+                // take over; any other investigation failure ends the chain.
+                const failureClass =
+                  this.dependencies.invocationFailureClassifier.classify(
+                    error,
+                    this.failureContext(input.workSlot)
+                  );
                 throw new ReviewScopedInvocationFailure(
                   scope,
                   error,
                   undefined,
-                  this.dependencies.invocationFailureClassifier.classify(
-                    error,
-                    this.failureContext(input.workSlot)
-                  )
+                  failureClass === ReviewInvocationFailureClass.Retryable
+                    ? undefined
+                    : failureClass
                 );
+              }
               throw error;
             }
             this.recordInvestigationDiagnostic({
@@ -3713,6 +3727,23 @@ export function fallbackLaneOutcome(
   return fallbackEligibleStop(stopReason)
     ? FallbackLaneOutcome.Failed
     : FallbackLaneOutcome.Stopped;
+}
+
+/**
+ * A reviewer reviewed the change when it has required work and all of it was
+ * accepted; optional lifecycle work never decides the fallback chain.
+ */
+export function reviewerCompletedRequiredWork(
+  slots: readonly Pick<ReviewWorkSlotPlan, 'workSlotId' | 'required'>[],
+  accepted: readonly Pick<AcceptedReviewWorkSlotEvidence, 'workSlotId'>[]
+): boolean {
+  const required = slots.filter((slot) => slot.required);
+  return (
+    required.length > 0 &&
+    required.every((slot) =>
+      accepted.some((item) => item.workSlotId === slot.workSlotId)
+    )
+  );
 }
 
 /** The chain is settled once a reviewer was accepted or one stopped it. */

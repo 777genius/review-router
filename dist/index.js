@@ -165150,14 +165150,15 @@ async function initializeEmptyGitRepository(cwd) {
 
 // src/control-plane/generated/review-action-v2/review-reviewer-plan.ts
 var reviewerPlanContract = Object.freeze({
-  planVersion: 1,
+  planVersion: 2,
   maxReviewers: 16,
   maxPlanBytes: 65536,
   runtimeEnvKey: "REVIEW_ROUTER_REVIEWER_PLAN_JSON",
   reviewerIdHeader: "x-reviewrouter-reviewer-id",
   transport: "account_gateway",
   investigationDescriptorVersion: 3,
-  reviewerAvailability: 1
+  reviewerAvailability: 1,
+  providerModes: Object.freeze(["parallel", "fallback"])
 });
 var efforts = [
   "minimal",
@@ -165187,8 +165188,9 @@ function parseReviewReviewerPlan(value) {
     "maxParallelReviewers",
     "inlineMinAgreement",
     "reviewers",
-    "concurrencyGroups"
-  ]) || value.planVersion !== 1 || !Array.isArray(value.reviewers) || value.reviewers.length < 1 || value.reviewers.length > 16 || !integer(value.maxParallelReviewers, 1, value.reviewers.length) || !integer(value.inlineMinAgreement, 1, value.reviewers.length) || !Array.isArray(value.concurrencyGroups) || value.concurrencyGroups.length < 1 || value.concurrencyGroups.length > value.reviewers.length)
+    "concurrencyGroups",
+    ...value.planVersion === 2 ? ["providerMode"] : []
+  ]) || value.planVersion !== 1 && !(value.planVersion === 2 && value.providerMode === "fallback" && value.maxParallelReviewers === 1 && value.inlineMinAgreement === 1) || !Array.isArray(value.reviewers) || value.reviewers.length < 1 || value.reviewers.length > 16 || !integer(value.maxParallelReviewers, 1, value.reviewers.length) || !integer(value.inlineMinAgreement, 1, value.reviewers.length) || !Array.isArray(value.concurrencyGroups) || value.concurrencyGroups.length < 1 || value.concurrencyGroups.length > value.reviewers.length)
     fail2();
   const reviewers = value.reviewers.map(parseReviewer);
   if (value.primaryReviewerId !== reviewers[0].reviewerId || !unique3(reviewers.map((row) => row.reviewerId)) || !unique3(reviewers.map((row) => row.providerVoteIdentityHash)) || !unique3(reviewers.map((row) => row.providerIndex)) || reviewers.some(
@@ -165213,14 +165215,18 @@ function parseReviewReviewerPlan(value) {
     )
   ))
     fail2();
-  return Object.freeze({
-    planVersion: 1,
+  const plan = {
     primaryReviewerId: String(value.primaryReviewerId),
     maxParallelReviewers: value.maxParallelReviewers,
     inlineMinAgreement: value.inlineMinAgreement,
     reviewers: Object.freeze(reviewers),
     concurrencyGroups: Object.freeze(groups)
-  });
+  };
+  return value.planVersion === 2 ? Object.freeze({
+    planVersion: 2,
+    providerMode: "fallback",
+    ...plan
+  }) : Object.freeze({ planVersion: 1, ...plan });
 }
 function parseReviewer(value) {
   if (!record5(value) || !keys3(value, [
@@ -206825,8 +206831,8 @@ var manifest_default = {
     descriptorDigest: "sha256:c188ad0a29581317f23b6aec3f103a7419f67576bea6fb3dc9910cf9ca3a3f7a"
   },
   reviewerPlanProfile: {
-    planVersion: 1,
-    descriptorDigest: "sha256:f6a45d7039129a813690f5f769052d3ba078418eb123b0c0c710ef790d2919d6"
+    planVersion: 2,
+    descriptorDigest: "sha256:53ad81adeb66035203dcd5e17924e3af938bf9e62a803238975f41379e2c649a"
   }
 };
 
@@ -212185,11 +212191,14 @@ var RunT0ReviewOrchestration = class {
           ].includes(outcome.exhaustionReason))
             throw new ReviewScopedInvocationFailure(
               "reviewer",
-              new Error("review_reviewer_work_exhausted")
+              new Error("review_reviewer_work_exhausted"),
+              void 0,
+              outcome.exhaustionReason
             );
         }
       };
       const providerQuotaVotes = /* @__PURE__ */ new Map();
+      const fallbackOutcomes = /* @__PURE__ */ new Map();
       if (!this.dependencies.reviewerScheduling) {
         for (const slot of command.workSlots.filter(
           (slot2) => slot2.taskKind !== "pr_description" /* PrDescription */
@@ -212222,6 +212231,8 @@ var RunT0ReviewOrchestration = class {
           throw new Error("review_reviewer_scheduling_group_invalid");
         const busyGroups = /* @__PURE__ */ new Map();
         const stoppedVotes = /* @__PURE__ */ new Set();
+        const fallback2 = scheduling.providerMode === "fallback";
+        const stopReasons = /* @__PURE__ */ new Map();
         const pending = [...lanes];
         const active = /* @__PURE__ */ new Set();
         let parentFailure;
@@ -212231,16 +212242,13 @@ var RunT0ReviewOrchestration = class {
           once: true
         });
         if (this.dependencies.signal?.aborted) stopRun();
-        const markExhausted = (slot) => {
+        const markExhausted = (slot, reason = "admission_limited" /* AdmissionLimited */) => {
           if (acceptedEvidence.some(
             (item) => item.workSlotId === slot.workSlotId
           ) || exhaustedWorkSlotIds.includes(slot.workSlotId))
             return;
           exhaustedWorkSlotIds.push(slot.workSlotId);
-          exhaustedWorkSlotReasons.set(
-            slot.workSlotId,
-            "admission_limited" /* AdmissionLimited */
-          );
+          exhaustedWorkSlotReasons.set(slot.workSlotId, reason);
           state3 = evolveReviewOrchestration(state3, {
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: slot.workSlotId
@@ -212252,14 +212260,36 @@ var RunT0ReviewOrchestration = class {
         };
         try {
           while (pending.length || active.size) {
-            while (!parentFailure && !this.runAbort.signal.aborted && active.size < scheduling.maxParallelReviewers) {
-              const index = pending.findIndex(
+            while (!parentFailure && !this.runAbort.signal.aborted && active.size < (fallback2 ? 1 : scheduling.maxParallelReviewers)) {
+              if (fallback2 && fallbackChainSettled(fallbackOutcomes)) {
+                for (const lane2 of pending.splice(0)) {
+                  for (const slot of lane2.slots)
+                    markExhausted(
+                      slot,
+                      "fallback_unused" /* FallbackUnused */
+                    );
+                  fallbackOutcomes.set(
+                    lane2.providerVoteIdentityHash,
+                    "unused" /* Unused */
+                  );
+                }
+                break;
+              }
+              const index = fallback2 ? pending.length > 0 ? 0 : -1 : pending.findIndex(
                 (lane2) => stoppedVotes.has(lane2.providerVoteIdentityHash) || (busyGroups.get(lane2.concurrencyGroupId) ?? 0) < groups.get(lane2.concurrencyGroupId)
               );
               if (index < 0) break;
               const lane = pending.splice(index, 1)[0];
               if (stoppedVotes.has(lane.providerVoteIdentityHash)) {
-                lane.slots.forEach(markExhausted);
+                for (const slot of lane.slots) markExhausted(slot);
+                if (fallback2)
+                  fallbackOutcomes.set(
+                    lane.providerVoteIdentityHash,
+                    fallbackLaneOutcome(
+                      false,
+                      stopReasons.get(lane.providerVoteIdentityHash)
+                    )
+                  );
                 continue;
               }
               busyGroups.set(
@@ -212280,7 +212310,12 @@ var RunT0ReviewOrchestration = class {
                   try {
                     await runWorkSlot(slot);
                   } catch (error4) {
-                    const scopedFailure = error4 instanceof ReviewScopedInvocationFailure ? error4 : error4 instanceof ReviewInvocationConfigurationMismatchError ? new ReviewScopedInvocationFailure("reviewer", error4) : void 0;
+                    const scopedFailure = error4 instanceof ReviewScopedInvocationFailure ? error4 : error4 instanceof ReviewInvocationConfigurationMismatchError ? new ReviewScopedInvocationFailure(
+                      "reviewer",
+                      error4,
+                      void 0,
+                      "configuration_mismatch" /* ConfigurationMismatch */
+                    ) : void 0;
                     if (!scopedFailure && !stoppedVotes.has(lane.providerVoteIdentityHash))
                       throw error4;
                     const scope = scopedFailure?.scope ?? "reviewer";
@@ -212294,12 +212329,28 @@ var RunT0ReviewOrchestration = class {
                           sibling.providerVoteIdentityHash,
                           scopedFailure.providerQuota
                         );
+                      if (!stoppedVotes.has(sibling.providerVoteIdentityHash))
+                        stopReasons.set(
+                          sibling.providerVoteIdentityHash,
+                          scopedFailure?.stopReason
+                        );
                       stoppedVotes.add(sibling.providerVoteIdentityHash);
                       sibling.abort.abort(error4);
                     }
                     markExhausted(slot);
                   }
                 }
+                if (fallback2)
+                  fallbackOutcomes.set(
+                    lane.providerVoteIdentityHash,
+                    fallbackLaneOutcome(
+                      reviewerCompletedRequiredWork(
+                        lane.slots,
+                        acceptedEvidence
+                      ),
+                      stopReasons.get(lane.providerVoteIdentityHash)
+                    )
+                  );
               })().catch((error4) => {
                 parentFailure ??= error4;
                 this.runAbort.abort(error4);
@@ -212336,9 +212387,12 @@ var RunT0ReviewOrchestration = class {
       const acceptedWorkSlotIds = new Set(
         acceptedEvidence.map((item) => item.workSlotId)
       );
+      const fallbackCoverage = orderedFallbackCoverage(fallbackOutcomes);
       const quotaSkippedVotes = new Set(
-        providerQuotaSkippedVotes({
-          requiredWorkSlots: command.workSlots.filter((slot) => slot.required),
+        fallbackOutcomes.size > 0 ? [] : providerQuotaSkippedVotes({
+          requiredWorkSlots: command.workSlots.filter(
+            (slot) => slot.required
+          ),
           acceptedWorkSlotIds,
           quotaVotes: new Set(providerQuotaVotes.keys())
         })
@@ -212358,7 +212412,9 @@ var RunT0ReviewOrchestration = class {
       }
       const requiredWorkSlotIds = new Set(
         command.workSlots.filter(
-          (workSlot) => workSlot.required && !quotaSkippedVotes.has(workSlot.providerVoteIdentityHash)
+          (workSlot) => workSlot.required && !quotaSkippedVotes.has(workSlot.providerVoteIdentityHash) && !fallbackCoverage?.excusedVotes.has(
+            workSlot.providerVoteIdentityHash
+          )
         ).map((workSlot) => workSlot.workSlotId)
       );
       const requiredExhaustedWorkSlotIds = exhaustedWorkSlotIds.filter(
@@ -212420,10 +212476,17 @@ var RunT0ReviewOrchestration = class {
               providerQuotaVotes.get(vote)
             ])
           )
+        } : {},
+        ...fallbackCoverage ? {
+          fallbackReviewers: {
+            failedVotes: fallbackCoverage.failedVotes,
+            unusedVotes: fallbackCoverage.unusedVotes
+          }
         } : {}
       });
       this.dependencies.progress?.report({ type: "assembling" });
       let partial2 = requiredExhaustedWorkSlotIds.length > 0 || !projection.coverageComplete;
+      const serverExcusedCoverage = quotaSkippedVotes.size > 0 || (fallbackCoverage?.excusedVotes.size ?? 0) > 0;
       let partialFailureCode = derivePartialFailureCode({
         requiredExhaustedWorkSlotIds,
         exhaustedWorkSlotReasons,
@@ -212495,12 +212558,12 @@ var RunT0ReviewOrchestration = class {
         ]),
         execution,
         projection,
-        // A quota skip leaves required slots open on the server, which decides
-        // from its own recorded facts. Permit partial so a disagreement still
-        // publishes, then report whatever the server actually finalized.
-        allowPartial: partial2 || quotaSkippedVotes.size > 0
+        // A quota skip or a fallback leaves required slots open on the
+        // server, which decides from its own facts. Permit partial so a
+        // disagreement still publishes, then report what it finalized.
+        allowPartial: partial2 || serverExcusedCoverage
       });
-      if (!partial2 && quotaSkippedVotes.size > 0) {
+      if (!partial2 && serverExcusedCoverage) {
         const finalizedExecution = await this.dependencies.controlPlane.restoreExecution({
           authorization,
           reviewRevisionHash: command.reviewRevisionHash
@@ -212869,7 +212932,18 @@ var RunT0ReviewOrchestration = class {
                 error4,
                 this.failureContext(input.workSlot)
               ) : void 0;
-              if (scope) throw new ReviewScopedInvocationFailure(scope, error4);
+              if (scope) {
+                const failureClass = this.dependencies.invocationFailureClassifier.classify(
+                  error4,
+                  this.failureContext(input.workSlot)
+                );
+                throw new ReviewScopedInvocationFailure(
+                  scope,
+                  error4,
+                  void 0,
+                  failureClass === "retryable" /* Retryable */ ? void 0 : failureClass
+                );
+              }
               throw error4;
             }
             this.recordInvestigationDiagnostic({
@@ -213170,7 +213244,8 @@ var RunT0ReviewOrchestration = class {
                   error4,
                   failureClass === "capacity_unavailable" /* CapacityUnavailable */ ? this.dependencies.invocationFailureClassifier.providerQuota?.(
                     context5
-                  ) : void 0
+                  ) : void 0,
+                  failureClass
                 );
             }
             if (failureClass === "capacity_unavailable" /* CapacityUnavailable */) {
@@ -214320,12 +214395,52 @@ function maxVersion(left, right) {
   return BigInt(left) >= BigInt(right) ? left : right;
 }
 var ReviewScopedInvocationFailure = class extends Error {
-  constructor(scope, cause, providerQuota) {
+  constructor(scope, cause, providerQuota, stopReason) {
     super("review_invocation_scoped_failure", { cause });
     this.scope = scope;
     this.providerQuota = providerQuota;
+    this.stopReason = stopReason;
   }
 };
+function fallbackEligibleStop(reason) {
+  switch (reason) {
+    case "capacity_unavailable" /* CapacityUnavailable */:
+    case "authentication_unavailable" /* AuthenticationUnavailable */:
+    case "configuration_mismatch" /* ConfigurationMismatch */:
+    case "retryable" /* Retryable */:
+    case "attempt_budget_exhausted" /* AttemptBudgetExhausted */:
+      return true;
+    default:
+      return false;
+  }
+}
+function fallbackLaneOutcome(accepted, stopReason) {
+  if (accepted) return "accepted" /* Accepted */;
+  return fallbackEligibleStop(stopReason) ? "failed" /* Failed */ : "stopped" /* Stopped */;
+}
+function reviewerCompletedRequiredWork(slots, accepted) {
+  const required2 = slots.filter((slot) => slot.required);
+  return required2.length > 0 && required2.every(
+    (slot) => accepted.some((item) => item.workSlotId === slot.workSlotId)
+  );
+}
+function fallbackChainSettled(outcomes) {
+  const last = [...outcomes.values()].at(-1);
+  return last !== void 0 && last !== "failed" /* Failed */;
+}
+function orderedFallbackCoverage(outcomes) {
+  const entries = [...outcomes];
+  if (!entries.some(([, outcome]) => outcome === "accepted" /* Accepted */))
+    return void 0;
+  const votes = (wanted) => new Set(entries.filter(([, outcome]) => wanted(outcome)).map(([v2]) => v2));
+  return Object.freeze({
+    excusedVotes: votes((outcome) => outcome !== "accepted" /* Accepted */),
+    failedVotes: votes(
+      (outcome) => outcome === "failed" /* Failed */ || outcome === "stopped" /* Stopped */
+    ),
+    unusedVotes: votes((outcome) => outcome === "unused" /* Unused */)
+  });
+}
 
 // src/review-orchestration/infrastructure/review-investigation-telemetry.ts
 function emitReviewInvestigationTelemetry(message) {
@@ -241658,8 +241773,11 @@ var ProductionReviewProjectionCommandFactory = class {
   }
   async create(input) {
     const skipped = input.providerQuotaSkippedVotes ?? /* @__PURE__ */ new Map();
-    const assignments = this.input.assignments.map(
-      (assignment) => skipped.has(assignment.providerVoteIdentityHash ?? "") ? { ...assignment, required: false } : assignment
+    const fallback2 = input.fallbackReviewers;
+    const assignments = this.input.assignments.filter(
+      (assignment) => !fallback2?.unusedVotes.has(assignment.providerVoteIdentityHash ?? "")
+    ).map(
+      (assignment) => skipped.has(assignment.providerVoteIdentityHash ?? "") || fallback2?.failedVotes.has(assignment.providerVoteIdentityHash ?? "") ? { ...assignment, required: false } : assignment
     );
     const evidence = validateAcceptedEvidence({
       assignments,
@@ -248066,6 +248184,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             (context5) => context5 ? modelTransports.get(context5.workSlot.providerVoteIdentityHash)?.failureFact() : void 0
           ),
           reviewerScheduling: {
+            ...reviewerPlan.planVersion === 2 ? { providerMode: reviewerPlan.providerMode } : {},
             maxParallelReviewers: reviewerPlan.maxParallelReviewers,
             reviewers: reviewerPlan.reviewers,
             concurrencyGroups: reviewerPlan.concurrencyGroups.map(

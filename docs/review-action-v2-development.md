@@ -312,6 +312,17 @@ investigation access still resolve the exact eligible reviewer. Producer plan
 support is an immutable compatibility capability, with source implementation
 and runtime activation governed by the existing release boundary above.
 
+Reviewer plan version 2 adds the ordered fallback (`providerMode: "fallback"`,
+one reviewer at a time, agreement 1). Reviewers run in plan order; the next one
+starts only when the previous one stopped on a reviewer or allocation failure of
+class capacity, authentication or configuration (an unavailable reviewer), or
+used up its attempts. Admission limits, deferred investigations, the run
+deadline and run-scope failures end the chain. The first reviewer whose required
+work is accepted decides coverage: earlier failed reviewers become optional and
+later ones are not started. The server finalizer verifies the same rule from the
+captured snapshot. A version 2 producer still runs every version 1 plan; the
+server sends a version 2 plan only to a producer that declares it.
+
 ## Rotating Codex authorization
 
 Never write `REVIEWROUTER_CODEX_AUTH_JSON` directly with `gh secret set` for a

@@ -29,6 +29,11 @@ export interface ReviewProjectionCommandFactoryPort {
     readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
     readonly reviewRevisionHash: string;
     readonly providerQuotaSkippedVotes?: ReadonlyMap<string, ProviderQuota>;
+    /** Ordered fallback around the accepted reviewer: failed and unused votes. */
+    readonly fallbackReviewers?: Readonly<{
+      failedVotes: ReadonlySet<string>;
+      unusedVotes: ReadonlySet<string>;
+    }>;
   }): Promise<BuildCurrentReviewProjectionCommand>;
 }
 

@@ -2024,6 +2024,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                     : undefined
                 ),
               reviewerScheduling: {
+                ...(reviewerPlan.planVersion === 2
+                  ? { providerMode: reviewerPlan.providerMode }
+                  : {}),
                 maxParallelReviewers: reviewerPlan.maxParallelReviewers,
                 reviewers: reviewerPlan.reviewers,
                 concurrencyGroups: reviewerPlan.concurrencyGroups.map(

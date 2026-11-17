@@ -212324,7 +212324,9 @@ var RunT0ReviewOrchestration = class {
                       (candidate) => candidate.concurrencyGroupId === lane.concurrencyGroupId
                     ) : [lane];
                     for (const sibling of affected) {
-                      if (scopedFailure?.providerQuota && !stoppedVotes.has(sibling.providerVoteIdentityHash))
+                      if (scopedFailure?.providerQuota && !stoppedVotes.has(sibling.providerVoteIdentityHash) && !sibling.slots.some(
+                        (candidate) => candidate.required && exhaustedWorkSlotIds.includes(candidate.workSlotId)
+                      ))
                         providerQuotaVotes.set(
                           sibling.providerVoteIdentityHash,
                           scopedFailure.providerQuota
@@ -252863,7 +252865,7 @@ async function finishAccountGatewayActionReview(inputs, review, ciProgressReport
   signal.throwIfAborted();
   const report = buildV2TerminalOutcomeReport(inputs, review);
   if (report) appendTerminalOutcomeStepSummary(report);
-  const terminalFailureCode = v2TerminalFailureCode(review);
+  const terminalFailureCode = v2TerminalFailureCode(review, inputs.eventName);
   if (terminalFailureCode) setFailed(terminalFailureCode);
 }
 async function finishV2ActionReview(inputs, review, terminalOutcomeReporter, ciProgressReporter, signal) {
@@ -252899,7 +252901,7 @@ async function finishV2ActionReview(inputs, review, terminalOutcomeReporter, ciP
       await publishTerminalOutcomeReportSafely(terminalOutcomeReporter, report);
     }
   }
-  const terminalFailureCode = v2TerminalFailureCode(review);
+  const terminalFailureCode = v2TerminalFailureCode(review, inputs.eventName);
   if (terminalFailureCode) {
     setFailed(terminalFailureCode);
   }
@@ -253245,12 +253247,12 @@ function buildV2TerminalOutcomeReport(inputs, review) {
     statusDescription: laneBusy ? "Review delayed: provider lanes are busy." : revisionUnavailable ? "Review delayed: repository state is temporarily unavailable." : revisionFailed ? "Review failed: repository revision could not be verified." : providerCapacity ? "Review unavailable: provider capacity is exhausted." : executionFailed ? "Review failed: execution did not complete." : "Review incomplete: required coverage did not finish."
   });
 }
-function v2TerminalFailureCode(review) {
+function v2TerminalFailureCode(review, eventName) {
   switch (review.outcome) {
     case "completed" /* Completed */:
       return completedV2MergeGateFailureCode(review);
     case "superseded" /* Superseded */:
-      return "review_superseded_by_newer_revision";
+      return eventName === "workflow_dispatch" ? null : "review_superseded_by_newer_revision";
     case "cancelled" /* Cancelled */:
       return null;
     case "partial_completed" /* PartialCompleted */:

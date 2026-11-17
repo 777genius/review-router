@@ -195884,7 +195884,9 @@ var RunT0ReviewOrchestration = class {
                       (candidate) => candidate.concurrencyGroupId === lane.concurrencyGroupId
                     ) : [lane];
                     for (const sibling of affected) {
-                      if (scopedFailure?.providerQuota && !stoppedVotes.has(sibling.providerVoteIdentityHash))
+                      if (scopedFailure?.providerQuota && !stoppedVotes.has(sibling.providerVoteIdentityHash) && !sibling.slots.some(
+                        (candidate) => candidate.required && exhaustedWorkSlotIds.includes(candidate.workSlotId)
+                      ))
                         providerQuotaVotes.set(
                           sibling.providerVoteIdentityHash,
                           scopedFailure.providerQuota

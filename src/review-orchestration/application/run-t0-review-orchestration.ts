@@ -866,10 +866,16 @@ export class RunT0ReviewOrchestration {
                         : [lane];
                     for (const sibling of affected) {
                       // Quota belongs to the account, so it stops the whole
-                      // allocation; a reviewer stopped earlier keeps its cause.
+                      // allocation. A reviewer stopped earlier, or with required
+                      // work already lost for another reason, keeps that cause.
                       if (
                         scopedFailure?.providerQuota &&
-                        !stoppedVotes.has(sibling.providerVoteIdentityHash)
+                        !stoppedVotes.has(sibling.providerVoteIdentityHash) &&
+                        !sibling.slots.some(
+                          (candidate) =>
+                            candidate.required &&
+                            exhaustedWorkSlotIds.includes(candidate.workSlotId)
+                        )
                       )
                         providerQuotaVotes.set(
                           sibling.providerVoteIdentityHash,

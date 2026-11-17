@@ -4640,6 +4640,55 @@ describe('exact reviewer concurrency in the parent orchestration', () => {
     );
   });
 
+  it('keeps an earlier non-quota gap when the same reviewer later runs out of quota', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'a', 'b'],
+      { a: 'a', b: 'b' },
+      { a: 1, b: 1 },
+      2
+    );
+    Object.assign(fixture.dependencies.invocationFailureClassifier, {
+      classify: jest.fn(() => ReviewInvocationFailureClass.CapacityUnavailable),
+      scope: jest.fn(() => 'allocation'),
+      providerQuota: jest.fn(() => quota),
+    });
+    finalizeAs(fixture, RestoredReviewExecutionState.Completed);
+    // slot-1 of reviewer a already ended without evidence in an earlier attempt.
+    const start = fixture.controlPlane.startExecution.getMockImplementation()!;
+    fixture.controlPlane.startExecution.mockImplementation(async (request) => {
+      const started = await start(request);
+      return {
+        ...started,
+        restoredExecution: {
+          ...started.restoredExecution,
+          workSlots: started.restoredExecution.workSlots.map((slot) =>
+            slot.workSlotId === 'slot-1'
+              ? { ...slot, state: RestoredReviewWorkSlotState.Exhausted }
+              : slot
+          ),
+        },
+      };
+    });
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ invocation }) => {
+        if (invocation.workSlotId === 'slot-2')
+          throw new Error('provider_quota_exhausted');
+        return observationPayload;
+      });
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      allowPartial: true,
+    });
+    expect(result.status).toBe(
+      ReviewOrchestrationResultStatus.PartialCompleted
+    );
+    expect(
+      jest.mocked(fixture.dependencies.projectionBuilder.build).mock.calls[0][0]
+        .providerQuotaSkippedVotes
+    ).toBeUndefined();
+  });
+
   it('reports partial coverage when the server does not accept the skip', async () => {
     const fixture = concurrentFixture(
       ['a', 'b'],

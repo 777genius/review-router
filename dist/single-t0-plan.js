@@ -191609,7 +191609,14 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   maxWaits: 128,
   inFlight: 1,
   localConnections: 4,
-  cliOutputBytes: 8388608
+  cliOutputBytes: 8388608,
+  // OCR prompt-token ceiling (`--max-tokens`) for runs through the relay,
+  // whose request limit (RR relay `ingressBytes`, Gateway `requestBytes`) is
+  // 1 MiB. OCR compresses its history at 60% and stops a group at 80% of it.
+  // It counts cl100k tokens, and escaped JSON code reached ~8.7 bytes per
+  // counted token in production, so 1 MiB / 12 keeps a margin. Lower it if
+  // that server limit is ever lowered.
+  ocrMaxTokens: Math.floor(1048576 / 12)
 });
 function createAccountGatewayRunFetch(fetchImpl, signal) {
   return (input, init) => {
@@ -223083,7 +223090,8 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 } : {},
                 bridge,
                 limits: {
-                  requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
+                  requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3,
+                  ...input2.accountGateway ? { maxTokens: ACCOUNT_GATEWAY_BOUNDS.ocrMaxTokens } : {}
                 },
                 ocrEffort: "medium",
                 modelReasoningEffort: ocrModelReasoningEffort,

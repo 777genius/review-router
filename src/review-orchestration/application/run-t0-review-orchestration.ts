@@ -761,7 +761,9 @@ export class RunT0ReviewOrchestration {
         if (this.dependencies.signal?.aborted) stopRun();
         const markExhausted = (
           slot: ReviewWorkSlotPlan,
-          reason = ReviewWorkSlotExhaustionReason.AdmissionLimited
+          reason = stoppedReviewerExhaustion(
+            stopReasons.get(slot.providerVoteIdentityHash)
+          )
         ) => {
           if (
             acceptedEvidence.some(
@@ -3717,6 +3719,29 @@ export enum FallbackLaneOutcome {
   Stopped = 'stopped',
   /** The chain ended before this reviewer was needed. */
   Unused = 'unused',
+}
+
+/**
+ * Why the work a stopped reviewer never ran is exhausted; the summary names it
+ * as the cause. Admission limits, a deferred investigation and the deadline
+ * keep their own cause. Any provider failure (quota, capacity, sign-in, an
+ * unavailable reviewer, used-up attempts) means no accepted evidence, the same
+ * reason a quota-skipped slot gets, so it never reads as an admission limit.
+ */
+export function stoppedReviewerExhaustion(
+  reason: ReviewerStopReason | undefined
+): ReviewWorkSlotExhaustionReason {
+  switch (reason) {
+    case ReviewInvocationFailureClass.AdmissionLimited:
+    case ReviewWorkSlotExhaustionReason.AdmissionLimited:
+      return ReviewWorkSlotExhaustionReason.AdmissionLimited;
+    case ReviewWorkSlotExhaustionReason.InvestigationDeferred:
+      return ReviewWorkSlotExhaustionReason.InvestigationDeferred;
+    case ReviewWorkSlotExhaustionReason.DeadlineReached:
+      return ReviewWorkSlotExhaustionReason.DeadlineReached;
+    default:
+      return ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted;
+  }
 }
 
 /**

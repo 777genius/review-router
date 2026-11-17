@@ -26,6 +26,7 @@ import {
   ReviewWorkSlotExhaustionReason,
   fallbackLaneOutcome,
   orderedFallbackCoverage,
+  stoppedReviewerExhaustion,
   reviewerCompletedRequiredWork,
   canonicalizeReviewWorkSlots,
   type ReviewActionV2ControlPlanePort,
@@ -4910,6 +4911,58 @@ describe('exact reviewer concurrency in the parent orchestration', () => {
           ])
         )
       ).toBeUndefined();
+    });
+
+    // A provider failure used to leave the reviewer's other work as
+    // admission_limited, so the summary blamed the admission policy.
+    it('records why a stopped reviewer left its work, not an admission limit', async () => {
+      const fixture = concurrentFixture(
+        ['a', 'a', 'b'],
+        { a: 'a', b: 'b' },
+        { a: 1, b: 1 },
+        2
+      );
+      finalizeAs(fixture, RestoredReviewExecutionState.Completed);
+      failing(
+        fixture,
+        ['slot-1'],
+        ReviewInvocationFailureClass.CapacityUnavailable
+      );
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        allowPartial: true,
+      });
+      expect(result.status).toBe(
+        ReviewOrchestrationResultStatus.PartialCompleted
+      );
+      const reasons = jest.mocked(fixture.dependencies.projectionBuilder.build)
+        .mock.calls[0][0].exhaustedWorkSlotReasons;
+      expect(reasons?.get('slot-1')).toBe(
+        ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted
+      );
+      expect(reasons?.get('slot-2')).toBe(
+        ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted
+      );
+      for (const [reason, expected] of [
+        [
+          ReviewInvocationFailureClass.AdmissionLimited,
+          ReviewWorkSlotExhaustionReason.AdmissionLimited,
+        ],
+        [
+          ReviewWorkSlotExhaustionReason.InvestigationDeferred,
+          ReviewWorkSlotExhaustionReason.InvestigationDeferred,
+        ],
+        [
+          ReviewWorkSlotExhaustionReason.DeadlineReached,
+          ReviewWorkSlotExhaustionReason.DeadlineReached,
+        ],
+        [
+          ReviewInvocationFailureClass.AuthenticationUnavailable,
+          ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted,
+        ],
+        [undefined, ReviewWorkSlotExhaustionReason.AttemptBudgetExhausted],
+      ] as const)
+        expect(stoppedReviewerExhaustion(reason)).toBe(expected);
     });
 
     it('ends the chain when admission limits the review', async () => {

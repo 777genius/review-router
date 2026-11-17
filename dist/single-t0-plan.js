@@ -195813,7 +195813,9 @@ var RunT0ReviewOrchestration = class {
           once: true
         });
         if (this.dependencies.signal?.aborted) stopRun();
-        const markExhausted = (slot, reason = "admission_limited" /* AdmissionLimited */) => {
+        const markExhausted = (slot, reason = stoppedReviewerExhaustion(
+          stopReasons.get(slot.providerVoteIdentityHash)
+        )) => {
           if (acceptedEvidence.some(
             (item) => item.workSlotId === slot.workSlotId
           ) || exhaustedWorkSlotIds.includes(slot.workSlotId))
@@ -197977,6 +197979,19 @@ var ReviewScopedInvocationFailure = class extends Error {
     this.stopReason = stopReason;
   }
 };
+function stoppedReviewerExhaustion(reason) {
+  switch (reason) {
+    case "admission_limited" /* AdmissionLimited */:
+    case "admission_limited" /* AdmissionLimited */:
+      return "admission_limited" /* AdmissionLimited */;
+    case "investigation_deferred" /* InvestigationDeferred */:
+      return "investigation_deferred" /* InvestigationDeferred */;
+    case "deadline_reached" /* DeadlineReached */:
+      return "deadline_reached" /* DeadlineReached */;
+    default:
+      return "attempt_budget_exhausted" /* AttemptBudgetExhausted */;
+  }
+}
 function fallbackEligibleStop(reason) {
   switch (reason) {
     case "capacity_unavailable" /* CapacityUnavailable */:

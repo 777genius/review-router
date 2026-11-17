@@ -1166,6 +1166,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 bridge,
                 limits: {
                   requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
+                  ...(input.accountGateway
+                    ? { maxTokens: ACCOUNT_GATEWAY_BOUNDS.ocrMaxTokens }
+                    : {}),
                 },
                 ocrEffort: 'medium',
                 modelReasoningEffort: ocrModelReasoningEffort,

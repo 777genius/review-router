@@ -2,6 +2,7 @@ import { CONTEXT_TOOLS_PLAN_ENV } from '../../../src/context-tools/contract';
 import type { AccountGatewayReviewerRuntime } from '../../../src/codex-oauth/account-gateway-reviewer-session';
 import { reviewerRuntimeConfig } from '../../../src/codex-oauth/account-gateway-reviewer-session';
 import { OcrReviewInvocationAdapter } from '../../../src/review-orchestration/infrastructure/ocr-review-invocation-adapter';
+import { ACCOUNT_GATEWAY_BOUNDS } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 import type {
   ReviewReviewerPlanV1,
   ReviewReviewerPlanReviewerV1,
@@ -963,7 +964,7 @@ describe('ProductionT0ReviewRunner policy', () => {
             this: OcrReviewInvocationAdapter,
             request
           ) {
-            const { model, bridge } = (
+            const { model, bridge, limits } = (
               this as unknown as {
                 options: {
                   model: string;
@@ -971,9 +972,12 @@ describe('ProductionT0ReviewRunner policy', () => {
                     baseUrl: string;
                     capabilityAuthorization: string;
                   };
+                  limits: { maxTokens?: number };
                 };
               }
             ).options;
+            // Gateway OCR keeps its history under the 1 MiB relay request limit.
+            expect(limits.maxTokens).toBe(ACCOUNT_GATEWAY_BOUNDS.ocrMaxTokens);
             if (distinctOcrTransports) {
               const runtime = runtimes.find(
                 (item) => item.reviewer.requestedModel === model

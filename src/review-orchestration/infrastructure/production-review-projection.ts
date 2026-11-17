@@ -79,6 +79,8 @@ export type ProductionWorkAssignmentFacts = {
 
 export function createProductionReviewProjectionBuilder(input: {
   readonly providerQuota?: () => ProviderQuota | undefined;
+  /** Reviewer vote -> requested model, named when a reviewer is skipped. */
+  readonly reviewerModels?: ReadonlyMap<string, string>;
   readonly providerFailure?: () => ProviderFailureNotice | undefined;
   readonly authorizationFacts: ReviewRunAuthorizationFacts;
   readonly pr: PRContext;
@@ -144,6 +146,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
   constructor(
     private readonly input: {
       readonly providerQuota?: () => ProviderQuota | undefined;
+      readonly reviewerModels?: ReadonlyMap<string, string>;
       readonly providerFailure?: () => ProviderFailureNotice | undefined;
       readonly authorizationFacts: ReviewRunAuthorizationFacts;
       readonly pr: PRContext;
@@ -162,9 +165,19 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     readonly exhaustedWorkSlotIds: readonly string[];
     readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
     readonly reviewRevisionHash: string;
+    readonly providerQuotaSkippedVotes?: ReadonlyMap<string, ProviderQuota>;
   }): Promise<BuildCurrentReviewProjectionCommand> {
+    const skipped =
+      input.providerQuotaSkippedVotes ?? new Map<string, ProviderQuota>();
+    // A quota-skipped reviewer still counts as a failed provider, but its work
+    // no longer decides required coverage.
+    const assignments = this.input.assignments.map((assignment) =>
+      skipped.has(assignment.providerVoteIdentityHash ?? '')
+        ? { ...assignment, required: false }
+        : assignment
+    );
     const evidence = validateAcceptedEvidence({
-      assignments: this.input.assignments,
+      assignments,
       evidence: input.acceptedEvidence,
       reviewRevisionHash: input.reviewRevisionHash,
     });
@@ -229,9 +242,8 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     for (const [workSlotId, { observation }] of evidence.entries()) {
       if (
         this.input.lifecycleVerification &&
-        this.input.assignments.find(
-          (assignment) => assignment.workSlotId === workSlotId
-        )?.taskKind !== 'finding_discovery'
+        assignments.find((assignment) => assignment.workSlotId === workSlotId)
+          ?.taskKind !== 'finding_discovery'
       )
         continue;
       const payload = parseObservation(observation.payloadCanonicalJson);
@@ -243,7 +255,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       }
     }
 
-    const requiredAssignments = this.input.assignments.filter(
+    const requiredAssignments = assignments.filter(
       (assignment) =>
         assignment.required &&
         (!this.input.lifecycleVerification ||
@@ -288,7 +300,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       }
     };
     const exhaustedWorkSlots = new Set(input.exhaustedWorkSlotIds);
-    for (const assignment of this.input.assignments) {
+    for (const assignment of assignments) {
       if (
         this.input.lifecycleVerification &&
         assignment.taskKind !== 'finding_discovery'
@@ -425,7 +437,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       ].sort()
     );
     const providerExecution = providerExecutionSummary(
-      this.input.assignments.filter(
+      assignments.filter(
         (assignment) => assignment.taskKind === 'finding_discovery'
       ),
       evidence
@@ -466,6 +478,16 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       providerExecution,
       incompleteCauses,
       ...(providerQuota ? { providerQuota } : {}),
+      ...(skipped.size
+        ? {
+            providerQuotaSkippedReviewers: [...skipped].map(
+              ([vote, quota]) => ({
+                model: this.input.reviewerModels?.get(vote) ?? vote,
+                providerQuota: quota,
+              })
+            ),
+          }
+        : {}),
       ...(providerFailure ? { providerFailure } : {}),
       currentFindings: Object.freeze(
         findings.sort((left, right) =>

@@ -340,7 +340,8 @@ export class LegacyReviewProjectionPolicyAdapter
     );
     const currentOccurrences = activeOccurrences.filter(isCurrentOccurrence);
     const pendingAgreement = currentOccurrences.filter(
-      (occurrence) => !this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)
+      (occurrence) =>
+        !this.hasRequiredInlineAgreement(occurrence.providerVoteKeys)
     ).length;
     const legacyFindings = new Map(
       currentOccurrences.map((occurrence) => [
@@ -395,6 +396,7 @@ export class LegacyReviewProjectionPolicyAdapter
         incomplete,
         incompleteCauses: query.incompleteCauses,
         providerQuota: query.providerQuota,
+        providerQuotaSkippedReviewers: query.providerQuotaSkippedReviewers,
         providerFailure: query.providerFailure,
         coverage: {
           complete: query.coverage.state === ProjectionCoverageState.Complete,

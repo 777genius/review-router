@@ -3,6 +3,7 @@ import type {
   ReviewComparisonBaseline,
 } from '../../review-projection/domain';
 import type { GeneratedPrDescription } from '../../control-plane/generated/review-action-v2/companion-contracts';
+import type { ProviderQuota } from '../../review-execution/domain/provider-quota';
 
 export enum ReviewEvidenceLookupKind {
   Miss = 'miss',
@@ -199,6 +200,10 @@ export interface ReviewInvocationFailureClassifierPort {
     error: unknown,
     context: ReviewInvocationFailureContext
   ): ReviewInvocationFailureScope | undefined;
+  /** Gateway-confirmed provider quota behind a `CapacityUnavailable` failure. */
+  providerQuota?(
+    context: ReviewInvocationFailureContext
+  ): ProviderQuota | undefined;
 }
 
 export interface ReviewInvocationDiagnosticsPort {
@@ -775,6 +780,8 @@ export interface CurrentReviewProjectionBuilderPort {
     readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
     readonly reviewRevisionHash: string;
     readonly prDescription?: GeneratedPrDescription;
+    /** Reviewer vote -> quota; their required work is skipped, not missing. */
+    readonly providerQuotaSkippedVotes?: ReadonlyMap<string, ProviderQuota>;
   }): Promise<CurrentReviewProjection>;
 }
 

@@ -45,3 +45,44 @@ export function providerQuotaMessage(quota: ProviderQuota): string {
     .replace(/Z$/, ' UTC');
   return `OpenRouter request quota exhausted (0 of ${quota.limit} requests remaining). Try again after ${resetAt}.`;
 }
+
+/** A reviewer left out of required coverage because its provider quota ran out. */
+export type ProviderQuotaSkippedReviewer = Readonly<{
+  model: string;
+  providerQuota: ProviderQuota;
+}>;
+
+export function providerQuotaSkipMessage(
+  reviewer: ProviderQuotaSkippedReviewer
+): string {
+  return `Reviewer \`${reviewer.model}\` was skipped: ${providerQuotaMessage(reviewer.providerQuota)}`;
+}
+
+/**
+ * Required work of a reviewer stopped by confirmed provider quota is skipped
+ * only while another reviewer finished all of its required work. Every other
+ * failure, or a run where no reviewer finished, keeps coverage partial. The
+ * SaaS mirrors this rule in `deriveCoverageState` with its own recorded fact.
+ */
+export function providerQuotaSkippedVotes(input: {
+  readonly requiredWorkSlots: readonly Readonly<{
+    workSlotId: string;
+    providerVoteIdentityHash: string;
+  }>[];
+  readonly acceptedWorkSlotIds: ReadonlySet<string>;
+  readonly quotaVotes: ReadonlySet<string>;
+}): ReadonlySet<string> {
+  const openVotes = new Set(
+    input.requiredWorkSlots
+      .filter((slot) => !input.acceptedWorkSlotIds.has(slot.workSlotId))
+      .map((slot) => slot.providerVoteIdentityHash)
+  );
+  const anotherReviewerCompleted = input.requiredWorkSlots.some(
+    (slot) => !openVotes.has(slot.providerVoteIdentityHash)
+  );
+  return new Set(
+    anotherReviewerCompleted
+      ? [...openVotes].filter((vote) => input.quotaVotes.has(vote))
+      : []
+  );
+}

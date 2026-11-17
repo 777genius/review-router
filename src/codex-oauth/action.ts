@@ -708,7 +708,7 @@ async function finishAccountGatewayActionReview(
   signal.throwIfAborted();
   const report = buildV2TerminalOutcomeReport(inputs, review);
   if (report) appendTerminalOutcomeStepSummary(report);
-  const terminalFailureCode = v2TerminalFailureCode(review);
+  const terminalFailureCode = v2TerminalFailureCode(review, inputs.eventName);
   if (terminalFailureCode) core.setFailed(terminalFailureCode);
 }
 
@@ -751,7 +751,7 @@ async function finishV2ActionReview(
       await publishTerminalOutcomeReportSafely(terminalOutcomeReporter, report);
     }
   }
-  const terminalFailureCode = v2TerminalFailureCode(review);
+  const terminalFailureCode = v2TerminalFailureCode(review, inputs.eventName);
   if (terminalFailureCode) {
     core.setFailed(terminalFailureCode);
   }
@@ -1270,13 +1270,20 @@ function buildV2TerminalOutcomeReport(
 }
 
 function v2TerminalFailureCode(
-  review: CodexOAuthV2ReviewResult
+  review: CodexOAuthV2ReviewResult,
+  eventName: string
 ): string | null {
   switch (review.outcome) {
     case CodexOAuthV2ReviewOutcome.Completed:
       return completedV2MergeGateFailureCode(review);
     case CodexOAuthV2ReviewOutcome.Superseded:
-      return 'review_superseded_by_newer_revision';
+      // A dispatched run is not a pull request check and the newer revision
+      // has its own run, so failing it is only noise. A pull_request run is
+      // the check of its head commit and stays failed, e.g. when only the base
+      // moved and no newer run exists.
+      return eventName === 'workflow_dispatch'
+        ? null
+        : 'review_superseded_by_newer_revision';
     case CodexOAuthV2ReviewOutcome.Cancelled:
       return null;
     case CodexOAuthV2ReviewOutcome.PartialCompleted:

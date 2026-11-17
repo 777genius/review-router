@@ -11,6 +11,7 @@ import {
   shouldEnterCodexOAuthRotatingAction,
   runAccountGatewayAction,
 } from '../../../src/codex-oauth/action';
+import { CodexOAuthV2ReviewOutcome } from '../../../src/codex-oauth/runtime';
 
 describe('Codex OAuth rotating action mode', () => {
   it('publishes typed Git diagnostics to the actual Gateway Actions summary without a PR reporter', async () => {
@@ -75,6 +76,67 @@ describe('Codex OAuth rotating action mode', () => {
       expect(text).not.toContain('[x](url)');
       expect(text).toContain('&#124;');
       expect(failed).toHaveBeenCalledWith('review_skills_reference_missing');
+    } finally {
+      runtime.mockRestore();
+      failed.mockRestore();
+      output.mockRestore();
+      process.env = originalEnv;
+      process.exitCode = originalExit;
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+  it('ends a superseded App-first run without failing the workflow', async () => {
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'rr-superseded-action-')
+    );
+    const event = path.join(directory, 'event.json');
+    const summary = path.join(directory, 'summary.md');
+    fs.writeFileSync(
+      event,
+      JSON.stringify({
+        repository: { full_name: 'fixture/repo' },
+        inputs: { pr_number: '1', review_head_sha: 'a'.repeat(40) },
+      })
+    );
+    const originalEnv = process.env;
+    const originalExit = process.exitCode;
+    process.env = {
+      ...originalEnv,
+      GITHUB_EVENT_PATH: event,
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_REPOSITORY: 'fixture/repo',
+      GITHUB_STEP_SUMMARY: summary,
+      REVIEWROUTER_CONTROL_PLANE_URL: 'https://fixture.example',
+      INPUT_PROVIDER_INSTANCE_ID: 'provider',
+      INPUT_WORKFLOW_SCHEMA_VERSION: '2',
+    };
+    const runtime = jest
+      .spyOn(gatewayRuntime, 'runAccountGatewayRuntime')
+      .mockImplementation(async (_input, ports) => {
+        await ports.terminalReview(
+          { outcome: CodexOAuthV2ReviewOutcome.Superseded },
+          new AbortController().signal
+        );
+      });
+    const failed = jest
+      .spyOn(core, 'setFailed')
+      .mockImplementation(() => undefined);
+    const output = jest
+      .spyOn(core, 'setOutput')
+      .mockImplementation(() => undefined);
+    try {
+      await runAccountGatewayAction({
+        reviewActionV2Activation: {
+          mode: ReviewActionV2RuntimeMode.T0,
+          handoff: {} as never,
+        },
+      });
+      expect(failed).not.toHaveBeenCalled();
+      expect(output).toHaveBeenCalledWith(
+        'reviewrouter_v2_outcome',
+        CodexOAuthV2ReviewOutcome.Superseded
+      );
+      expect(fs.readFileSync(summary, 'utf8')).toContain('Review superseded');
     } finally {
       runtime.mockRestore();
       failed.mockRestore();

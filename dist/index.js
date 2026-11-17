@@ -131647,6 +131647,20 @@ function providerQuotaMessage(quota) {
   const resetAt = quota.resetAt.replace("T", " ").replace(/:00\.000Z$/, " UTC").replace(/Z$/, " UTC");
   return `OpenRouter request quota exhausted (0 of ${quota.limit} requests remaining). Try again after ${resetAt}.`;
 }
+function providerQuotaSkipMessage(reviewer) {
+  return `Reviewer \`${reviewer.model}\` was skipped: ${providerQuotaMessage(reviewer.providerQuota)}`;
+}
+function providerQuotaSkippedVotes(input) {
+  const openVotes = new Set(
+    input.requiredWorkSlots.filter((slot) => !input.acceptedWorkSlotIds.has(slot.workSlotId)).map((slot) => slot.providerVoteIdentityHash)
+  );
+  const anotherReviewerCompleted = input.requiredWorkSlots.some(
+    (slot) => !openVotes.has(slot.providerVoteIdentityHash)
+  );
+  return new Set(
+    anotherReviewerCompleted ? [...openVotes].filter((vote) => input.quotaVotes.has(vote)) : []
+  );
+}
 
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
 var import_crypto6 = require("crypto");
@@ -144750,8 +144764,12 @@ function renderReviewerSummaryMarkdown(input) {
       lines.push(`- ${copy.incompleteCauses[code]}`);
     }
   }
+  const skipped = input.providerQuotaSkippedReviewers ?? [];
+  for (const reviewer of skipped)
+    lines.push("", providerQuotaSkipMessage(reviewer));
   const quota = parseProviderQuota(input.providerQuota);
-  if (incomplete && quota) lines.push("", providerQuotaMessage(quota));
+  if (incomplete && quota && !skipped.length)
+    lines.push("", providerQuotaMessage(quota));
   const providerFailure = providerFailureMessage(
     input.providerFailure,
     incomplete
@@ -212006,6 +212024,55 @@ var RunT0ReviewOrchestration = class {
       ))
         throw new Error("review_orchestration_description_plan_invalid");
       this.coordinatedExecution = execution;
+      const terminalizeSlot = async (workSlotId, terminal) => {
+        const terminalizedResult = await this.parentCommand(
+          {
+            authorization,
+            execution,
+            revision: command
+          },
+          async (parentExecution) => {
+            let execution2 = parentExecution;
+            const latestExecution2 = await this.dependencies.controlPlane.restoreExecution({
+              authorization,
+              reviewRevisionHash: command.reviewRevisionHash
+            });
+            execution2 = refreshExecutionAdmission(execution2, latestExecution2);
+            const latestSlot = execution2.restoredExecution.workSlots.find(
+              (slot) => slot.workSlotId === workSlotId
+            );
+            const alreadyExhausted = execution2.restoredExecution.state === "running" /* Running */ && latestSlot?.state === "exhausted" /* Exhausted */ && latestSlot.activeLeaseId === null;
+            if (!alreadyExhausted) {
+              const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
+                authorization,
+                idempotencyKey: this.idempotencyKey("slot-terminalize", [
+                  execution2.executionId,
+                  execution2.generation,
+                  workSlotId,
+                  terminal.terminalState,
+                  terminal.reasonCode
+                ]),
+                execution: execution2,
+                reviewRevisionHash: command.reviewRevisionHash,
+                workSlotId,
+                terminal
+              });
+              execution2 = {
+                ...execution2,
+                streamVersion: terminalized.streamVersion
+              };
+            }
+            return { streamVersion: execution2.streamVersion };
+          }
+        );
+        execution = {
+          ...execution,
+          streamVersion: maxVersion(
+            execution.streamVersion,
+            terminalizedResult.streamVersion
+          )
+        };
+      };
       const runWorkSlot = async (workSlot) => {
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
@@ -212110,58 +212177,7 @@ var RunT0ReviewOrchestration = class {
             workSlotId: workSlot.workSlotId
           });
           const terminal = terminalizeCommand(outcome.exhaustionReason);
-          if (terminal) {
-            const terminalizedResult = await this.parentCommand(
-              {
-                authorization,
-                execution,
-                revision: command
-              },
-              async (parentExecution) => {
-                let execution2 = parentExecution;
-                const latestExecution2 = await this.dependencies.controlPlane.restoreExecution({
-                  authorization,
-                  reviewRevisionHash: command.reviewRevisionHash
-                });
-                execution2 = refreshExecutionAdmission(
-                  execution2,
-                  latestExecution2
-                );
-                const latestSlot = execution2.restoredExecution.workSlots.find(
-                  (slot) => slot.workSlotId === workSlot.workSlotId
-                );
-                const alreadyExhausted = execution2.restoredExecution.state === "running" /* Running */ && latestSlot?.state === "exhausted" /* Exhausted */ && latestSlot.activeLeaseId === null;
-                if (!alreadyExhausted) {
-                  const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
-                    authorization,
-                    idempotencyKey: this.idempotencyKey("slot-terminalize", [
-                      execution2.executionId,
-                      execution2.generation,
-                      workSlot.workSlotId,
-                      terminal.terminalState,
-                      terminal.reasonCode
-                    ]),
-                    execution: execution2,
-                    reviewRevisionHash: command.reviewRevisionHash,
-                    workSlotId: workSlot.workSlotId,
-                    terminal
-                  });
-                  execution2 = {
-                    ...execution2,
-                    streamVersion: terminalized.streamVersion
-                  };
-                }
-                return { streamVersion: execution2.streamVersion };
-              }
-            );
-            execution = {
-              ...execution,
-              streamVersion: maxVersion(
-                execution.streamVersion,
-                terminalizedResult.streamVersion
-              )
-            };
-          }
+          if (terminal) await terminalizeSlot(workSlot.workSlotId, terminal);
           if (this.dependencies.reviewerScheduling && [
             "attempt_budget_exhausted" /* AttemptBudgetExhausted */,
             "admission_limited" /* AdmissionLimited */,
@@ -212173,6 +212189,7 @@ var RunT0ReviewOrchestration = class {
             );
         }
       };
+      const providerQuotaVotes = /* @__PURE__ */ new Map();
       if (!this.dependencies.reviewerScheduling) {
         for (const slot of command.workSlots.filter(
           (slot2) => slot2.taskKind !== "pr_description" /* PrDescription */
@@ -212272,6 +212289,11 @@ var RunT0ReviewOrchestration = class {
                       (candidate) => candidate.concurrencyGroupId === lane.concurrencyGroupId
                     ) : [lane];
                     for (const sibling of affected) {
+                      if (scopedFailure?.providerQuota && !stoppedVotes.has(sibling.providerVoteIdentityHash))
+                        providerQuotaVotes.set(
+                          sibling.providerVoteIdentityHash,
+                          scopedFailure.providerQuota
+                        );
                       stoppedVotes.add(sibling.providerVoteIdentityHash);
                       sibling.abort.abort(error4);
                     }
@@ -212311,8 +212333,33 @@ var RunT0ReviewOrchestration = class {
           this.laneSignals.clear();
         }
       }
+      const acceptedWorkSlotIds = new Set(
+        acceptedEvidence.map((item) => item.workSlotId)
+      );
+      const quotaSkippedVotes = new Set(
+        providerQuotaSkippedVotes({
+          requiredWorkSlots: command.workSlots.filter((slot) => slot.required),
+          acceptedWorkSlotIds,
+          quotaVotes: new Set(providerQuotaVotes.keys())
+        })
+      );
+      for (const vote of quotaSkippedVotes) {
+        try {
+          for (const slot of command.workSlots)
+            if (slot.required && slot.providerVoteIdentityHash === vote && !acceptedWorkSlotIds.has(slot.workSlotId))
+              await terminalizeSlot(slot.workSlotId, {
+                terminalState: "exhausted",
+                reasonCode: "attempt_budget_exhausted"
+              });
+        } catch {
+          this.dependencies.signal?.throwIfAborted();
+          quotaSkippedVotes.delete(vote);
+        }
+      }
       const requiredWorkSlotIds = new Set(
-        command.workSlots.filter((workSlot) => workSlot.required).map((workSlot) => workSlot.workSlotId)
+        command.workSlots.filter(
+          (workSlot) => workSlot.required && !quotaSkippedVotes.has(workSlot.providerVoteIdentityHash)
+        ).map((workSlot) => workSlot.workSlotId)
       );
       const requiredExhaustedWorkSlotIds = exhaustedWorkSlotIds.filter(
         (workSlotId) => requiredWorkSlotIds.has(workSlotId)
@@ -212365,7 +212412,15 @@ var RunT0ReviewOrchestration = class {
         exhaustedWorkSlotIds,
         exhaustedWorkSlotReasons,
         reviewRevisionHash: command.reviewRevisionHash,
-        ...prDescription ? { prDescription } : {}
+        ...prDescription ? { prDescription } : {},
+        ...quotaSkippedVotes.size ? {
+          providerQuotaSkippedVotes: new Map(
+            [...quotaSkippedVotes].map((vote) => [
+              vote,
+              providerQuotaVotes.get(vote)
+            ])
+          )
+        } : {}
       });
       this.dependencies.progress?.report({ type: "assembling" });
       const partial2 = requiredExhaustedWorkSlotIds.length > 0 || !projection.coverageComplete;
@@ -212440,7 +212495,10 @@ var RunT0ReviewOrchestration = class {
         ]),
         execution,
         projection,
-        allowPartial: partial2
+        // A quota skip leaves required slots open on the server. The server
+        // completes coverage from this projection's own complete state; if it
+        // disagrees, a partial publication beats a rejected finalization.
+        allowPartial: partial2 || quotaSkippedVotes.size > 0
       });
       await this.assertRevisionCurrent(command);
       this.assertExecutionDeadlineAvailable(
@@ -213097,7 +213155,13 @@ var RunT0ReviewOrchestration = class {
                 context5
               ) ?? "reviewer";
               if (scope !== "reviewer" || failureClass !== "retryable" /* Retryable */)
-                throw new ReviewScopedInvocationFailure(scope, error4);
+                throw new ReviewScopedInvocationFailure(
+                  scope,
+                  error4,
+                  failureClass === "capacity_unavailable" /* CapacityUnavailable */ ? this.dependencies.invocationFailureClassifier.providerQuota?.(
+                    context5
+                  ) : void 0
+                );
             }
             if (failureClass === "capacity_unavailable" /* CapacityUnavailable */) {
               throw new ReviewProviderUnavailableSignal(
@@ -214246,9 +214310,10 @@ function maxVersion(left, right) {
   return BigInt(left) >= BigInt(right) ? left : right;
 }
 var ReviewScopedInvocationFailure = class extends Error {
-  constructor(scope, cause) {
+  constructor(scope, cause, providerQuota) {
     super("review_invocation_scoped_failure", { cause });
     this.scope = scope;
+    this.providerQuota = providerQuota;
   }
 };
 
@@ -238887,6 +238952,9 @@ var ProviderInvocationFailureClassifier = class {
     }
     return fact ? fact.failureScope ?? "reviewer" : void 0;
   }
+  providerQuota(context5) {
+    return confirmedProviderQuota(this.gatewayFailureFact(context5));
+  }
   classify(error4, context5) {
     const fact = this.gatewayFailureFact(context5);
     if (error4 instanceof ContextToolsError || fact?.code === "context_tools_unavailable")
@@ -240114,6 +240182,7 @@ var BuildCurrentReviewProjection = class {
       coverage,
       incompleteCauses: command.incompleteCauses,
       providerQuota: command.providerQuota,
+      providerQuotaSkippedReviewers: command.providerQuotaSkippedReviewers,
       providerFailure: command.providerFailure,
       occurrences,
       lifecycle: { targets: inventory.targets, facts: lifecycleFacts },
@@ -240975,6 +241044,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
         incomplete,
         incompleteCauses: query.incompleteCauses,
         providerQuota: query.providerQuota,
+        providerQuotaSkippedReviewers: query.providerQuotaSkippedReviewers,
         providerFailure: query.providerFailure,
         coverage: {
           complete: query.coverage.state === "complete" /* Complete */,
@@ -241577,8 +241647,12 @@ var ProductionReviewProjectionCommandFactory = class {
     this.input = input;
   }
   async create(input) {
+    const skipped = input.providerQuotaSkippedVotes ?? /* @__PURE__ */ new Map();
+    const assignments = this.input.assignments.map(
+      (assignment) => skipped.has(assignment.providerVoteIdentityHash ?? "") ? { ...assignment, required: false } : assignment
+    );
     const evidence = validateAcceptedEvidence({
-      assignments: this.input.assignments,
+      assignments,
       evidence: input.acceptedEvidence,
       reviewRevisionHash: input.reviewRevisionHash
     });
@@ -241627,9 +241701,7 @@ var ProductionReviewProjectionCommandFactory = class {
     const findings = [];
     const revalidations = [];
     for (const [workSlotId, { observation }] of evidence.entries()) {
-      if (this.input.lifecycleVerification && this.input.assignments.find(
-        (assignment) => assignment.workSlotId === workSlotId
-      )?.taskKind !== "finding_discovery")
+      if (this.input.lifecycleVerification && assignments.find((assignment) => assignment.workSlotId === workSlotId)?.taskKind !== "finding_discovery")
         continue;
       const payload = parseObservation(observation.payloadCanonicalJson);
       payload.normalizedFindings.forEach((finding, index) => {
@@ -241639,7 +241711,7 @@ var ProductionReviewProjectionCommandFactory = class {
         revalidations.push(toRevalidation(observation, revalidation));
       }
     }
-    const requiredAssignments = this.input.assignments.filter(
+    const requiredAssignments = assignments.filter(
       (assignment) => assignment.required && (!this.input.lifecycleVerification || assignment.taskKind === "finding_discovery")
     );
     const requiredWorkSlotIds = new Set(
@@ -241672,7 +241744,7 @@ var ProductionReviewProjectionCommandFactory = class {
       }
     };
     const exhaustedWorkSlots = new Set(input.exhaustedWorkSlotIds);
-    for (const assignment of this.input.assignments) {
+    for (const assignment of assignments) {
       if (this.input.lifecycleVerification && assignment.taskKind !== "finding_discovery")
         continue;
       const accepted = evidence.get(assignment.workSlotId);
@@ -241782,7 +241854,7 @@ var ProductionReviewProjectionCommandFactory = class {
       ].sort()
     );
     const providerExecution = providerExecutionSummary(
-      this.input.assignments.filter(
+      assignments.filter(
         (assignment) => assignment.taskKind === "finding_discovery"
       ),
       evidence
@@ -241813,6 +241885,14 @@ var ProductionReviewProjectionCommandFactory = class {
       providerExecution,
       incompleteCauses,
       ...providerQuota ? { providerQuota } : {},
+      ...skipped.size ? {
+        providerQuotaSkippedReviewers: [...skipped].map(
+          ([vote, quota]) => ({
+            model: this.input.reviewerModels?.get(vote) ?? vote,
+            providerQuota: quota
+          })
+        )
+      } : {},
       ...providerFailure ? { providerFailure } : {},
       currentFindings: Object.freeze(
         findings.sort(
@@ -247996,6 +248076,12 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             providerQuota: () => [...modelTransports.values()].map(
               (transport) => confirmedProviderQuota(transport.failureFact())
             ).filter((quota) => quota !== void 0).sort((a2, b2) => b2.resetAt.localeCompare(a2.resetAt))[0],
+            reviewerModels: new Map(
+              reviewerPlan.reviewers.map((reviewer) => [
+                reviewer.providerVoteIdentityHash,
+                reviewer.requestedModel
+              ])
+            ),
             authorizationFacts: authorization.facts,
             pr: pr2,
             config: {

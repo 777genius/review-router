@@ -105,6 +105,53 @@ describe('production review projection coverage', () => {
     ).rejects.toThrow('review_projection_coverage_manifest_scope_invalid');
   });
 
+  it('completes coverage without a quota-skipped reviewer and names it in the summary', async () => {
+    const quota = {
+      provider: 'openrouter' as const,
+      limit: 1000,
+      remaining: 0 as const,
+      resetAt: '2026-11-18T00:00:00.000Z',
+    };
+    const assignments = [
+      {
+        ...assignment('first', true),
+        providerVoteIdentityHash: 'a'.repeat(64),
+      },
+      {
+        ...assignment('second', true),
+        providerVoteIdentityHash: 'b'.repeat(64),
+      },
+    ];
+    const accepted = acceptedEvidence('first', fullCoverageManifest('first'));
+    const built = await projectionBuilder(assignments, {
+      providerQuota: () => quota,
+      reviewerModels: new Map([
+        ['b'.repeat(64), 'nvidia/nemotron-3-ultra-550b-a55b:free'],
+      ]),
+    }).build({
+      acceptedEvidence: [
+        {
+          ...accepted,
+          observation: {
+            ...accepted.observation,
+            providerVoteIdentityHash: 'a'.repeat(64),
+          },
+        },
+      ],
+      exhaustedWorkSlotIds: ['second'],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      providerQuotaSkippedVotes: new Map([['b'.repeat(64), quota]]),
+    });
+    expect(built.coverageComplete).toBe(true);
+    const summary = JSON.parse(built.projectionEnvelopeCanonicalJson).publishing
+      .summary.body;
+    expect(summary).toContain(
+      'Reviewer `nvidia/nemotron-3-ultra-550b-a55b:free` was skipped: OpenRouter request quota exhausted (0 of 1000 requests remaining). Try again after 2026-11-18 00:00 UTC.'
+    );
+    expect(summary).toContain('1/2');
+    expect(summary).not.toContain('Review incomplete');
+  });
+
   it('enforces inline quorum in the final artifact while reporting solo findings', async () => {
     const first = {
       ...assignment('first', true),

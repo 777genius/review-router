@@ -4529,6 +4529,130 @@ describe('exact reviewer concurrency in the parent orchestration', () => {
     );
   });
 
+  const quota = {
+    provider: 'openrouter' as const,
+    limit: 1000,
+    remaining: 0 as const,
+    resetAt: '2026-11-18T00:00:00.000Z',
+  };
+  it.each([
+    [
+      'skips a required reviewer stopped by confirmed quota',
+      ReviewInvocationFailureClass.CapacityUnavailable,
+      quota,
+      ['slot-1'],
+      ReviewOrchestrationResultStatus.Completed,
+    ],
+    [
+      'keeps coverage partial for unconfirmed capacity pressure',
+      ReviewInvocationFailureClass.CapacityUnavailable,
+      undefined,
+      ['slot-1'],
+      ReviewOrchestrationResultStatus.PartialCompleted,
+    ],
+    [
+      'keeps coverage partial for an authentication failure',
+      ReviewInvocationFailureClass.AuthenticationUnavailable,
+      quota,
+      ['slot-1'],
+      ReviewOrchestrationResultStatus.PartialCompleted,
+    ],
+    [
+      'keeps coverage partial when every reviewer ran out of quota',
+      ReviewInvocationFailureClass.CapacityUnavailable,
+      quota,
+      ['slot-1', 'slot-2'],
+      ReviewOrchestrationResultStatus.PartialCompleted,
+    ],
+  ])('%s', async (_case, failureClass, providerQuota, failing, expected) => {
+    const fixture = concurrentFixture(
+      ['a', 'b'],
+      { a: 'a', b: 'b' },
+      { a: 1, b: 1 },
+      2
+    );
+    Object.assign(fixture.dependencies.invocationFailureClassifier, {
+      classify: jest.fn(() => failureClass),
+      scope: jest.fn(() => 'allocation'),
+      providerQuota: jest.fn(() => providerQuota),
+    });
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ invocation }) => {
+        if (failing.includes(invocation.workSlotId))
+          throw new Error('provider_quota_exhausted');
+        return observationPayload;
+      });
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      allowPartial: true,
+    });
+    const skipped = expected === ReviewOrchestrationResultStatus.Completed;
+    expect(result.status).toBe(expected);
+    // Open required slots always permit a partial server decision.
+    expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ allowPartial: true })
+    );
+    expect(
+      jest.mocked(fixture.dependencies.projectionBuilder.build).mock.calls[0][0]
+        .providerQuotaSkippedVotes
+    ).toEqual(skipped ? new Map([[hash('vote-a'), quota]]) : undefined);
+    // The server excuses only terminal slots of the skipped reviewer.
+    expect(
+      fixture.controlPlane.terminalizeWorkSlot.mock.calls.map(([request]) => [
+        request.workSlotId,
+        request.terminal,
+      ])
+    ).toEqual(
+      skipped
+        ? [
+            [
+              'slot-1',
+              {
+                terminalState: 'exhausted',
+                reasonCode: 'attempt_budget_exhausted',
+              },
+            ],
+          ]
+        : []
+    );
+  });
+
+  it('keeps coverage partial when the skipped reviewer cannot be closed on the server', async () => {
+    const fixture = concurrentFixture(
+      ['a', 'b'],
+      { a: 'a', b: 'b' },
+      { a: 1, b: 1 },
+      2
+    );
+    Object.assign(fixture.dependencies.invocationFailureClassifier, {
+      classify: jest.fn(() => ReviewInvocationFailureClass.CapacityUnavailable),
+      scope: jest.fn(() => 'allocation'),
+      providerQuota: jest.fn(() => quota),
+    });
+    fixture.controlPlane.terminalizeWorkSlot.mockRejectedValue(
+      new Error('review_action_v2_conflict')
+    );
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ invocation }) => {
+        if (invocation.workSlotId === 'slot-1')
+          throw new Error('provider_quota_exhausted');
+        return observationPayload;
+      });
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      allowPartial: true,
+    });
+    expect(result.status).toBe(
+      ReviewOrchestrationResultStatus.PartialCompleted
+    );
+    expect(
+      jest.mocked(fixture.dependencies.projectionBuilder.build).mock.calls[0][0]
+        .providerQuotaSkippedVotes
+    ).toBeUndefined();
+  });
+
   it('aborts every child and waits for settlement before returning a parent authority failure', async () => {
     const fixture = concurrentFixture(
       ['a', 'b'],

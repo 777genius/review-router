@@ -212099,7 +212099,7 @@ var RunT0ReviewOrchestration = class {
             workSlot.workSlotId,
             "restored_terminal" /* RestoredTerminal */
           );
-          if (restoredSlot.state === "exhausted" /* Exhausted */)
+          if (workSlot.required && restoredSlot.state === "exhausted" /* Exhausted */)
             restoredExhaustedVotes.add(workSlot.providerVoteIdentityHash);
           state3 = evolveReviewOrchestration(state3, {
             type: "slot_exhausted" /* SlotExhausted */,

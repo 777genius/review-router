@@ -571,8 +571,13 @@ export class RunT0ReviewOrchestration {
             workSlot.workSlotId,
             ReviewWorkSlotExhaustionReason.RestoredTerminal
           );
-          // An earlier attempt of this execution used up the reviewer's work.
-          if (restoredSlot.state === RestoredReviewWorkSlotState.Exhausted)
+          // An earlier attempt of this execution used up the reviewer's
+          // required work. The server keeps no failure class, so this hands
+          // over even when that attempt stopped on an admission limit.
+          if (
+            workSlot.required &&
+            restoredSlot.state === RestoredReviewWorkSlotState.Exhausted
+          )
             restoredExhaustedVotes.add(workSlot.providerVoteIdentityHash);
           state = evolveReviewOrchestration(state, {
             type: ReviewOrchestrationEventType.SlotExhausted,

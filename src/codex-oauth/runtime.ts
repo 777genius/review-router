@@ -182,7 +182,9 @@ export interface CodexOAuthV2ReviewRunnerPort {
     readonly ocr?: {
       readonly run: import('./ocr-managed-bootstrap').OcrManagedRunHandle;
       /** Terminal Gateway effect facts of this run; undefined = no failure fact. */
-      readonly effectFacts: () => Readonly<{ effect: string }> | undefined;
+      readonly effectFacts: () =>
+        | Readonly<{ effect: string; code?: string }>
+        | undefined;
     };
     /**
      * Short-lived GitHub capability restricted by the control plane to

@@ -103,7 +103,7 @@ export type OcrLoopbackBridge = Readonly<{
   /** Observed model requests of this run; proven 0 rejects any success. */
   requestCount(): number | undefined;
   /** Terminal Gateway effect facts; `effect: 'none'` is the safe state. */
-  effectFacts?(): Readonly<{ effect: string }> | undefined;
+  effectFacts?(): Readonly<{ effect: string; code?: string }> | undefined;
   /** Diagnostics only; never participates in dispatch or acceptance gates. */
   diagnosticFailureFact?():
     | Readonly<{ effect: string; code?: string }>
@@ -1149,7 +1149,8 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     const qualityFlags = accepted.partial
       ? accepted.classification.filterCommentsPreserved &&
         !accepted.normalized.diagnostics.partialFlagsRequired &&
-        accepted.uncoveredPaths.length === 0
+        accepted.uncoveredPaths.length === 0 &&
+        !accepted.outputTruncated
         ? ['provider_warning']
         : ['context_inspection_incomplete', 'provider_warning']
       : [];

@@ -1,4 +1,5 @@
 import { encodeStructuredLifecycleRequest } from '../../finding-revalidation/domain/packet';
+import { confirmedProviderFailure } from '../../review-execution/domain/provider-failure';
 import {
   confirmedProviderQuota,
   type ProviderQuota,
@@ -70,6 +71,10 @@ export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   // counted token in production, so 1 MiB / 12 keeps a margin. Lower it if
   // that server limit is ever lowered.
   ocrMaxTokens: Math.floor(1_048_576 / 12),
+  // Output-limit turns one consumer may survive. A few runaway turns cost
+  // little next to a lost review; more mean the model is stuck on this input,
+  // and the next one fences the consumer as before.
+  truncatedTurns: 3,
 });
 // Closed pre-dispatch saturation denials a later attempt may retry once released.
 const RELEASABLE_SATURATION_CODES: readonly string[] = [
@@ -281,6 +286,9 @@ export class AccountGatewayModelTransport {
    * denial (or a transport error) is observed: something may have been paid. */
   private mayHaveDispatched = false;
   private failure?: GatewayFailureFact;
+  /** Digests of requests that ended at a confirmed output-limit terminal. Only
+   * an identical replay stays denied; a different request may still run. */
+  private readonly truncatedRequests = new Set<string>();
   private requestRef?: string;
   private observedModel?: string;
   private modelUncertain = false;
@@ -349,6 +357,16 @@ export class AccountGatewayModelTransport {
 
   get lastFailure(): GatewayFailureFact | undefined {
     return this.failure;
+  }
+
+  /** The first failure wins, but a confirmed output-limit terminal never hides
+   * a later failure whose effect is less certain. */
+  private recordFailure(fact: GatewayFailureFact): void {
+    if (
+      !this.failure ||
+      confirmedProviderFailure(this.failure) === 'output_truncated'
+    )
+      this.failure = fact;
   }
   get lastRequestRef(): string | undefined {
     return this.requestRef;
@@ -663,6 +681,16 @@ export class AccountGatewayModelTransport {
       observeTransport(this.observe, 'upstream_request', false, null, error);
       throw error;
     }
+    const requestDigest = Buffer.isBuffer(body)
+      ? createHash('sha256').update(body).digest('hex')
+      : undefined;
+    // Replaying a request that already hit the output limit pays for the same
+    // truncation again; a new request (another turn or file group) may run.
+    if (requestDigest && this.truncatedRequests.has(requestDigest)) {
+      const error = new Error('account_gateway_inference_denied');
+      observeTransport(this.observe, 'upstream_request', false, null, error);
+      throw error;
+    }
     const controller = new AbortController();
     this.held.add(controller);
     const abort = () => controller.abort();
@@ -703,6 +731,7 @@ export class AccountGatewayModelTransport {
     let ticket: PreparedModelDispatchTicket | undefined;
     let completedResponse: unknown;
     let outputTruncated = false;
+    let truncationSettled = false;
     let nativeCompleted:
       | ReturnType<typeof decodeCodexSubscriptionCompletedResponse>
       | undefined;
@@ -979,11 +1008,12 @@ export class AccountGatewayModelTransport {
               }
             }
             if (outputTruncated) {
-              this.failure = {
+              truncationSettled = true;
+              this.recordFailure({
                 code: 'output_truncated',
                 effect: 'completed',
                 ...(requestRef ? { requestRef } : {}),
-              };
+              });
               throw new ModelOutputTruncatedError();
             }
           })().then(
@@ -1022,7 +1052,19 @@ export class AccountGatewayModelTransport {
           terminalCancellation = true;
           return;
         }
-        this.inferenceDenied = true;
+        // A confirmed output-limit terminal is a known, completed and settled
+        // effect. It fails only this request: one runaway model turn must not
+        // discard the rest of a long agentic review. Its identical replay stays
+        // denied, a body without a digest keeps the old fence, and so does the
+        // turn after `truncatedTurns`. fail() can run twice for one request.
+        if (
+          truncationSettled &&
+          requestDigest &&
+          (this.truncatedRequests.has(requestDigest) ||
+            this.truncatedRequests.size < ACCOUNT_GATEWAY_BOUNDS.truncatedTurns)
+        )
+          this.truncatedRequests.add(requestDigest);
+        else this.inferenceDenied = true;
         if (ticket && !ticket.isCompleted())
           this.trackSettlement(ticket.failed());
         if (!streamFailureObserved) {
@@ -1042,11 +1084,12 @@ export class AccountGatewayModelTransport {
             }
           );
         }
-        this.failure ??= {
-          code: 'transport',
-          effect: 'effect_unknown',
-          ...(requestRef ? { requestRef } : {}),
-        };
+        if (!truncationSettled)
+          this.recordFailure({
+            code: 'transport',
+            effect: 'effect_unknown',
+            ...(requestRef ? { requestRef } : {}),
+          });
         controller.abort();
       };
       bounded.once('error', fail);
@@ -1100,12 +1143,8 @@ export class AccountGatewayModelTransport {
         contentType,
         ...(requestRef ? { requestRef } : {}),
         body: bounded,
-        ...(Buffer.isBuffer(body)
-          ? {
-              providerRequestEnvelopeHash: createHash('sha256')
-                .update(body)
-                .digest('hex'),
-            }
+        ...(requestDigest
+          ? { providerRequestEnvelopeHash: requestDigest }
           : {}),
         cancel: abort,
       };
@@ -1129,14 +1168,14 @@ export class AccountGatewayModelTransport {
       );
       this.inferenceDenied = true;
       this.mayHaveDispatched = true;
-      this.failure ??= {
+      this.recordFailure({
         code:
           error instanceof ModelDispatchClaimDeniedError
             ? error.code
             : 'transport',
         effect: 'effect_unknown',
         ...(currentRequestRef ? { requestRef: currentRequestRef } : {}),
-      };
+      });
       controller.abort();
       dispose();
       if (error instanceof ModelDispatchClaimDeniedError) throw error;

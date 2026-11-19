@@ -20,6 +20,7 @@ import {
   type OcrNormalizedFindings,
 } from './ocr-review-normalization';
 import type { TokenUsage } from '../../types';
+import { confirmedProviderFailure } from '../../review-execution/domain/provider-failure';
 import type { AdmittedRuntimeConfig } from '../../control-plane/runtime-config';
 import { resolveAdmittedGatewayOcrReasoningEffort } from '../../control-plane/admitted-gateway-codex-model-settings';
 import { anthropicReasoningEffort } from './anthropic-messages-codec';
@@ -331,6 +332,8 @@ export type OcrAcceptedReviewResult = Readonly<{
   partial: boolean;
   /** Native-selected paths that did not receive an outcome group. */
   uncoveredPaths: readonly string[];
+  /** A model turn of this run stopped at the provider output limit. */
+  outputTruncated: boolean;
 }>;
 
 /**
@@ -342,7 +345,9 @@ export type OcrAcceptedReviewResult = Readonly<{
 export function acceptOcrManagedReviewResult(input: {
   readonly admission: OcrNativeManifestAdmission;
   /** Gateway effect facts of the run; terminal/unknown effect fails closed. */
-  readonly effectFacts?: Readonly<{ effect: string }> | undefined;
+  readonly effectFacts?:
+    | Readonly<{ effect: string; code?: string }>
+    | undefined;
   readonly process: OcrReviewProcessResult;
   /** Result bytes read after close via readOcrOutputFileAfterClose. */
   readonly resultBytes: Buffer;
@@ -359,7 +364,17 @@ export function acceptOcrManagedReviewResult(input: {
   // Step 2: Gateway effect facts before any output interpretation.
   // A positively proven not_dispatched effect is a distinct retry-safe failure
   // (§8.4 step 2), not an unknown effect that could have been paid.
-  if (input.effectFacts && input.effectFacts.effect !== 'none') {
+  // A confirmed output-limit terminal is a known completed effect: OCR saw
+  // that one request fail and reports its group, so the rest of the run is
+  // judged by steps 3-8 and the review is partial instead of discarded.
+  const outputTruncated =
+    input.effectFacts !== undefined &&
+    confirmedProviderFailure(input.effectFacts) === 'output_truncated';
+  if (
+    input.effectFacts &&
+    input.effectFacts.effect !== 'none' &&
+    !outputTruncated
+  ) {
     if (input.effectFacts.effect === 'not_dispatched') {
       throw new OcrReviewAcceptanceError(
         'review_agent_not_dispatched',
@@ -470,10 +485,14 @@ export function acceptOcrManagedReviewResult(input: {
     actualModel: input.observedActualModel,
     usage,
     reasons: Object.freeze(reasons),
+    // A lost model turn is never reported as a complete review, even when
+    // OCR itself recovered the affected group.
     partial:
       classification.partial ||
       normalized.diagnostics.partialFlagsRequired ||
-      uncoveredPaths.length > 0,
+      uncoveredPaths.length > 0 ||
+      outputTruncated,
     uncoveredPaths,
+    outputTruncated,
   });
 }

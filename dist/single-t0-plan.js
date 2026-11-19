@@ -144435,7 +144435,8 @@ var OcrReviewAcceptanceError = class extends Error {
   }
 };
 function acceptOcrManagedReviewResult(input) {
-  if (input.effectFacts && input.effectFacts.effect !== "none") {
+  const outputTruncated = input.effectFacts !== void 0 && confirmedProviderFailure(input.effectFacts) === "output_truncated";
+  if (input.effectFacts && input.effectFacts.effect !== "none" && !outputTruncated) {
     if (input.effectFacts.effect === "not_dispatched") {
       throw new OcrReviewAcceptanceError(
         "review_agent_not_dispatched",
@@ -144527,8 +144528,11 @@ function acceptOcrManagedReviewResult(input) {
     actualModel: input.observedActualModel,
     usage,
     reasons: Object.freeze(reasons),
-    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0,
-    uncoveredPaths
+    // A lost model turn is never reported as a complete review, even when
+    // OCR itself recovered the affected group.
+    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0 || outputTruncated,
+    uncoveredPaths,
+    outputTruncated
   });
 }
 
@@ -191623,7 +191627,11 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   // It counts cl100k tokens, and escaped JSON code reached ~8.7 bytes per
   // counted token in production, so 1 MiB / 12 keeps a margin. Lower it if
   // that server limit is ever lowered.
-  ocrMaxTokens: Math.floor(1048576 / 12)
+  ocrMaxTokens: Math.floor(1048576 / 12),
+  // Output-limit turns one consumer may survive. A few runaway turns cost
+  // little next to a lost review; more mean the model is stuck on this input,
+  // and the next one fences the consumer as before.
+  truncatedTurns: 3
 });
 function createAccountGatewayRunFetch(fetchImpl, signal) {
   return (input, init) => {
@@ -216408,6 +216416,7 @@ var GATEWAY_CODES = [
   "model_dispatch_readback_required",
   "model_dispatch_reservation_required",
   "model_dispatch_unavailable",
+  "output_truncated",
   "pending",
   "preparation_denied",
   "relay_saturated",
@@ -217155,7 +217164,7 @@ var OcrReviewInvocationAdapter = class {
       // One engine invocation; model calls are accounted separately (§9).
       transportAttemptCount: 1
     };
-    const qualityFlags = accepted.partial ? accepted.classification.filterCommentsPreserved && !accepted.normalized.diagnostics.partialFlagsRequired && accepted.uncoveredPaths.length === 0 ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
+    const qualityFlags = accepted.partial ? accepted.classification.filterCommentsPreserved && !accepted.normalized.diagnostics.partialFlagsRequired && accepted.uncoveredPaths.length === 0 && !accepted.outputTruncated ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
     if (accepted.normalized.diagnostics.reasons.includes("unverified_native_span")) {
       qualityFlags.push("unverified_native_span");
     }

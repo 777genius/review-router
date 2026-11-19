@@ -37,6 +37,10 @@ const body = JSON.stringify({
   store: false,
   service_tier: 'default',
 });
+// A different request of the same run (another OCR turn or file group).
+const nextBody = JSON.stringify({ ...JSON.parse(body), input: 'next-turn' });
+const turnBody = (turn: number) =>
+  JSON.stringify({ ...JSON.parse(body), input: `turn-${turn}` });
 const completed = (id: string) =>
   `event: response.completed\ndata: ${JSON.stringify({
     type: 'response.completed',
@@ -253,7 +257,10 @@ type ProbeMode =
   | 'dispatch-incomplete-missing-done'
   | 'dispatch-incomplete-tool'
   | 'dispatch-incomplete-malformed'
-  | 'dispatch-incomplete-lifecycle';
+  | 'dispatch-incomplete-lifecycle'
+  | 'dispatch-truncated-then-next'
+  | 'dispatch-truncated-then-unknown'
+  | 'truncated-turn-cap';
 
 async function transientRetry(mode: ProbeMode): Promise<void> {
   const root = process.env.RR_TRANSIENT_RETRY_PROBE_ROOT;
@@ -265,6 +272,8 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
   const incompleteProbe =
     mode.startsWith('dispatch-incomplete-') ||
     mode.startsWith('incomplete-known-legacy');
+  const truncatedFirst = mode.startsWith('dispatch-truncated-then-');
+  const truncatedCap = mode === 'truncated-turn-cap';
   let claim: Record<string, unknown> = {};
   const dispatchHeaders: Array<string | undefined> = [];
   const withDispatch = mode.startsWith('dispatch-');
@@ -285,9 +294,14 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         assert.equal(request.url, '/api/action/v2/account-gateway/responses');
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        const sent = truncatedCap
+          ? turnBody(requests)
+          : truncatedFirst && requests > 1
+            ? nextBody
+            : body;
         const expectedBody = withDispatch
-          ? JSON.stringify({ ...JSON.parse(body), max_output_tokens: 100 })
-          : body;
+          ? JSON.stringify({ ...JSON.parse(sent), max_output_tokens: 100 })
+          : sent;
         assert.equal(Buffer.concat(chunks).toString('utf8'), expectedBody);
         if (withDispatch)
           dispatchHeaders.push(
@@ -302,6 +316,10 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
             mode === 'unknown-effect-release-denied') &&
           requests === 1
         ) {
+          request.socket.destroy();
+          return;
+        }
+        if (mode === 'dispatch-truncated-then-unknown' && requests === 2) {
           request.socket.destroy();
           return;
         }
@@ -370,7 +388,11 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
           'content-type': 'text/event-stream',
           'x-reviewrouter-request-ref': 'synthetic-recovered',
         });
-        if (incompleteProbe) {
+        if (
+          incompleteProbe ||
+          truncatedCap ||
+          (truncatedFirst && requests === 1)
+        ) {
           const terminal = JSON.parse(
             completed('truncated').split('data: ')[1]!.trim()
           );
@@ -621,6 +643,86 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
       );
       return;
     }
+    if (truncatedFirst) {
+      // One runaway model turn ends only its own request. Before, the whole
+      // consumer was fenced and a long OCR review lost every later group.
+      const first = await bounded(
+        transport.responses(Buffer.from(body)),
+        'truncated-first'
+      );
+      const firstText = await bounded(drain(first.body), 'truncated-drain');
+      assert(!firstText.includes('response.completed'));
+      await transport.drainSettlements();
+      assert.equal(transport.lastFailure?.code, 'output_truncated');
+      assert.equal(transport.lastFailure?.effect, 'completed');
+      // An identical replay would pay for the same truncation again.
+      await assert.rejects(
+        transport.responses(Buffer.from(body)),
+        /account_gateway_inference_denied/u
+      );
+      assert.equal(requests, 1);
+      if (mode === 'dispatch-truncated-then-next') {
+        const next = await bounded(
+          transport.responses(Buffer.from(nextBody)),
+          'truncated-next'
+        );
+        const nextText = await bounded(drain(next.body), 'next-drain');
+        assert(nextText.includes('transient-recovered'));
+        await transport.drainSettlements();
+        assert.equal(requests, 2);
+        assert.equal(transport.actualModel, 'fixture-model');
+        assert.equal(transport.lastFailure?.code, 'output_truncated');
+        assert.equal(transport.lastFailure?.effect, 'completed');
+      } else {
+        await assert.rejects(
+          bounded(transport.responses(Buffer.from(nextBody)), 'next-loss')
+        );
+        await transport.drainSettlements();
+        assert.equal(requests, 2);
+        // The known truncation never hides a later unknown effect, and model
+        // attribution is withdrawn, so OCR acceptance stays closed.
+        assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+        assert.equal(transport.actualModel, undefined);
+        await assert.rejects(
+          transport.responses(Buffer.from(nextBody)),
+          /account_gateway_inference_denied/u
+        );
+        assert.equal(requests, 2);
+      }
+      assert.equal(claims, 2);
+      assert.deepEqual(
+        settlements.map(
+          (value) => parseReviewModelDispatchSettlementV2(value).state
+        ),
+        mode === 'dispatch-truncated-then-next'
+          ? ['completed', 'completed']
+          : ['completed', 'effect_unknown']
+      );
+      assert.equal(transport.releaseRetrySafeFailure(), false);
+      return;
+    }
+    if (truncatedCap) {
+      // A few runaway turns are survived; the next one fences as before.
+      for (let turn = 1; turn <= 4; turn++) {
+        const response = await bounded(
+          transport.responses(Buffer.from(turnBody(turn))),
+          `cap-turn-${turn}`
+        );
+        await bounded(drain(response.body), `cap-drain-${turn}`);
+        await transport.drainSettlements();
+        assert.equal(transport.lastFailure?.code, 'output_truncated');
+        assert.equal(
+          transport.actualModel,
+          turn < 4 ? 'fixture-model' : undefined
+        );
+      }
+      await assert.rejects(
+        transport.responses(Buffer.from(turnBody(5))),
+        /account_gateway_inference_denied/u
+      );
+      assert.equal(requests, 4);
+      return;
+    }
     if (incompleteProbe) {
       if (mode === 'dispatch-incomplete-lifecycle') {
         await assert.rejects(
@@ -798,6 +900,9 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
     'dispatch-incomplete-tool',
     'dispatch-incomplete-malformed',
     'dispatch-incomplete-lifecycle',
+    'dispatch-truncated-then-next',
+    'dispatch-truncated-then-unknown',
+    'truncated-turn-cap',
   ] as const) {
     nodeTest(mode, { timeout: 20000 }, () => transientRetry(mode));
   }
@@ -938,8 +1043,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 24\b/);
-      expect(result.stdout).toMatch(/# pass 24\b/);
+      expect(result.stdout).toMatch(/# tests 27\b/);
+      expect(result.stdout).toMatch(/# pass 27\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -39,6 +39,7 @@ const GATEWAY_CODES = [
   'model_dispatch_readback_required',
   'model_dispatch_reservation_required',
   'model_dispatch_unavailable',
+  'output_truncated',
   'pending',
   'preparation_denied',
   'relay_saturated',

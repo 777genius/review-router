@@ -48,7 +48,7 @@ export type AccountGatewayReviewerRuntime = Readonly<{
   codexBinaryPath?: string;
   ocr?: Readonly<{
     run: OcrManagedRunHandle;
-    effectFacts: () => Readonly<{ effect: string }> | undefined;
+    effectFacts: () => Readonly<{ effect: string; code?: string }> | undefined;
   }>;
 }>;
 
@@ -187,7 +187,10 @@ export async function prepareAccountGatewayReviewerSession(input: {
           run: ocrRun,
           effectFacts: () =>
             transport.lastFailure
-              ? { effect: transport.lastFailure.effect }
+              ? {
+                  effect: transport.lastFailure.effect,
+                  code: transport.lastFailure.code,
+                }
               : undefined,
         },
       });

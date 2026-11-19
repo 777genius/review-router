@@ -355,6 +355,29 @@ describe('acceptOcrManagedReviewResult (§8.4 order 1-8)', () => {
     expect(error.code).not.toBe('gateway_effect_unknown');
   });
 
+  it('keeps a run with one output-limit turn as a partial review', () => {
+    // Prod: one NVIDIA turn hit the 32768 output cap after 25 minutes and the
+    // whole review was discarded as gateway_effect_unknown (0/N files).
+    const accepted = acceptOcrManagedReviewResult(
+      acceptInput({
+        effectFacts: { effect: 'completed', code: 'output_truncated' },
+      })
+    );
+    expect(accepted.partial).toBe(true);
+    expect(accepted.actualModel).toBe('observed-model');
+  });
+
+  it.each([
+    { effect: 'completed' },
+    { effect: 'completed', code: 'transport' },
+    { effect: 'effect_unknown', code: 'output_truncated' },
+  ])('still fails closed on any other paid effect %j', (effectFacts) => {
+    const error = acceptanceErrorOf(() =>
+      acceptOcrManagedReviewResult(acceptInput({ effectFacts }))
+    );
+    expect(error.code).toBe('gateway_effect_unknown');
+  });
+
   it('rejects a nonzero exit even when a valid JSON is present (local diagnostics only)', () => {
     const error = acceptanceErrorOf(() =>
       acceptOcrManagedReviewResult(

@@ -482,9 +482,13 @@ async function runAccountGatewayRuntimeInternal(
           ? {
               ocr: {
                 run: ocrRun,
-                effectFacts: (): Readonly<{ effect: string }> | undefined => {
+                effectFacts: ():
+                  | Readonly<{ effect: string; code?: string }>
+                  | undefined => {
                   const failure = transport.lastFailure;
-                  return failure ? { effect: failure.effect } : undefined;
+                  return failure
+                    ? { effect: failure.effect, code: failure.code }
+                    : undefined;
                 },
               },
             }

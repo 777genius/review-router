@@ -144435,7 +144435,8 @@ var OcrReviewAcceptanceError = class extends Error {
   }
 };
 function acceptOcrManagedReviewResult(input) {
-  if (input.effectFacts && input.effectFacts.effect !== "none") {
+  const outputTruncated = input.effectFacts !== void 0 && confirmedProviderFailure(input.effectFacts) === "output_truncated";
+  if (input.effectFacts && input.effectFacts.effect !== "none" && !outputTruncated) {
     if (input.effectFacts.effect === "not_dispatched") {
       throw new OcrReviewAcceptanceError(
         "review_agent_not_dispatched",
@@ -144527,7 +144528,9 @@ function acceptOcrManagedReviewResult(input) {
     actualModel: input.observedActualModel,
     usage,
     reasons: Object.freeze(reasons),
-    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0,
+    // A lost model turn is never reported as a complete review, even when
+    // OCR itself recovered the affected group.
+    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0 || outputTruncated,
     uncoveredPaths
   });
 }
@@ -216408,6 +216411,7 @@ var GATEWAY_CODES = [
   "model_dispatch_readback_required",
   "model_dispatch_reservation_required",
   "model_dispatch_unavailable",
+  "output_truncated",
   "pending",
   "preparation_denied",
   "relay_saturated",

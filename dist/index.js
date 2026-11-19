@@ -131662,6 +131662,27 @@ function providerQuotaSkippedVotes(input) {
   );
 }
 
+// src/review-execution/domain/provider-failure.ts
+function confirmedProviderFailure(fact) {
+  if (!fact || typeof fact !== "object") return void 0;
+  const value = fact;
+  if (value.code === "output_truncated" && value.effect === "completed")
+    return "output_truncated";
+  if (value.effect === "effect_unknown" || value.effect === "dispatch_started" || value.effect === "response_started")
+    return value.code === "upstream_failure" ? "upstream_failure_unknown" : confirmedProviderQuota(fact) !== void 0 ? void 0 : "request_outcome_unknown";
+  if (value.code !== "upstream_failure") return void 0;
+  return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
+}
+function providerFailureMessage(notice, incompleteReview = false) {
+  if (notice === "output_invalid")
+    return "A verification response did not satisfy the required format or evidence checks. The affected findings remain unverified and are not confirmed as fixed.";
+  if (notice === "output_truncated")
+    return incompleteReview ? "The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes." : "The provider reached its output token limit before completing a response. The affected result is incomplete.";
+  if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown" && notice !== "request_outcome_unknown")
+    return void 0;
+  return (notice === "request_outcome_unknown" ? "The review request did not produce a confirmed result. " : "The review provider could not return a usable result. ") + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : notice === "request_outcome_unknown" ? "The request may have reached the provider. " : "") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "Automatic retry was withheld to avoid running the request twice. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
+}
+
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
 var import_crypto6 = require("crypto");
 var import_http = require("http");
@@ -132453,6 +132474,9 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
    * denial (or a transport error) is observed: something may have been paid. */
   mayHaveDispatched = false;
   failure;
+  /** Digests of requests that ended at a confirmed output-limit terminal. Only
+   * an identical replay stays denied; a different request may still run. */
+  truncatedRequests = /* @__PURE__ */ new Set();
   requestRef;
   observedModel;
   modelUncertain = false;
@@ -132477,6 +132501,12 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
   }
   get lastFailure() {
     return this.failure;
+  }
+  /** The first failure wins, but a confirmed output-limit terminal never hides
+   * a later failure whose effect is less certain. */
+  recordFailure(fact) {
+    if (!this.failure || confirmedProviderFailure(this.failure) === "output_truncated")
+      this.failure = fact;
   }
   get lastRequestRef() {
     return this.requestRef;
@@ -132683,6 +132713,12 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       observeTransport(this.observe, "upstream_request", false, null, error4);
       throw error4;
     }
+    const requestDigest = Buffer.isBuffer(body2) ? (0, import_crypto6.createHash)("sha256").update(body2).digest("hex") : void 0;
+    if (requestDigest && this.truncatedRequests.has(requestDigest)) {
+      const error4 = new Error("account_gateway_inference_denied");
+      observeTransport(this.observe, "upstream_request", false, null, error4);
+      throw error4;
+    }
     const controller = new AbortController();
     this.held.add(controller);
     const abort = () => controller.abort();
@@ -132717,6 +132753,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     let ticket;
     let completedResponse;
     let outputTruncated = false;
+    let truncationSettled = false;
     let nativeCompleted;
     try {
       if (this.modelDispatch)
@@ -132903,11 +132940,12 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
               }
             }
             if (outputTruncated) {
-              this.failure = {
+              truncationSettled = true;
+              this.recordFailure({
                 code: "output_truncated",
                 effect: "completed",
                 ...requestRef ? { requestRef } : {}
-              };
+              });
               throw new ModelOutputTruncatedError();
             }
           })().then(
@@ -132931,7 +132969,9 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
           terminalCancellation = true;
           return;
         }
-        this.inferenceDenied = true;
+        if (truncationSettled && requestDigest)
+          this.truncatedRequests.add(requestDigest);
+        else this.inferenceDenied = true;
         if (ticket && !ticket.isCompleted())
           this.trackSettlement(ticket.failed());
         if (!streamFailureObserved) {
@@ -132951,11 +132991,12 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
             }
           );
         }
-        this.failure ??= {
-          code: "transport",
-          effect: "effect_unknown",
-          ...requestRef ? { requestRef } : {}
-        };
+        if (!truncationSettled)
+          this.recordFailure({
+            code: "transport",
+            effect: "effect_unknown",
+            ...requestRef ? { requestRef } : {}
+          });
         controller.abort();
       };
       bounded3.once("error", fail3);
@@ -132993,9 +133034,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         contentType: contentType3,
         ...requestRef ? { requestRef } : {},
         body: bounded3,
-        ...Buffer.isBuffer(body2) ? {
-          providerRequestEnvelopeHash: (0, import_crypto6.createHash)("sha256").update(body2).digest("hex")
-        } : {},
+        ...requestDigest ? { providerRequestEnvelopeHash: requestDigest } : {},
         cancel: abort
       };
     } catch (error4) {
@@ -133010,11 +133049,11 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       );
       this.inferenceDenied = true;
       this.mayHaveDispatched = true;
-      this.failure ??= {
+      this.recordFailure({
         code: error4 instanceof ModelDispatchClaimDeniedError ? error4.code : "transport",
         effect: "effect_unknown",
         ...currentRequestRef ? { requestRef: currentRequestRef } : {}
-      };
+      });
       controller.abort();
       dispose();
       if (error4 instanceof ModelDispatchClaimDeniedError) throw error4;
@@ -143220,27 +143259,6 @@ function uniqueSuggestionsByVoteKey(suggestions) {
     unique4.push(suggestion);
   }
   return unique4;
-}
-
-// src/review-execution/domain/provider-failure.ts
-function confirmedProviderFailure(fact) {
-  if (!fact || typeof fact !== "object") return void 0;
-  const value = fact;
-  if (value.code === "output_truncated" && value.effect === "completed")
-    return "output_truncated";
-  if (value.effect === "effect_unknown" || value.effect === "dispatch_started" || value.effect === "response_started")
-    return value.code === "upstream_failure" ? "upstream_failure_unknown" : confirmedProviderQuota(fact) !== void 0 ? void 0 : "request_outcome_unknown";
-  if (value.code !== "upstream_failure") return void 0;
-  return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
-}
-function providerFailureMessage(notice, incompleteReview = false) {
-  if (notice === "output_invalid")
-    return "A verification response did not satisfy the required format or evidence checks. The affected findings remain unverified and are not confirmed as fixed.";
-  if (notice === "output_truncated")
-    return incompleteReview ? "The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes." : "The provider reached its output token limit before completing a response. The affected result is incomplete.";
-  if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown" && notice !== "request_outcome_unknown")
-    return void 0;
-  return (notice === "request_outcome_unknown" ? "The review request did not produce a confirmed result. " : "The review provider could not return a usable result. ") + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : notice === "request_outcome_unknown" ? "The request may have reached the provider. " : "") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "Automatic retry was withheld to avoid running the request twice. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
 }
 
 // src/finding-revalidation/domain/resolve-confidence-policy.ts
@@ -168255,7 +168273,8 @@ var OcrReviewAcceptanceError = class extends Error {
   }
 };
 function acceptOcrManagedReviewResult(input) {
-  if (input.effectFacts && input.effectFacts.effect !== "none") {
+  const outputTruncated = input.effectFacts !== void 0 && confirmedProviderFailure(input.effectFacts) === "output_truncated";
+  if (input.effectFacts && input.effectFacts.effect !== "none" && !outputTruncated) {
     if (input.effectFacts.effect === "not_dispatched") {
       throw new OcrReviewAcceptanceError(
         "review_agent_not_dispatched",
@@ -168347,7 +168366,9 @@ function acceptOcrManagedReviewResult(input) {
     actualModel: input.observedActualModel,
     usage,
     reasons: Object.freeze(reasons),
-    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0,
+    // A lost model turn is never reported as a complete review, even when
+    // OCR itself recovered the affected group.
+    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0 || outputTruncated,
     uncoveredPaths
   });
 }
@@ -243452,6 +243473,7 @@ var GATEWAY_CODES = [
   "model_dispatch_readback_required",
   "model_dispatch_reservation_required",
   "model_dispatch_unavailable",
+  "output_truncated",
   "pending",
   "preparation_denied",
   "relay_saturated",
@@ -249292,7 +249314,10 @@ async function prepareAccountGatewayReviewerSession(input) {
         modelTransport: bridge,
         ocr: {
           run: ocrRun,
-          effectFacts: () => transport.lastFailure ? { effect: transport.lastFailure.effect } : void 0
+          effectFacts: () => transport.lastFailure ? {
+            effect: transport.lastFailure.effect,
+            code: transport.lastFailure.code
+          } : void 0
         }
       });
     }
@@ -249922,7 +249947,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
             run: ocrRun,
             effectFacts: () => {
               const failure = transport.lastFailure;
-              return failure ? { effect: failure.effect } : void 0;
+              return failure ? { effect: failure.effect, code: failure.code } : void 0;
             }
           }
         } : {}

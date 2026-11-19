@@ -364,6 +364,7 @@ describe('acceptOcrManagedReviewResult (§8.4 order 1-8)', () => {
       })
     );
     expect(accepted.partial).toBe(true);
+    expect(accepted.outputTruncated).toBe(true);
     expect(accepted.actualModel).toBe('observed-model');
   });
 

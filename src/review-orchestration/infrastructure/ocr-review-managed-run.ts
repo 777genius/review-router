@@ -332,6 +332,8 @@ export type OcrAcceptedReviewResult = Readonly<{
   partial: boolean;
   /** Native-selected paths that did not receive an outcome group. */
   uncoveredPaths: readonly string[];
+  /** A model turn of this run stopped at the provider output limit. */
+  outputTruncated: boolean;
 }>;
 
 /**
@@ -491,5 +493,6 @@ export function acceptOcrManagedReviewResult(input: {
       uncoveredPaths.length > 0 ||
       outputTruncated,
     uncoveredPaths,
+    outputTruncated,
   });
 }

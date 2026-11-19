@@ -71,6 +71,10 @@ export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   // counted token in production, so 1 MiB / 12 keeps a margin. Lower it if
   // that server limit is ever lowered.
   ocrMaxTokens: Math.floor(1_048_576 / 12),
+  // Output-limit turns one consumer may survive. A few runaway turns cost
+  // little next to a lost review; more mean the model is stuck on this input,
+  // and the next one fences the consumer as before.
+  truncatedTurns: 3,
 });
 // Closed pre-dispatch saturation denials a later attempt may retry once released.
 const RELEASABLE_SATURATION_CODES: readonly string[] = [
@@ -1051,8 +1055,14 @@ export class AccountGatewayModelTransport {
         // A confirmed output-limit terminal is a known, completed and settled
         // effect. It fails only this request: one runaway model turn must not
         // discard the rest of a long agentic review. Its identical replay stays
-        // denied, and a body without a digest keeps the old fence.
-        if (truncationSettled && requestDigest)
+        // denied, a body without a digest keeps the old fence, and so does the
+        // turn after `truncatedTurns`. fail() can run twice for one request.
+        if (
+          truncationSettled &&
+          requestDigest &&
+          (this.truncatedRequests.has(requestDigest) ||
+            this.truncatedRequests.size < ACCOUNT_GATEWAY_BOUNDS.truncatedTurns)
+        )
           this.truncatedRequests.add(requestDigest);
         else this.inferenceDenied = true;
         if (ticket && !ticket.isCompleted())

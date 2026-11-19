@@ -132405,7 +132405,11 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   // It counts cl100k tokens, and escaped JSON code reached ~8.7 bytes per
   // counted token in production, so 1 MiB / 12 keeps a margin. Lower it if
   // that server limit is ever lowered.
-  ocrMaxTokens: Math.floor(1048576 / 12)
+  ocrMaxTokens: Math.floor(1048576 / 12),
+  // Output-limit turns one consumer may survive. A few runaway turns cost
+  // little next to a lost review; more mean the model is stuck on this input,
+  // and the next one fences the consumer as before.
+  truncatedTurns: 3
 });
 var RELEASABLE_SATURATION_CODES = [
   "relay_saturated",
@@ -132969,7 +132973,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
           terminalCancellation = true;
           return;
         }
-        if (truncationSettled && requestDigest)
+        if (truncationSettled && requestDigest && (this.truncatedRequests.has(requestDigest) || this.truncatedRequests.size < ACCOUNT_GATEWAY_BOUNDS.truncatedTurns))
           this.truncatedRequests.add(requestDigest);
         else this.inferenceDenied = true;
         if (ticket && !ticket.isCompleted())
@@ -168369,7 +168373,8 @@ function acceptOcrManagedReviewResult(input) {
     // A lost model turn is never reported as a complete review, even when
     // OCR itself recovered the affected group.
     partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0 || outputTruncated,
-    uncoveredPaths
+    uncoveredPaths,
+    outputTruncated
   });
 }
 
@@ -244221,7 +244226,7 @@ var OcrReviewInvocationAdapter = class {
       // One engine invocation; model calls are accounted separately (§9).
       transportAttemptCount: 1
     };
-    const qualityFlags = accepted.partial ? accepted.classification.filterCommentsPreserved && !accepted.normalized.diagnostics.partialFlagsRequired && accepted.uncoveredPaths.length === 0 ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
+    const qualityFlags = accepted.partial ? accepted.classification.filterCommentsPreserved && !accepted.normalized.diagnostics.partialFlagsRequired && accepted.uncoveredPaths.length === 0 && !accepted.outputTruncated ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
     if (accepted.normalized.diagnostics.reasons.includes("unverified_native_span")) {
       qualityFlags.push("unverified_native_span");
     }
@@ -252842,7 +252847,8 @@ async function runAccountGatewayActionInternal(options = {}) {
         "relay_saturated",
         "close_pending",
         "same_operation_recovery_required",
-        "preparation_denied"
+        "preparation_denied",
+        "output_truncated"
       ])).has(fact.code) ? fact.code : "unclassified";
       const effect = (/* @__PURE__ */ new Set([
         "not_dispatched",

@@ -1149,7 +1149,8 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     const qualityFlags = accepted.partial
       ? accepted.classification.filterCommentsPreserved &&
         !accepted.normalized.diagnostics.partialFlagsRequired &&
-        accepted.uncoveredPaths.length === 0
+        accepted.uncoveredPaths.length === 0 &&
+        !accepted.outputTruncated
         ? ['provider_warning']
         : ['context_inspection_incomplete', 'provider_warning']
       : [];

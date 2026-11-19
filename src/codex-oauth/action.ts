@@ -603,6 +603,7 @@ async function runAccountGatewayActionInternal(
         'close_pending',
         'same_operation_recovery_required',
         'preparation_denied',
+        'output_truncated',
       ]).has(fact.code)
         ? fact.code
         : 'unclassified';

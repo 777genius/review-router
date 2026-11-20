@@ -21604,7 +21604,7 @@ var require_api_request = __commonJS({
         if (!opts || typeof opts !== "object") {
           throw new InvalidArgumentError("invalid opts");
         }
-        const { signal, method, opaque, body: body2, onInfo, responseHeaders, throwOnError, highWaterMark } = opts;
+        const { signal, method, opaque, body: body2, onInfo, responseHeaders: responseHeaders2, throwOnError, highWaterMark } = opts;
         try {
           if (typeof callback !== "function") {
             throw new InvalidArgumentError("invalid callback");
@@ -21629,7 +21629,7 @@ var require_api_request = __commonJS({
           throw err;
         }
         this.method = method;
-        this.responseHeaders = responseHeaders || null;
+        this.responseHeaders = responseHeaders2 || null;
         this.opaque = opaque || null;
         this.callback = callback;
         this.res = null;
@@ -21678,15 +21678,15 @@ var require_api_request = __commonJS({
         this.context = context5;
       }
       onHeaders(statusCode, rawHeaders, resume, statusMessage) {
-        const { callback, opaque, abort, context: context5, responseHeaders, highWaterMark } = this;
-        const headers = responseHeaders === "raw" ? util4.parseRawHeaders(rawHeaders) : util4.parseHeaders(rawHeaders);
+        const { callback, opaque, abort, context: context5, responseHeaders: responseHeaders2, highWaterMark } = this;
+        const headers = responseHeaders2 === "raw" ? util4.parseRawHeaders(rawHeaders) : util4.parseHeaders(rawHeaders);
         if (statusCode < 200) {
           if (this.onInfo) {
             this.onInfo({ statusCode, headers });
           }
           return;
         }
-        const parsedHeaders = responseHeaders === "raw" ? util4.parseHeaders(rawHeaders) : headers;
+        const parsedHeaders = responseHeaders2 === "raw" ? util4.parseHeaders(rawHeaders) : headers;
         const contentType3 = parsedHeaders["content-type"];
         const contentLength2 = parsedHeaders["content-length"];
         const res = new Readable9({
@@ -21842,7 +21842,7 @@ var require_api_stream = __commonJS({
         if (!opts || typeof opts !== "object") {
           throw new InvalidArgumentError("invalid opts");
         }
-        const { signal, method, opaque, body: body2, onInfo, responseHeaders, throwOnError } = opts;
+        const { signal, method, opaque, body: body2, onInfo, responseHeaders: responseHeaders2, throwOnError } = opts;
         try {
           if (typeof callback !== "function") {
             throw new InvalidArgumentError("invalid callback");
@@ -21866,7 +21866,7 @@ var require_api_stream = __commonJS({
           }
           throw err;
         }
-        this.responseHeaders = responseHeaders || null;
+        this.responseHeaders = responseHeaders2 || null;
         this.opaque = opaque || null;
         this.factory = factory;
         this.callback = callback;
@@ -21894,8 +21894,8 @@ var require_api_stream = __commonJS({
         this.context = context5;
       }
       onHeaders(statusCode, rawHeaders, resume, statusMessage) {
-        const { factory, opaque, context: context5, callback, responseHeaders } = this;
-        const headers = responseHeaders === "raw" ? util4.parseRawHeaders(rawHeaders) : util4.parseHeaders(rawHeaders);
+        const { factory, opaque, context: context5, callback, responseHeaders: responseHeaders2 } = this;
+        const headers = responseHeaders2 === "raw" ? util4.parseRawHeaders(rawHeaders) : util4.parseHeaders(rawHeaders);
         if (statusCode < 200) {
           if (this.onInfo) {
             this.onInfo({ statusCode, headers });
@@ -21905,7 +21905,7 @@ var require_api_stream = __commonJS({
         this.factory = null;
         let res;
         if (this.throwOnError && statusCode >= 400) {
-          const parsedHeaders = responseHeaders === "raw" ? util4.parseHeaders(rawHeaders) : headers;
+          const parsedHeaders = responseHeaders2 === "raw" ? util4.parseHeaders(rawHeaders) : headers;
           const contentType3 = parsedHeaders["content-type"];
           res = new PassThrough3();
           this.callback = null;
@@ -22058,7 +22058,7 @@ var require_api_pipeline = __commonJS({
         if (typeof handler2 !== "function") {
           throw new InvalidArgumentError("invalid handler");
         }
-        const { signal, method, opaque, onInfo, responseHeaders } = opts;
+        const { signal, method, opaque, onInfo, responseHeaders: responseHeaders2 } = opts;
         if (signal && typeof signal.on !== "function" && typeof signal.addEventListener !== "function") {
           throw new InvalidArgumentError("signal must be an EventEmitter or EventTarget");
         }
@@ -22070,7 +22070,7 @@ var require_api_pipeline = __commonJS({
         }
         super("UNDICI_PIPELINE");
         this.opaque = opaque || null;
-        this.responseHeaders = responseHeaders || null;
+        this.responseHeaders = responseHeaders2 || null;
         this.handler = handler2;
         this.abort = null;
         this.context = null;
@@ -22216,12 +22216,12 @@ var require_api_upgrade = __commonJS({
         if (typeof callback !== "function") {
           throw new InvalidArgumentError("invalid callback");
         }
-        const { signal, opaque, responseHeaders } = opts;
+        const { signal, opaque, responseHeaders: responseHeaders2 } = opts;
         if (signal && typeof signal.on !== "function" && typeof signal.addEventListener !== "function") {
           throw new InvalidArgumentError("signal must be an EventEmitter or EventTarget");
         }
         super("UNDICI_UPGRADE");
-        this.responseHeaders = responseHeaders || null;
+        this.responseHeaders = responseHeaders2 || null;
         this.opaque = opaque || null;
         this.callback = callback;
         this.abort = null;
@@ -22308,13 +22308,13 @@ var require_api_connect = __commonJS({
         if (typeof callback !== "function") {
           throw new InvalidArgumentError("invalid callback");
         }
-        const { signal, opaque, responseHeaders } = opts;
+        const { signal, opaque, responseHeaders: responseHeaders2 } = opts;
         if (signal && typeof signal.on !== "function" && typeof signal.addEventListener !== "function") {
           throw new InvalidArgumentError("signal must be an EventEmitter or EventTarget");
         }
         super("UNDICI_CONNECT");
         this.opaque = opaque || null;
-        this.responseHeaders = responseHeaders || null;
+        this.responseHeaders = responseHeaders2 || null;
         this.callback = callback;
         this.abort = null;
         addSignal(this, signal);
@@ -22667,10 +22667,10 @@ var require_mock_utils = __commonJS({
           return;
         }
         const responseData = getResponseData2(body2);
-        const responseHeaders = generateKeyValues(headers);
+        const responseHeaders2 = generateKeyValues(headers);
         const responseTrailers = generateKeyValues(trailers);
         handler2.onConnect?.((err) => handler2.onError(err), null);
-        handler2.onHeaders?.(statusCode, responseHeaders, resume, getStatusText(statusCode));
+        handler2.onHeaders?.(statusCode, responseHeaders2, resume, getStatusText(statusCode));
         handler2.onData?.(Buffer.from(responseData));
         handler2.onComplete?.(responseTrailers);
         deleteMockDispatch(mockDispatches, key);
@@ -106151,21 +106151,21 @@ async function fetchWrapper(requestOptions) {
   }
   const status = fetchResponse.status;
   const url3 = fetchResponse.url;
-  const responseHeaders = {};
+  const responseHeaders2 = {};
   for (const [key, value] of fetchResponse.headers) {
-    responseHeaders[key] = value;
+    responseHeaders2[key] = value;
   }
   const octokitResponse = {
     url: url3,
     status,
-    headers: responseHeaders,
+    headers: responseHeaders2,
     data: ""
   };
-  if ("deprecation" in responseHeaders) {
-    const matches = responseHeaders.link && responseHeaders.link.match(/<([^<>]+)>; rel="deprecation"/);
+  if ("deprecation" in responseHeaders2) {
+    const matches = responseHeaders2.link && responseHeaders2.link.match(/<([^<>]+)>; rel="deprecation"/);
     const deprecationLink = matches && matches.pop();
     log2.warn(
-      `[@octokit/request] "${requestOptions.method} ${requestOptions.url}" is deprecated. It is scheduled to be removed on ${responseHeaders.sunset}${deprecationLink ? `. See ${deprecationLink}` : ""}`
+      `[@octokit/request] "${requestOptions.method} ${requestOptions.url}" is deprecated. It is scheduled to be removed on ${responseHeaders2.sunset}${deprecationLink ? `. See ${deprecationLink}` : ""}`
     );
   }
   if (status === 204 || status === 205) {
@@ -150903,7 +150903,8 @@ function createResilientOctokit(initialToken, tokenProvider, sleep2 = (delayMs) 
     };
     let token = tokenProvider ? await tokenProvider.getToken() : initialToken;
     let authRefreshAttempted = false;
-    let transientFailures = 0;
+    let retries = 0;
+    const deadline = Date.now() + GITHUB_READ_RETRY_WINDOW_MS;
     for (; ; ) {
       try {
         return await requestWithToken(token);
@@ -150914,14 +150915,27 @@ function createResilientOctokit(initialToken, tokenProvider, sleep2 = (delayMs) 
           authRefreshAttempted = true;
           continue;
         }
-        if (isSafeRetryMethod(options.method) && isTransientGitHubRequestError(error4) && transientFailures < 2) {
-          const delayMs = githubRetryDelayMs(error4, transientFailures);
-          if (delayMs === void 0) throw error4;
-          transientFailures += 1;
-          await sleep2(delayMs);
-          continue;
+        if (!isSafeRetryMethod(options.method)) throw error4;
+        const failureClass = transientGitHubReadFailureClass(error4);
+        if (!failureClass) throw error4;
+        const waitMs = transientGitHubReadWaitMs(
+          error4,
+          failureClass,
+          GITHUB_READ_RETRY_DELAYS_MS[retries],
+          deadline - Date.now()
+        );
+        if (waitMs === void 0 || options.request?.signal?.aborted) {
+          info(
+            `GitHub read gave up after ${retries} of ${GITHUB_READ_RETRY_DELAYS_MS.length} retries: ${describeFailure(failureClass, status)}`
+          );
+          options.request?.signal?.throwIfAborted();
+          throw error4;
         }
-        throw error4;
+        retries += 1;
+        info(
+          `GitHub read retry ${retries}/${GITHUB_READ_RETRY_DELAYS_MS.length} in ${waitMs} ms after ${describeFailure(failureClass, status)}`
+        );
+        await sleep2(waitMs);
       }
     }
   });
@@ -150934,7 +150948,13 @@ function getHttpStatus(error4) {
   const status = error4.status;
   return typeof status === "number" ? status : void 0;
 }
-var MAX_GITHUB_RETRY_DELAY_MS = 1e4;
+var GITHUB_READ_RETRY_DELAYS_MS = Object.freeze([
+  1e3,
+  2e3,
+  4e3
+]);
+var GITHUB_READ_RETRY_WINDOW_MS = 15e3;
+var UNANNOUNCED_RATE_LIMIT_WAIT_MS = 6e4;
 var TRANSIENT_GITHUB_NETWORK_ERROR_CODES = [
   "EAI_AGAIN",
   "ECONNABORTED",
@@ -150951,47 +150971,57 @@ var TRANSIENT_GITHUB_NETWORK_ERROR_CODES = [
 function isSafeRetryMethod(method) {
   return typeof method === "string" && ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 }
-function isTransientGitHubRequestError(error4) {
+function transientGitHubReadFailureClass(error4) {
   const status = getHttpStatus(error4);
-  if (status === 408 || status === 429 || status !== void 0 && status >= 500 && status <= 599) {
-    return true;
+  if (status !== void 0 && status >= 500 && status <= 599) {
+    return responseHeaders(error4) === void 0 ? "network" : "server_error";
   }
-  const message = error4 instanceof Error ? error4.message : void 0;
-  if (status === 403 && typeof message === "string" && /rate limit|secondary rate limit|abuse detection/i.test(message)) {
-    return true;
+  if (status === 429) return "rate_limited";
+  if (status === 403) {
+    const headers = responseHeaders(error4) ?? {};
+    return readHeader(headers, "retry-after") !== void 0 || readHeader(headers, "x-ratelimit-remaining") === "0" ? "rate_limited" : void 0;
   }
-  return hasTransientNetworkErrorCode(error4);
+  return hasTransientNetworkErrorCode(error4) ? "network" : void 0;
 }
-function githubRetryDelayMs(error4, transientFailures) {
-  const serverDelayMs = githubServerRetryDelayMs(error4);
-  if (serverDelayMs !== void 0) {
-    return serverDelayMs <= MAX_GITHUB_RETRY_DELAY_MS ? serverDelayMs : void 0;
-  }
-  return transientFailures === 0 ? 250 : 1e3;
+function transientGitHubReadWaitMs(error4, failureClass, delayMs, remainingMs) {
+  if (delayMs === void 0) return void 0;
+  const headers = responseHeaders(error4) ?? {};
+  const waitMs = Math.max(
+    Math.round(delayMs * (0.5 + Math.random() / 2)),
+    failureClass === "rate_limited" ? rateLimitWaitMs(headers) : retryAfterMs(headers) ?? 0
+  );
+  return waitMs < remainingMs ? waitMs : void 0;
 }
-function githubServerRetryDelayMs(error4) {
+function rateLimitWaitMs(headers) {
+  const retryAfter = retryAfterMs(headers);
+  if (retryAfter !== void 0) return retryAfter;
+  if (readHeader(headers, "x-ratelimit-remaining") === "0") {
+    const reset = Number(readHeader(headers, "x-ratelimit-reset"));
+    if (Number.isFinite(reset)) {
+      return Math.max(0, Math.ceil(reset * 1e3 - Date.now()));
+    }
+  }
+  return UNANNOUNCED_RATE_LIMIT_WAIT_MS;
+}
+function retryAfterMs(headers) {
+  const retryAfter = readHeader(headers, "retry-after");
+  if (retryAfter === void 0) return void 0;
+  const seconds = Number(retryAfter);
+  if (retryAfter.trim() !== "" && Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1e3);
+  }
+  const retryAt = Date.parse(retryAfter);
+  return Number.isFinite(retryAt) ? Math.max(0, retryAt - Date.now()) : void 0;
+}
+function responseHeaders(error4) {
   if (!error4 || typeof error4 !== "object") return void 0;
   const response = readOwnDataProperty(error4, "response");
   if (!response || typeof response !== "object") return void 0;
   const headers = readOwnDataProperty(response, "headers");
-  if (!headers || typeof headers !== "object") return void 0;
-  const retryAfter = readHeader(headers, "retry-after");
-  if (retryAfter !== void 0) {
-    const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0) {
-      return Math.ceil(seconds * 1e3);
-    }
-    const retryAt = Date.parse(retryAfter);
-    if (Number.isFinite(retryAt)) return Math.max(0, retryAt - Date.now());
-  }
-  if (!isRateLimitResponse(error4, headers)) return void 0;
-  const reset = readHeader(headers, "x-ratelimit-reset");
-  const resetSeconds = reset === void 0 ? NaN : Number(reset);
-  return Number.isFinite(resetSeconds) ? Math.max(0, Math.ceil(resetSeconds * 1e3 - Date.now())) : void 0;
+  return headers && typeof headers === "object" ? headers : {};
 }
-function isRateLimitResponse(error4, headers) {
-  const status = getHttpStatus(error4);
-  return (status === 403 || status === 429) && readHeader(headers, "x-ratelimit-remaining") === "0";
+function describeFailure(failureClass, status) {
+  return status === void 0 ? failureClass : `${failureClass} ${status}`;
 }
 function readHeader(headers, expectedName) {
   for (const key of Object.keys(headers)) {
@@ -168613,10 +168643,10 @@ var REVIEW_INVESTIGATION_GATEWAY_TOOLS = Object.freeze([
   "review_git_fact"
 ]);
 var ReviewAgentExecutionError = class extends Error {
-  constructor(failureClass, retryAfterMs, message) {
+  constructor(failureClass, retryAfterMs2, message) {
     super(message);
     this.failureClass = failureClass;
-    this.retryAfterMs = retryAfterMs;
+    this.retryAfterMs = retryAfterMs2;
     this.name = "ReviewAgentExecutionError";
   }
 };
@@ -228310,7 +228340,7 @@ function createPinnedHttpsFetch(input) {
           res.on("end", () => {
             if (settled) return;
             settled = true;
-            const responseHeaders = new Headers();
+            const responseHeaders2 = new Headers();
             for (const name of [
               "content-type",
               "mcp-session-id",
@@ -228318,12 +228348,12 @@ function createPinnedHttpsFetch(input) {
             ]) {
               const value = res.headers[name];
               if (typeof value === "string" && /^[\x20-\x7e]{1,1024}$/.test(value))
-                responseHeaders.set(name, value);
+                responseHeaders2.set(name, value);
             }
             resolve6(
               new Response(
                 status === 204 || status === 205 || status === 304 ? null : Buffer.concat(chunks),
-                { status, headers: responseHeaders }
+                { status, headers: responseHeaders2 }
               )
             );
           });

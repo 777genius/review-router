@@ -1,6 +1,7 @@
 import { approvedAgentRuntimeEnv } from '../../helpers/approved-agent-fixture';
 import { applyAdmittedRuntimeConfig } from '../../../src/control-plane/runtime-config';
-import type { GitHubClient } from '../../../src/github/client';
+import nock from 'nock';
+import { GitHubClient } from '../../../src/github/client';
 import {
   ReviewThreadInventoryLoader,
   lifecycleObservationAuthors,
@@ -111,6 +112,81 @@ describe('GitHubReviewRevisionGuard', () => {
       'review_action_v2_revision_guard_failed'
     );
     expect(deprecatedCodeGetter).not.toHaveBeenCalled();
+  });
+
+  describe('through the resilient GitHub client', () => {
+    const baseSha = 'b'.repeat(40);
+    const mergeBase = { merge_base_commit: { sha: 'c'.repeat(40) } };
+    const pullPath = '/repos/owner/repo/pulls/420';
+    const pull = (headSha: string) => ({
+      state: 'open',
+      base: { sha: baseSha },
+      head: { sha: headSha },
+    });
+
+    function guardWith(sleep: jest.Mock) {
+      const client = new GitHubClient('TEST_TOKEN', {
+        repository: 'owner/repo',
+        sleep,
+      });
+      return new GitHubReviewRevisionGuard(client, scope);
+    }
+
+    afterEach(() => nock.cleanAll());
+
+    it('reads again after a transient failure and still reports a head that moved meanwhile', async () => {
+      const staleHead = 'a'.repeat(40);
+      const currentHead = 'd'.repeat(40);
+      const api = nock('https://api.github.com')
+        .get(pullPath)
+        .reply(503, { message: 'Service unavailable' })
+        .get(pullPath)
+        .reply(200, pull(staleHead))
+        .get(`/repos/owner/repo/compare/${baseSha}...${staleHead}`)
+        .reply(200, mergeBase)
+        .get(pullPath)
+        .reply(502, { message: 'Bad gateway' })
+        .get(pullPath)
+        .reply(200, pull(currentHead))
+        .get(`/repos/owner/repo/compare/${baseSha}...${currentHead}`)
+        .reply(200, mergeBase);
+      const sleep = jest.fn(async () => undefined);
+
+      const revision = await guardWith(sleep).loadCurrentRevision();
+
+      // The retry only re-read: the newest head wins, so a run authorized for
+      // the stale head is refused by the caller's revision comparison.
+      expect(revision.headSha).toBe(currentHead);
+      expect(sleep).toHaveBeenCalledTimes(2);
+      expect(api.isDone()).toBe(true);
+    });
+
+    it('refuses with the unavailable code once the retries are exhausted', async () => {
+      const api = nock('https://api.github.com')
+        .get(pullPath)
+        .times(4)
+        .reply(503, { message: 'Service unavailable' });
+      const sleep = jest.fn(async () => undefined);
+
+      await expect(guardWith(sleep).loadCurrentRevision()).rejects.toThrow(
+        'review_action_v2_revision_guard_unavailable'
+      );
+      expect(sleep).toHaveBeenCalledTimes(3);
+      expect(api.isDone()).toBe(true);
+    });
+
+    it('refuses a missing pull request without reading it again', async () => {
+      const api = nock('https://api.github.com')
+        .get(pullPath)
+        .reply(404, { message: 'Not Found' });
+      const sleep = jest.fn(async () => undefined);
+
+      await expect(guardWith(sleep).loadCurrentRevision()).rejects.toThrow(
+        'review_action_v2_revision_guard_failed'
+      );
+      expect(sleep).not.toHaveBeenCalled();
+      expect(api.isDone()).toBe(true);
+    });
   });
 });
 

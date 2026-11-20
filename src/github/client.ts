@@ -197,7 +197,8 @@ function createResilientOctokit(
     };
     let token = tokenProvider ? await tokenProvider.getToken() : initialToken;
     let authRefreshAttempted = false;
-    let transientFailures = 0;
+    let retries = 0;
+    const deadline = Date.now() + GITHUB_READ_RETRY_WINDOW_MS;
 
     for (;;) {
       try {
@@ -209,18 +210,31 @@ function createResilientOctokit(
           authRefreshAttempted = true;
           continue;
         }
-        if (
-          isSafeRetryMethod(options.method) &&
-          isTransientGitHubRequestError(error) &&
-          transientFailures < 2
-        ) {
-          const delayMs = githubRetryDelayMs(error, transientFailures);
-          if (delayMs === undefined) throw error;
-          transientFailures += 1;
-          await sleep(delayMs);
-          continue;
+        if (!isSafeRetryMethod(options.method)) throw error;
+        const failureClass = transientGitHubReadFailureClass(error);
+        if (!failureClass) throw error;
+        // A retry only reads again: the caller still judges the answer, and
+        // an exhausted or refused retry surfaces the original error.
+        const waitMs = transientGitHubReadWaitMs(
+          error,
+          failureClass,
+          GITHUB_READ_RETRY_DELAYS_MS[retries],
+          deadline - Date.now()
+        );
+        if (waitMs === undefined || options.request?.signal?.aborted) {
+          core.info(
+            `GitHub read gave up after ${retries} of ${GITHUB_READ_RETRY_DELAYS_MS.length} retries: ${describeFailure(failureClass, status)}`
+          );
+          // A cancelled or timed-out read keeps its abort reason, so callers
+          // still tell cancellation apart from a GitHub failure.
+          options.request?.signal?.throwIfAborted();
+          throw error;
         }
-        throw error;
+        retries += 1;
+        core.info(
+          `GitHub read retry ${retries}/${GITHUB_READ_RETRY_DELAYS_MS.length} in ${waitMs} ms after ${describeFailure(failureClass, status)}`
+        );
+        await sleep(waitMs);
       }
     }
   });
@@ -235,7 +249,21 @@ function getHttpStatus(error: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined;
 }
 
-const MAX_GITHUB_RETRY_DELAY_MS = 10_000;
+/**
+ * Waits before each retry of a transient GitHub read. The transient classes,
+ * this schedule, the jitter and the shared window match the SaaS revision read
+ * (review-router-ai plan 86), so both sides of a run ride out the same short
+ * GitHub outage and still refuse a longer one.
+ */
+const GITHUB_READ_RETRY_DELAYS_MS: readonly number[] = Object.freeze([
+  1_000, 2_000, 4_000,
+]);
+// All attempts of one read share this window. A wait that does not end
+// inside it is not taken, so the read fails with its last error instead.
+const GITHUB_READ_RETRY_WINDOW_MS = 15_000;
+// GitHub: a rate limit answer without an announced wait still needs at least
+// a minute. That never fits the window, so such a read is refused at once.
+const UNANNOUNCED_RATE_LIMIT_WAIT_MS = 60_000;
 const TRANSIENT_GITHUB_NETWORK_ERROR_CODES = [
   'EAI_AGAIN',
   'ECONNABORTED',
@@ -257,70 +285,89 @@ function isSafeRetryMethod(method: unknown): boolean {
   );
 }
 
-function isTransientGitHubRequestError(error: unknown): boolean {
-  const status = getHttpStatus(error);
-  if (
-    status === 408 ||
-    status === 429 ||
-    (status !== undefined && status >= 500 && status <= 599)
-  ) {
-    return true;
-  }
-  const message = error instanceof Error ? error.message : undefined;
-  if (
-    status === 403 &&
-    typeof message === 'string' &&
-    /rate limit|secondary rate limit|abuse detection/i.test(message)
-  ) {
-    return true;
-  }
-  return hasTransientNetworkErrorCode(error);
-}
+type TransientGitHubReadFailure = 'server_error' | 'network' | 'rate_limited';
 
-function githubRetryDelayMs(
-  error: unknown,
-  transientFailures: number
-): number | undefined {
-  const serverDelayMs = githubServerRetryDelayMs(error);
-  if (serverDelayMs !== undefined) {
-    return serverDelayMs <= MAX_GITHUB_RETRY_DELAY_MS
-      ? serverDelayMs
+// Only 5xx, network failures, 429 and a 403 that announces a rate limit are
+// read again. 401 (the token refresh above), 404, every other 4xx and any
+// other error reach the caller unchanged.
+function transientGitHubReadFailureClass(
+  error: unknown
+): TransientGitHubReadFailure | undefined {
+  const status = getHttpStatus(error);
+  if (status !== undefined && status >= 500 && status <= 599) {
+    // Octokit reports a failed fetch (reset, refused, DNS) as 500 without a
+    // response.
+    return responseHeaders(error) === undefined ? 'network' : 'server_error';
+  }
+  if (status === 429) return 'rate_limited';
+  if (status === 403) {
+    const headers = responseHeaders(error) ?? {};
+    return readHeader(headers, 'retry-after') !== undefined ||
+      readHeader(headers, 'x-ratelimit-remaining') === '0'
+      ? 'rate_limited'
       : undefined;
   }
-  return transientFailures === 0 ? 250 : 1_000;
+  return hasTransientNetworkErrorCode(error) ? 'network' : undefined;
 }
 
-function githubServerRetryDelayMs(error: unknown): number | undefined {
+function transientGitHubReadWaitMs(
+  error: unknown,
+  failureClass: TransientGitHubReadFailure,
+  delayMs: number | undefined,
+  remainingMs: number
+): number | undefined {
+  if (delayMs === undefined) return undefined;
+  const headers = responseHeaders(error) ?? {};
+  // Spread concurrent readers, never wait less than GitHub asks for, and give
+  // up when that wait does not fit the window.
+  const waitMs = Math.max(
+    Math.round(delayMs * (0.5 + Math.random() / 2)),
+    failureClass === 'rate_limited'
+      ? rateLimitWaitMs(headers)
+      : (retryAfterMs(headers) ?? 0)
+  );
+  return waitMs < remainingMs ? waitMs : undefined;
+}
+
+function rateLimitWaitMs(headers: object): number {
+  const retryAfter = retryAfterMs(headers);
+  if (retryAfter !== undefined) return retryAfter;
+  if (readHeader(headers, 'x-ratelimit-remaining') === '0') {
+    const reset = Number(readHeader(headers, 'x-ratelimit-reset'));
+    if (Number.isFinite(reset)) {
+      return Math.max(0, Math.ceil(reset * 1_000 - Date.now()));
+    }
+  }
+  return UNANNOUNCED_RATE_LIMIT_WAIT_MS;
+}
+
+function retryAfterMs(headers: object): number | undefined {
+  const retryAfter = readHeader(headers, 'retry-after');
+  if (retryAfter === undefined) return undefined;
+  const seconds = Number(retryAfter);
+  if (retryAfter.trim() !== '' && Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1_000);
+  }
+  const retryAt = Date.parse(retryAfter);
+  return Number.isFinite(retryAt)
+    ? Math.max(0, retryAt - Date.now())
+    : undefined;
+}
+
+function responseHeaders(error: unknown): object | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const response = readOwnDataProperty(error, 'response');
   if (!response || typeof response !== 'object') return undefined;
   const headers = readOwnDataProperty(response, 'headers');
-  if (!headers || typeof headers !== 'object') return undefined;
-
-  const retryAfter = readHeader(headers, 'retry-after');
-  if (retryAfter !== undefined) {
-    const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0) {
-      return Math.ceil(seconds * 1_000);
-    }
-    const retryAt = Date.parse(retryAfter);
-    if (Number.isFinite(retryAt)) return Math.max(0, retryAt - Date.now());
-  }
-
-  if (!isRateLimitResponse(error, headers)) return undefined;
-  const reset = readHeader(headers, 'x-ratelimit-reset');
-  const resetSeconds = reset === undefined ? NaN : Number(reset);
-  return Number.isFinite(resetSeconds)
-    ? Math.max(0, Math.ceil(resetSeconds * 1_000 - Date.now()))
-    : undefined;
+  return headers && typeof headers === 'object' ? headers : {};
 }
 
-function isRateLimitResponse(error: unknown, headers: object): boolean {
-  const status = getHttpStatus(error);
-  return (
-    (status === 403 || status === 429) &&
-    readHeader(headers, 'x-ratelimit-remaining') === '0'
-  );
+// Logs carry only the failure class and status, never a URL, header or body.
+function describeFailure(
+  failureClass: TransientGitHubReadFailure,
+  status: number | undefined
+): string {
+  return status === undefined ? failureClass : `${failureClass} ${status}`;
 }
 
 function readHeader(headers: object, expectedName: string): string | undefined {

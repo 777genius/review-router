@@ -120,7 +120,9 @@ export type OcrNormalizationDiagnostics = Readonly<{
   }[];
   /** Bounded local diagnostic codes for partial quality flags. */
   reasons: readonly string[];
-  /** True when at least one reason requires partial quality flags (§8.2). */
+  /** True when at least one reason or skip makes the result partial (§8.2).
+   * The adapter decides how far that escalates: an unverified span alone
+   * stays advisory. */
   partialFlagsRequired: boolean;
 }>;
 
@@ -239,9 +241,11 @@ export function normalizeOcrFindings(input: {
           })
         : ({ verified: false, reason: 'content_mismatch' } as const);
     // Only ungroundable (content_mismatch) or colliding (ambiguous_match)
-    // quotes degrade the review. Grounded content is real context evidence
-    // even when the model's range math is wrong or the span is outside the
-    // current diff: those degrade to file placement only (plan 56, §8.2).
+    // quotes are recorded as a cause; the finding itself keeps file
+    // placement and the adapter keeps the cause advisory unless another
+    // degradation applies. Grounded content is real context evidence even
+    // when the model's range math is wrong or the span is outside the current
+    // diff: those degrade to file placement only (plan 56, §8.2).
     if (
       !span.verified &&
       (span.reason === 'content_mismatch' || span.reason === 'ambiguous_match')

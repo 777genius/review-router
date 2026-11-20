@@ -1291,7 +1291,7 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(serialized).not.toContain('private_path_923.ts');
   });
 
-  it('retains the finite unverified-span cause on otherwise complete file-level evidence', async () => {
+  it('keeps an unverified span advisory when inspection and coverage are intact', async () => {
     const diagnostic = jest.fn<void, [OcrReviewAcceptanceDiagnostic]>();
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;
@@ -1327,8 +1327,9 @@ describe('OcrReviewInvocationAdapter', () => {
         uncoveredPathCount: 0,
       })
     );
+    // The finding keeps file-level placement without an anchor or patch;
+    // the whole slot must not turn into a coverage failure.
     expect(observation.qualityFlags).toEqual([
-      'context_inspection_incomplete',
       'provider_warning',
       'unverified_native_span',
     ]);
@@ -1343,6 +1344,109 @@ describe('OcrReviewInvocationAdapter', () => {
         endLine: null,
         suggestion: null,
       }),
+    ]);
+  });
+
+  it('keeps context_inspection_incomplete when an unverified span shares a truncated turn', async () => {
+    // Dispatch sees no effect yet; acceptance sees the output-limit turn.
+    let effectReads = 0;
+    const { bridge, requests } = bridgeFixture({
+      effectFacts: () =>
+        effectReads++ === 0
+          ? { effect: 'none' }
+          : { effect: 'completed', code: 'output_truncated' },
+    });
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunnerWriting(
+        nativeResultBody({
+          comments: [
+            {
+              path: 'calc.ts',
+              content: 'Missing authorization check.',
+              severity: 'high',
+              existing_code: 'removed authorization check',
+            },
+          ],
+        })
+      ).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+      'unverified_native_span',
+    ]);
+  });
+
+  it('keeps an unverified span advisory next to a preserved filter decision', async () => {
+    const body = JSON.parse(
+      nativeResultBody({
+        comments: [
+          {
+            path: 'calc.ts',
+            content: 'Missing authorization check.',
+            severity: 'high',
+            existing_code: 'removed authorization check',
+          },
+        ],
+      })
+    ) as Record<string, unknown>;
+    const outcome = body.reviewrouter_outcome as {
+      groups: Record<string, unknown>[];
+    };
+    (outcome.groups[0].phases as Record<string, unknown>).filter = {
+      state: 'failed',
+      reason: 'invalid_arguments',
+    };
+    outcome.groups[0].filter_decision_valid = false;
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunnerWriting(JSON.stringify(body)).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([
+      'provider_warning',
+      'unverified_native_span',
+    ]);
+  });
+
+  it('keeps context_inspection_incomplete when an unverified span shares a skipped finding', async () => {
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunnerWriting(
+        nativeResultBody({
+          comments: [
+            {
+              path: 'calc.ts',
+              content: 'Missing authorization check.',
+              severity: 'high',
+              category: 'security',
+              existing_code: 'removed authorization check',
+              start_line: 1,
+              end_line: 1,
+            },
+            { path: 'unassigned.ts', content: 'Outside the assignment.' },
+          ],
+        })
+      ).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+      'unverified_native_span',
     ]);
   });
 

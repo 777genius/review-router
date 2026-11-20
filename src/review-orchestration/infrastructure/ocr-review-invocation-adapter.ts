@@ -1140,26 +1140,33 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     // §8.2 mapping invariant: every degraded/partial outcome carries
     // context_inspection_incomplete + provider_warning; natural
     // not_applicable skips stay unflagged; provider_warning alone never
-    // makes the projection partial. One tier is lighter: when the only
-    // degradation is an invalid filter decision that preserved the comments
-    // (§7.3) and inspection/coverage are intact, the advisory
-    // provider_warning alone is truthful — claiming
-    // context_inspection_incomplete there would over-escalate into a
-    // coverage failure for a run whose findings were preserved.
+    // makes the projection partial. One tier is lighter: when inspection and
+    // path coverage are intact and the only degradations are an invalid
+    // filter decision that preserved the comments (§7.3) and/or quotes that
+    // match no unique HEAD span, the advisory provider_warning alone is
+    // truthful. An ungrounded quote only costs its finding the inline anchor
+    // and suggested patch; the finding stays at file level like a finding
+    // without a quote. Claiming context_inspection_incomplete there would
+    // turn a fully covered review into a coverage failure.
+    const normalization = accepted.normalized.diagnostics;
+    const inspectionIntact =
+      (!accepted.classification.partial ||
+        accepted.classification.filterCommentsPreserved) &&
+      normalization.skipped.length === 0 &&
+      normalization.reasons.every(
+        (reason) => reason === 'unverified_native_span'
+      ) &&
+      accepted.uncoveredPaths.length === 0 &&
+      !accepted.outputTruncated;
     const qualityFlags = accepted.partial
-      ? accepted.classification.filterCommentsPreserved &&
-        !accepted.normalized.diagnostics.partialFlagsRequired &&
-        accepted.uncoveredPaths.length === 0 &&
-        !accepted.outputTruncated
+      ? inspectionIntact
         ? ['provider_warning']
         : ['context_inspection_incomplete', 'provider_warning']
       : [];
-    // Preserve the finite normalization cause across evidence serialization.
-    // ReviewResult.content is local-only; without this flag a fully covered
-    // but ungrounded finding yields an unexplained partial summary.
-    if (
-      accepted.normalized.diagnostics.reasons.includes('unverified_native_span')
-    ) {
+    // Preserve the finite normalization cause across evidence serialization:
+    // it ranks the observation below grounded evidence for reuse and explains
+    // the cause when another degradation makes the slot partial.
+    if (normalization.reasons.includes('unverified_native_span')) {
       qualityFlags.push('unverified_native_span');
     }
     const observation = normalizeReviewObservation({

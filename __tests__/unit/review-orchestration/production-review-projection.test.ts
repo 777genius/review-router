@@ -1548,6 +1548,31 @@ describe('production review projection coverage', () => {
     expect(envelope.publishing.inlineReviewChunks).toEqual([]);
   });
 
+  it('keeps full-path coverage complete when an unverified span is only advisory', async () => {
+    const builder = projectionBuilder([assignment('required-slot', true)]);
+    const projection = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence(
+          'required-slot',
+          fullCoverageManifest('required-slot'),
+          ['provider_warning', 'unverified_native_span']
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
+    expect(envelope.coverage).toMatchObject({
+      state: 'complete',
+      limitations: [],
+      reviewedFiles: 1,
+      unreviewedFiles: 0,
+    });
+    expect(envelope.publishing.summary.body).not.toContain(
+      'Quoted code could not be verified'
+    );
+  });
+
   it('publishes investigation findings as partial when the investigation is inconclusive', async () => {
     const builder = projectionBuilder([assignment('required-slot', true)]);
     const manifest = fullCoverageManifest('required-slot');

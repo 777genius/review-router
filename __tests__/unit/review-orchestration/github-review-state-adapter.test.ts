@@ -175,6 +175,36 @@ describe('GitHubReviewRevisionGuard', () => {
       expect(api.isDone()).toBe(true);
     });
 
+    it.each([
+      [
+        'an announced wait without rate limit wording',
+        4,
+        { message: 'Forbidden' },
+        { 'Retry-After': '1' },
+      ],
+      [
+        'rate limit wording without an announced wait',
+        1,
+        { message: 'You have exceeded a secondary rate limit' },
+        {},
+      ],
+    ])(
+      'treats a 403 with %s as temporary',
+      async (_name, reads, body, headers: Record<string, string>) => {
+        const api = nock('https://api.github.com')
+          .get(pullPath)
+          .times(reads)
+          .reply(403, body, headers);
+        const sleep = jest.fn(async () => undefined);
+
+        await expect(guardWith(sleep).loadCurrentRevision()).rejects.toThrow(
+          'review_action_v2_revision_guard_unavailable'
+        );
+        expect(sleep).toHaveBeenCalledTimes(reads - 1);
+        expect(api.isDone()).toBe(true);
+      }
+    );
+
     it('refuses a missing pull request without reading it again', async () => {
       const api = nock('https://api.github.com')
         .get(pullPath)

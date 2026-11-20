@@ -217,6 +217,25 @@ describe('GitHubClient', () => {
         403,
         { 'X-RateLimit-Remaining': '12' },
       ],
+      ['a rate limit with a blank Retry-After', 429, { 'Retry-After': ' ' }],
+      [
+        'a rate limit with a negative Retry-After',
+        429,
+        { 'Retry-After': '-5' },
+      ],
+      [
+        'an exhausted rate limit whose reset is past the read window',
+        403,
+        {
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(Math.ceil(Date.now() / 1_000) + 3_600),
+        },
+      ],
+      [
+        'an exhausted rate limit with a blank reset',
+        403,
+        { 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '' },
+      ],
       ['a missing resource', 404, {}],
       ['a request timeout', 408, {}],
       ['a validation failure', 422, {}],
@@ -260,6 +279,30 @@ describe('GitHubClient', () => {
       const [wait] = waits(sleep);
       expect(wait).toBeGreaterThan(2_000);
       expect(wait).toBeLessThanOrEqual(4_000);
+      expect(requests.isDone()).toBe(true);
+    });
+
+    it('honors a Retry-After given as an HTTP date', async () => {
+      const retryAt = new Date(Date.now() + 3_000).toUTCString();
+      const requests = nock('https://api.github.com')
+        .get('/repos/owner/repo')
+        .reply(
+          503,
+          { message: 'Service unavailable' },
+          { 'Retry-After': retryAt }
+        )
+        .get('/repos/owner/repo')
+        .reply(200, { id: 1, name: 'repo' });
+      const sleep = jest.fn(async () => undefined);
+      const client = new GitHubClient(mockToken, { sleep });
+
+      await expect(
+        client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+      ).resolves.toMatchObject({ status: 200 });
+      const [wait] = waits(sleep);
+      // HTTP dates have whole-second precision.
+      expect(wait).toBeGreaterThan(1_000);
+      expect(wait).toBeLessThanOrEqual(3_000);
       expect(requests.isDone()).toBe(true);
     });
 

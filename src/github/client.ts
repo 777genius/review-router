@@ -214,7 +214,7 @@ function createResilientOctokit(
         const failureClass = transientGitHubReadFailureClass(error);
         if (!failureClass) throw error;
         // A retry only reads again: the caller still judges the answer, and
-        // an exhausted or refused retry surfaces the original error.
+        // an exhausted or refused retry surfaces the last attempt's error.
         const waitMs = transientGitHubReadWaitMs(
           error,
           failureClass,
@@ -251,9 +251,10 @@ function getHttpStatus(error: unknown): number | undefined {
 
 /**
  * Waits before each retry of a transient GitHub read. The transient classes,
- * this schedule, the jitter and the shared window match the SaaS revision read
+ * this schedule, the jitter and the 15 s window follow the SaaS revision read
  * (review-router-ai plan 86), so both sides of a run ride out the same short
- * GitHub outage and still refuse a longer one.
+ * GitHub outage and still refuse a longer one. Here the window bounds the
+ * waits; each attempt is bounded by the caller's own request timeout.
  */
 const GITHUB_READ_RETRY_DELAYS_MS: readonly number[] = Object.freeze([
   1_000, 2_000, 4_000,
@@ -287,6 +288,24 @@ function isSafeRetryMethod(method: unknown): boolean {
 
 type TransientGitHubReadFailure = 'server_error' | 'network' | 'rate_limited';
 
+/**
+ * True when a failed GitHub read means "try later" rather than a refusal:
+ * everything a read retries, plus a 408 and a 403 whose message names a rate
+ * limit. Those two are not read again within one read (GitHub asks for a
+ * minute or more), but they are still temporary.
+ */
+export function isTemporaryGitHubReadFailure(error: unknown): boolean {
+  if (transientGitHubReadFailureClass(error)) return true;
+  const status = getHttpStatus(error);
+  if (status === 408) return true;
+  const message = error instanceof Error ? error.message : undefined;
+  return (
+    status === 403 &&
+    typeof message === 'string' &&
+    /rate limit|abuse detection/i.test(message)
+  );
+}
+
 // Only 5xx, network failures, 429 and a 403 that announces a rate limit are
 // read again. 401 (the token refresh above), 404, every other 4xx and any
 // other error reach the caller unchanged.
@@ -307,7 +326,9 @@ function transientGitHubReadFailureClass(
       ? 'rate_limited'
       : undefined;
   }
-  return hasTransientNetworkErrorCode(error) ? 'network' : undefined;
+  return status === undefined && hasTransientNetworkErrorCode(error)
+    ? 'network'
+    : undefined;
 }
 
 function transientGitHubReadWaitMs(
@@ -333,25 +354,32 @@ function rateLimitWaitMs(headers: object): number {
   const retryAfter = retryAfterMs(headers);
   if (retryAfter !== undefined) return retryAfter;
   if (readHeader(headers, 'x-ratelimit-remaining') === '0') {
-    const reset = Number(readHeader(headers, 'x-ratelimit-reset'));
-    if (Number.isFinite(reset)) {
+    const reset = numericHeader(headers, 'x-ratelimit-reset');
+    if (reset !== undefined) {
       return Math.max(0, Math.ceil(reset * 1_000 - Date.now()));
     }
   }
   return UNANNOUNCED_RATE_LIMIT_WAIT_MS;
 }
 
+// Retry-After is either delay seconds or an HTTP date.
 function retryAfterMs(headers: object): number | undefined {
+  const seconds = numericHeader(headers, 'retry-after');
+  if (seconds !== undefined) return Math.ceil(seconds * 1_000);
   const retryAfter = readHeader(headers, 'retry-after');
-  if (retryAfter === undefined) return undefined;
-  const seconds = Number(retryAfter);
-  if (retryAfter.trim() !== '' && Number.isFinite(seconds) && seconds >= 0) {
-    return Math.ceil(seconds * 1_000);
-  }
-  const retryAt = Date.parse(retryAfter);
+  const retryAt =
+    retryAfter !== undefined && /[a-z]/i.test(retryAfter)
+      ? Date.parse(retryAfter)
+      : NaN;
   return Number.isFinite(retryAt)
     ? Math.max(0, retryAt - Date.now())
     : undefined;
+}
+
+// A blank, negative or otherwise malformed value announces nothing.
+function numericHeader(headers: object, name: string): number | undefined {
+  const value = readHeader(headers, name)?.trim();
+  return value && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : undefined;
 }
 
 function responseHeaders(error: unknown): object | undefined {

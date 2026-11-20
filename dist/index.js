@@ -150971,6 +150971,13 @@ var TRANSIENT_GITHUB_NETWORK_ERROR_CODES = [
 function isSafeRetryMethod(method) {
   return typeof method === "string" && ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 }
+function isTemporaryGitHubReadFailure(error4) {
+  if (transientGitHubReadFailureClass(error4)) return true;
+  const status = getHttpStatus(error4);
+  if (status === 408) return true;
+  const message = error4 instanceof Error ? error4.message : void 0;
+  return status === 403 && typeof message === "string" && /rate limit|abuse detection/i.test(message);
+}
 function transientGitHubReadFailureClass(error4) {
   const status = getHttpStatus(error4);
   if (status !== void 0 && status >= 500 && status <= 599) {
@@ -150981,7 +150988,7 @@ function transientGitHubReadFailureClass(error4) {
     const headers = responseHeaders(error4) ?? {};
     return readHeader(headers, "retry-after") !== void 0 || readHeader(headers, "x-ratelimit-remaining") === "0" ? "rate_limited" : void 0;
   }
-  return hasTransientNetworkErrorCode(error4) ? "network" : void 0;
+  return status === void 0 && hasTransientNetworkErrorCode(error4) ? "network" : void 0;
 }
 function transientGitHubReadWaitMs(error4, failureClass, delayMs, remainingMs) {
   if (delayMs === void 0) return void 0;
@@ -150996,22 +151003,23 @@ function rateLimitWaitMs(headers) {
   const retryAfter = retryAfterMs(headers);
   if (retryAfter !== void 0) return retryAfter;
   if (readHeader(headers, "x-ratelimit-remaining") === "0") {
-    const reset = Number(readHeader(headers, "x-ratelimit-reset"));
-    if (Number.isFinite(reset)) {
+    const reset = numericHeader(headers, "x-ratelimit-reset");
+    if (reset !== void 0) {
       return Math.max(0, Math.ceil(reset * 1e3 - Date.now()));
     }
   }
   return UNANNOUNCED_RATE_LIMIT_WAIT_MS;
 }
 function retryAfterMs(headers) {
+  const seconds = numericHeader(headers, "retry-after");
+  if (seconds !== void 0) return Math.ceil(seconds * 1e3);
   const retryAfter = readHeader(headers, "retry-after");
-  if (retryAfter === void 0) return void 0;
-  const seconds = Number(retryAfter);
-  if (retryAfter.trim() !== "" && Number.isFinite(seconds) && seconds >= 0) {
-    return Math.ceil(seconds * 1e3);
-  }
-  const retryAt = Date.parse(retryAfter);
+  const retryAt = retryAfter !== void 0 && /[a-z]/i.test(retryAfter) ? Date.parse(retryAfter) : NaN;
   return Number.isFinite(retryAt) ? Math.max(0, retryAt - Date.now()) : void 0;
+}
+function numericHeader(headers, name) {
+  const value = readHeader(headers, name)?.trim();
+  return value && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : void 0;
 }
 function responseHeaders(error4) {
   if (!error4 || typeof error4 !== "object") return void 0;
@@ -239942,7 +239950,7 @@ var GitHubReviewRevisionGuard = class {
     try {
       return await read();
     } catch (error4) {
-      if (isTransientGitHubReadError(error4)) {
+      if (isTemporaryGitHubReadFailure(error4)) {
         throw new Error("review_action_v2_revision_guard_unavailable", {
           cause: error4
         });
@@ -240182,30 +240190,6 @@ function requireThreadStateHash(value) {
   }
   return value;
 }
-var TRANSIENT_GITHUB_NETWORK_ERROR_CODES2 = [
-  "EAI_AGAIN",
-  "ECONNABORTED",
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "ENETDOWN",
-  "ENETUNREACH",
-  "ENOTFOUND",
-  "ETIMEDOUT",
-  "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_HEADERS_TIMEOUT",
-  "UND_ERR_SOCKET"
-];
-function isTransientGitHubReadError(error4) {
-  const candidate = error4;
-  const status = typeof candidate?.status === "number" ? candidate.status : void 0;
-  if (status === 408 || status === 429 || status !== void 0 && status >= 500 && status <= 599) {
-    return true;
-  }
-  if (status === 403 && typeof candidate.message === "string" && /rate limit|secondary rate limit|abuse detection/i.test(candidate.message)) {
-    return true;
-  }
-  return hasTransientNetworkErrorCode2(error4);
-}
 function isGitHubHttpReadError(error4) {
   const status = error4?.status;
   return typeof status === "number" && status >= 400 && status <= 599;
@@ -240214,28 +240198,6 @@ function isRevisionFactValidationError(error4) {
   return error4 instanceof Error && /^review_action_v2_(?:base_sha|head_sha|merge_base)_invalid$/.test(
     error4.message
   );
-}
-function hasTransientNetworkErrorCode2(error4, visited = /* @__PURE__ */ new Set(), depth = 0) {
-  if (!error4 || typeof error4 !== "object" || depth > 4 || visited.has(error4)) {
-    return false;
-  }
-  visited.add(error4);
-  const code = readOwnDataProperty2(error4, "code");
-  if (typeof code === "string" && TRANSIENT_GITHUB_NETWORK_ERROR_CODES2.some(
-    (transientCode) => transientCode === code
-  )) {
-    return true;
-  }
-  const cause = readOwnDataProperty2(error4, "cause");
-  if (hasTransientNetworkErrorCode2(cause, visited, depth + 1)) return true;
-  const errors = readOwnDataProperty2(error4, "errors");
-  return Array.isArray(errors) && errors.some(
-    (nested) => hasTransientNetworkErrorCode2(nested, visited, depth + 1)
-  );
-}
-function readOwnDataProperty2(value, property) {
-  const descriptor = Object.getOwnPropertyDescriptor(value, property);
-  return descriptor && "value" in descriptor ? descriptor.value : void 0;
 }
 function canonicalJson13(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson13).join(",")}]`;

@@ -404,13 +404,18 @@ manifest.
 
 ## Unverified managed OCR spans
 
-Action 1.0.229 retains the closed `unverified_native_span` normalization cause
-in accepted evidence quality flags. A quote that cannot be matched uniquely
-to authorized HEAD content still makes the review partial. Its finding remains
-at file level without an inline anchor or suggested patch, and the projection
-explains that cause even when every assigned path has full diff coverage.
-Missing quotes and grounded off-diff quotes retain their existing file-placement
-semantics. This diagnostic does not relax provider, source, path or coverage gates.
+Accepted evidence keeps the closed `unverified_native_span` normalization
+cause in its quality flags. A quote that cannot be matched uniquely to
+authorized HEAD content costs only its own finding the inline anchor and
+suggested patch: the finding stays at file level, like a finding without a
+quote or with a grounded off-diff quote. When inspection and path coverage are
+otherwise intact, the slot carries only the advisory `provider_warning`, so a
+fully covered review is not reported as incomplete. When another degradation
+(engine phase failure, skipped finding, uncovered path, truncated turn) already
+makes the slot partial, the projection still explains the unverified quote.
+The flag keeps ranking the observation below grounded evidence for reuse. This
+does not relax provider, source, path or coverage gates, and inline anchors and
+suggested patches still require a unique verified span.
 
 ### Unknown review-request outcomes
 

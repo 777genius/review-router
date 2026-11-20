@@ -217164,8 +217164,12 @@ var OcrReviewInvocationAdapter = class {
       // One engine invocation; model calls are accounted separately (§9).
       transportAttemptCount: 1
     };
-    const qualityFlags = accepted.partial ? accepted.classification.filterCommentsPreserved && !accepted.normalized.diagnostics.partialFlagsRequired && accepted.uncoveredPaths.length === 0 && !accepted.outputTruncated ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
-    if (accepted.normalized.diagnostics.reasons.includes("unverified_native_span")) {
+    const normalization = accepted.normalized.diagnostics;
+    const inspectionIntact = (!accepted.classification.partial || accepted.classification.filterCommentsPreserved) && normalization.skipped.length === 0 && normalization.reasons.every(
+      (reason) => reason === "unverified_native_span"
+    ) && accepted.uncoveredPaths.length === 0 && !accepted.outputTruncated;
+    const qualityFlags = accepted.partial ? inspectionIntact ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
+    if (normalization.reasons.includes("unverified_native_span")) {
       qualityFlags.push("unverified_native_span");
     }
     const observation = normalizeReviewObservation({

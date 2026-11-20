@@ -1,5 +1,4 @@
 import { encodeStructuredLifecycleRequest } from '../../finding-revalidation/domain/packet';
-import { partialRunStop } from '../../review-execution/domain/provider-failure';
 import {
   confirmedProviderQuota,
   type ProviderQuota,
@@ -286,6 +285,10 @@ export class AccountGatewayModelTransport {
    * denial (or a transport error) is observed: something may have been paid. */
   private mayHaveDispatched = false;
   private failure?: GatewayFailureFact;
+  /** The recorded failure is a known partial stop that this transport itself
+   * observed (a settled output-limit terminal or a refused request-budget
+   * claim), never a code copied from a response body. */
+  private knownStop = false;
   /** Digests of requests that ended at a confirmed output-limit terminal. Only
    * an identical replay stays denied; a different request may still run. */
   private readonly truncatedRequests = new Set<string>();
@@ -362,8 +365,10 @@ export class AccountGatewayModelTransport {
   /** The first failure wins, but a known partial stop (output-limit terminal
    * or refused request-budget claim) never hides a later failure whose effect
    * is less certain. */
-  private recordFailure(fact: GatewayFailureFact): void {
-    if (!this.failure || partialRunStop(this.failure)) this.failure = fact;
+  private recordFailure(fact: GatewayFailureFact, knownStop = false): void {
+    if (this.failure && !this.knownStop) return;
+    this.failure = fact;
+    this.knownStop = knownStop;
   }
   get lastRequestRef(): string | undefined {
     return this.requestRef;
@@ -386,6 +391,7 @@ export class AccountGatewayModelTransport {
     )
       return false;
     this.failure = undefined;
+    this.knownStop = false;
     this.inferenceDenied = false;
     return true;
   }
@@ -398,8 +404,10 @@ export class AccountGatewayModelTransport {
     // A known partial stop (refused request-budget claim, or the output-limit
     // turn after `truncatedTurns`) fences inference but leaves no uncertain
     // effect, so the model that answered the earlier requests is still known.
-    return (this.inferenceDenied && !partialRunStop(this.failure)) ||
-      this.modelUncertain
+    // Cancellation and every other fence still withdraw attribution.
+    return this.modelUncertain ||
+      this.inferenceCancelled ||
+      (this.inferenceDenied && !this.knownStop)
       ? undefined
       : this.observedModel;
   }
@@ -600,7 +608,7 @@ export class AccountGatewayModelTransport {
         auxiliary.lastFailure?.code === 'output_truncated' &&
         auxiliary.lastFailure.effect === 'completed'
       )
-        this.failure = auxiliary.lastFailure;
+        this.recordFailure(auxiliary.lastFailure, true);
       throw error;
     } finally {
       clearTimeout(timer);
@@ -1010,11 +1018,14 @@ export class AccountGatewayModelTransport {
             }
             if (outputTruncated) {
               truncationSettled = true;
-              this.recordFailure({
-                code: 'output_truncated',
-                effect: 'completed',
-                ...(requestRef ? { requestRef } : {}),
-              });
+              this.recordFailure(
+                {
+                  code: 'output_truncated',
+                  effect: 'completed',
+                  ...(requestRef ? { requestRef } : {}),
+                },
+                true
+              );
               throw new ModelOutputTruncatedError();
             }
           })().then(
@@ -1118,6 +1129,7 @@ export class AccountGatewayModelTransport {
                       effect: 'effect_unknown',
                       ...(requestRef ? { requestRef } : {}),
                     });
+              this.knownStop = false;
               if (this.failure.requestRef)
                 this.requestRef = this.failure.requestRef;
             }
@@ -1175,14 +1187,17 @@ export class AccountGatewayModelTransport {
         error.code === 'model_dispatch_budget_exhausted';
       this.inferenceDenied = true;
       if (!budgetStop) this.mayHaveDispatched = true;
-      this.recordFailure({
-        code:
-          error instanceof ModelDispatchClaimDeniedError
-            ? error.code
-            : 'transport',
-        effect: budgetStop ? 'not_dispatched' : 'effect_unknown',
-        ...(currentRequestRef ? { requestRef: currentRequestRef } : {}),
-      });
+      this.recordFailure(
+        {
+          code:
+            error instanceof ModelDispatchClaimDeniedError
+              ? error.code
+              : 'transport',
+          effect: budgetStop ? 'not_dispatched' : 'effect_unknown',
+          ...(currentRequestRef ? { requestRef: currentRequestRef } : {}),
+        },
+        budgetStop
+      );
       controller.abort();
       dispose();
       if (error instanceof ModelDispatchClaimDeniedError) throw error;
@@ -1972,8 +1987,14 @@ function failureFact(
     )
       return undefined;
     const quota = confirmedProviderQuota(error);
-    const code = safeReference(error.code);
-    const effect = safeReference(error.effect);
+    const rawCode = safeReference(error.code);
+    // A known partial stop is only ever observed locally; the same words in a
+    // response body prove nothing and stay an unknown effect.
+    const localStop =
+      rawCode === 'output_truncated' ||
+      rawCode === 'model_dispatch_budget_exhausted';
+    const code = localStop ? 'relay_unknown' : rawCode;
+    const effect = localStop ? 'effect_unknown' : safeReference(error.effect);
     const requestRef =
       'requestRef' in error ? safeReference(error.requestRef) : ref;
     return code && effect

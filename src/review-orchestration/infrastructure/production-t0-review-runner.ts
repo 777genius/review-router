@@ -1339,6 +1339,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                     ?.context.files.map((file) => file.filename) ?? [],
               })),
               uncoveredPaths: planned.uncoveredPaths,
+              unfinishedPaths: (workSlotId) =>
+                invocationAdapter.unfinishedPaths(workSlotId),
               uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
               lifecycleVerification: lifecycle?.lifecycleVerification,
               cleanup: async () => {
@@ -2071,6 +2073,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 protocolLimits: authorization.limits,
                 assignments: combined.assignments,
                 uncoveredPaths: combined.uncoveredPaths,
+                ...(combined.unfinishedPaths
+                  ? { unfinishedPaths: combined.unfinishedPaths }
+                  : {}),
                 uncoveredLifecycleTargetIds:
                   combined.uncoveredLifecycleTargetIds,
                 lifecycleInventory,
@@ -3696,6 +3701,8 @@ type ProductionReviewLane = Readonly<{
   compatibilityKey: string;
   assignments: readonly ProductionWorkAssignmentFacts[];
   uncoveredPaths: readonly string[];
+  /** Paths an accepted (partial) OCR run of a slot never finished. */
+  unfinishedPaths?: (workSlotId: string) => readonly string[];
   uncoveredLifecycleTargetIds: readonly string[];
   lifecycleVerification?: ProductionLifecycleVerificationPlan;
   cleanup(): Promise<void>;
@@ -3757,6 +3764,8 @@ function combineProductionReviewLanes(
     uncoveredPaths: [
       ...new Set(lanes.flatMap((lane) => lane.uncoveredPaths)),
     ].sort(),
+    unfinishedPaths: (workSlotId) =>
+      lanes.flatMap((lane) => lane.unfinishedPaths?.(workSlotId) ?? []),
     uncoveredLifecycleTargetIds: [
       ...new Set(lanes.flatMap((lane) => lane.uncoveredLifecycleTargetIds)),
     ].sort(),

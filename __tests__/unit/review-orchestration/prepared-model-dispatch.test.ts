@@ -142,18 +142,12 @@ it.each([
       source: 'api_denial',
       message: code,
     });
-    // A refused allowance stays a typed local refusal; anything else is the
-    // generic uncertain fence. Neither reaches the control plane again.
-    const again = dispatch.reserve(
-      request({ max_output_tokens: 100 }),
-      new AbortController().signal
-    );
-    if (code === 'model_dispatch_budget_exhausted')
-      await expect(again).rejects.toMatchObject({
-        code,
-        source: 'local_bound',
-      });
-    else await expect(again).rejects.toThrow('model_dispatch_fenced');
+    await expect(
+      dispatch.reserve(
+        request({ max_output_tokens: 100 }),
+        new AbortController().signal
+      )
+    ).rejects.toThrow('model_dispatch_fenced');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   }
 );
@@ -240,11 +234,7 @@ it.each([32, 128])(
         request({ max_output_tokens: 100 }),
         new AbortController().signal
       )
-    ).rejects.toMatchObject({
-      code: 'model_dispatch_budget_exhausted',
-      source: 'local_bound',
-    });
-    expect(fetchImpl).toHaveBeenCalledTimes(limit * 2);
+    ).rejects.toThrow('model_dispatch_fenced');
   }
 );
 

@@ -100,10 +100,6 @@ export class PreparedModelDispatch {
   private readonly ordinals = new Map<string, number>();
   private active = false;
   private fenced = false;
-  /** The run used its request allowance. That fence proves only that later
-   * requests were refused before leaving the runner, so they keep the same
-   * typed refusal instead of the generic uncertain fence. */
-  private budgetReached = false;
 
   constructor(
     private readonly input: Readonly<{
@@ -194,12 +190,6 @@ export class PreparedModelDispatch {
   ): Promise<PreparedModelDispatchTicket> {
     signal.throwIfAborted();
     const cap = this.capability;
-    if (this.budgetReached)
-      throw new ModelDispatchClaimDeniedError(
-        'model_dispatch_budget_exhausted',
-        undefined,
-        'local_bound'
-      );
     if (this.fenced || this.active || Date.now() >= Date.parse(cap.deadline))
       throw new Error('model_dispatch_fenced');
     const scope = explicitScope ?? this.scope?.();
@@ -236,7 +226,6 @@ export class PreparedModelDispatch {
       // This request has no claim, but earlier calls may have paid. Keep the
       // invocation fenced; never turn this local bound into a whole-run refund.
       this.fenced = true;
-      this.budgetReached = true;
       throw new ModelDispatchClaimDeniedError(
         'model_dispatch_budget_exhausted',
         undefined,
@@ -288,13 +277,7 @@ export class PreparedModelDispatch {
     } catch (error) {
       this.active = false;
       this.fenced = true;
-      if (error instanceof ModelDispatchClaimDeniedError) {
-        // The control plane refused the claim inside its transaction, so this
-        // request was never recorded or forwarded (other roles share the cap).
-        if (error.code === 'model_dispatch_budget_exhausted')
-          this.budgetReached = true;
-        throw error;
-      }
+      if (error instanceof ModelDispatchClaimDeniedError) throw error;
       throw new Error('model_dispatch_claim_unavailable');
     }
     let forwarded = false;

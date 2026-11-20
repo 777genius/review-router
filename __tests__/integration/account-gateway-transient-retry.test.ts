@@ -261,7 +261,8 @@ type ProbeMode =
   | 'dispatch-truncated-then-next'
   | 'dispatch-truncated-then-unknown'
   | 'truncated-turn-cap'
-  | 'dispatch-budget-reached';
+  | 'dispatch-budget-reached'
+  | 'remote-stop-code-untrusted';
 
 async function transientRetry(mode: ProbeMode): Promise<void> {
   const root = process.env.RR_TRANSIENT_RETRY_PROBE_ROOT;
@@ -322,6 +323,16 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         }
         if (mode === 'dispatch-truncated-then-unknown' && requests === 2) {
           request.socket.destroy();
+          return;
+        }
+        if (mode === 'remote-stop-code-untrusted' && requests === 2) {
+          reply.writeHead(502, {
+            'content-type': 'application/json',
+            'x-reviewrouter-request-ref': 'synthetic-remote-stop',
+          });
+          reply.end(
+            '{"error":{"code":"output_truncated","effect":"completed"}}'
+          );
           return;
         }
         if (mode === 'mid-stream-terminal') {
@@ -763,6 +774,36 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         ['completed', 'completed']
       );
       assert.equal(transport.releaseRetrySafeFailure(), false);
+      // Cancellation still withdraws attribution after a known stop.
+      transport.cancelInference();
+      assert.equal(transport.actualModel, undefined);
+      return;
+    }
+    if (mode === 'remote-stop-code-untrusted') {
+      // A response body that names a local stop proves nothing: the fact stays
+      // an unknown effect and attribution is withdrawn as for any fence.
+      const first = await bounded(
+        transport.responses(Buffer.from(body)),
+        'remote-stop-first'
+      );
+      await bounded(drain(first.body), 'remote-stop-first-drain');
+      await transport.drainSettlements();
+      assert.equal(transport.actualModel, 'fixture-model');
+      const second = await bounded(
+        transport.responses(Buffer.from(body)),
+        'remote-stop-second'
+      );
+      assert.equal(second.httpStatus, 502);
+      await bounded(drain(second.body), 'remote-stop-second-drain');
+      await transport.drainSettlements();
+      assert.equal(transport.lastFailure?.code, 'relay_unknown');
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      assert.equal(
+        confirmedProviderFailure(transport.lastFailure),
+        'request_outcome_unknown'
+      );
+      assert.equal(transport.actualModel, undefined);
+      assert.equal(requests, 2);
       return;
     }
     if (incompleteProbe) {
@@ -946,6 +987,7 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
     'dispatch-truncated-then-unknown',
     'truncated-turn-cap',
     'dispatch-budget-reached',
+    'remote-stop-code-untrusted',
   ] as const) {
     nodeTest(mode, { timeout: 20000 }, () => transientRetry(mode));
   }
@@ -1086,8 +1128,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 28\b/);
-      expect(result.stdout).toMatch(/# pass 28\b/);
+      expect(result.stdout).toMatch(/# tests 29\b/);
+      expect(result.stdout).toMatch(/# pass 29\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

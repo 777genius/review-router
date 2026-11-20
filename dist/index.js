@@ -131662,35 +131662,6 @@ function providerQuotaSkippedVotes(input) {
   );
 }
 
-// src/review-execution/domain/provider-failure.ts
-function confirmedProviderFailure(fact) {
-  if (!fact || typeof fact !== "object") return void 0;
-  const value = fact;
-  if (value.code === "output_truncated" && value.effect === "completed")
-    return "output_truncated";
-  if (value.code === "model_dispatch_budget_exhausted" && value.effect === "not_dispatched")
-    return "request_budget_reached";
-  if (value.effect === "effect_unknown" || value.effect === "dispatch_started" || value.effect === "response_started")
-    return value.code === "upstream_failure" ? "upstream_failure_unknown" : confirmedProviderQuota(fact) !== void 0 ? void 0 : "request_outcome_unknown";
-  if (value.code !== "upstream_failure") return void 0;
-  return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
-}
-function partialRunStop(fact) {
-  const notice = confirmedProviderFailure(fact);
-  return notice === "output_truncated" || notice === "request_budget_reached" ? notice : void 0;
-}
-function providerFailureMessage(notice, incompleteReview = false) {
-  if (notice === "output_invalid")
-    return "A verification response did not satisfy the required format or evidence checks. The affected findings remain unverified and are not confirmed as fixed.";
-  if (notice === "output_truncated")
-    return incompleteReview ? "The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes." : "The provider reached its output token limit before completing a response. The affected result is incomplete.";
-  if (notice === "request_budget_reached")
-    return incompleteReview ? "The review used its whole allowance of model requests before it reached every file, so its findings cover only part of the changes. This review is incomplete and does not approve the changes." : "The review used its whole allowance of model requests before it finished. The result is incomplete.";
-  if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown" && notice !== "request_outcome_unknown")
-    return void 0;
-  return (notice === "request_outcome_unknown" ? "The review request did not produce a confirmed result. " : "The review provider could not return a usable result. ") + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : notice === "request_outcome_unknown" ? "The request may have reached the provider. " : "") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "Automatic retry was withheld to avoid running the request twice. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
-}
-
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
 var import_crypto6 = require("crypto");
 var import_http = require("http");
@@ -131953,10 +131924,6 @@ var PreparedModelDispatch = class {
   ordinals = /* @__PURE__ */ new Map();
   active = false;
   fenced = false;
-  /** The run used its request allowance. That fence proves only that later
-   * requests were refused before leaving the runner, so they keep the same
-   * typed refusal instead of the generic uncertain fence. */
-  budgetReached = false;
   /** The runner installs a live lease getter only while its leased invocation
    * runs. An engine cannot submit its own scope or mint a new ordinal. */
   beginInvocation(scope) {
@@ -132001,12 +131968,6 @@ var PreparedModelDispatch = class {
   async reserve(bytes2, signal, explicitScope, outputAcceptanceCap) {
     signal.throwIfAborted();
     const cap = this.capability;
-    if (this.budgetReached)
-      throw new ModelDispatchClaimDeniedError(
-        "model_dispatch_budget_exhausted",
-        void 0,
-        "local_bound"
-      );
     if (this.fenced || this.active || Date.now() >= Date.parse(cap.deadline))
       throw new Error("model_dispatch_fenced");
     const scope = explicitScope ?? this.scope?.();
@@ -132025,7 +131986,6 @@ var PreparedModelDispatch = class {
     const requestOrdinal = (this.ordinals.get(scope.workSlotId) ?? 0) + 1;
     if (requestOrdinal > cap.maxRequests) {
       this.fenced = true;
-      this.budgetReached = true;
       throw new ModelDispatchClaimDeniedError(
         "model_dispatch_budget_exhausted",
         void 0,
@@ -132070,11 +132030,7 @@ var PreparedModelDispatch = class {
     } catch (error4) {
       this.active = false;
       this.fenced = true;
-      if (error4 instanceof ModelDispatchClaimDeniedError) {
-        if (error4.code === "model_dispatch_budget_exhausted")
-          this.budgetReached = true;
-        throw error4;
-      }
+      if (error4 instanceof ModelDispatchClaimDeniedError) throw error4;
       throw new Error("model_dispatch_claim_unavailable");
     }
     let forwarded = false;
@@ -132501,6 +132457,10 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
    * denial (or a transport error) is observed: something may have been paid. */
   mayHaveDispatched = false;
   failure;
+  /** The recorded failure is a known partial stop that this transport itself
+   * observed (a settled output-limit terminal or a refused request-budget
+   * claim), never a code copied from a response body. */
+  knownStop = false;
   /** Digests of requests that ended at a confirmed output-limit terminal. Only
    * an identical replay stays denied; a different request may still run. */
   truncatedRequests = /* @__PURE__ */ new Set();
@@ -132532,8 +132492,10 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
   /** The first failure wins, but a known partial stop (output-limit terminal
    * or refused request-budget claim) never hides a later failure whose effect
    * is less certain. */
-  recordFailure(fact) {
-    if (!this.failure || partialRunStop(this.failure)) this.failure = fact;
+  recordFailure(fact, knownStop = false) {
+    if (this.failure && !this.knownStop) return;
+    this.failure = fact;
+    this.knownStop = knownStop;
   }
   get lastRequestRef() {
     return this.requestRef;
@@ -132547,6 +132509,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     if (this.terminal || this.inferenceCancelled || this.mayHaveDispatched || !failure || failure.requestRef !== void 0 || failure.effect !== "not_dispatched" || !RELEASABLE_SATURATION_CODES.includes(failure.code))
       return false;
     this.failure = void 0;
+    this.knownStop = false;
     this.inferenceDenied = false;
     return true;
   }
@@ -132556,7 +132519,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     return this.releaseRetrySafeFailure();
   }
   get actualModel() {
-    return this.inferenceDenied && !partialRunStop(this.failure) || this.modelUncertain ? void 0 : this.observedModel;
+    return this.modelUncertain || this.inferenceCancelled || this.inferenceDenied && !this.knownStop ? void 0 : this.observedModel;
   }
   get requestCount() {
     return this.observedRequests;
@@ -132699,7 +132662,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       });
     } catch (error4) {
       if (auxiliary.lastFailure?.code === "output_truncated" && auxiliary.lastFailure.effect === "completed")
-        this.failure = auxiliary.lastFailure;
+        this.recordFailure(auxiliary.lastFailure, true);
       throw error4;
     } finally {
       clearTimeout(timer);
@@ -132968,11 +132931,14 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
             }
             if (outputTruncated) {
               truncationSettled = true;
-              this.recordFailure({
-                code: "output_truncated",
-                effect: "completed",
-                ...requestRef ? { requestRef } : {}
-              });
+              this.recordFailure(
+                {
+                  code: "output_truncated",
+                  effect: "completed",
+                  ...requestRef ? { requestRef } : {}
+                },
+                true
+              );
               throw new ModelOutputTruncatedError();
             }
           })().then(
@@ -133044,6 +133010,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
                 effect: "effect_unknown",
                 ...requestRef ? { requestRef } : {}
               };
+              this.knownStop = false;
               if (this.failure.requestRef)
                 this.requestRef = this.failure.requestRef;
             }
@@ -133077,11 +133044,14 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       const budgetStop = error4 instanceof ModelDispatchClaimDeniedError && error4.code === "model_dispatch_budget_exhausted";
       this.inferenceDenied = true;
       if (!budgetStop) this.mayHaveDispatched = true;
-      this.recordFailure({
-        code: error4 instanceof ModelDispatchClaimDeniedError ? error4.code : "transport",
-        effect: budgetStop ? "not_dispatched" : "effect_unknown",
-        ...currentRequestRef ? { requestRef: currentRequestRef } : {}
-      });
+      this.recordFailure(
+        {
+          code: error4 instanceof ModelDispatchClaimDeniedError ? error4.code : "transport",
+          effect: budgetStop ? "not_dispatched" : "effect_unknown",
+          ...currentRequestRef ? { requestRef: currentRequestRef } : {}
+        },
+        budgetStop
+      );
       controller.abort();
       dispose();
       if (error4 instanceof ModelDispatchClaimDeniedError) throw error4;
@@ -133640,8 +133610,10 @@ function failureFact(bytes2, ref) {
     if (!error4 || typeof error4 !== "object" || !("code" in error4) || !("effect" in error4))
       return void 0;
     const quota = confirmedProviderQuota(error4);
-    const code = safeReference(error4.code);
-    const effect = safeReference(error4.effect);
+    const rawCode = safeReference(error4.code);
+    const localStop = rawCode === "output_truncated" || rawCode === "model_dispatch_budget_exhausted";
+    const code = localStop ? "relay_unknown" : rawCode;
+    const effect = localStop ? "effect_unknown" : safeReference(error4.effect);
     const requestRef = "requestRef" in error4 ? safeReference(error4.requestRef) : ref;
     return code && effect ? {
       code,
@@ -143287,6 +143259,35 @@ function uniqueSuggestionsByVoteKey(suggestions) {
     unique4.push(suggestion);
   }
   return unique4;
+}
+
+// src/review-execution/domain/provider-failure.ts
+function confirmedProviderFailure(fact) {
+  if (!fact || typeof fact !== "object") return void 0;
+  const value = fact;
+  if (value.code === "output_truncated" && value.effect === "completed")
+    return "output_truncated";
+  if (value.code === "model_dispatch_budget_exhausted" && value.effect === "not_dispatched")
+    return "request_budget_reached";
+  if (value.effect === "effect_unknown" || value.effect === "dispatch_started" || value.effect === "response_started")
+    return value.code === "upstream_failure" ? "upstream_failure_unknown" : confirmedProviderQuota(fact) !== void 0 ? void 0 : "request_outcome_unknown";
+  if (value.code !== "upstream_failure") return void 0;
+  return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
+}
+function partialRunStop(fact) {
+  const notice = confirmedProviderFailure(fact);
+  return notice === "output_truncated" || notice === "request_budget_reached" ? notice : void 0;
+}
+function providerFailureMessage(notice, incompleteReview = false) {
+  if (notice === "output_invalid")
+    return "A verification response did not satisfy the required format or evidence checks. The affected findings remain unverified and are not confirmed as fixed.";
+  if (notice === "output_truncated")
+    return incompleteReview ? "The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes." : "The provider reached its output token limit before completing a response. The affected result is incomplete.";
+  if (notice === "request_budget_reached")
+    return incompleteReview ? "The review used its whole allowance of model requests before it reached every file. This review is incomplete and does not approve the changes." : "The review used its whole allowance of model requests before it finished. The result is incomplete.";
+  if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown" && notice !== "request_outcome_unknown")
+    return void 0;
+  return (notice === "request_outcome_unknown" ? "The review request did not produce a confirmed result. " : "The review provider could not return a usable result. ") + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : notice === "request_outcome_unknown" ? "The request may have reached the provider. " : "") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "Automatic retry was withheld to avoid running the request twice. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
 }
 
 // src/finding-revalidation/domain/resolve-confidence-policy.ts
@@ -247755,6 +247756,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 )?.context.files.map((file) => file.filename) ?? []
               })),
               uncoveredPaths: planned2.uncoveredPaths,
+              unfinishedPaths: (workSlotId) => invocationAdapter2.unfinishedPaths(workSlotId),
               uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
               lifecycleVerification: lifecycle2?.lifecycleVerification,
               cleanup: async () => {
@@ -248326,6 +248328,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             protocolLimits: authorization.limits,
             assignments: combined.assignments,
             uncoveredPaths: combined.uncoveredPaths,
+            ...combined.unfinishedPaths ? { unfinishedPaths: combined.unfinishedPaths } : {},
             uncoveredLifecycleTargetIds: combined.uncoveredLifecycleTargetIds,
             lifecycleInventory,
             ...lifecycleVerification ? { lifecycleVerification } : {},
@@ -249207,6 +249210,7 @@ function combineProductionReviewLanes(lanes, compatibilityKey, authorization) {
     uncoveredPaths: [
       ...new Set(lanes.flatMap((lane) => lane.uncoveredPaths))
     ].sort(),
+    unfinishedPaths: (workSlotId) => lanes.flatMap((lane) => lane.unfinishedPaths?.(workSlotId) ?? []),
     uncoveredLifecycleTargetIds: [
       ...new Set(lanes.flatMap((lane) => lane.uncoveredLifecycleTargetIds))
     ].sort()

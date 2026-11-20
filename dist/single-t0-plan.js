@@ -120010,7 +120010,7 @@ function providerFailureMessage(notice, incompleteReview = false) {
   if (notice === "output_truncated")
     return incompleteReview ? "The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes." : "The provider reached its output token limit before completing a response. The affected result is incomplete.";
   if (notice === "request_budget_reached")
-    return incompleteReview ? "The review used its whole allowance of model requests before it reached every file, so its findings cover only part of the changes. This review is incomplete and does not approve the changes." : "The review used its whole allowance of model requests before it finished. The result is incomplete.";
+    return incompleteReview ? "The review used its whole allowance of model requests before it reached every file. This review is incomplete and does not approve the changes." : "The review used its whole allowance of model requests before it finished. The result is incomplete.";
   if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown" && notice !== "request_outcome_unknown")
     return void 0;
   return (notice === "request_outcome_unknown" ? "The review request did not produce a confirmed result. " : "The review provider could not return a usable result. ") + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : notice === "request_outcome_unknown" ? "The request may have reached the provider. " : "") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "Automatic retry was withheld to avoid running the request twice. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
@@ -223408,6 +223408,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 )?.context.files.map((file) => file.filename) ?? []
               })),
               uncoveredPaths: planned2.uncoveredPaths,
+              unfinishedPaths: (workSlotId) => invocationAdapter2.unfinishedPaths(workSlotId),
               uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
               lifecycleVerification: lifecycle2?.lifecycleVerification,
               cleanup: async () => {
@@ -223979,6 +223980,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             protocolLimits: authorization.limits,
             assignments: combined.assignments,
             uncoveredPaths: combined.uncoveredPaths,
+            ...combined.unfinishedPaths ? { unfinishedPaths: combined.unfinishedPaths } : {},
             uncoveredLifecycleTargetIds: combined.uncoveredLifecycleTargetIds,
             lifecycleInventory,
             ...lifecycleVerification ? { lifecycleVerification } : {},
@@ -225146,6 +225148,7 @@ function combineProductionReviewLanes(lanes, compatibilityKey, authorization) {
     uncoveredPaths: [
       ...new Set(lanes.flatMap((lane) => lane.uncoveredPaths))
     ].sort(),
+    unfinishedPaths: (workSlotId) => lanes.flatMap((lane) => lane.unfinishedPaths?.(workSlotId) ?? []),
     uncoveredLifecycleTargetIds: [
       ...new Set(lanes.flatMap((lane) => lane.uncoveredLifecycleTargetIds))
     ].sort()

@@ -64,7 +64,7 @@ export function providerFailureMessage(
       : 'The provider reached its output token limit before completing a response. The affected result is incomplete.';
   if (notice === 'request_budget_reached')
     return incompleteReview
-      ? 'The review used its whole allowance of model requests before it reached every file, so its findings cover only part of the changes. This review is incomplete and does not approve the changes.'
+      ? 'The review used its whole allowance of model requests before it reached every file. This review is incomplete and does not approve the changes.'
       : 'The review used its whole allowance of model requests before it finished. The result is incomplete.';
   if (
     notice !== 'upstream_failure' &&

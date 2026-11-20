@@ -1,5 +1,6 @@
 import {
   confirmedProviderFailure,
+  partialRunStop,
   providerFailureMessage,
 } from '../../../src/review-execution/domain/provider-failure';
 
@@ -24,6 +25,26 @@ describe('unknown request outcome diagnostics', () => {
       expect(message).not.toMatch(/502|503|quota|exhausted/);
     }
   );
+
+  it('names a refused request-budget claim as a partial stop, never an unknown outcome', () => {
+    const fact = {
+      code: 'model_dispatch_budget_exhausted',
+      effect: 'not_dispatched',
+    };
+    expect(confirmedProviderFailure(fact)).toBe('request_budget_reached');
+    expect(partialRunStop(fact)).toBe('request_budget_reached');
+    const message = providerFailureMessage('request_budget_reached', true)!;
+    expect(message).toContain('whole allowance of model requests');
+    expect(message).toContain('This review is incomplete');
+    expect(message).not.toMatch(/may have reached|retry|start a new review/i);
+    // The same code with an uncertain effect stays an unknown outcome.
+    expect(
+      confirmedProviderFailure({ ...fact, effect: 'effect_unknown' })
+    ).toBe('request_outcome_unknown');
+    expect(
+      partialRunStop({ ...fact, effect: 'effect_unknown' })
+    ).toBeUndefined();
+  });
 
   it.each(['none', 'completed', 'not_dispatched', 'invented'])(
     'does not invent an unknown result from %s',

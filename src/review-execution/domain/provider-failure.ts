@@ -6,6 +6,7 @@ export type ProviderFailureNotice =
   | 'upstream_failure_unknown'
   | 'request_outcome_unknown'
   | 'output_truncated'
+  | 'request_budget_reached'
   | 'output_invalid';
 
 export function confirmedProviderFailure(
@@ -15,6 +16,11 @@ export function confirmedProviderFailure(
   const value = fact as Record<string, unknown>;
   if (value.code === 'output_truncated' && value.effect === 'completed')
     return 'output_truncated';
+  if (
+    value.code === 'model_dispatch_budget_exhausted' &&
+    value.effect === 'not_dispatched'
+  )
+    return 'request_budget_reached';
   if (
     value.effect === 'effect_unknown' ||
     value.effect === 'dispatch_started' ||
@@ -34,6 +40,18 @@ export function confirmedProviderFailure(
     : undefined;
 }
 
+/** A known stop that ends only the rest of a run: one model turn hit the
+ * output limit, or the run used its whole request allowance. What the earlier
+ * requests produced stays usable; the review is reported as incomplete. */
+export function partialRunStop(
+  fact: unknown
+): 'output_truncated' | 'request_budget_reached' | undefined {
+  const notice = confirmedProviderFailure(fact);
+  return notice === 'output_truncated' || notice === 'request_budget_reached'
+    ? notice
+    : undefined;
+}
+
 export function providerFailureMessage(
   notice: unknown,
   incompleteReview = false
@@ -44,6 +62,10 @@ export function providerFailureMessage(
     return incompleteReview
       ? 'The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes.'
       : 'The provider reached its output token limit before completing a response. The affected result is incomplete.';
+  if (notice === 'request_budget_reached')
+    return incompleteReview
+      ? 'The review used its whole allowance of model requests before it reached every file, so its findings cover only part of the changes. This review is incomplete and does not approve the changes.'
+      : 'The review used its whole allowance of model requests before it finished. The result is incomplete.';
   if (
     notice !== 'upstream_failure' &&
     notice !== 'upstream_failure_unknown' &&

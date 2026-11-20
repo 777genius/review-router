@@ -131668,16 +131668,24 @@ function confirmedProviderFailure(fact) {
   const value = fact;
   if (value.code === "output_truncated" && value.effect === "completed")
     return "output_truncated";
+  if (value.code === "model_dispatch_budget_exhausted" && value.effect === "not_dispatched")
+    return "request_budget_reached";
   if (value.effect === "effect_unknown" || value.effect === "dispatch_started" || value.effect === "response_started")
     return value.code === "upstream_failure" ? "upstream_failure_unknown" : confirmedProviderQuota(fact) !== void 0 ? void 0 : "request_outcome_unknown";
   if (value.code !== "upstream_failure") return void 0;
   return value.effect === "not_dispatched" || value.effect === "rejected_before_dispatch" ? "upstream_failure" : void 0;
+}
+function partialRunStop(fact) {
+  const notice = confirmedProviderFailure(fact);
+  return notice === "output_truncated" || notice === "request_budget_reached" ? notice : void 0;
 }
 function providerFailureMessage(notice, incompleteReview = false) {
   if (notice === "output_invalid")
     return "A verification response did not satisfy the required format or evidence checks. The affected findings remain unverified and are not confirmed as fixed.";
   if (notice === "output_truncated")
     return incompleteReview ? "The provider reached its output token limit before producing a complete result. This review is incomplete and does not approve the changes." : "The provider reached its output token limit before completing a response. The affected result is incomplete.";
+  if (notice === "request_budget_reached")
+    return incompleteReview ? "The review used its whole allowance of model requests before it reached every file, so its findings cover only part of the changes. This review is incomplete and does not approve the changes." : "The review used its whole allowance of model requests before it finished. The result is incomplete.";
   if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown" && notice !== "request_outcome_unknown")
     return void 0;
   return (notice === "request_outcome_unknown" ? "The review request did not produce a confirmed result. " : "The review provider could not return a usable result. ") + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : notice === "request_outcome_unknown" ? "The request may have reached the provider. " : "") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "Automatic retry was withheld to avoid running the request twice. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
@@ -131945,6 +131953,10 @@ var PreparedModelDispatch = class {
   ordinals = /* @__PURE__ */ new Map();
   active = false;
   fenced = false;
+  /** The run used its request allowance. That fence proves only that later
+   * requests were refused before leaving the runner, so they keep the same
+   * typed refusal instead of the generic uncertain fence. */
+  budgetReached = false;
   /** The runner installs a live lease getter only while its leased invocation
    * runs. An engine cannot submit its own scope or mint a new ordinal. */
   beginInvocation(scope) {
@@ -131989,6 +132001,12 @@ var PreparedModelDispatch = class {
   async reserve(bytes2, signal, explicitScope, outputAcceptanceCap) {
     signal.throwIfAborted();
     const cap = this.capability;
+    if (this.budgetReached)
+      throw new ModelDispatchClaimDeniedError(
+        "model_dispatch_budget_exhausted",
+        void 0,
+        "local_bound"
+      );
     if (this.fenced || this.active || Date.now() >= Date.parse(cap.deadline))
       throw new Error("model_dispatch_fenced");
     const scope = explicitScope ?? this.scope?.();
@@ -132007,6 +132025,7 @@ var PreparedModelDispatch = class {
     const requestOrdinal = (this.ordinals.get(scope.workSlotId) ?? 0) + 1;
     if (requestOrdinal > cap.maxRequests) {
       this.fenced = true;
+      this.budgetReached = true;
       throw new ModelDispatchClaimDeniedError(
         "model_dispatch_budget_exhausted",
         void 0,
@@ -132051,7 +132070,11 @@ var PreparedModelDispatch = class {
     } catch (error4) {
       this.active = false;
       this.fenced = true;
-      if (error4 instanceof ModelDispatchClaimDeniedError) throw error4;
+      if (error4 instanceof ModelDispatchClaimDeniedError) {
+        if (error4.code === "model_dispatch_budget_exhausted")
+          this.budgetReached = true;
+        throw error4;
+      }
       throw new Error("model_dispatch_claim_unavailable");
     }
     let forwarded = false;
@@ -132506,11 +132529,11 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
   get lastFailure() {
     return this.failure;
   }
-  /** The first failure wins, but a confirmed output-limit terminal never hides
-   * a later failure whose effect is less certain. */
+  /** The first failure wins, but a known partial stop (output-limit terminal
+   * or refused request-budget claim) never hides a later failure whose effect
+   * is less certain. */
   recordFailure(fact) {
-    if (!this.failure || confirmedProviderFailure(this.failure) === "output_truncated")
-      this.failure = fact;
+    if (!this.failure || partialRunStop(this.failure)) this.failure = fact;
   }
   get lastRequestRef() {
     return this.requestRef;
@@ -132533,7 +132556,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
     return this.releaseRetrySafeFailure();
   }
   get actualModel() {
-    return this.inferenceDenied || this.modelUncertain ? void 0 : this.observedModel;
+    return this.inferenceDenied && !partialRunStop(this.failure) || this.modelUncertain ? void 0 : this.observedModel;
   }
   get requestCount() {
     return this.observedRequests;
@@ -133051,11 +133074,12 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         error4 instanceof ModelDispatchClaimDeniedError ? error4.httpStatus ?? null : httpStatus,
         error4
       );
+      const budgetStop = error4 instanceof ModelDispatchClaimDeniedError && error4.code === "model_dispatch_budget_exhausted";
       this.inferenceDenied = true;
-      this.mayHaveDispatched = true;
+      if (!budgetStop) this.mayHaveDispatched = true;
       this.recordFailure({
         code: error4 instanceof ModelDispatchClaimDeniedError ? error4.code : "transport",
-        effect: "effect_unknown",
+        effect: budgetStop ? "not_dispatched" : "effect_unknown",
         ...currentRequestRef ? { requestRef: currentRequestRef } : {}
       });
       controller.abort();
@@ -168315,8 +168339,10 @@ var OcrReviewAcceptanceError = class extends Error {
   }
 };
 function acceptOcrManagedReviewResult(input) {
-  const outputTruncated = input.effectFacts !== void 0 && confirmedProviderFailure(input.effectFacts) === "output_truncated";
-  if (input.effectFacts && input.effectFacts.effect !== "none" && !outputTruncated) {
+  const stop = input.effectFacts !== void 0 ? partialRunStop(input.effectFacts) : void 0;
+  const outputTruncated = stop === "output_truncated";
+  const requestBudgetReached = stop === "request_budget_reached";
+  if (input.effectFacts && input.effectFacts.effect !== "none" && !stop) {
     if (input.effectFacts.effect === "not_dispatched") {
       throw new OcrReviewAcceptanceError(
         "review_agent_not_dispatched",
@@ -168408,11 +168434,12 @@ function acceptOcrManagedReviewResult(input) {
     actualModel: input.observedActualModel,
     usage,
     reasons: Object.freeze(reasons),
-    // A lost model turn is never reported as a complete review, even when
-    // OCR itself recovered the affected group.
-    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0 || outputTruncated,
+    // A lost model turn or a refused request is never reported as a complete
+    // review, even when OCR itself recovered the affected group.
+    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0 || stop !== void 0,
     uncoveredPaths,
-    outputTruncated
+    outputTruncated,
+    requestBudgetReached
   });
 }
 
@@ -241898,6 +241925,11 @@ var ProductionReviewProjectionCommandFactory = class {
     const reviewedFiles = /* @__PURE__ */ new Set();
     const policyExcludedFiles = /* @__PURE__ */ new Set();
     const coverageLimitations = [];
+    const unfinishedPaths = (workSlotId) => new Set(
+      (this.input.unfinishedPaths?.(workSlotId) ?? []).map(
+        normalizeManifestPath
+      )
+    );
     const manifestByPath = /* @__PURE__ */ new Map();
     const recordManifestFile = (entry, required2) => {
       const key = normalizeManifestPath(entry.path);
@@ -241938,9 +241970,14 @@ var ProductionReviewProjectionCommandFactory = class {
         }
         continue;
       }
+      const unfinished = unfinishedPaths(assignment.workSlotId);
       for (const path40 of accepted.coverageManifest.paths) {
         recordManifestFile(
-          promptCoverageToManifestFile(path40),
+          unfinished.has(normalizeManifestPath(path40.path)) ? {
+            path: path40.path,
+            status: "unreviewed",
+            reason: "the review stopped before this file was finished"
+          } : promptCoverageToManifestFile(path40),
           assignment.required
         );
       }
@@ -241991,7 +242028,13 @@ var ProductionReviewProjectionCommandFactory = class {
           `work_slot_investigation_inconclusive:${assignment.workSlotId}`
         );
       }
+      const unfinished = unfinishedPaths(assignment.workSlotId);
+      if (unfinished.size > 0)
+        coverageLimitations.push(
+          `work_slot_unfinished_paths:${assignment.workSlotId}`
+        );
       for (const path40 of manifest.paths) {
+        if (unfinished.has(normalizeManifestPath(path40.path))) continue;
         if (path40.kind === "full_patch" /* FullPatch */) {
           reviewedFiles.add(path40.path);
         } else if (path40.kind === "policy_excluded" /* PolicyExcluded */) {
@@ -243794,6 +243837,9 @@ var OcrReviewInvocationAdapter = class {
   running = false;
   /** Slots whose engine run may already have paid for model requests. */
   dispatchedSlots = /* @__PURE__ */ new Set();
+  /** Per accepted slot: paths whose group never finished its main pass (or
+   * got no group). Local to this run; partial OCR evidence is not reused. */
+  unfinished = /* @__PURE__ */ new Map();
   /** Model-free: deterministic preview and semantic capture only (§5.2). */
   async prepare(input) {
     this.options.signal?.throwIfAborted();
@@ -244221,7 +244267,7 @@ var OcrReviewInvocationAdapter = class {
     const normalization = accepted.normalized.diagnostics;
     const inspectionIntact = (!accepted.classification.partial || accepted.classification.filterCommentsPreserved) && normalization.skipped.length === 0 && normalization.reasons.every(
       (reason) => reason === "unverified_native_span"
-    ) && accepted.uncoveredPaths.length === 0 && !accepted.outputTruncated;
+    ) && accepted.uncoveredPaths.length === 0 && !accepted.outputTruncated && !accepted.requestBudgetReached;
     const qualityFlags = accepted.partial ? inspectionIntact ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
     if (normalization.reasons.includes("unverified_native_span")) {
       qualityFlags.push("unverified_native_span");
@@ -244238,6 +244284,17 @@ var OcrReviewInvocationAdapter = class {
     if (observation.byteCount > OCR_NORMALIZATION_LIMITS.maxPayloadBytes) {
       throw new OcrOutputTooLargeError("payload");
     }
+    this.unfinished.set(
+      input.invocation.workSlotId,
+      Object.freeze(
+        [
+          .../* @__PURE__ */ new Set([
+            ...accepted.uncoveredPaths,
+            ...accepted.native.outcome.groups.filter((group) => !group.mainCompleted).flatMap((group) => group.paths)
+          ])
+        ].sort()
+      )
+    );
     if (typeof requestsBefore === "number" && Number.isFinite(requestsBefore) && requestsBefore >= 0 && typeof requestsAfter === "number" && Number.isFinite(requestsAfter) && requestsAfter > requestsBefore) {
       try {
         this.options.freshReviewSkillsSupply?.({
@@ -244248,6 +244305,11 @@ var OcrReviewInvocationAdapter = class {
       }
     }
     return observation;
+  }
+  /** Paths of an accepted run that OCR never finished reviewing, so the
+   * projection of this run does not count them as reviewed. */
+  unfinishedPaths(workSlotId) {
+    return this.unfinished.get(workSlotId) ?? [];
   }
 };
 function assertOcrInvocationLive(input) {
@@ -247667,6 +247729,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                     )?.context.files.map((file) => file.filename) ?? []
                   })),
                   uncoveredPaths: planned2.uncoveredPaths,
+                  unfinishedPaths: (workSlotId) => invocationAdapter2.unfinishedPaths(workSlotId),
                   uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
                   lifecycleInventory,
                   ...lifecycle2?.lifecycleVerification ? { lifecycleVerification: lifecycle2.lifecycleVerification } : {},

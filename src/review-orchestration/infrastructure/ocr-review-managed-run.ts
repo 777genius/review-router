@@ -20,7 +20,7 @@ import {
   type OcrNormalizedFindings,
 } from './ocr-review-normalization';
 import type { TokenUsage } from '../../types';
-import { confirmedProviderFailure } from '../../review-execution/domain/provider-failure';
+import { partialRunStop } from '../../review-execution/domain/provider-failure';
 import type { AdmittedRuntimeConfig } from '../../control-plane/runtime-config';
 import { resolveAdmittedGatewayOcrReasoningEffort } from '../../control-plane/admitted-gateway-codex-model-settings';
 import { anthropicReasoningEffort } from './anthropic-messages-codec';
@@ -334,6 +334,8 @@ export type OcrAcceptedReviewResult = Readonly<{
   uncoveredPaths: readonly string[];
   /** A model turn of this run stopped at the provider output limit. */
   outputTruncated: boolean;
+  /** The run used its request allowance; later requests were refused locally. */
+  requestBudgetReached: boolean;
 }>;
 
 /**
@@ -364,17 +366,18 @@ export function acceptOcrManagedReviewResult(input: {
   // Step 2: Gateway effect facts before any output interpretation.
   // A positively proven not_dispatched effect is a distinct retry-safe failure
   // (§8.4 step 2), not an unknown effect that could have been paid.
-  // A confirmed output-limit terminal is a known completed effect: OCR saw
-  // that one request fail and reports its group, so the rest of the run is
-  // judged by steps 3-8 and the review is partial instead of discarded.
-  const outputTruncated =
-    input.effectFacts !== undefined &&
-    confirmedProviderFailure(input.effectFacts) === 'output_truncated';
-  if (
-    input.effectFacts &&
-    input.effectFacts.effect !== 'none' &&
-    !outputTruncated
-  ) {
+  // Two known partial stops keep the rest of the run. A confirmed output-limit
+  // terminal is a known completed effect: OCR saw that one request fail and
+  // reports its group. A refused request-budget claim never left the runner:
+  // OCR reports the groups it could not start. Either way the run is judged
+  // by steps 3-8 and the review is partial instead of discarded.
+  const stop =
+    input.effectFacts !== undefined
+      ? partialRunStop(input.effectFacts)
+      : undefined;
+  const outputTruncated = stop === 'output_truncated';
+  const requestBudgetReached = stop === 'request_budget_reached';
+  if (input.effectFacts && input.effectFacts.effect !== 'none' && !stop) {
     if (input.effectFacts.effect === 'not_dispatched') {
       throw new OcrReviewAcceptanceError(
         'review_agent_not_dispatched',
@@ -485,14 +488,15 @@ export function acceptOcrManagedReviewResult(input: {
     actualModel: input.observedActualModel,
     usage,
     reasons: Object.freeze(reasons),
-    // A lost model turn is never reported as a complete review, even when
-    // OCR itself recovered the affected group.
+    // A lost model turn or a refused request is never reported as a complete
+    // review, even when OCR itself recovered the affected group.
     partial:
       classification.partial ||
       normalized.diagnostics.partialFlagsRequired ||
       uncoveredPaths.length > 0 ||
-      outputTruncated,
+      stop !== undefined,
     uncoveredPaths,
     outputTruncated,
+    requestBudgetReached,
   });
 }

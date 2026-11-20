@@ -142,12 +142,18 @@ it.each([
       source: 'api_denial',
       message: code,
     });
-    await expect(
-      dispatch.reserve(
-        request({ max_output_tokens: 100 }),
-        new AbortController().signal
-      )
-    ).rejects.toThrow('model_dispatch_fenced');
+    // A refused allowance stays a typed local refusal; anything else is the
+    // generic uncertain fence. Neither reaches the control plane again.
+    const again = dispatch.reserve(
+      request({ max_output_tokens: 100 }),
+      new AbortController().signal
+    );
+    if (code === 'model_dispatch_budget_exhausted')
+      await expect(again).rejects.toMatchObject({
+        code,
+        source: 'local_bound',
+      });
+    else await expect(again).rejects.toThrow('model_dispatch_fenced');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   }
 );
@@ -234,7 +240,11 @@ it.each([32, 128])(
         request({ max_output_tokens: 100 }),
         new AbortController().signal
       )
-    ).rejects.toThrow('model_dispatch_fenced');
+    ).rejects.toMatchObject({
+      code: 'model_dispatch_budget_exhausted',
+      source: 'local_bound',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(limit * 2);
   }
 );
 
@@ -275,9 +285,11 @@ it.each([32, 128])(
       code: 'model_dispatch_budget_exhausted',
       source: 'api_denial',
     });
+    // The refused claim never left the runner: a known stop, not an unknown
+    // effect. Inference stays fenced below; nothing is released.
     expect(transport.lastFailure).toEqual({
       code: 'model_dispatch_budget_exhausted',
-      effect: 'effect_unknown',
+      effect: 'not_dispatched',
     });
     expect(diagnostics).toEqual([
       expect.objectContaining({

@@ -1303,6 +1303,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                         ?.context.files.map((file) => file.filename) ?? [],
                   })),
                   uncoveredPaths: planned.uncoveredPaths,
+                  unfinishedPaths: (workSlotId) =>
+                    invocationAdapter.unfinishedPaths(workSlotId),
                   uncoveredLifecycleTargetIds:
                     planned.uncoveredLifecycleTargetIds,
                   lifecycleInventory,

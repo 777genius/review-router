@@ -1,5 +1,5 @@
 import { encodeStructuredLifecycleRequest } from '../../finding-revalidation/domain/packet';
-import { confirmedProviderFailure } from '../../review-execution/domain/provider-failure';
+import { partialRunStop } from '../../review-execution/domain/provider-failure';
 import {
   confirmedProviderQuota,
   type ProviderQuota,
@@ -359,14 +359,11 @@ export class AccountGatewayModelTransport {
     return this.failure;
   }
 
-  /** The first failure wins, but a confirmed output-limit terminal never hides
-   * a later failure whose effect is less certain. */
+  /** The first failure wins, but a known partial stop (output-limit terminal
+   * or refused request-budget claim) never hides a later failure whose effect
+   * is less certain. */
   private recordFailure(fact: GatewayFailureFact): void {
-    if (
-      !this.failure ||
-      confirmedProviderFailure(this.failure) === 'output_truncated'
-    )
-      this.failure = fact;
+    if (!this.failure || partialRunStop(this.failure)) this.failure = fact;
   }
   get lastRequestRef(): string | undefined {
     return this.requestRef;
@@ -398,7 +395,11 @@ export class AccountGatewayModelTransport {
     return this.releaseRetrySafeFailure();
   }
   get actualModel(): string | undefined {
-    return this.inferenceDenied || this.modelUncertain
+    // A known partial stop (refused request-budget claim, or the output-limit
+    // turn after `truncatedTurns`) fences inference but leaves no uncertain
+    // effect, so the model that answered the earlier requests is still known.
+    return (this.inferenceDenied && !partialRunStop(this.failure)) ||
+      this.modelUncertain
       ? undefined
       : this.observedModel;
   }
@@ -1166,14 +1167,20 @@ export class AccountGatewayModelTransport {
           : httpStatus,
         error
       );
+      // A refused request-budget claim proves only that THIS request never left
+      // the runner (no claim, no forward). Inference stays fenced, but the
+      // work earlier requests completed is kept as a partial review.
+      const budgetStop =
+        error instanceof ModelDispatchClaimDeniedError &&
+        error.code === 'model_dispatch_budget_exhausted';
       this.inferenceDenied = true;
-      this.mayHaveDispatched = true;
+      if (!budgetStop) this.mayHaveDispatched = true;
       this.recordFailure({
         code:
           error instanceof ModelDispatchClaimDeniedError
             ? error.code
             : 'transport',
-        effect: 'effect_unknown',
+        effect: budgetStop ? 'not_dispatched' : 'effect_unknown',
         ...(currentRequestRef ? { requestRef: currentRequestRef } : {}),
       });
       controller.abort();

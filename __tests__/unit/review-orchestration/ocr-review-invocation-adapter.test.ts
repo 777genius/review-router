@@ -1382,6 +1382,51 @@ describe('OcrReviewInvocationAdapter', () => {
     ]);
   });
 
+  it('never reports a run stopped at the request allowance as fully inspected', async () => {
+    // Dispatch sees no effect yet; acceptance sees the refused request claim.
+    let effectReads = 0;
+    const { bridge, requests } = bridgeFixture({
+      effectFacts: () =>
+        effectReads++ === 0
+          ? { effect: 'none' }
+          : {
+              effect: 'not_dispatched',
+              code: 'model_dispatch_budget_exhausted',
+            },
+    });
+    requests.count = 1;
+    // OCR reports the group it could not start after the refused claim.
+    const body = JSON.parse(nativeResultBody()) as Record<string, unknown>;
+    const outcome = body.reviewrouter_outcome as {
+      groups: Record<string, unknown>[];
+    };
+    outcome.groups[0] = {
+      ...outcome.groups[0],
+      main_completed: false,
+      stop_cause: 'provider_error',
+      rounds: { configured: 2, started: 1, completed: 0 },
+      phases: {
+        plan: { state: 'not_applicable', reason: 'threshold' },
+        compression: { state: 'not_applicable', reason: 'no_zone' },
+        relocation: { state: 'not_applicable', reason: 'no_candidates' },
+        filter: { state: 'cancelled', reason: 'not_dispatched' },
+      },
+    };
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunnerWriting(JSON.stringify(body)).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+    ]);
+    // The projection of this run must not count the unstarted group's files.
+    expect(adapter.unfinishedPaths(workSlot.workSlotId)).toEqual(['calc.ts']);
+  });
+
   it('keeps an unverified span advisory next to a preserved filter decision', async () => {
     const body = JSON.parse(
       nativeResultBody({

@@ -368,6 +368,47 @@ describe('acceptOcrManagedReviewResult (§8.4 order 1-8)', () => {
     expect(accepted.actualModel).toBe('observed-model');
   });
 
+  it('keeps the work done before the request allowance ran out as a partial review', () => {
+    // Prod: PR 821 (27 files) reached the 128-request cap after 80 minutes and
+    // the whole review was discarded; large PRs reach it before finishing.
+    const accepted = acceptOcrManagedReviewResult(
+      acceptInput({
+        effectFacts: {
+          effect: 'not_dispatched',
+          code: 'model_dispatch_budget_exhausted',
+        },
+      })
+    );
+    expect(accepted.partial).toBe(true);
+    expect(accepted.requestBudgetReached).toBe(true);
+    expect(accepted.outputTruncated).toBe(false);
+    expect(accepted.actualModel).toBe('observed-model');
+  });
+
+  it.each([
+    { effect: 'effect_unknown', code: 'model_dispatch_budget_exhausted' },
+    { effect: 'completed', code: 'model_dispatch_budget_exhausted' },
+  ])(
+    'fails closed on a request-budget code with another effect %j',
+    (effectFacts) => {
+      const error = acceptanceErrorOf(() =>
+        acceptOcrManagedReviewResult(acceptInput({ effectFacts }))
+      );
+      expect(error.code).toBe('gateway_effect_unknown');
+    }
+  );
+
+  it('keeps any other not_dispatched effect retry-safe instead of partial', () => {
+    const error = acceptanceErrorOf(() =>
+      acceptOcrManagedReviewResult(
+        acceptInput({
+          effectFacts: { effect: 'not_dispatched', code: 'relay_saturated' },
+        })
+      )
+    );
+    expect(error.code).toBe('review_agent_not_dispatched');
+  });
+
   it.each([
     { effect: 'completed' },
     { effect: 'completed', code: 'transport' },

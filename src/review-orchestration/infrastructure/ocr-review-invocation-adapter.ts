@@ -604,6 +604,9 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
   private running = false;
   /** Slots whose engine run may already have paid for model requests. */
   private readonly dispatchedSlots = new Set<string>();
+  /** Per accepted slot: paths whose group never finished its main pass (or
+   * got no group). Local to this run; partial OCR evidence is not reused. */
+  private readonly unfinished = new Map<string, readonly string[]>();
 
   constructor(
     assignments: readonly OcrReviewAssignment[],
@@ -1157,7 +1160,8 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         (reason) => reason === 'unverified_native_span'
       ) &&
       accepted.uncoveredPaths.length === 0 &&
-      !accepted.outputTruncated;
+      !accepted.outputTruncated &&
+      !accepted.requestBudgetReached;
     const qualityFlags = accepted.partial
       ? inspectionIntact
         ? ['provider_warning']
@@ -1184,6 +1188,19 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     if (observation.byteCount > OCR_NORMALIZATION_LIMITS.maxPayloadBytes) {
       throw new OcrOutputTooLargeError('payload');
     }
+    this.unfinished.set(
+      input.invocation.workSlotId,
+      Object.freeze(
+        [
+          ...new Set([
+            ...accepted.uncoveredPaths,
+            ...accepted.native.outcome.groups
+              .filter((group) => !group.mainCompleted)
+              .flatMap((group) => group.paths),
+          ]),
+        ].sort()
+      )
+    );
     if (
       typeof requestsBefore === 'number' &&
       Number.isFinite(requestsBefore) &&
@@ -1202,6 +1219,12 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       }
     }
     return observation;
+  }
+
+  /** Paths of an accepted run that OCR never finished reviewing, so the
+   * projection of this run does not count them as reviewed. */
+  unfinishedPaths(workSlotId: string): readonly string[] {
+    return this.unfinished.get(workSlotId) ?? [];
   }
 }
 

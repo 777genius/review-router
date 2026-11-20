@@ -260,7 +260,8 @@ type ProbeMode =
   | 'dispatch-incomplete-lifecycle'
   | 'dispatch-truncated-then-next'
   | 'dispatch-truncated-then-unknown'
-  | 'truncated-turn-cap';
+  | 'truncated-turn-cap'
+  | 'dispatch-budget-reached';
 
 async function transientRetry(mode: ProbeMode): Promise<void> {
   const root = process.env.RR_TRANSIENT_RETRY_PROBE_ROOT;
@@ -702,7 +703,9 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
       return;
     }
     if (truncatedCap) {
-      // A few runaway turns are survived; the next one fences as before.
+      // A few runaway turns are survived; the next one fences as before. It is
+      // still a known completed stop, so the answered model stays attributable
+      // and OCR keeps the groups it finished (a partial review).
       for (let turn = 1; turn <= 4; turn++) {
         const response = await bounded(
           transport.responses(Buffer.from(turnBody(turn))),
@@ -711,16 +714,55 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         await bounded(drain(response.body), `cap-drain-${turn}`);
         await transport.drainSettlements();
         assert.equal(transport.lastFailure?.code, 'output_truncated');
-        assert.equal(
-          transport.actualModel,
-          turn < 4 ? 'fixture-model' : undefined
-        );
+        assert.equal(transport.actualModel, 'fixture-model');
       }
       await assert.rejects(
         transport.responses(Buffer.from(turnBody(5))),
         /account_gateway_inference_denied/u
       );
       assert.equal(requests, 4);
+      return;
+    }
+    if (mode === 'dispatch-budget-reached') {
+      // The capability allows 2 requests. Both complete; the third claim is
+      // refused before it leaves the runner. Inference stays fenced, but the
+      // answered model stays attributable so OCR keeps the finished groups.
+      for (let turn = 1; turn <= 2; turn++) {
+        const response = await bounded(
+          transport.responses(Buffer.from(body)),
+          `budget-turn-${turn}`
+        );
+        await bounded(drain(response.body), `budget-drain-${turn}`);
+        await transport.drainSettlements();
+      }
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'budget-refused'),
+        (error: unknown) =>
+          (error as { code?: unknown }).code ===
+          'model_dispatch_budget_exhausted'
+      );
+      assert.deepEqual(transport.lastFailure, {
+        code: 'model_dispatch_budget_exhausted',
+        effect: 'not_dispatched',
+      });
+      assert.equal(
+        confirmedProviderFailure(transport.lastFailure),
+        'request_budget_reached'
+      );
+      assert.equal(transport.actualModel, 'fixture-model');
+      await assert.rejects(
+        transport.responses(Buffer.from(body)),
+        /account_gateway_inference_denied/u
+      );
+      assert.equal(requests, 2);
+      assert.equal(claims, 2);
+      assert.deepEqual(
+        settlements.map(
+          (value) => parseReviewModelDispatchSettlementV2(value).state
+        ),
+        ['completed', 'completed']
+      );
+      assert.equal(transport.releaseRetrySafeFailure(), false);
       return;
     }
     if (incompleteProbe) {
@@ -903,6 +945,7 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
     'dispatch-truncated-then-next',
     'dispatch-truncated-then-unknown',
     'truncated-turn-cap',
+    'dispatch-budget-reached',
   ] as const) {
     nodeTest(mode, { timeout: 20000 }, () => transientRetry(mode));
   }
@@ -1043,8 +1086,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 27\b/);
-      expect(result.stdout).toMatch(/# pass 27\b/);
+      expect(result.stdout).toMatch(/# tests 28\b/);
+      expect(result.stdout).toMatch(/# pass 28\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

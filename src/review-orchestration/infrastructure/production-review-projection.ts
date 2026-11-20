@@ -88,6 +88,8 @@ export function createProductionReviewProjectionBuilder(input: {
   readonly protocolLimits: ReviewProtocolLimits;
   readonly assignments: readonly ProductionWorkAssignmentFacts[];
   readonly uncoveredPaths: readonly string[];
+  /** Paths an accepted (partial) engine run of this slot never finished. */
+  readonly unfinishedPaths?: (workSlotId: string) => readonly string[];
   readonly uncoveredLifecycleTargetIds: readonly string[];
   readonly lifecycleInventory: CurrentLifecycleInventoryPort;
   readonly lifecycleVerification?: ProductionLifecycleVerificationPlan;
@@ -153,6 +155,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       readonly config: ReviewConfig;
       readonly assignments: readonly ProductionWorkAssignmentFacts[];
       readonly uncoveredPaths: readonly string[];
+      readonly unfinishedPaths?: (workSlotId: string) => readonly string[];
       readonly uncoveredLifecycleTargetIds: readonly string[];
       readonly limits: ReviewProjectionLimits;
       readonly lifecycleVerification?: ProductionLifecycleVerificationPlan;
@@ -284,6 +287,14 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     const reviewedFiles = new Set<string>();
     const policyExcludedFiles = new Set<string>();
     const coverageLimitations: string[] = [];
+    // Files a stopped engine run never finished stay unreviewed even though
+    // its slot produced accepted (partial) evidence.
+    const unfinishedPaths = (workSlotId: string): ReadonlySet<string> =>
+      new Set(
+        (this.input.unfinishedPaths?.(workSlotId) ?? []).map(
+          normalizeManifestPath
+        )
+      );
     const manifestByPath = new Map<
       string,
       { entry: ReviewCoverageManifestFile; required: boolean }
@@ -338,9 +349,16 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         }
         continue;
       }
+      const unfinished = unfinishedPaths(assignment.workSlotId);
       for (const path of accepted.coverageManifest.paths) {
         recordManifestFile(
-          promptCoverageToManifestFile(path),
+          unfinished.has(normalizeManifestPath(path.path))
+            ? {
+                path: path.path,
+                status: 'unreviewed',
+                reason: 'the review stopped before this file was finished',
+              }
+            : promptCoverageToManifestFile(path),
           assignment.required
         );
       }
@@ -397,7 +415,13 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
           `work_slot_investigation_inconclusive:${assignment.workSlotId}`
         );
       }
+      const unfinished = unfinishedPaths(assignment.workSlotId);
+      if (unfinished.size > 0)
+        coverageLimitations.push(
+          `work_slot_unfinished_paths:${assignment.workSlotId}`
+        );
       for (const path of manifest.paths) {
+        if (unfinished.has(normalizeManifestPath(path.path))) continue;
         if (path.kind === ReviewPromptPathCoverageKind.FullPatch) {
           reviewedFiles.add(path.path);
         } else if (path.kind === ReviewPromptPathCoverageKind.PolicyExcluded) {

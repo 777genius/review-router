@@ -1810,11 +1810,11 @@ describe('production review projection coverage', () => {
       {
         path: 'src/b.ts',
         status: 'unreviewed',
-        reason: 'the review stopped before this file was finished',
+        reason: 'the review did not finish this file',
       },
     ]);
     expect(envelope.publishing.summary.body).toContain(
-      '- <code>src/b.ts</code> - unreviewed — the review stopped before this file was finished'
+      '- <code>src/b.ts</code> - unreviewed — the review did not finish this file'
     );
   });
 

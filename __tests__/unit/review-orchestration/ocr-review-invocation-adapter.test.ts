@@ -1333,6 +1333,8 @@ describe('OcrReviewInvocationAdapter', () => {
       'provider_warning',
       'unverified_native_span',
     ]);
+    // Every group finished: no file is reported as unfinished.
+    expect(adapter.unfinishedPaths(workSlot.workSlotId)).toEqual([]);
     expect(
       JSON.parse(observation.payloadCanonicalJson).normalizedFindings
     ).toEqual([

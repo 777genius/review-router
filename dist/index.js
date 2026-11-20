@@ -132843,7 +132843,17 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       const contentType3 = response.headers["content-type"] ?? "";
       const requestRef = currentRequestRef;
       const isStream = status === 200 && /^text\/event-stream(?:\s*;.*)?$/i.test(contentType3);
-      if (!isStream) this.inferenceDenied = true;
+      if (!isStream) {
+        this.inferenceDenied = true;
+        if (this.knownStop) {
+          this.knownStop = false;
+          this.failure = {
+            code: "relay_unknown",
+            effect: "effect_unknown",
+            ...requestRef ? { requestRef } : {}
+          };
+        }
+      }
       if (status === 200 && !isStream)
         throw new Error("account_gateway_invalid_stream");
       let count2 = 0;
@@ -241977,7 +241987,7 @@ var ProductionReviewProjectionCommandFactory = class {
           unfinished.has(normalizeManifestPath(path40.path)) ? {
             path: path40.path,
             status: "unreviewed",
-            reason: "the review stopped before this file was finished"
+            reason: "the review did not finish this file"
           } : promptCoverageToManifestFile(path40),
           assignment.required
         );

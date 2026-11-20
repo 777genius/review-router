@@ -213025,7 +213025,7 @@ var ProductionReviewProjectionCommandFactory = class {
           unfinished.has(normalizeManifestPath(path19.path)) ? {
             path: path19.path,
             status: "unreviewed",
-            reason: "the review stopped before this file was finished"
+            reason: "the review did not finish this file"
           } : promptCoverageToManifestFile(path19),
           assignment.required
         );

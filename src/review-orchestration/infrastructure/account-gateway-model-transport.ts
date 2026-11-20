@@ -887,7 +887,19 @@ export class AccountGatewayModelTransport {
       const isStream =
         status === 200 && /^text\/event-stream(?:\s*;.*)?$/i.test(contentType);
       // Every final non-stream response remains terminal to this consumer.
-      if (!isStream) this.inferenceDenied = true;
+      if (!isStream) {
+        this.inferenceDenied = true;
+        // Its body is read later; until then an earlier known stop must not
+        // keep attribution for a response whose effect is not known yet.
+        if (this.knownStop) {
+          this.knownStop = false;
+          this.failure = {
+            code: 'relay_unknown',
+            effect: 'effect_unknown',
+            ...(requestRef ? { requestRef } : {}),
+          };
+        }
+      }
       if (status === 200 && !isStream)
         throw new Error('account_gateway_invalid_stream');
       let count = 0;

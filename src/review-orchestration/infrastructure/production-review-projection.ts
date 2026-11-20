@@ -356,7 +356,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
             ? {
                 path: path.path,
                 status: 'unreviewed',
-                reason: 'the review stopped before this file was finished',
+                reason: 'the review did not finish this file',
               }
             : promptCoverageToManifestFile(path),
           assignment.required

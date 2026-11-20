@@ -410,11 +410,15 @@ authorized HEAD content costs only its own finding the inline anchor and
 suggested patch: the finding stays at file level, like a finding without a
 quote or with a grounded off-diff quote. When inspection and path coverage are
 otherwise intact, the slot carries only the advisory `provider_warning`, so a
-fully covered review is not reported as incomplete. When another degradation
-(engine phase failure, skipped finding, uncovered path, truncated turn) already
-makes the slot partial, the projection still explains the unverified quote.
-The flag keeps ranking the observation below grounded evidence for reuse. This
-does not relax provider, source, path or coverage gates, and inline anchors and
+fully covered review is not reported as incomplete and its verified inline
+findings and lifecycle changes are published as for any complete review. When
+another degradation (any engine stop or phase failure other than a preserved
+filter decision, unknown severity, skipped finding, uncovered path, truncated
+turn) already makes the slot partial, the projection still explains the
+unverified quote. Such an advisory observation can satisfy an exact-revision
+(T0) reuse lookup, because the SaaS guard denies only OCR observations with
+`context_inspection_incomplete`; the flag still ranks it below grounded
+evidence. Provider, source and path gates are unchanged, and inline anchors and
 suggested patches still require a unique verified span.
 
 ### Unknown review-request outcomes

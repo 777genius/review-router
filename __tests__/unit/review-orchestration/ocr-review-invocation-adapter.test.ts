@@ -1347,6 +1347,77 @@ describe('OcrReviewInvocationAdapter', () => {
     ]);
   });
 
+  it('keeps context_inspection_incomplete when an unverified span shares a truncated turn', async () => {
+    // Dispatch sees no effect yet; acceptance sees the output-limit turn.
+    let effectReads = 0;
+    const { bridge, requests } = bridgeFixture({
+      effectFacts: () =>
+        effectReads++ === 0
+          ? { effect: 'none' }
+          : { effect: 'completed', code: 'output_truncated' },
+    });
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunnerWriting(
+        nativeResultBody({
+          comments: [
+            {
+              path: 'calc.ts',
+              content: 'Missing authorization check.',
+              severity: 'high',
+              existing_code: 'removed authorization check',
+            },
+          ],
+        })
+      ).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+      'unverified_native_span',
+    ]);
+  });
+
+  it('keeps an unverified span advisory next to a preserved filter decision', async () => {
+    const body = JSON.parse(
+      nativeResultBody({
+        comments: [
+          {
+            path: 'calc.ts',
+            content: 'Missing authorization check.',
+            severity: 'high',
+            existing_code: 'removed authorization check',
+          },
+        ],
+      })
+    ) as Record<string, unknown>;
+    const outcome = body.reviewrouter_outcome as {
+      groups: Record<string, unknown>[];
+    };
+    (outcome.groups[0].phases as Record<string, unknown>).filter = {
+      state: 'failed',
+      reason: 'invalid_arguments',
+    };
+    outcome.groups[0].filter_decision_valid = false;
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunnerWriting(JSON.stringify(body)).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([
+      'provider_warning',
+      'unverified_native_span',
+    ]);
+  });
+
   it('keeps context_inspection_incomplete when an unverified span shares a skipped finding', async () => {
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;

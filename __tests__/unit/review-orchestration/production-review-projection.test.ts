@@ -1741,6 +1741,149 @@ describe('production review projection coverage', () => {
     });
   });
 
+  it('never counts files of a stopped engine run as reviewed', async () => {
+    // A partial OCR run (request allowance or output-limit stop) is accepted
+    // for the groups it finished; before, the summary said "N/N reviewed".
+    const twoFilePr = {
+      ...pr,
+      files: [
+        ...pr.files,
+        {
+          filename: 'src/b.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -1 +1 @@\n+more',
+        },
+      ],
+    };
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr: twoFilePr,
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [
+        {
+          workSlotId: 'slot-1',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          required: true,
+          filePaths: ['src/a.ts', 'src/b.ts'],
+        },
+      ],
+      uncoveredPaths: [],
+      unfinishedPaths: (workSlotId) =>
+        workSlotId === 'slot-1' ? ['src/b.ts'] : [],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const coverageManifest = createReviewPromptCoverageManifest({
+      workSlotId: 'slot-1',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: ['src/a.ts', 'src/b.ts'],
+      pathCoverage: ['src/a.ts', 'src/b.ts'].map((path, index) => ({
+        path,
+        kind: ReviewPromptPathCoverageKind.FullPatch,
+        contentHash: String(index + 7).repeat(64),
+      })),
+    });
+    const projection = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence('slot-1', coverageManifest, [
+          'context_inspection_incomplete',
+          'provider_warning',
+        ]),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
+    expect(envelope.coverage).toMatchObject({
+      state: 'partial',
+      totalFiles: 2,
+      reviewedFiles: 1,
+      unreviewedFiles: 1,
+    });
+    expect(envelope.coverage.files).toEqual([
+      { path: 'src/a.ts', status: 'full' },
+      {
+        path: 'src/b.ts',
+        status: 'unreviewed',
+        reason: 'the review did not finish this file',
+      },
+    ]);
+    expect(envelope.publishing.summary.body).toContain(
+      '- <code>src/b.ts</code> - unreviewed — the review did not finish this file'
+    );
+  });
+
+  it('keeps a file one required lane did not finish out of the reviewed count', async () => {
+    // Two required lanes cover the same files; the second one finished
+    // src/b.ts, but the first did not, and a required gap wins.
+    const twoFilePr = {
+      ...pr,
+      files: [
+        ...pr.files,
+        {
+          filename: 'src/b.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -1 +1 @@\n+more',
+        },
+      ],
+    };
+    const lane = (workSlotId: string) => ({
+      workSlotId,
+      taskKind: ReviewTaskKind.FindingDiscovery,
+      providerKind: ReviewExecutionProviderKind.Codex,
+      required: true,
+      filePaths: ['src/a.ts', 'src/b.ts'],
+    });
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr: twoFilePr,
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [lane('slot-1'), lane('slot-2')],
+      uncoveredPaths: [],
+      unfinishedPaths: (workSlotId) =>
+        workSlotId === 'slot-1' ? ['src/b.ts'] : [],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const manifest = (workSlotId: string) =>
+      createReviewPromptCoverageManifest({
+        workSlotId,
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+        assignedPaths: ['src/a.ts', 'src/b.ts'],
+        pathCoverage: ['src/a.ts', 'src/b.ts'].map((path, index) => ({
+          path,
+          kind: ReviewPromptPathCoverageKind.FullPatch,
+          contentHash: String(index + 7).repeat(64),
+        })),
+      });
+    const projection = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence('slot-1', manifest('slot-1'), [
+          'context_inspection_incomplete',
+          'provider_warning',
+        ]),
+        acceptedEvidence('slot-2', manifest('slot-2')),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
+    expect(envelope.coverage).toMatchObject({
+      state: 'partial',
+      reviewedFiles: 1,
+      unreviewedFiles: 1,
+    });
+  });
+
   it('publishes a per-file coverage manifest in the partial summary body', async () => {
     const partialPr = {
       ...pr,

@@ -260,7 +260,11 @@ type ProbeMode =
   | 'dispatch-incomplete-lifecycle'
   | 'dispatch-truncated-then-next'
   | 'dispatch-truncated-then-unknown'
-  | 'truncated-turn-cap';
+  | 'truncated-turn-cap'
+  | 'dispatch-budget-reached'
+  | 'remote-stop-code-untrusted'
+  | 'remote-budget-code-untrusted'
+  | 'dispatch-truncated-then-502';
 
 async function transientRetry(mode: ProbeMode): Promise<void> {
   const root = process.env.RR_TRANSIENT_RETRY_PROBE_ROOT;
@@ -321,6 +325,32 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         }
         if (mode === 'dispatch-truncated-then-unknown' && requests === 2) {
           request.socket.destroy();
+          return;
+        }
+        if (
+          (mode === 'remote-stop-code-untrusted' ||
+            mode === 'remote-budget-code-untrusted') &&
+          requests === 2
+        ) {
+          reply.writeHead(502, {
+            'content-type': 'application/json',
+            'x-reviewrouter-request-ref': 'synthetic-remote-stop',
+          });
+          reply.end(
+            mode === 'remote-stop-code-untrusted'
+              ? '{"error":{"code":"output_truncated","effect":"completed"}}'
+              : '{"error":{"code":"model_dispatch_budget_exhausted","effect":"not_dispatched"}}'
+          );
+          return;
+        }
+        if (mode === 'dispatch-truncated-then-502' && requests === 2) {
+          reply.writeHead(502, {
+            'content-type': 'application/json',
+            'x-reviewrouter-request-ref': 'synthetic-after-stop',
+          });
+          reply.end(
+            '{"error":{"code":"upstream_failure","effect":"effect_unknown"}}'
+          );
           return;
         }
         if (mode === 'mid-stream-terminal') {
@@ -643,6 +673,37 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
       );
       return;
     }
+    if (mode === 'dispatch-truncated-then-502') {
+      // A known stop never covers a later non-stream response: attribution is
+      // withdrawn as soon as the response arrives, before its body is read.
+      const first = await bounded(
+        transport.responses(Buffer.from(body)),
+        'stop-first'
+      );
+      await bounded(drain(first.body), 'stop-first-drain');
+      await transport.drainSettlements();
+      assert.equal(transport.lastFailure?.code, 'output_truncated');
+      assert.equal(transport.actualModel, 'fixture-model');
+      const second = await bounded(
+        transport.responses(Buffer.from(nextBody)),
+        'stop-second'
+      );
+      assert.equal(second.httpStatus, 502);
+      assert.equal(transport.actualModel, undefined);
+      assert.notEqual(transport.lastFailure?.code, 'output_truncated');
+      await bounded(drain(second.body), 'stop-second-drain');
+      await transport.drainSettlements();
+      assert.equal(transport.lastFailure?.code, 'upstream_failure');
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      assert.equal(transport.actualModel, undefined);
+      assert.deepEqual(
+        settlements.map(
+          (value) => parseReviewModelDispatchSettlementV2(value).state
+        ),
+        ['completed', 'effect_unknown']
+      );
+      return;
+    }
     if (truncatedFirst) {
       // One runaway model turn ends only its own request. Before, the whole
       // consumer was fenced and a long OCR review lost every later group.
@@ -702,7 +763,9 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
       return;
     }
     if (truncatedCap) {
-      // A few runaway turns are survived; the next one fences as before.
+      // A few runaway turns are survived; the next one fences as before. It is
+      // still a known completed stop, so the answered model stays attributable
+      // and OCR keeps the groups it finished (a partial review).
       for (let turn = 1; turn <= 4; turn++) {
         const response = await bounded(
           transport.responses(Buffer.from(turnBody(turn))),
@@ -711,16 +774,88 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         await bounded(drain(response.body), `cap-drain-${turn}`);
         await transport.drainSettlements();
         assert.equal(transport.lastFailure?.code, 'output_truncated');
-        assert.equal(
-          transport.actualModel,
-          turn < 4 ? 'fixture-model' : undefined
-        );
+        assert.equal(transport.actualModel, 'fixture-model');
       }
       await assert.rejects(
         transport.responses(Buffer.from(turnBody(5))),
         /account_gateway_inference_denied/u
       );
       assert.equal(requests, 4);
+      return;
+    }
+    if (mode === 'dispatch-budget-reached') {
+      // The capability allows 2 requests. Both complete; the third claim is
+      // refused before it leaves the runner. Inference stays fenced, but the
+      // answered model stays attributable so OCR keeps the finished groups.
+      for (let turn = 1; turn <= 2; turn++) {
+        const response = await bounded(
+          transport.responses(Buffer.from(body)),
+          `budget-turn-${turn}`
+        );
+        await bounded(drain(response.body), `budget-drain-${turn}`);
+        await transport.drainSettlements();
+      }
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'budget-refused'),
+        (error: unknown) =>
+          (error as { code?: unknown }).code ===
+          'model_dispatch_budget_exhausted'
+      );
+      assert.deepEqual(transport.lastFailure, {
+        code: 'model_dispatch_budget_exhausted',
+        effect: 'not_dispatched',
+      });
+      assert.equal(
+        confirmedProviderFailure(transport.lastFailure),
+        'request_budget_reached'
+      );
+      assert.equal(transport.actualModel, 'fixture-model');
+      await assert.rejects(
+        transport.responses(Buffer.from(body)),
+        /account_gateway_inference_denied/u
+      );
+      assert.equal(requests, 2);
+      assert.equal(claims, 2);
+      assert.deepEqual(
+        settlements.map(
+          (value) => parseReviewModelDispatchSettlementV2(value).state
+        ),
+        ['completed', 'completed']
+      );
+      assert.equal(transport.releaseRetrySafeFailure(), false);
+      // Cancellation still withdraws attribution after a known stop.
+      transport.cancelInference();
+      assert.equal(transport.actualModel, undefined);
+      return;
+    }
+    if (
+      mode === 'remote-stop-code-untrusted' ||
+      mode === 'remote-budget-code-untrusted'
+    ) {
+      // A response body that names a local stop proves nothing: the fact stays
+      // an unknown effect and attribution is withdrawn as for any fence.
+      const first = await bounded(
+        transport.responses(Buffer.from(body)),
+        'remote-stop-first'
+      );
+      await bounded(drain(first.body), 'remote-stop-first-drain');
+      await transport.drainSettlements();
+      assert.equal(transport.actualModel, 'fixture-model');
+      const second = await bounded(
+        transport.responses(Buffer.from(body)),
+        'remote-stop-second'
+      );
+      assert.equal(second.httpStatus, 502);
+      await bounded(drain(second.body), 'remote-stop-second-drain');
+      await transport.drainSettlements();
+      assert.equal(transport.lastFailure?.code, 'relay_unknown');
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      assert.equal(
+        confirmedProviderFailure(transport.lastFailure),
+        'request_outcome_unknown'
+      );
+      assert.equal(transport.actualModel, undefined);
+      assert.equal(requests, 2);
       return;
     }
     if (incompleteProbe) {
@@ -903,6 +1038,10 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
     'dispatch-truncated-then-next',
     'dispatch-truncated-then-unknown',
     'truncated-turn-cap',
+    'dispatch-budget-reached',
+    'remote-stop-code-untrusted',
+    'remote-budget-code-untrusted',
+    'dispatch-truncated-then-502',
   ] as const) {
     nodeTest(mode, { timeout: 20000 }, () => transientRetry(mode));
   }
@@ -1043,8 +1182,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 27\b/);
-      expect(result.stdout).toMatch(/# pass 27\b/);
+      expect(result.stdout).toMatch(/# tests 31\b/);
+      expect(result.stdout).toMatch(/# pass 31\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

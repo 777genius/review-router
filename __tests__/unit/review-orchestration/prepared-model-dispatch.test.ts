@@ -275,9 +275,11 @@ it.each([32, 128])(
       code: 'model_dispatch_budget_exhausted',
       source: 'api_denial',
     });
+    // The refused claim never left the runner: a known stop, not an unknown
+    // effect. Inference stays fenced below; nothing is released.
     expect(transport.lastFailure).toEqual({
       code: 'model_dispatch_budget_exhausted',
-      effect: 'effect_unknown',
+      effect: 'not_dispatched',
     });
     expect(diagnostics).toEqual([
       expect.objectContaining({

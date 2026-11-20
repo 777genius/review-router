@@ -289,6 +289,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     const coverageLimitations: string[] = [];
     // Files a stopped engine run never finished stay unreviewed even though
     // its slot produced accepted (partial) evidence.
+    const requiredUnfinished = new Set<string>();
     const unfinishedPaths = (workSlotId: string): ReadonlySet<string> =>
       new Set(
         (this.input.unfinishedPaths?.(workSlotId) ?? []).map(
@@ -420,6 +421,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         coverageLimitations.push(
           `work_slot_unfinished_paths:${assignment.workSlotId}`
         );
+      for (const path of unfinished) requiredUnfinished.add(path);
       for (const path of manifest.paths) {
         if (unfinished.has(normalizeManifestPath(path.path))) continue;
         if (path.kind === ReviewPromptPathCoverageKind.FullPatch) {
@@ -436,6 +438,11 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         );
       }
     }
+    // Like the manifest, a required gap wins: another lane that finished the
+    // same file does not make it reviewed.
+    for (const path of [...reviewedFiles])
+      if (requiredUnfinished.has(normalizeManifestPath(path)))
+        reviewedFiles.delete(path);
     const completeLoad =
       this.input.pr.loadCompleteness?.status !==
       PullRequestLoadStatus.Truncated;

@@ -241936,6 +241936,7 @@ var ProductionReviewProjectionCommandFactory = class {
     const reviewedFiles = /* @__PURE__ */ new Set();
     const policyExcludedFiles = /* @__PURE__ */ new Set();
     const coverageLimitations = [];
+    const requiredUnfinished = /* @__PURE__ */ new Set();
     const unfinishedPaths = (workSlotId) => new Set(
       (this.input.unfinishedPaths?.(workSlotId) ?? []).map(
         normalizeManifestPath
@@ -242044,6 +242045,7 @@ var ProductionReviewProjectionCommandFactory = class {
         coverageLimitations.push(
           `work_slot_unfinished_paths:${assignment.workSlotId}`
         );
+      for (const path40 of unfinished) requiredUnfinished.add(path40);
       for (const path40 of manifest.paths) {
         if (unfinished.has(normalizeManifestPath(path40.path))) continue;
         if (path40.kind === "full_patch" /* FullPatch */) {
@@ -242060,6 +242062,9 @@ var ProductionReviewProjectionCommandFactory = class {
         );
       }
     }
+    for (const path40 of [...reviewedFiles])
+      if (requiredUnfinished.has(normalizeManifestPath(path40)))
+        reviewedFiles.delete(path40);
     const completeLoad = this.input.pr.loadCompleteness?.status !== "truncated" /* Truncated */;
     const complete = requiredExhaustedWorkSlotIds.length === 0 && completeLoad && this.input.uncoveredPaths.length === 0 && (this.input.lifecycleVerification !== void 0 || this.input.uncoveredLifecycleTargetIds.length === 0) && requiredAssignments.every(
       (assignment) => evidence.has(assignment.workSlotId)

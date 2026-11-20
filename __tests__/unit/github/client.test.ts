@@ -1,5 +1,23 @@
+import * as core from '../../../src/actions/core';
 import { GitHubClient } from '../../../src/github/client';
 import nock from 'nock';
+
+function waits(sleep: jest.Mock): number[] {
+  return sleep.mock.calls.map(([delayMs]) => delayMs as number);
+}
+
+// Each retry waits a jittered 50-100% of its scheduled delay.
+function expectJitteredWaits(
+  sleep: jest.Mock,
+  scheduledMs: readonly number[]
+): void {
+  const observed = waits(sleep);
+  expect(observed).toHaveLength(scheduledMs.length);
+  observed.forEach((delayMs, index) => {
+    expect(delayMs).toBeGreaterThanOrEqual(scheduledMs[index] / 2);
+    expect(delayMs).toBeLessThanOrEqual(scheduledMs[index]);
+  });
+}
 
 describe('GitHubClient', () => {
   const mockToken = 'TEST_TOKEN';
@@ -130,8 +148,7 @@ describe('GitHubClient', () => {
       ).resolves.toMatchObject({ status: 200 });
       expect(tokenProvider.getToken).toHaveBeenCalledTimes(1);
       expect(tokenProvider.refreshToken).not.toHaveBeenCalled();
-      expect(sleep).toHaveBeenNthCalledWith(1, 250);
-      expect(sleep).toHaveBeenNthCalledWith(2, 1_000);
+      expectJitteredWaits(sleep, [1_000, 2_000]);
       expect(requests.isDone()).toBe(true);
     });
 
@@ -149,7 +166,167 @@ describe('GitHubClient', () => {
       await expect(
         client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
       ).resolves.toMatchObject({ status: 200 });
-      expect(sleep).toHaveBeenCalledWith(250);
+      expectJitteredWaits(sleep, [1_000]);
+      expect(requests.isDone()).toBe(true);
+    });
+
+    it('gives up after three retries with the last GitHub error', async () => {
+      const requests = nock('https://api.github.com')
+        .get('/repos/owner/repo')
+        .times(4)
+        .reply(502, { message: 'Bad gateway' });
+      const sleep = jest.fn(async () => undefined);
+      const client = new GitHubClient(mockToken, { sleep });
+
+      await expect(
+        client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+      ).rejects.toMatchObject({ status: 502 });
+      expectJitteredWaits(sleep, [1_000, 2_000, 4_000]);
+      expect(requests.isDone()).toBe(true);
+    });
+
+    it('retries a failed connection without logging credentials', async () => {
+      const info = jest.spyOn(core, 'info').mockImplementation(() => undefined);
+      const requests = nock('https://api.github.com', {
+        reqheaders: { authorization: 'token TEST_TOKEN' },
+      })
+        .get('/repos/owner/repo')
+        .replyWithError({ code: 'ECONNRESET', message: 'socket hang up' })
+        .get('/repos/owner/repo')
+        .reply(200, { id: 1, name: 'repo' });
+      const sleep = jest.fn(async () => undefined);
+      const client = new GitHubClient(mockToken, { sleep });
+
+      await expect(
+        client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+      ).resolves.toMatchObject({ status: 200 });
+      expectJitteredWaits(sleep, [1_000]);
+      expect(requests.isDone()).toBe(true);
+      const logged = info.mock.calls.map(([message]) => message).join('\n');
+      expect(logged).toMatch(/^GitHub read retry 1\/3 in \d+ ms after network/);
+      expect(logged).not.toContain(mockToken);
+      expect(logged).not.toContain('socket hang up');
+      expect(logged).not.toContain('/repos/');
+      info.mockRestore();
+    });
+
+    it.each([
+      ['a rate limit without an announced wait', 429, {}],
+      [
+        'a secondary rate limit without an announced wait',
+        403,
+        { 'X-RateLimit-Remaining': '12' },
+      ],
+      ['a rate limit with a blank Retry-After', 429, { 'Retry-After': ' ' }],
+      [
+        'a rate limit with a negative Retry-After',
+        429,
+        { 'Retry-After': '-5' },
+      ],
+      [
+        'an exhausted rate limit whose reset is past the read window',
+        403,
+        {
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(Math.ceil(Date.now() / 1_000) + 3_600),
+        },
+      ],
+      [
+        'an exhausted rate limit with a blank reset',
+        403,
+        { 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '' },
+      ],
+      ['a missing resource', 404, {}],
+      ['a request timeout', 408, {}],
+      ['a validation failure', 422, {}],
+    ])(
+      'refuses %s at once',
+      async (_name, status, headers: Record<string, string>) => {
+        const request = nock('https://api.github.com')
+          .get('/repos/owner/repo')
+          .reply(status, { message: 'secondary rate limit' }, headers);
+        const sleep = jest.fn(async () => undefined);
+        const client = new GitHubClient(mockToken, { sleep });
+
+        await expect(
+          client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+        ).rejects.toMatchObject({ status });
+        expect(sleep).not.toHaveBeenCalled();
+        expect(request.isDone()).toBe(true);
+      }
+    );
+
+    it('waits for an exhausted primary rate limit only when its reset fits the read window', async () => {
+      const resetAt = Math.ceil(Date.now() / 1_000) + 3;
+      const requests = nock('https://api.github.com')
+        .get('/repos/owner/repo')
+        .reply(
+          403,
+          { message: 'API rate limit exceeded' },
+          {
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(resetAt),
+          }
+        )
+        .get('/repos/owner/repo')
+        .reply(200, { id: 1, name: 'repo' });
+      const sleep = jest.fn(async () => undefined);
+      const client = new GitHubClient(mockToken, { sleep });
+
+      await expect(
+        client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+      ).resolves.toMatchObject({ status: 200 });
+      const [wait] = waits(sleep);
+      expect(wait).toBeGreaterThan(2_000);
+      expect(wait).toBeLessThanOrEqual(4_000);
+      expect(requests.isDone()).toBe(true);
+    });
+
+    it('honors a Retry-After given as an HTTP date', async () => {
+      const retryAt = new Date(Date.now() + 3_000).toUTCString();
+      const requests = nock('https://api.github.com')
+        .get('/repos/owner/repo')
+        .reply(
+          503,
+          { message: 'Service unavailable' },
+          { 'Retry-After': retryAt }
+        )
+        .get('/repos/owner/repo')
+        .reply(200, { id: 1, name: 'repo' });
+      const sleep = jest.fn(async () => undefined);
+      const client = new GitHubClient(mockToken, { sleep });
+
+      await expect(
+        client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+      ).resolves.toMatchObject({ status: 200 });
+      const [wait] = waits(sleep);
+      // HTTP dates have whole-second precision.
+      expect(wait).toBeGreaterThan(1_000);
+      expect(wait).toBeLessThanOrEqual(3_000);
+      expect(requests.isDone()).toBe(true);
+    });
+
+    it('keeps every retry of one read inside the shared read window', async () => {
+      let now = Date.now();
+      const clock = jest.spyOn(Date, 'now').mockImplementation(() => now);
+      const requests = nock('https://api.github.com')
+        .get('/repos/owner/repo')
+        .times(3)
+        .reply(503, { message: 'Service unavailable' }, { 'Retry-After': '6' });
+      const sleep = jest.fn(async (delayMs: number) => {
+        now += delayMs;
+      });
+      const client = new GitHubClient(mockToken, { sleep });
+
+      try {
+        await expect(
+          client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+        ).rejects.toMatchObject({ status: 503 });
+      } finally {
+        clock.mockRestore();
+      }
+      // Two 6 s waits fit the 15 s window, a third would end after it.
+      expect(waits(sleep)).toEqual([6_000, 6_000]);
       expect(requests.isDone()).toBe(true);
     });
 
@@ -175,7 +352,7 @@ describe('GitHubClient', () => {
       await expect(
         client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
       ).resolves.toMatchObject({ status: 200 });
-      expect(sleep).toHaveBeenCalledWith(250);
+      expectJitteredWaits(sleep, [1_000]);
       expect(requests.isDone()).toBe(true);
     });
 

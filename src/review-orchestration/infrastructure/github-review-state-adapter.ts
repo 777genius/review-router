@@ -1,5 +1,8 @@
 import { createHash } from 'crypto';
-import { GitHubClient } from '../../github/client';
+import {
+  GitHubClient,
+  isTemporaryGitHubReadFailure,
+} from '../../github/client';
 import {
   commandLedgerWatermark,
   type LoadedLedger,
@@ -98,7 +101,7 @@ export class GitHubReviewRevisionGuard implements ReviewRevisionGuardPort {
     try {
       return await read();
     } catch (error) {
-      if (isTransientGitHubReadError(error)) {
+      if (isTemporaryGitHubReadFailure(error)) {
         throw new Error('review_action_v2_revision_guard_unavailable', {
           cause: error,
         });
@@ -419,44 +422,6 @@ function requireThreadStateHash(value: unknown): string {
   return value;
 }
 
-const TRANSIENT_GITHUB_NETWORK_ERROR_CODES = [
-  'EAI_AGAIN',
-  'ECONNABORTED',
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'ENETDOWN',
-  'ENETUNREACH',
-  'ENOTFOUND',
-  'ETIMEDOUT',
-  'UND_ERR_CONNECT_TIMEOUT',
-  'UND_ERR_HEADERS_TIMEOUT',
-  'UND_ERR_SOCKET',
-] as const;
-
-function isTransientGitHubReadError(error: unknown): boolean {
-  const candidate = error as {
-    readonly status?: unknown;
-    readonly message?: unknown;
-  };
-  const status =
-    typeof candidate?.status === 'number' ? candidate.status : undefined;
-  if (
-    status === 408 ||
-    status === 429 ||
-    (status !== undefined && status >= 500 && status <= 599)
-  ) {
-    return true;
-  }
-  if (
-    status === 403 &&
-    typeof candidate.message === 'string' &&
-    /rate limit|secondary rate limit|abuse detection/i.test(candidate.message)
-  ) {
-    return true;
-  }
-  return hasTransientNetworkErrorCode(error);
-}
-
 function isGitHubHttpReadError(error: unknown): boolean {
   const status = (error as { readonly status?: unknown })?.status;
   return typeof status === 'number' && status >= 400 && status <= 599;
@@ -469,40 +434,6 @@ function isRevisionFactValidationError(error: unknown): boolean {
       error.message
     )
   );
-}
-
-function hasTransientNetworkErrorCode(
-  error: unknown,
-  visited = new Set<object>(),
-  depth = 0
-): boolean {
-  if (!error || typeof error !== 'object' || depth > 4 || visited.has(error)) {
-    return false;
-  }
-  visited.add(error);
-  const code = readOwnDataProperty(error, 'code');
-  if (
-    typeof code === 'string' &&
-    TRANSIENT_GITHUB_NETWORK_ERROR_CODES.some(
-      (transientCode) => transientCode === code
-    )
-  ) {
-    return true;
-  }
-  const cause = readOwnDataProperty(error, 'cause');
-  if (hasTransientNetworkErrorCode(cause, visited, depth + 1)) return true;
-  const errors = readOwnDataProperty(error, 'errors');
-  return (
-    Array.isArray(errors) &&
-    errors.some((nested) =>
-      hasTransientNetworkErrorCode(nested, visited, depth + 1)
-    )
-  );
-}
-
-function readOwnDataProperty(value: object, property: string): unknown {
-  const descriptor = Object.getOwnPropertyDescriptor(value, property);
-  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
 }
 
 function canonicalJson(value: unknown): string {

@@ -247,9 +247,8 @@ export function buildOcrControlledRuleText(input: {
   ].join('\n');
   return `${JSON.stringify(
     {
-      merge_system_rule: true,
       include: [...input.assignedPaths].sort(),
-      rules: [{ id: 'reviewrouter-managed-v1', content: rule }],
+      rules: [{ path: '**', rule, merge_system_rule: true }],
     },
     null,
     2
@@ -266,7 +265,7 @@ export function buildOcrSkillsControlledRuleText(input: {
   if (input.reviewSkills.kind !== 'captured')
     throw new Error('review_skills_attachment_required');
   const legacy = JSON.parse(buildOcrControlledRuleText(input)) as {
-    rules: { content: string }[];
+    rules: { rule: string }[];
   };
   const paths = [...new Set(input.assignedPaths)].sort();
   return `${JSON.stringify(
@@ -276,7 +275,7 @@ export function buildOcrSkillsControlledRuleText(input: {
         (item) => ({
           path: item.path,
           rule: [
-            legacy.rules[0].content,
+            legacy.rules[0].rule,
             `Captured review skills: ${input.reviewSkills.kind === 'captured' ? input.reviewSkills.capture.digest : ''}`,
             `Materialized review skills: ${input.reviewSkills.kind === 'captured' ? input.reviewSkills.bundle.executionDigest : ''}`,
             'Text-only instructions for this exact reviewed path; no additional tool, network, execution or file authority.',
@@ -308,9 +307,9 @@ function appendOcrReviewMemory(ruleText: string, memory: string): string {
     throw new Error('review_memory_ocr_rule_invalid');
   }
   document.rules = document.rules.map((rule) => {
-    // Historical no-Skills bytes use `content`, which the native parser ignores.
-    // Translate only when attaching memory; memory-free legacy identities stay
-    // unchanged. A native catch-all rule keeps the existing built-ins additive.
+    // Fresh controlled rules already use the additive native shape. Retain
+    // translation for historical caller-supplied `content` rules when attaching
+    // memory; native rules keep their existing path and built-in policy.
     const nativeRule =
       typeof rule.rule === 'string'
         ? rule

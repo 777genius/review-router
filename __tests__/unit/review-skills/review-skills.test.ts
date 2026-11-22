@@ -415,12 +415,12 @@ describe('captured text-only review skills', () => {
     expect(legacy.prompt).not.toContain('CAPTURED REVIEW SKILLS');
   });
 
-  it('preserves historical rr.3 policy/semantic identity and uses a separate corrected supporting branch', () => {
+  it('gives fresh native baseline rules a new identity and retains exact Skills rules', () => {
     const text = buildOcrControlledRuleText({
       language: 'en',
       assignedPaths: ['z.ts', 'src/Foo.ts'],
     });
-    expect(createHash('sha256').update(text).digest('hex')).toBe(
+    expect(createHash('sha256').update(text).digest('hex')).not.toBe(
       '0bed96d046fddbe2cb7d868e68acbd0b0ad3799bbebee41462b0ca9d19b0ab18'
     );
     const semantic = buildOcrSemanticInvocationPreimage({
@@ -441,7 +441,7 @@ describe('captured text-only review skills', () => {
       retryPolicyVersion: 'ocr-managed-no-replay.v1',
       attemptBudget: 1,
     });
-    expect(createHash('sha256').update(semantic).digest('hex')).toBe(
+    expect(createHash('sha256').update(semantic).digest('hex')).not.toBe(
       '482319de1123a1cf3552838e72778dce1fe3bfbf531cee53d8b5f11a2d635cc5'
     );
     for (const capture of [captured([]), captured()]) {

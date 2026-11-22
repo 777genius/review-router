@@ -45,14 +45,16 @@ audience before capture and validates current receipt eligibility at each task's
 authoritative grant. Recovery retains the admitted identity instead of fetching
 new memory for an old execution.
 
-OCR uses its native `path`/`rule` JSON entries. Captured Skills keep their exact
-path rules and built-ins. When a retained no-Skills profile receives memory,
-the Action translates its historical `content` rule to an additive native
-catch-all; this changes rule content, not the legacy selected file inventory.
-Memory-free historical rule bytes and invocation identities remain unchanged.
-The required real-CLI fixture verifies memory in actual main model requests
-with and without Skills. Deterministic model responses prove input delivery,
-not that a real model follows every remembered convention.
+Fresh OCR rules use native `path`/`rule` JSON entries, including an additive
+catch-all for no-Skills profiles without memory. Captured Skills keep their
+exact path rules and built-ins. Memory appends its frozen text to native rules;
+historical caller-supplied `content` rules are still translated when memory is
+attached. Selected file inventory is unchanged. Fresh rule bytes participate
+in invocation identity; already admitted manifests are not rewritten or replayed.
+The required real-CLI fixtures verify the managed policy and built-ins in actual
+main/plan requests without memory, including an empty captured Skills profile,
+and memory delivery with and without Skills. Deterministic model responses
+prove input delivery, not that a real model follows every supplied instruction.
 
 Admission uses a two-second client transport deadline around the separately
 bounded server decision. Failed checks discard the frozen snapshot without retry

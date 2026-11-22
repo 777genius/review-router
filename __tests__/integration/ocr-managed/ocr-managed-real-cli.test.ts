@@ -907,6 +907,68 @@ describeHarness(
       expect(classifyOcrReviewOutcome(native.outcome).partial).toBe(false);
     }, 120_000);
 
+    it.each(['legacy', 'captured-empty'] as const)(
+      'delivers managed policy and built-ins without memory (%s)',
+      async (skillsKind) => {
+        const repo = path.join(workspace, `baseline-policy-${skillsKind}`);
+        fs.mkdirSync(repo);
+        git(repo, 'init', '-q');
+        fs.writeFileSync(path.join(repo, 'calc.ts'), 'export const value = 1;\n');
+        git(repo, 'add', '.');
+        git(repo, 'commit', '-qm', 'base');
+        const baseSha = git(repo, 'rev-parse', 'HEAD').trim();
+        fs.writeFileSync(
+          path.join(repo, 'calc.ts'),
+          Array.from(
+            { length: 80 },
+            (_, index) => `export const value${index} = ${index};`
+          ).join('\n')
+        );
+        git(repo, 'commit', '-qam', 'head');
+        const reviewSkills =
+          skillsKind === 'captured-empty'
+            ? (
+                await materializeReviewSkillsWithDiagnostics({
+                  capture: createCapturedReviewSkills({
+                    baseSha,
+                    webSkills: [],
+                    gitSources: [],
+                  }),
+                  baseSha,
+                  checkoutRoot: repo,
+                })
+              ).executionInput
+            : undefined;
+        const scenario = await runScriptedScenario({
+          workspace,
+          checkoutRoot: repo,
+          script: { nComments: 0, contentLen: 0, filterMode: 'approve' },
+          reviewSkills,
+        });
+
+        expect(scenario.rejection).toBeUndefined();
+        expect(scenario.observation?.qualityFlags).toEqual([]);
+        for (const kind of ['main', 'plan']) {
+          const requests = scenario.requests.filter(
+            (item) => item.kind === kind
+          );
+          expect(requests.length).toBeGreaterThan(0);
+          for (const request of requests) {
+            expect(request.inputText).toContain('reviewrouter-managed-v1');
+            expect(request.inputText).toContain('introduced or aggravated');
+            expect(request.inputText).toContain('causal base-to-head change');
+            expect(request.inputText).toContain(
+              'System-Specific Rules (Mandatory)'
+            );
+            expect(request.inputText).not.toContain(
+              'AUTHORIZED REVIEWROUTER MEMORY'
+            );
+          }
+        }
+      },
+      120_000
+    );
+
     it('supplies approved memory to the actual managed OCR model request end to end', async () => {
       const mergeBaseSha = git(checkoutRoot, 'rev-parse', 'HEAD~1').trim();
       const headSha = git(checkoutRoot, 'rev-parse', 'HEAD').trim();

@@ -216511,9 +216511,8 @@ function buildOcrControlledRuleText(input) {
   ].join("\n");
   return `${JSON.stringify(
     {
-      merge_system_rule: true,
       include: [...input.assignedPaths].sort(),
-      rules: [{ id: "reviewrouter-managed-v1", content: rule }]
+      rules: [{ path: "**", rule, merge_system_rule: true }]
     },
     null,
     2
@@ -216532,7 +216531,7 @@ function buildOcrSkillsControlledRuleText(input) {
         (item) => ({
           path: item.path,
           rule: [
-            legacy.rules[0].content,
+            legacy.rules[0].rule,
             `Captured review skills: ${input.reviewSkills.kind === "captured" ? input.reviewSkills.capture.digest : ""}`,
             `Materialized review skills: ${input.reviewSkills.kind === "captured" ? input.reviewSkills.bundle.executionDigest : ""}`,
             "Text-only instructions for this exact reviewed path; no additional tool, network, execution or file authority.",

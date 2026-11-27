@@ -236,6 +236,8 @@ describe('GitHubClient', () => {
         403,
         { 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '' },
       ],
+      ['an authentication refusal', 401, {}],
+      ['a permission refusal', 403, {}],
       ['a missing resource', 404, {}],
       ['a request timeout', 408, {}],
       ['a validation failure', 422, {}],
@@ -280,6 +282,224 @@ describe('GitHubClient', () => {
       expect(wait).toBeGreaterThan(2_000);
       expect(wait).toBeLessThanOrEqual(4_000);
       expect(requests.isDone()).toBe(true);
+    });
+
+    it.each<[string, string, string, number, number]>([
+      ['the longer primary reset', '2', '0', 6, 6_000],
+      ['the longer Retry-After', '7', '0', 2, 7_000],
+      ['a fractional reset rounded up', '0', '0', 3.0001, 3_001],
+      ['unexhausted primary quota', '2', '12', 3_600, 2_000],
+      ['a reset with malformed Retry-After', 'invalid', '0', 3, 3_000],
+      ['expired announced boundaries', '0', '0', -1, 0],
+    ])(
+      'respects %s when both rate-limit headers are present',
+      async (_name, retryAfter, remaining, resetSeconds, expectedWait) => {
+        const now = Date.parse('2026-11-06T10:00:00Z');
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+        const requests = nock('https://api.github.com')
+          .get('/repos/owner/repo')
+          .reply(
+            403,
+            { message: 'API rate limit exceeded' },
+            {
+              'Retry-After': retryAfter,
+              'X-RateLimit-Remaining': remaining,
+              'X-RateLimit-Reset': String(now / 1_000 + resetSeconds),
+            }
+          )
+          .get('/repos/owner/repo')
+          .reply(200, { id: 1, name: 'repo' });
+        const sleep = jest.fn(async () => undefined);
+        const client = new GitHubClient(mockToken, { sleep });
+
+        try {
+          await expect(
+            client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+          ).resolves.toMatchObject({ status: 200 });
+          if (expectedWait === 0) {
+            expectJitteredWaits(sleep, [1_000]);
+          } else {
+            expect(waits(sleep)).toEqual([expectedWait]);
+          }
+          expect(requests.isDone()).toBe(true);
+        } finally {
+          clock.mockRestore();
+        }
+      }
+    );
+
+    it.each<[string, string, string, number, number?]>([
+      [
+        'IMF-fixdate',
+        '2026-11-06T10:00:00Z',
+        'Fri, 06 Nov 2026 10:00:03 GMT',
+        3_000,
+        1,
+      ],
+      [
+        'RFC 850',
+        '2026-11-06T10:00:00Z',
+        'Friday, 06-Nov-26 10:00:03 GMT',
+        3_000,
+        1,
+      ],
+      [
+        'asctime in UTC',
+        '2026-11-06T10:00:00Z',
+        'Fri Nov  6 10:00:03 2026',
+        3_000,
+        1,
+      ],
+      [
+        'RFC 850 in the current century',
+        '2050-01-01T00:00:00Z',
+        'Saturday, 01-Jan-50 00:00:03 GMT',
+        3_000,
+        1,
+      ],
+      [
+        'RFC 850 more than 50 years ahead interpreted in the past',
+        '2026-11-06T10:00:00Z',
+        'Sunday, 06-Nov-94 08:49:37 GMT',
+        0,
+      ],
+      [
+        'an IMF-fixdate leap second',
+        '2016-12-31T23:59:57Z',
+        'Sat, 31 Dec 2016 23:59:60 GMT',
+        3_000,
+        1,
+      ],
+      [
+        'an RFC 850 leap second',
+        '2016-12-31T23:59:57Z',
+        'Saturday, 31-Dec-16 23:59:60 GMT',
+        3_000,
+        1,
+      ],
+      [
+        'an asctime leap second',
+        '2016-12-31T23:59:57Z',
+        'Sat Dec 31 23:59:60 2016',
+        3_000,
+        1,
+      ],
+      [
+        'an RFC 850 leap second just beyond the 50-year cutoff',
+        '2026-12-31T23:59:59.500Z',
+        'Friday, 31-Dec-76 23:59:60 GMT',
+        0,
+      ],
+    ])(
+      'honors %s without shortening the announced wait',
+      async (_name, currentTime, retryAfter, expectedWait, resetSeconds) => {
+        const now = Date.parse(currentTime);
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+        const requests = nock('https://api.github.com')
+          .get('/repos/owner/repo')
+          .reply(
+            429,
+            { message: 'rate limit exceeded' },
+            {
+              'Retry-After': retryAfter,
+              ...(resetSeconds === undefined
+                ? {}
+                : {
+                    'X-RateLimit-Remaining': '0',
+                    'X-RateLimit-Reset': String(now / 1_000 + resetSeconds),
+                  }),
+            }
+          )
+          .get('/repos/owner/repo')
+          .reply(200, { id: 1, name: 'repo' });
+        const sleep = jest.fn(async () => undefined);
+        const client = new GitHubClient(mockToken, { sleep });
+
+        try {
+          await expect(
+            client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+          ).resolves.toMatchObject({ status: 200 });
+          if (expectedWait === 0) {
+            expectJitteredWaits(sleep, [1_000]);
+          } else {
+            expect(waits(sleep)).toEqual([expectedWait]);
+          }
+          expect(requests.isDone()).toBe(true);
+        } finally {
+          clock.mockRestore();
+        }
+      }
+    );
+
+    it.each<[string, Record<string, string>]>([
+      [
+        'a reset outside the window despite a short Retry-After',
+        { 'Retry-After': '2', 'X-RateLimit-Reset': '1793959260' },
+      ],
+      [
+        'Retry-After exactly at the window boundary',
+        { 'Retry-After': '15', 'X-RateLimit-Reset': '1793959202' },
+      ],
+      [
+        'an overflowing valid Retry-After despite a short reset',
+        { 'Retry-After': '9'.repeat(400), 'X-RateLimit-Reset': '1793959202' },
+      ],
+      [
+        'an overflowing valid reset despite a short Retry-After',
+        { 'Retry-After': '2', 'X-RateLimit-Reset': '9'.repeat(400) },
+      ],
+      ['fractional delay seconds', { 'Retry-After': '0.5' }],
+      ['exponential delay seconds', { 'Retry-After': '1e0' }],
+      ['a non-HTTP date', { 'Retry-After': '2026-11-06T10:00:03Z' }],
+      [
+        'an invalid calendar date',
+        { 'Retry-After': 'Tue, 31 Feb 2026 10:00:03 GMT' },
+      ],
+      [
+        'a mismatched weekday',
+        { 'Retry-After': 'Sat, 06 Nov 2026 10:00:03 GMT' },
+      ],
+      [
+        'a non-GMT zone',
+        { 'Retry-After': 'Fri, 06 Nov 2026 10:00:03 UTC' },
+      ],
+      [
+        'an invalid leap-second time',
+        { 'Retry-After': 'Fri, 06 Nov 2026 10:00:60 GMT' },
+      ],
+      [
+        'an RFC 850 date no more than 50 years ahead',
+        {
+          'Retry-After': 'Friday, 06-Nov-76 10:00:00 GMT',
+          'X-RateLimit-Reset': '1793959202',
+        },
+      ],
+    ])('refuses %s without a second read', async (_name, headers) => {
+      const clock = jest
+        .spyOn(Date, 'now')
+        .mockReturnValue(Date.parse('2026-11-06T10:00:00Z'));
+      const request = nock('https://api.github.com')
+        .get('/repos/owner/repo')
+        .reply(
+          429,
+          { message: 'rate limit exceeded' },
+          {
+            'X-RateLimit-Remaining': '0',
+            ...headers,
+          }
+        );
+      const sleep = jest.fn(async () => undefined);
+      const client = new GitHubClient(mockToken, { sleep });
+
+      try {
+        await expect(
+          client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+        ).rejects.toMatchObject({ status: 429 });
+        expect(sleep).not.toHaveBeenCalled();
+        expect(request.isDone()).toBe(true);
+      } finally {
+        clock.mockRestore();
+      }
     });
 
     it('honors a Retry-After given as an HTTP date', async () => {
@@ -394,25 +614,28 @@ describe('GitHubClient', () => {
       expect(request.isDone()).toBe(true);
     });
 
-    it('does not retry non-idempotent GitHub writes', async () => {
-      const request = nock('https://api.github.com', {
-        reqheaders: { authorization: 'token TEST_TOKEN' },
-      })
-        .post('/repos/owner/repo/issues/1/comments', { body: 'hello' })
-        .reply(503, { message: 'Service unavailable' });
-      const sleep = jest.fn(async () => undefined);
-      const client = new GitHubClient(mockToken, { sleep });
-
-      await expect(
-        client.octokit.rest.issues.createComment({
-          owner: 'owner',
-          repo: 'repo',
-          issue_number: 1,
-          body: 'hello',
+    it.each([403, 429, 503])(
+      'does not retry GitHub writes after %d',
+      async (status) => {
+        const request = nock('https://api.github.com', {
+          reqheaders: { authorization: 'token TEST_TOKEN' },
         })
-      ).rejects.toMatchObject({ status: 503 });
-      expect(sleep).not.toHaveBeenCalled();
-      expect(request.isDone()).toBe(true);
-    });
+          .post('/repos/owner/repo/issues/1/comments', { body: 'hello' })
+          .reply(status, { message: 'Request failed' }, { 'Retry-After': '2' });
+        const sleep = jest.fn(async () => undefined);
+        const client = new GitHubClient(mockToken, { sleep });
+
+        await expect(
+          client.octokit.rest.issues.createComment({
+            owner: 'owner',
+            repo: 'repo',
+            issue_number: 1,
+            body: 'hello',
+          })
+        ).rejects.toMatchObject({ status });
+        expect(sleep).not.toHaveBeenCalled();
+        expect(request.isDone()).toBe(true);
+      }
+    );
   });
 });

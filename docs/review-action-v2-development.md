@@ -493,6 +493,18 @@ renewal, current-target discovery or new cancellation endpoint is introduced.
 The adapter must propagate a target-revision denial for the original-revision
 cancellation path instead of manufacturing an acknowledgement.
 
+### Completed output and GitHub freshness
+
+Persist a validated completed non-context invocation through the original scoped
+evidence-commit operation before the subsequent GitHub revision read. A transient
+GitHub failure after provider completion must not be classified as a provider
+failure or start another paid attempt. Preserve the outer abort, original work
+cutoff, payload/context validation and original lease/reporting authority.
+
+Attachment, finalization and publication still require their existing current
+revision checks. Preserving the evidence does not by itself restore an unattached
+observation after runner exit, extend its reporting window or prove publication.
+
 ### Preserving generated runtime for source review
 
 The ordinary CI job retains its official `npm run build` and unchanged committed

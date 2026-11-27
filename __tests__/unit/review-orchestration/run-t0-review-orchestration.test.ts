@@ -1106,24 +1106,29 @@ describe('RunT0ReviewOrchestration', () => {
     }
   );
 
-  it('fails closed at the orchestration boundary when a provider aborts', async () => {
-    const fixture = createFixture();
-    const abort = new Error('provider aborted before terminal output');
-    abort.name = 'AbortError';
-    jest
-      .mocked(fixture.dependencies.invocations.execute)
-      .mockRejectedValue(abort);
+  it.each(['AbortError', 'native_effect_unknown'])(
+    'fails closed when a provider has no terminal output after %s',
+    async (failureName) => {
+      const fixture = createFixture();
+      const failure = new Error('provider has no complete terminal output');
+      failure.name = failureName;
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mockRejectedValue(failure);
 
-    const result = await fixture.useCase.execute(fixture.command);
+      const result = await fixture.useCase.execute(fixture.command);
 
-    expect(result).toMatchObject({
-      status: ReviewOrchestrationResultStatus.Failed,
-      failureCode: 'required_work_exhausted',
-    });
-    expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
-    expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
-    expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
-  });
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'required_work_exhausted',
+      });
+      expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
 
   it('fails closed at the orchestration boundary when provider output is missing', async () => {
     const fixture = createFixture();
@@ -3290,42 +3295,137 @@ describe('RunT0ReviewOrchestration', () => {
     );
   });
 
-  it('releases the lease and supersedes when revision moves after provider execution', async () => {
-    const fixture = createFixture();
-    jest.mocked(fixture.dependencies.delay.sleep).mockImplementation(
-      (_delayMs, signal) =>
-        new Promise<void>((resolve) => {
-          if (!signal) throw new Error('held_revision_sleep_requires_signal');
-          const finish = () => {
-            signal.removeEventListener('abort', finish);
-            resolve();
-          };
-          signal.addEventListener('abort', finish, { once: true });
-          if (signal.aborted) finish();
+  it.each([
+    ['unavailable', ReviewOrchestrationResultStatus.Failed],
+    ['closed', ReviewOrchestrationResultStatus.Cancelled],
+    ['moved', ReviewOrchestrationResultStatus.Superseded],
+  ] as const)(
+    'commits completed evidence before an %s revision read without replaying the provider',
+    async (outcome, expectedStatus) => {
+      const fixture = createFixture({ maxAttempts: 2 });
+      const events: string[] = [];
+      let providerCompleted = false;
+      let unavailableReadFailed = false;
+      jest.mocked(fixture.dependencies.delay.sleep).mockImplementation(
+        (_delayMs, signal) =>
+          new Promise<void>((resolve) => {
+            if (!signal) {
+              resolve();
+              return;
+            }
+            const finish = () => {
+              signal.removeEventListener('abort', finish);
+              resolve();
+            };
+            signal.addEventListener('abort', finish, { once: true });
+            if (signal.aborted) finish();
+          })
+      );
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mockImplementation(async () => {
+          providerCompleted = true;
+          events.push('provider-completed');
+          return observationPayload;
+        });
+      fixture.controlPlane.commitEvidence.mockImplementation(async () => {
+        events.push('evidence-committed');
+        return {
+          observationId: 'observation-1',
+          historicalOnly: false,
+          eligibilityPolicyVersion: 't0-v1',
+        };
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockImplementation(async () => {
+          if (!providerCompleted || unavailableReadFailed)
+            return revisionOf(fixture.command);
+          events.push('revision-refused');
+          if (outcome === 'unavailable') {
+            unavailableReadFailed = true;
+            throw new Error('review_action_v2_revision_guard_unavailable');
+          }
+          return outcome === 'closed'
+            ? { ...revisionOf(fixture.command), pullRequestState: 'closed' }
+            : {
+                ...revisionOf(fixture.command),
+                mergeBaseSha: '8'.repeat(40),
+                reviewRevisionHash: hash('new-head'),
+              };
+        });
+
+      const result = await fixture.useCase.execute(fixture.command);
+
+      expect(result.status).toBe(expectedStatus);
+      expect(events.slice(0, 3)).toEqual([
+        'provider-completed',
+        'evidence-committed',
+        'revision-refused',
+      ]);
+      expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+        1
+      );
+      expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lease,
+          ownerIdHash: fixture.command.ownerIdHash,
+          observation: observationPayload,
         })
-    );
-    const revisionGuard = jest.mocked(
-      fixture.dependencies.revisionGuard.loadCurrentRevision
-    );
-    revisionGuard.mockReset().mockResolvedValue(revisionOf(fixture.command));
-    for (let call = 0; call < 4; call += 1) {
-      revisionGuard.mockResolvedValueOnce(revisionOf(fixture.command));
+      );
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.adoptObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+        1
+      );
+      expect(
+        fixture.dependencies.invocationFailureClassifier.classify
+      ).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        outcome === 'unavailable' ? 0 : 1
+      );
+      if (outcome === 'closed') {
+        expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            targetRevisionHash: authorization.facts.reviewRevisionHash,
+          })
+        );
+      }
     }
-    revisionGuard.mockResolvedValueOnce({
-      ...revisionOf(fixture.command),
-      mergeBaseSha: '8'.repeat(40),
-      reviewRevisionHash: hash('new-head'),
-    });
+  );
 
-    const result = await fixture.useCase.execute(fixture.command);
+  it('retains cancellation after the lease supervisor returns a completed result', async () => {
+    const fixture = createFixture();
+    const controller = new AbortController();
+    const reason = new Error('cancelled_after_provider_completion');
+    Object.assign(fixture.dependencies, { signal: controller.signal });
+    const supervise: RunT0ReviewOrchestrationDependencies['leaseSupervisor']['run'] =
+      async ({ lease: currentLease, operation }) => {
+        const result = await operation(
+          new AbortController().signal,
+          () => currentLease
+        );
+        controller.abort(reason);
+        return result;
+      };
+    jest
+      .mocked(fixture.dependencies.leaseSupervisor.run)
+      .mockImplementation(supervise);
 
-    expect(result.status).toBe(ReviewOrchestrationResultStatus.Superseded);
+    await expect(fixture.useCase.execute(fixture.command)).rejects.toBe(reason);
+
     expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
     expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
     expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
       1
     );
-    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
   });
 
   it('aborts an active provider invocation when the revision moves', async () => {

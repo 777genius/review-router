@@ -2029,11 +2029,9 @@ export class RunT0ReviewOrchestration {
               return activeInvocation;
             },
           });
-          if (
-            invocation.manifestFacts.executionProfile !== 'context_gateway_v1'
-          ) {
-            await this.assertRevisionCurrent(input.revision);
-          }
+          // Preserve the completed result before a GitHub read can fail.
+          // Attachment below still requires the current revision.
+          this.dependencies.signal?.throwIfAborted();
           if (this.providerOperationRemainingMs() <= 0) {
             throw new ReviewExecutionDeadlineReachedSignal();
           }

@@ -352,9 +352,9 @@ describe('Codex OAuth rotating setup PR preview', () => {
           'https://token.actions.githubusercontent.com/request'
         )
       ) {
-        expect((init?.headers as Record<string, string>).authorization).toBe(
-          'Bearer runner-oidc-request-token'
-        );
+        expect(
+          (init?.headers as Record<string, string> | undefined)?.authorization
+        ).toBe('Bearer runner-oidc-request-token');
         return jsonResponse({ value: 'runner-oidc-token' });
       }
       if (
@@ -373,9 +373,9 @@ describe('Codex OAuth rotating setup PR preview', () => {
       if (
         urlText === 'https://api.reviewrouter.org/api/action/v1/comment-token'
       ) {
-        expect((init?.headers as Record<string, string>).authorization).toBe(
-          'Bearer action-session-token'
-        );
+        expect(
+          (init?.headers as Record<string, string> | undefined)?.authorization
+        ).toBe('Bearer action-session-token');
         return jsonResponse({ protocolVersion: 1 });
       }
       return new Response('{}', { status: 404 });

@@ -1,13 +1,14 @@
 # Managed OCR tracked inventory repair
 
-Status: implementation plan; no release or activation claimed.
+Status: source recovery and end-to-end qualification in progress; no new release or activation claimed.
 
 ## Assigned outcome and evidence
 
 Finish the scoped production-stability follow-up to private PR #977/#1003.
 The new defect is native OCR required coverage on tracked files whose paths
-match the checkout's `.gitignore`. Public Action source and the maintained
-native patch/build belong to this repository. Private formatting CI and
+match the checkout's `.gitignore`. Public Action source belongs to this repository. The maintained native source,
+qualification and publication now belong to `agent-teams-ai/open-code-review`;
+the patch stack here is the frozen rr.6 reproduction baseline. Private formatting CI and
 operator-host backup/disk checks have separate owners and evidence.
 
 The failed private review run
@@ -30,8 +31,12 @@ managed exact admission; the Action correctly fails closed for missing rows.
 
 ## Ownership and invariants
 
-- Preserve upstream pin `8eb83340a487b1150af00701b94f01af97e4b4d6`, Go
-  `1.26.10`, all twelve existing patch bytes, rr.6, its manifest and old profiles.
+- Preserve the frozen rr.6 baseline: upstream pin
+  `8eb83340a487b1150af00701b94f01af97e4b4d6`, Go `1.26.10`, all twelve
+  existing patch bytes, its manifest and old profiles. Develop this fix as an
+  ordinary source change in the native owner fork. Its reviewed main already
+  contains upstream 1.14.0 (`39515dca6161fb7fd176d87704b2b10e5f7a0c36`)
+  and Go `1.26.11`; this task performs no upstream merge or toolchain bump.
 - Carry the existing validated `FileFilter.ManagedPaths` exact inventory into
   the native diff provider. Copy its values; do not retain a mutable caller map.
 - Only a tracked Git diff with an admitted effective path may bypass the
@@ -47,8 +52,10 @@ managed exact admission; the Action correctly fails closed for missing rows.
   Missing/duplicate/unassigned/malformed evidence remains incomplete or rejected.
 - Preserve request budgets, cancellation, transport serialization, memory,
   Skills, opaque-template substitution, protocol/schema and publication policy.
-- New immutable component identity is proposed as `1.13.1-rr.7` /
-  `ocr-managed-v6`, subject to fresh remote absence checks before publication.
+- Candidate identity is `1.14.0-rr.1` / `ocr-managed-v6`, subject to fresh
+  remote absence checks before publication. The earlier proposed rr.7 identity
+  is unavailable: the native owner already published `1.13.1-rr.7` for a separate
+  packaging/security change. Neither rr.6 nor that rr.7 may be overwritten.
   Source, qualification, asset publication, producer approval and activation are
   distinct steps. Existing admitted runs keep their original identities.
 
@@ -81,16 +88,20 @@ they are not defensible alternatives. The strongest counterexample is a
 
 1. Publish this plan in a draft owner PR; perform two independent criticism
    rounds before implementation and record findings and dispositions below.
-2. Add one successor native patch containing the minimal shared-provider fix
-   and focused Go regression tests. Run real Git-backed provider/agent tests,
-   not just a reimplementation of the filter predicate.
+2. Add ordinary source changes in the native owner fork for the shared-provider
+   fix and managed context exclusion enforcement. Remove the pending local
+   successor patch from this repository; do not maintain two implementation
+   owners. Run real Git-backed provider, agent and tool tests.
 3. Extend the existing managed real-CLI integration owner with the seven-path
    fixture and negative controls. Verify actual selected path/content delivery
    against synthetic loopback model responses, exact outcomes and Action
    coverage/projection. No paid provider requests or production fault injection.
-4. Build rr.7 with the pinned toolchain; generate a new qualification manifest
-   from actual bytes. Append a new profile, never relabel rr.6. Update the
-   existing candidate qualification/publisher references and their tests.
+4. Qualify the native owner candidate with its existing formatting, test/race,
+   vulnerability, coverage, pinned-build and four real-CLI case gates. Publish
+   only through its existing `managed-release.yml` using the reviewed main SHA.
+   Generate the consumer manifest and new profile from actual published bytes;
+   never relabel an old binary. The public candidate workflow becomes a
+   read-only consumer of that exact qualified release.
 5. Resolve the required toolchain boundary through its owning dependency
    qualification route before running TypeScript tools: the current public
    lockfile resolves TypeScript 5.9.3 in tsc/ts-jest/parser. Maintained changes
@@ -101,9 +112,10 @@ they are not defensible alternatives. The strongest counterexample is a
    Review the exact diff and generated artifacts, resolve critical findings,
    complete required CI, then use the protected owner merge route and verify
    actual attribution and resulting-main CI. Keep unrelated refactors out.
-7. Publish the new component only through the existing qualified draft-release
-   procedure. Verify binary, checksum and MANIFEST by remote download and the
-   fixed anonymous bootstrap URL. Do not activate an unpublished profile.
+7. Verify the native owner's seven published assets, qualification receipt,
+   checksum and MANIFEST by remote download. The Action must download the new
+   version from the fixed owner URL and verify its exact profile digest. Keep
+   legacy profile download URLs unchanged. Do not activate an unpublished profile.
 8. Assess compatible Action-only adoption against the actual installed private
    source and current operator evidence; producer registry and channel promotion
    remain subject to the existing checks and operator access. Record exactly
@@ -182,3 +194,43 @@ they are not defensible alternatives. The strongest counterexample is a
   bounded retry uses lower GC/memory limits without changing build flags.
 - The published rr.6 binary was downloaded again and verified against its
   immutable SHA-256 for the forthcoming baseline RED comparison.
+
+### Continuation: ownership reconciliation and actual tool boundary
+
+- The recovered public workspace is
+  `/workspace/scratch/b54e70400ef6/review-router`. Its source survived, while
+  temporary Git metadata and dependencies did not. The available transcript
+  export predates this PR; historical reviewer acceptance does not qualify the
+  restored bytes.
+- Inspection of the native owner's `docs/managed-fork.md` supersedes the old
+  patch ownership assumption above. Its already accepted 1.14.0 main is the
+  source base; the frozen rr.6 reconstruction remains available here. The
+  unpublished duplicate rr.7 candidate is diagnostic evidence only.
+- The recovered tracked-inventory fixtures initially omitted captured Skills
+  input, accidentally selecting a legacy Action path. They now use the same
+  captured empty Skills object as production v3+ profiles and assert the entire
+  exact-path/rule object. No legacy rule contract or parser was broadened.
+- The same corrected fixtures fail on the official rr.6 binary and pass on
+  candidate `794ef542f85431f7227707696d437cdc3c468e24b3ba694b2464b7c8ac0d65e7`.
+  They exercise modified and renamed ignored tracked files, four deletions
+  including empty `0/0`, explicit secret/binary/provider exclusions, actual
+  synthetic request content and the Action coverage result. This candidate
+  has not been released and does not qualify the subsequent native tool fix.
+- A real CLI loopback probe found that `file_read('.env')` still returned a
+  synthetic secret marker despite the existing `file_read_diff` guard. The
+  owner fix applies the existing hard exclusions to managed read/search/find
+  tools on both comparison sides, including renamed secret aliases. Related
+  non-secret and deleted old-side context remain available. Nonmanaged tool
+  behavior is preserved.
+- Independent review also found that `git grep -I` alone can miss binary data
+  whose NUL occurs beyond its initial detection window. Managed search must
+  validate the entire matched file before rendering any row; a marker before
+  a late NUL is an explicit negative regression.
+- The existing four native real-CLI qualification cases retain their release
+  gate and gain actual malicious tool requests and request-body leak checks.
+  The public E2E then consumes the published artifact through the real adapter.
+- Restored strict TypeScript 7.0.2, lint and formatting checks passed. A full
+  local Jest process was killed after 56 passing suites without a final result;
+  it is not a suite PASS. Environment restarts and killed builds are recorded
+  as incomplete. Final complete tests and exact released-artifact E2E remain
+  required before acceptance.

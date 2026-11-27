@@ -42,9 +42,9 @@ function fixture(
   const calls: Array<{ url: string; request: Record<string, unknown> }> = [];
   const fetchImpl = jest.fn(async (url: unknown, init?: RequestInit) => {
     calls.push({ url: String(url), request: JSON.parse(String(init?.body)) });
-    expect((init?.headers as Record<string, string>).authorization).toBe(
-      'Bearer session-only'
-    );
+    expect(
+      (init?.headers as Record<string, string> | undefined)?.authorization
+    ).toBe('Bearer session-only');
     if (JSON.parse(String(init?.body)).status === 'dispatching') {
       if (options.claimError) throw new Error('lost claim ACK');
       return new Response(

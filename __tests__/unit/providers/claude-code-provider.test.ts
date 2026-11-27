@@ -41,7 +41,9 @@ describe('ClaudeCodeProvider', () => {
   it('rejects missing selected subscription token before spawning', async () => {
     delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
     process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-unselected-api-key';
-    const provider = new ClaudeCodeProvider('sonnet', { authMode: 'claude-oauth' });
+    const provider = new ClaudeCodeProvider('sonnet', {
+      authMode: 'claude-oauth',
+    });
     await expect(provider.review('synthetic prompt', 1000)).rejects.toThrow(
       'CLAUDE_CODE_OAUTH_TOKEN is required'
     );
@@ -385,9 +387,12 @@ describe('ClaudeCodeProvider', () => {
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('--version')) return createMockProcess();
       return createMockProcess((proc) => {
-        proc.stdout.emit('data', JSON.stringify({
-          structured_output: { findings: [], revalidations: [] },
-        }));
+        proc.stdout.emit(
+          'data',
+          JSON.stringify({
+            structured_output: { findings: [], revalidations: [] },
+          })
+        );
       });
     });
     const provider = new ClaudeCodeProvider('sonnet', {
@@ -428,16 +433,19 @@ describe('ClaudeCodeProvider', () => {
     'sk-ant-oat01-wrong-credential-kind',
     'sk-ant-api03-has whitespace',
     'not-an-api-key',
-  ])('rejects invalid selected API credential before running CLI (%s)', async (value) => {
-    process.env.ANTHROPIC_API_KEY = value;
-    const provider = new ClaudeCodeProvider('sonnet', {
-      authMode: 'claude-api-key',
-    });
-    await expect(provider.review('synthetic prompt', 1000)).rejects.toThrow(
-      'ANTHROPIC_API_KEY is missing or invalid'
-    );
-    expect(spawnMock).not.toHaveBeenCalled();
-  });
+  ])(
+    'rejects invalid selected API credential before running CLI (%s)',
+    async (value) => {
+      process.env.ANTHROPIC_API_KEY = value;
+      const provider = new ClaudeCodeProvider('sonnet', {
+        authMode: 'claude-api-key',
+      });
+      await expect(provider.review('synthetic prompt', 1000)).rejects.toThrow(
+        'ANTHROPIC_API_KEY is missing or invalid'
+      );
+      expect(spawnMock).not.toHaveBeenCalled();
+    }
+  );
 
   it('keeps selected API-key mode in the immutable prepared request', async () => {
     const provider = new ClaudeCodeProvider('sonnet', {
@@ -523,5 +531,4 @@ describe('ClaudeCodeProvider', () => {
     expect(thrown).toContain('[REDACTED]');
     expect(thrown).not.toContain(apiKey);
   });
-
 });

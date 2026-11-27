@@ -535,12 +535,14 @@ async function runInteractionPreflight(token: string): Promise<void> {
     fs.readFileSync(process.env.GITHUB_EVENT_PATH || '', 'utf8')
   );
   if (process.env.REVIEW_ROUTER_INTERACTION_BACKEND === 'account-gateway') {
-    const isHuman = payload.comment?.user?.type !== 'Bot' &&
+    const isHuman =
+      payload.comment?.user?.type !== 'Bot' &&
       !String(payload.comment?.user?.login || '').endsWith('[bot]');
     const command = parseInteractionCommand(
       String(payload.comment?.body || '')
     );
-    const editedReadOnly = payload.action === 'edited' &&
+    const editedReadOnly =
+      payload.action === 'edited' &&
       (command?.kind === 'help' || command?.kind === 'status');
     const isPrCommand = Boolean(
       payload.issue?.pull_request &&
@@ -565,7 +567,8 @@ async function runInteractionPreflight(token: string): Promise<void> {
     payload?.comment?.user?.type === 'Bot' ||
     String(payload?.comment?.user?.login || '').endsWith('[bot]');
   const command = parseInteractionCommand(body);
-  const editedReadOnly = payload.action === 'edited' &&
+  const editedReadOnly =
+    payload.action === 'edited' &&
     (command?.kind === 'help' || command?.kind === 'status');
   const memoryInteraction = parseMemoryInteraction(body);
   const memoryRequest =

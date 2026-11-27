@@ -4,8 +4,12 @@ jest.mock('p-queue', () => {
     __esModule: true,
     default: class {
       constructor(public opts: any = {}) {}
-      add<T>(fn: () => Promise<T>): Promise<T> { return fn(); }
-      onIdle(): Promise<void> { return Promise.resolve(); }
+      add<T>(fn: () => Promise<T>): Promise<T> {
+        return fn();
+      }
+      onIdle(): Promise<void> {
+        return Promise.resolve();
+      }
     },
   };
 });

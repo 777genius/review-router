@@ -197,7 +197,11 @@ function git(repo: string, ...args: string[]): string {
 /* ------------------------------------------------------------------ */
 
 type ScriptedRequestKind =
-  'main' | 'plan' | 'filter' | 'relocation' | 'compression';
+  | 'main'
+  | 'plan'
+  | 'filter'
+  | 'relocation'
+  | 'compression';
 
 interface ScriptedRequest {
   method: string;
@@ -216,7 +220,11 @@ interface ScriptedStubScript {
   readonly nComments: number;
   readonly contentLen: number;
   readonly filterMode:
-    'approve' | 'badargs' | 'empty' | 'nullargs' | 'empty-selection';
+    | 'approve'
+    | 'badargs'
+    | 'empty'
+    | 'nullargs'
+    | 'empty-selection';
   /** Truncate the terminal SSE event mid-JSON on the first request. */
   readonly truncateFirst?: boolean;
   /** Records the transport failure fact when the truncation happens. */
@@ -447,6 +455,7 @@ function startScriptedStub(script: ScriptedStubScript): Promise<{
 }
 
 interface ScriptedScenarioResult {
+  ruleText: string;
   projection?: import('../../../src/review-orchestration/application').CurrentReviewProjection;
   replayProjection?: import('../../../src/review-orchestration/application').CurrentReviewProjection;
   observation?: ReviewObservationPayload;
@@ -806,6 +815,7 @@ async function runScriptedScenario(input: {
       replayProjection = await project(new ReviewSkillsReceiptCollector());
     }
     return {
+      ruleText: prepared.reviewPrompt,
       ...(projection ? { projection, replayProjection } : {}),
       ...(observation !== undefined ? { observation } : {}),
       ...(rejection !== undefined ? { rejection } : {}),
@@ -919,28 +929,60 @@ describeHarness(
         'tmp/empty-deleted.ts',
       ];
       const assignedPaths = [...selected, ...deleted].sort();
-      const files: PRContext['files'] = assignedPaths.map((filename) => ({
-        filename,
-        status: deleted.includes(filename)
-          ? 'removed'
-          : filename === 'tmp/renamed.ts'
-            ? 'renamed'
-            : 'modified',
-        ...(filename === 'tmp/renamed.ts'
-          ? { previous_filename: 'rename.ts' }
-          : {}),
-        additions: deleted.includes(filename) ? 0 : 1,
-        deletions: deleted.includes(filename) ? 1 : 0,
-        changes: 1,
-        patch: git(repo, 'diff', baseSha + '..' + headSha, '--', filename),
-      }));
+      const files: PRContext['files'] = assignedPaths.map((filename) => {
+        const renamed = filename === 'tmp/renamed.ts';
+        const paths = renamed ? ['rename.ts', filename] : [filename];
+        const [added, removed] = git(
+          repo,
+          'diff',
+          '--numstat',
+          baseSha + '..' + headSha,
+          '--',
+          ...paths
+        ).split('\t');
+        const additions = Number(added);
+        const deletions = Number(removed);
+        return {
+          filename,
+          status: deleted.includes(filename)
+            ? 'removed'
+            : renamed
+              ? 'renamed'
+              : 'modified',
+          ...(renamed ? { previous_filename: 'rename.ts' } : {}),
+          additions,
+          deletions,
+          changes: additions + deletions,
+          patch: git(repo, 'diff', baseSha + '..' + headSha, '--', ...paths),
+        };
+      });
+      const { executionInput: reviewSkills } =
+        await materializeReviewSkillsWithDiagnostics({
+          capture: createCapturedReviewSkills({
+            baseSha,
+            webSkills: [],
+            gitSources: [],
+          }),
+          baseSha,
+          checkoutRoot: repo,
+        });
       const scenario = await runScriptedScenario({
         workspace,
         checkoutRoot: repo,
         assignedPaths,
         files,
+        reviewSkills,
         project: true,
         script: { nComments: 0, contentLen: 0, filterMode: 'approve' },
+      });
+      expect(JSON.parse(scenario.ruleText)).toEqual({
+        reviewrouter_managed_paths: assignedPaths,
+        rules: assignedPaths.map((path) => ({
+          path,
+          rule: expect.stringContaining('reviewrouter-managed-v1'),
+          merge_system_rule: true,
+          reviewrouter_exact_path: true,
+        })),
       });
       expect(scenario.rejection).toBeUndefined();
       expect(scenario.previewSelectedPaths).toEqual(selected);
@@ -977,9 +1019,10 @@ describeHarness(
 
     it('keeps ignored secrets binaries provider files and unassigned changes out of model requests', async () => {
       const repo = path.join(workspace, 'ignored-tracked-hard-exclusions');
-      fs.mkdirSync(path.join(repo, 'tmp', 'vendor'), { recursive: true });
+      fs.mkdirSync(path.join(repo, 'tmp'), { recursive: true });
+      fs.mkdirSync(path.join(repo, 'vendor'));
       git(repo, 'init', '-q');
-      fs.writeFileSync(path.join(repo, '.gitignore'), 'tmp/\n');
+      fs.writeFileSync(path.join(repo, '.gitignore'), 'tmp/\nvendor/\n');
       fs.writeFileSync(
         path.join(repo, 'calc.ts'),
         'export const visible = 1;\n'
@@ -987,7 +1030,7 @@ describeHarness(
       const contents: Record<string, string | Buffer> = {
         'tmp/.env': 'FAKE_SECRET_IGNORED_MARKER=old\n',
         'tmp/image.ts': Buffer.from('BINARY_IGNORED_MARKER\u0000old'),
-        'tmp/vendor/provider.ts':
+        'vendor/provider.ts':
           'export const value = "PROVIDER_EXCLUDED_MARKER";\n',
         'tmp/unassigned.ts':
           'export const value = "UNASSIGNED_IGNORED_MARKER";\n',
@@ -996,6 +1039,7 @@ describeHarness(
         fs.writeFileSync(path.join(repo, name), content);
       git(repo, 'add', '-f', '.');
       git(repo, 'commit', '-qm', 'hard exclusion baseline');
+      const baseSha = git(repo, 'rev-parse', 'HEAD').trim();
       fs.writeFileSync(
         path.join(repo, 'calc.ts'),
         'export const visible = "ALLOWED_NEW_MARKER";\n'
@@ -1018,14 +1062,34 @@ describeHarness(
         'calc.ts',
         'tmp/.env',
         'tmp/image.ts',
-        'tmp/vendor/provider.ts',
+        'vendor/provider.ts',
       ];
+      const { executionInput: reviewSkills } =
+        await materializeReviewSkillsWithDiagnostics({
+          capture: createCapturedReviewSkills({
+            baseSha,
+            webSkills: [],
+            gitSources: [],
+          }),
+          baseSha,
+          checkoutRoot: repo,
+        });
       const scenario = await runScriptedScenario({
         workspace,
         checkoutRoot: repo,
         assignedPaths,
+        reviewSkills,
         project: true,
         script: { nComments: 0, contentLen: 0, filterMode: 'approve' },
+      });
+      expect(JSON.parse(scenario.ruleText)).toEqual({
+        reviewrouter_managed_paths: assignedPaths,
+        rules: assignedPaths.map((path) => ({
+          path,
+          rule: expect.stringContaining('reviewrouter-managed-v1'),
+          merge_system_rule: true,
+          reviewrouter_exact_path: true,
+        })),
       });
       expect(scenario.rejection).toBeUndefined();
       expect(scenario.previewSelectedPaths).toEqual(['calc.ts']);
@@ -1598,11 +1662,11 @@ describeHarness(
       expect(JSON.stringify(scenario.requests)).not.toContain(
         'UNASSIGNED_SOURCE_MARKER'
       );
-      const groups = (
-        scenario.resultRaw?.reviewrouter_outcome as {
-          groups: { paths: string[] }[];
-        }
-      ).groups;
+      expect(scenario.resultRaw).toBeDefined();
+      const groups = parseOcrNativeReviewResult(
+        scenario.resultRaw,
+        scenario.admission
+      ).outcome.groups;
       expect(groups.flatMap((group) => group.paths).sort()).toEqual([
         'calc.ts',
         'src/Foo.ts',

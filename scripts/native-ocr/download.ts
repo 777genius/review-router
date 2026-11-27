@@ -120,7 +120,22 @@ async function main(): Promise<void> {
       receipt.outcome_schema_version === fields.outcome_schema_version &&
       Array.isArray(receipt.qualification_cases) &&
       receipt.qualification_cases.length === 4 &&
-      receipt.qualification_cases.every((item) => record(item).passed === true)
+      receipt.qualification_cases.every((item) => {
+        const entry = record(item);
+        return entry.passed === true && typeof entry.name === 'string';
+      })
+  );
+  need(
+    receipt.qualification_cases
+      .map((item) => record(item).name)
+      .sort()
+      .join('\n') ===
+      [
+        'anthropic/finding',
+        'anthropic/missing-terminal',
+        'openai-responses/finding',
+        'openai-responses/missing-terminal',
+      ].join('\n')
   );
 
   fs.mkdirSync(path.dirname(output), { recursive: true });
@@ -141,8 +156,7 @@ async function main(): Promise<void> {
     );
     const checksum = await download(`${baseUrl}/${binaryName}.sha256`, 256);
     need(
-      checksum.toString('utf8') ===
-        `${fields.binary_sha256}  ${binaryName}\n`
+      checksum.toString('utf8') === `${fields.binary_sha256}  ${binaryName}\n`
     );
     const binaryPath = path.join(staging, binaryName);
     fs.writeFileSync(binaryPath, binary, { mode: 0o700 });

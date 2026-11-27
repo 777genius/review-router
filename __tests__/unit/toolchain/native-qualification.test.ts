@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { parseSource } from '../../helpers/native-source';
 
 const root = process.cwd();
 const lintScript = path.join(root, 'scripts/toolchain/lint.ts');
@@ -52,6 +53,27 @@ describe('native qualification boundaries', () => {
         'export function value(_ignored: string, input: number) { return input; }'
       ).status
     ).toBe(0);
+  });
+
+  it('formats TypeScript through the configured parser without changing its AST', () => {
+    const source =
+      'export const value = {items:["x"] as const} satisfies {readonly items: readonly string[]};';
+    const result = spawnSync(
+      process.execPath,
+      [
+        'node_modules/prettier/bin/prettier.cjs',
+        '--stdin-filepath',
+        path.join(root, 'fixture.ts'),
+      ],
+      { cwd: root, input: source, encoding: 'utf8', timeout: 15000 }
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toBe(source);
+    const ast = (text: string): string =>
+      JSON.stringify(parseSource('fixture.ts', text), (key, value: unknown) =>
+        ['start', 'end', 'range', 'raw'].includes(key) ? undefined : value
+      );
+    expect(ast(result.stdout)).toBe(ast(source));
   });
 
   it('locks the compiler to native TypeScript 7 without classic API consumers', () => {

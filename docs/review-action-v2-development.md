@@ -44,8 +44,8 @@ enumerates the original TypeScript roots explicitly and includes the changed
 publisher/toolchain scripts; it does not hide tracked source through Git ignore.
 Behavior fixtures cover these migration boundaries without loading a classic
 TypeScript API. Architecture tests use the real OXC AST and retain their
-dependency-inversion and process-launch assertions. Prettier uses its native
-OXC TypeScript parser explicitly.
+dependency-inversion and process-launch assertions. Prettier uses its supported
+Babel TypeScript syntax parser explicitly.
 
 The dependency lock must contain only TypeScript 7.0.2, without ts-jest,
 typescript-eslint compiler-API consumers or a transitive classic compiler.

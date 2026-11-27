@@ -291,12 +291,16 @@ export class ClaudeCodeProvider extends Provider {
         // eslint-disable-next-line no-control-regex
         /[\s|\u0000-\u001f\u007f"'\x60]/.test(credential)
       ) {
-        throw new Error('ANTHROPIC_API_KEY is missing or invalid for Claude API-key authentication.');
+        throw new Error(
+          'ANTHROPIC_API_KEY is missing or invalid for Claude API-key authentication.'
+        );
       }
       return;
     }
     if (!credential || !isClaudeSubscriptionSetupToken(credential)) {
-      throw new Error('CLAUDE_CODE_OAUTH_TOKEN is missing or invalid for Claude subscription authentication.');
+      throw new Error(
+        'CLAUDE_CODE_OAUTH_TOKEN is missing or invalid for Claude subscription authentication.'
+      );
     }
   }
 
@@ -576,8 +580,12 @@ export class ClaudeCodeProvider extends Provider {
   ): string {
     const raw = `${stderr || stdout || 'no output'}`.trim();
     // Vendor errors can echo a full or partially substituted credential.
-    const text = (credential ? raw.replaceAll(credential, '[REDACTED]') : raw)
-      .replace(/sk-ant-(?:api[0-9]{2}|oat[0-9]{2})-[A-Za-z0-9._-]{12,}/g, '[REDACTED]');
+    const text = (
+      credential ? raw.replaceAll(credential, '[REDACTED]') : raw
+    ).replace(
+      /sk-ant-(?:api[0-9]{2}|oat[0-9]{2})-[A-Za-z0-9._-]{12,}/g,
+      '[REDACTED]'
+    );
     const hint = this.authHintFor(text, mode);
     const message = hint ? `${text}\n${hint}` : text;
     return message.length > 1600

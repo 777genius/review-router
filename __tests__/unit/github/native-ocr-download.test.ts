@@ -41,6 +41,8 @@ global.fetch = async (url, options) => {
     if (scenario === 'receipt-source') receipt.source_commit = 'b'.repeat(40);
     if (scenario === 'receipt-manifest') receipt.manifest_sha256 = 'b'.repeat(64);
     if (scenario === 'receipt-failed') receipt.qualification_cases[0].passed = false;
+    if (scenario === 'receipt-duplicate') receipt.qualification_cases[1] = receipt.qualification_cases[0];
+    if (scenario === 'receipt-unknown') receipt.qualification_cases[0].name = 'unverified-case';
     bytes = Buffer.from(JSON.stringify(receipt));
   }
   return new Response(bytes, scenario === 'oversize' && name === 'opencodereview-linux-amd64'
@@ -63,7 +65,9 @@ describe('pinned managed fork release download', () => {
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-native-consumer-'));
     output = path.join(root, 'candidate');
-    fs.mkdirSync(path.join(root, path.dirname(manifestPath)), { recursive: true });
+    fs.mkdirSync(path.join(root, path.dirname(manifestPath)), {
+      recursive: true,
+    });
     fs.mkdirSync(path.join(root, 'src/control-plane'), { recursive: true });
     fs.mkdirSync(path.join(root, 'remote'));
     const binary = Buffer.alloc(64);
@@ -115,7 +119,12 @@ describe('pinned managed fork release download', () => {
         binary_sha256: binarySha,
         manifest_sha256: hash(manifest),
         outcome_schema_version: 'reviewrouter.ocr-outcome/v1',
-        qualification_cases: Array.from({ length: 4 }, () => ({ passed: true })),
+        qualification_cases: [
+          'openai-responses/finding',
+          'openai-responses/missing-terminal',
+          'anthropic/finding',
+          'anthropic/missing-terminal',
+        ].map((name) => ({ name, passed: true })),
       }),
     };
     for (const [name, bytes] of Object.entries(assets))
@@ -138,31 +147,33 @@ describe('pinned managed fork release download', () => {
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
   function run(scenario = 'success') {
-    return new Promise<{ status: number | null; stdout: string; stderr: string }>(
-      (resolve, reject) => {
-        const child = spawn(
-          process.execPath,
-          ['--require', path.join(root, 'preload.cjs'), script, output],
-          {
-            cwd: root,
-            timeout: 15_000,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: {
-              ...process.env,
-              GH_TOKEN: 'synthetic-must-not-reach-native',
-              RR_NATIVE_DOWNLOAD_FIXTURE: root,
-              RR_NATIVE_DOWNLOAD_SCENARIO: scenario,
-            },
-          }
-        );
-        let stdout = '';
-        let stderr = '';
-        child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
-        child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
-        child.on('error', reject);
-        child.on('close', (status) => resolve({ status, stdout, stderr }));
-      }
-    );
+    return new Promise<{
+      status: number | null;
+      stdout: string;
+      stderr: string;
+    }>((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        ['--require', path.join(root, 'preload.cjs'), script, output],
+        {
+          cwd: root,
+          timeout: 15_000,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            GH_TOKEN: 'synthetic-must-not-reach-native',
+            RR_NATIVE_DOWNLOAD_FIXTURE: root,
+            RR_NATIVE_DOWNLOAD_SCENARIO: scenario,
+          },
+        }
+      );
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+      child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+      child.on('error', reject);
+      child.on('close', (status) => resolve({ status, stdout, stderr }));
+    });
   }
 
   it('preserves the seven qualified owner assets and checks the native version last', async () => {
@@ -190,6 +201,8 @@ describe('pinned managed fork release download', () => {
     'receipt-source',
     'receipt-manifest',
     'receipt-failed',
+    'receipt-duplicate',
+    'receipt-unknown',
     'binary',
     'checksum',
     'license',
@@ -200,16 +213,25 @@ describe('pinned managed fork release download', () => {
     async (scenario) => {
       const result = await run(scenario);
       expect(result.status).toBe(1);
-      expect(JSON.parse(result.stderr).code).toBe('native_ocr_download_rejected');
+      expect(JSON.parse(result.stderr).code).toBe(
+        'native_ocr_download_rejected'
+      );
       expect(fs.existsSync(output)).toBe(false);
       expect(
         fs.readdirSync(root).some((name) => name.startsWith('.ocr-download-'))
       ).toBe(false);
-      expect(fs.existsSync(path.join(root, 'executed'))).toBe(scenario === 'version');
+      expect(fs.existsSync(path.join(root, 'executed'))).toBe(
+        scenario === 'version'
+      );
     }
   );
 
-  it.each(['missing-manifest', 'profile', 'duplicate-manifest-key', 'existing-output'])(
+  it.each([
+    'missing-manifest',
+    'profile',
+    'duplicate-manifest-key',
+    'existing-output',
+  ])(
     'rejects local %s before any network or native execution',
     async (scenario) => {
       if (scenario === 'missing-manifest')

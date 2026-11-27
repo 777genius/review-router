@@ -170,7 +170,10 @@ readline.createInterface({input:process.stdin}).on('line', line => {
         );
         const requests = (
           await fs.readFile(path.join(directory, 'requests.jsonl'), 'utf8')
-        ).trim().split('\n').map((line) => JSON.parse(line).method);
+        )
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line).method);
         expect(requests).toEqual(['initialize', 'initialized', 'account/read']);
       } finally {
         await result.clearAuthMaterial();

@@ -328,7 +328,8 @@ jobs:
       const candidate = readWorkflow(name);
       const steps = Object.values(candidate.jobs).flatMap((job) => job.steps);
       const download = steps.find(
-        (step) => step.name === 'Verify and download pinned managed fork release'
+        (step) =>
+          step.name === 'Verify and download pinned managed fork release'
       );
       expect(download?.run).toBe(
         'node scripts/native-ocr/download.ts "$RUNNER_TEMP/reviewrouter-ocr"'
@@ -338,14 +339,19 @@ jobs:
       expect(JSON.stringify(steps)).not.toContain('native-ocr/publish.ts');
     }
     const realCli = qualify.steps.find(
-      (step) => step.name === 'Require real binaries against synthetic local wire fixtures'
+      (step) =>
+        step.name ===
+        'Require real binaries against synthetic local wire fixtures'
     )!;
     expect(realCli.env).toMatchObject({
       REVIEWROUTER_OCR_REQUIRED: '1',
-      REVIEWROUTER_OCR_BINARY: '${{ runner.temp }}/reviewrouter-ocr/opencodereview-linux-amd64',
+      REVIEWROUTER_OCR_BINARY:
+        '${{ runner.temp }}/reviewrouter-ocr/opencodereview-linux-amd64',
     });
     const artifact = qualify.steps.find(
-      (step) => step.name === 'Preserve consumed native release and its qualification evidence'
+      (step) =>
+        step.name ===
+        'Preserve consumed native release and its qualification evidence'
     )!;
     expect(artifact.if).toBe(
       "always() && steps.ocr-download.outcome == 'success'"

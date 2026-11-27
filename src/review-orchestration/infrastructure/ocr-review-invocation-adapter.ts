@@ -939,9 +939,14 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       let processResult: OcrReviewProcessResult | undefined;
       try {
         this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-        return await this.runInvocation(input, assignment, preimages, (result) => {
-          processResult = result;
-        });
+        return await this.runInvocation(
+          input,
+          assignment,
+          preimages,
+          (result) => {
+            processResult = result;
+          }
+        );
       } catch (error) {
         try {
           this.options.failureDiagnostic?.(
@@ -1304,7 +1309,10 @@ function parseOcrPreviewCoverage(
         )
       : undefined;
     const legacyPaths =
-      value.selected_paths ?? value.selectedPaths ?? value.paths ?? groupedPaths;
+      value.selected_paths ??
+      value.selectedPaths ??
+      value.paths ??
+      groupedPaths;
     if (!Array.isArray(legacyPaths)) {
       throw new Error('review_action_v2_ocr_preview_contract_invalid');
     }
@@ -1314,11 +1322,7 @@ function parseOcrPreviewCoverage(
   const observed = new Set<string>();
   const selected = new Set<string>();
   for (const file of files) {
-    if (
-      typeof file !== 'object' ||
-      file === null ||
-      Array.isArray(file)
-    ) {
+    if (typeof file !== 'object' || file === null || Array.isArray(file)) {
       throw new Error('review_action_v2_ocr_preview_contract_invalid');
     }
     const entry = file as Record<string, unknown>;
@@ -1347,19 +1351,14 @@ function parseOcrPreviewCoverage(
         entry.will_review ||
         (entry.exclude_reason !== 'user_exclude' &&
           (typeof entry.exclude_reason !== 'string' ||
-            !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(
-              entry.exclude_reason
-            )))
+            !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(entry.exclude_reason)))
       ) {
         throw new Error('review_action_v2_ocr_preview_scope_invalid');
       }
       continue;
     }
     if (entry.will_review) {
-      if (
-        entry.exclude_reason !== undefined &&
-        entry.exclude_reason !== ''
-      ) {
+      if (entry.exclude_reason !== undefined && entry.exclude_reason !== '') {
         throw new Error('review_action_v2_ocr_preview_contract_invalid');
       }
       selected.add(path);

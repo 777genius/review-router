@@ -495,10 +495,7 @@ describe('GitHubClient', () => {
         'a mismatched weekday',
         { 'Retry-After': 'Sat, 06 Nov 2026 10:00:03 GMT' },
       ],
-      [
-        'a non-GMT zone',
-        { 'Retry-After': 'Fri, 06 Nov 2026 10:00:03 UTC' },
-      ],
+      ['a non-GMT zone', { 'Retry-After': 'Fri, 06 Nov 2026 10:00:03 UTC' }],
       [
         'an invalid leap-second time',
         { 'Retry-After': 'Fri, 06 Nov 2026 10:00:60 GMT' },

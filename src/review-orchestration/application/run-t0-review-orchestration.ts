@@ -465,11 +465,12 @@ export class RunT0ReviewOrchestration {
         authorization,
         reviewRevisionHash: command.reviewRevisionHash,
       };
-      initialExecutionRestore =
-        this.dependencies.controlPlane.restoreExecution({
+      initialExecutionRestore = this.dependencies.controlPlane.restoreExecution(
+        {
           authorization,
           reviewRevisionHash: command.reviewRevisionHash,
-        });
+        }
+      );
       const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
@@ -657,15 +658,17 @@ export class RunT0ReviewOrchestration {
         const restoredAcceptedHint = restoredAcceptedHintFor(
           workSlot.workSlotId
         );
-        if (restoredAcceptedHint && (
-          !command.restoreOnly ||
-          workSlot.taskKind !== ReviewTaskKind.FindingDiscovery ||
-          workSlot.attemptBudget !== 1 ||
-          persistedSlot?.nextAttemptOrdinal !== 2 ||
-          restoredSlot.state !== RestoredReviewWorkSlotState.Exhausted ||
-          restoredSlot.activeLeaseId !== null ||
-          restoredSlot.acceptedObservationRefId !== null
-        )) throw new Error('review_orchestration_unattached_source_changed');
+        if (
+          restoredAcceptedHint &&
+          (!command.restoreOnly ||
+            workSlot.taskKind !== ReviewTaskKind.FindingDiscovery ||
+            workSlot.attemptBudget !== 1 ||
+            persistedSlot?.nextAttemptOrdinal !== 2 ||
+            restoredSlot.state !== RestoredReviewWorkSlotState.Exhausted ||
+            restoredSlot.activeLeaseId !== null ||
+            restoredSlot.acceptedObservationRefId !== null)
+        )
+          throw new Error('review_orchestration_unattached_source_changed');
         const lifecycleEvidenceUnavailable =
           workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation &&
           (!restoredSatisfied ||
@@ -681,12 +684,11 @@ export class RunT0ReviewOrchestration {
             restoredSlot.activeLeaseId !== null ||
             (persistedSlot?.nextAttemptOrdinal ?? 1) > 1);
         if (
-          !restoredAcceptedHint && (
-            (command.restoreOnly &&
-              (lifecycleEvidenceUnavailable || discoveryDispatchUncertain)) ||
+          !restoredAcceptedHint &&
+          ((command.restoreOnly &&
+            (lifecycleEvidenceUnavailable || discoveryDispatchUncertain)) ||
             restoredSlot.state === RestoredReviewWorkSlotState.Exhausted ||
-            restoredSlot.state === RestoredReviewWorkSlotState.Cancelled
-          )
+            restoredSlot.state === RestoredReviewWorkSlotState.Cancelled)
         ) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
@@ -765,7 +767,8 @@ export class RunT0ReviewOrchestration {
             error instanceof ReviewExecutionSupersededSignal ||
             error instanceof ReviewExecutionCancelledSignal ||
             error instanceof ReviewExecutionDeadlineReachedSignal
-          ) throw error;
+          )
+            throw error;
           this.dependencies.signal?.throwIfAborted();
           // A recovery refusal is a run failure, never a reviewer-route fallback.
           throw new Error(
@@ -2258,7 +2261,8 @@ export class RunT0ReviewOrchestration {
         if (
           input.restoredAcceptedHint ||
           !(error instanceof ReviewMemoryAdmissionChangedSignal)
-        ) throw error;
+        )
+          throw error;
         // No authoritative lease was granted for this stale input. Prepare a
         // memory-free prompt/manifest at the same attempt ordinal; completed
         // investigation work is not repeated or reused under the new manifest.
@@ -2468,18 +2472,21 @@ export class RunT0ReviewOrchestration {
       planHash: input.planHash,
       manifest: input.manifest,
     });
-    if (hint && (
-      lookup.kind !== ReviewEvidenceLookupKind.Hit ||
-      lookup.attachment.kind !== 'same_execution' ||
-      lookup.observation.observationId !== hint.observationId ||
-      lookup.observation.payloadHash !== hint.payloadHash ||
-      lookup.observation.providerInvocationKey !== hint.providerInvocationKey ||
-      lookup.observation.providerVoteIdentityHash !==
-        hint.providerVoteIdentityHash ||
-      lookup.attachment.sourceLeaseId !== hint.sourceLeaseId ||
-      lookup.attachment.sourceFencingToken !== hint.sourceFencingToken ||
-      lookup.attachment.sourceOwnerIdHash !== hint.sourceOwnerIdHash
-    )) throw new Error('review_orchestration_unattached_observation_mismatch');
+    if (
+      hint &&
+      (lookup.kind !== ReviewEvidenceLookupKind.Hit ||
+        lookup.attachment.kind !== 'same_execution' ||
+        lookup.observation.observationId !== hint.observationId ||
+        lookup.observation.payloadHash !== hint.payloadHash ||
+        lookup.observation.providerInvocationKey !==
+          hint.providerInvocationKey ||
+        lookup.observation.providerVoteIdentityHash !==
+          hint.providerVoteIdentityHash ||
+        lookup.attachment.sourceLeaseId !== hint.sourceLeaseId ||
+        lookup.attachment.sourceFencingToken !== hint.sourceFencingToken ||
+        lookup.attachment.sourceOwnerIdHash !== hint.sourceOwnerIdHash)
+    )
+      throw new Error('review_orchestration_unattached_observation_mismatch');
     if (lookup.kind === ReviewEvidenceLookupKind.Miss) return null;
 
     await this.assertRevisionCurrent(input.revision);

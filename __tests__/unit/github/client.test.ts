@@ -405,7 +405,7 @@ describe('GitHubClient', () => {
         currentTime,
         retryAfter,
         expectedWait,
-        resetSeconds,
+        resetSeconds = undefined,
         status = 429
       ) => {
         const now = Date.parse(currentTime);

@@ -310,6 +310,128 @@ export class RunT0ReviewOrchestration {
     );
     let authorization: ReviewRunAuthorization | undefined;
     let execution: ReviewExecutionAdmission | undefined;
+    let executionStartAttempted = false;
+    let initialExecutionRestore:
+      | Promise<RestoredReviewExecution | null>
+      | undefined;
+    const cancelledResult = async (): Promise<ReviewOrchestrationResult> => {
+      this.dependencies.signal?.throwIfAborted();
+      let initialRestoredExecution: RestoredReviewExecution | null | undefined;
+      if (
+        !execution &&
+        !command.restoredExecution &&
+        !executionStartAttempted &&
+        initialExecutionRestore
+      ) {
+        // A sibling restore failure does not prove this execution is absent.
+        try {
+          initialRestoredExecution = await initialExecutionRestore;
+        } catch {
+          this.dependencies.signal?.throwIfAborted();
+        }
+        this.dependencies.signal?.throwIfAborted();
+      }
+      let acknowledged =
+        !execution &&
+        !command.restoredExecution &&
+        !executionStartAttempted &&
+        (!initialExecutionRestore || initialRestoredExecution === null);
+      let cancelledExecution = execution;
+      const currentAuthorization = authorization;
+      if (!acknowledged && currentAuthorization) {
+        try {
+          validateAuthorizationScope(command, currentAuthorization);
+          const restored =
+            command.restoredExecution ?? initialRestoredExecution;
+          const original =
+            execution ??
+            (restored
+              ? {
+                  executionId: restored.executionId,
+                  generation: restored.generation,
+                  streamVersion: restored.streamVersion,
+                  executionVersion: restored.version,
+                  restoredExecution: restored,
+                }
+              : undefined);
+          if (
+            !original ||
+            (initialRestoredExecution &&
+              initialRestoredExecution.executionId !== command.executionId) ||
+            original.executionId !== original.restoredExecution.executionId ||
+            original.generation !== original.restoredExecution.generation ||
+            original.restoredExecution.authorizationId !==
+              currentAuthorization.authorizationId ||
+            original.restoredExecution.reviewRevisionHash !==
+              currentAuthorization.facts.reviewRevisionHash ||
+            original.restoredExecution.planHash !== command.planHash ||
+            (restored &&
+              (original.executionId !== restored.executionId ||
+                original.generation !== restored.generation))
+          )
+            throw new Error('review_orchestration_cancellation_scope_mismatch');
+          cancelledExecution = original;
+          this.dependencies.signal?.throwIfAborted();
+          const latest =
+            initialRestoredExecution ??
+            (await this.dependencies.controlPlane.restoreExecution({
+              authorization: currentAuthorization,
+              reviewRevisionHash: currentAuthorization.facts.reviewRevisionHash,
+            }));
+          this.dependencies.signal?.throwIfAborted();
+          const current = latest
+            ? refreshExecutionAdmission(original, latest)
+            : original;
+          const alreadyTerminal =
+            latest !== null &&
+            [
+              RestoredReviewExecutionState.Superseded,
+              RestoredReviewExecutionState.Completed,
+              RestoredReviewExecutionState.Partial,
+              RestoredReviewExecutionState.Failed,
+            ].includes(latest.state);
+          if (!alreadyTerminal) {
+            // A missing restore is not terminal proof. The exact original
+            // execution may still acknowledge an idempotent supersession.
+            this.dependencies.signal?.throwIfAborted();
+            await this.dependencies.controlPlane.supersedeExecution({
+              authorization: currentAuthorization,
+              idempotencyKey: this.idempotencyKey('cancel-closed-pr', [
+                current.executionId,
+                current.generation,
+                current.streamVersion,
+                currentAuthorization.facts.reviewRevisionHash,
+              ]),
+              execution: current,
+              targetRevisionHash: currentAuthorization.facts.reviewRevisionHash,
+            });
+            this.dependencies.signal?.throwIfAborted();
+          }
+          acknowledged = true;
+        } catch {
+          this.dependencies.signal?.throwIfAborted();
+        }
+      }
+      if (!isTerminal(state.phase)) {
+        state = evolveReviewOrchestration(state, {
+          type: acknowledged
+            ? ReviewOrchestrationEventType.Superseded
+            : ReviewOrchestrationEventType.Failed,
+        });
+      }
+      return {
+        status: acknowledged
+          ? ReviewOrchestrationResultStatus.Cancelled
+          : ReviewOrchestrationResultStatus.Failed,
+        state,
+        ...(cancelledExecution
+          ? { executionId: cancelledExecution.executionId }
+          : {}),
+        ...(acknowledged
+          ? {}
+          : { failureCode: 'review_orchestration_cancellation_unconfirmed' }),
+      };
+    };
 
     try {
       this.dependencies.signal?.throwIfAborted();
@@ -328,10 +450,7 @@ export class RunT0ReviewOrchestration {
       const admittedRevision =
         await this.dependencies.revisionGuard.loadCurrentRevision();
       if (admittedRevision.pullRequestState === 'closed') {
-        state = evolveReviewOrchestration(state, {
-          type: ReviewOrchestrationEventType.Superseded,
-        });
-        return { status: ReviewOrchestrationResultStatus.Cancelled, state };
+        return await cancelledResult();
       }
       if (!sameRevision(admittedRevision, command)) {
         state = evolveReviewOrchestration(state, {
@@ -374,15 +493,17 @@ export class RunT0ReviewOrchestration {
         authorization,
         reviewRevisionHash: command.reviewRevisionHash,
       };
+      initialExecutionRestore =
+        this.dependencies.controlPlane.restoreExecution({
+          authorization,
+          reviewRevisionHash: command.reviewRevisionHash,
+        });
       const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
           reviewRevisionHash: command.reviewRevisionHash,
         }),
-        this.dependencies.controlPlane.restoreExecution({
-          authorization,
-          reviewRevisionHash: command.reviewRevisionHash,
-        }),
+        initialExecutionRestore,
         Promise.resolve()
           .then(
             () =>
@@ -409,6 +530,7 @@ export class RunT0ReviewOrchestration {
       const continuingExecution = command.restoredExecution
         ? (restoredExecution ?? command.restoredExecution)
         : undefined;
+      executionStartAttempted = continuingExecution === undefined;
       execution = continuingExecution
         ? {
             executionId: continuingExecution.executionId,
@@ -1356,18 +1478,6 @@ export class RunT0ReviewOrchestration {
       };
     } catch (error) {
       this.dependencies.signal?.throwIfAborted();
-      if (error instanceof ReviewExecutionCancelledSignal) {
-        if (!isTerminal(state.phase)) {
-          state = evolveReviewOrchestration(state, {
-            type: ReviewOrchestrationEventType.Superseded,
-          });
-        }
-        return {
-          status: ReviewOrchestrationResultStatus.Cancelled,
-          state,
-          ...(execution ? { executionId: execution.executionId } : {}),
-        };
-      }
       if (error instanceof ReviewExecutionSupersededSignal) {
         if (authorization && execution) {
           await this.dependencies.controlPlane.supersedeExecution({
@@ -1393,17 +1503,11 @@ export class RunT0ReviewOrchestration {
           ...(execution ? { executionId: execution.executionId } : {}),
         };
       }
-      if (await this.pullRequestClosedAfterFailure()) {
-        if (!isTerminal(state.phase)) {
-          state = evolveReviewOrchestration(state, {
-            type: ReviewOrchestrationEventType.Superseded,
-          });
-        }
-        return {
-          status: ReviewOrchestrationResultStatus.Cancelled,
-          state,
-          ...(execution ? { executionId: execution.executionId } : {}),
-        };
+      if (
+        error instanceof ReviewExecutionCancelledSignal ||
+        (await this.pullRequestClosedAfterFailure())
+      ) {
+        return await cancelledResult();
       }
       if (!isTerminal(state.phase)) {
         state = evolveReviewOrchestration(state, {
@@ -2561,8 +2665,10 @@ export class RunT0ReviewOrchestration {
     try {
       const currentRevision =
         await this.dependencies.revisionGuard.loadCurrentRevision();
+      this.dependencies.signal?.throwIfAborted();
       return currentRevision.pullRequestState === 'closed';
     } catch {
+      this.dependencies.signal?.throwIfAborted();
       return false;
     }
   }

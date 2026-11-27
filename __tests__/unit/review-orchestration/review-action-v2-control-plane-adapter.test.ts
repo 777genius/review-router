@@ -890,6 +890,29 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('does not acknowledge original-revision cancellation when RR denies its target', async () => {
+    const failure = new ReviewActionV2ClientError(
+      ReviewActionV2ClientFailureCode.ProtocolError,
+      ReviewActionV2OperationId.ReviewExecutionSupersede,
+      {
+        httpStatus: 403,
+        protocolErrorCode: ReviewActionV2ProtocolErrorCode.Forbidden,
+        issues: ['target_revision_mismatch'],
+      }
+    );
+    const execute = jest.fn().mockRejectedValue(failure);
+
+    await expect(
+      createAdapter(execute).supersedeExecution({
+        authorization,
+        idempotencyKey: 'cancel-closed-pr-key',
+        execution,
+        targetRevisionHash: authorization.facts.reviewRevisionHash,
+      })
+    ).rejects.toBe(failure);
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it('opens and seals a target-bound context gateway session', async () => {
     const execute = jest
       .fn()

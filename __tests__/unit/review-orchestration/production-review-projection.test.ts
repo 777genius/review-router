@@ -1518,6 +1518,60 @@ describe('production review projection coverage', () => {
     expect(envelope.publishing.check.conclusion).toBe(CheckConclusion.Neutral);
   });
 
+  it.each([
+    {
+      cause: 'review_main_incomplete',
+      explanation: 'Completion of all required review work was not confirmed.',
+    },
+    {
+      cause: 'review_round_incomplete',
+      explanation: 'The review stopped before completing its review rounds.',
+    },
+    {
+      cause: 'review_phase_incomplete',
+      explanation: 'A review phase could not be completed.',
+    },
+  ])('explains $cause with complete path coverage', async ({ cause, explanation }) => {
+    const builder = projectionBuilder([assignment('required-slot', true)]);
+    const projection = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence(
+          'required-slot',
+          fullCoverageManifest('required-slot'),
+          ['context_inspection_incomplete', 'provider_warning', cause],
+          [{
+            category: 'correctness',
+            endLine: 1,
+            evidence: [],
+            message: 'A useful finding remains available from the incomplete review.',
+            normalizedFailureModeHash: '9'.repeat(64),
+            path: 'src/a.ts',
+            placementConfidence: null,
+            severity: 'major',
+            startLine: 1,
+            suggestion: null,
+            title: 'Preserved incomplete finding',
+          }]
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
+    expect(envelope.coverage).toMatchObject({
+      state: 'partial',
+      reviewedFiles: 1,
+      unreviewedFiles: 0,
+    });
+    expect(envelope.publishing.summary.body).toContain(explanation);
+    expect(envelope.publishing.summary.body).toContain('Preserved incomplete finding');
+    expect(envelope.publishing.summary.body).toContain('<!-- reviewrouter:review-status:incomplete -->');
+    expect(envelope.publishing.summary.body).not.toContain(cause);
+    expect(envelope.publishing.summary.allClear).toBe(false);
+    expect(envelope.publishing.check.conclusion).toBe(CheckConclusion.Neutral);
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+  });
+
   it('explains an unverified native span while keeping full-path evidence partial', async () => {
     const builder = projectionBuilder([assignment('required-slot', true)]);
     const projection = await builder.build({
@@ -1671,7 +1725,12 @@ describe('production review projection coverage', () => {
         acceptedEvidence(
           'optional-slot',
           fullCoverageManifest('optional-slot'),
-          ['context_inspection_incomplete']
+          [
+            'context_inspection_incomplete',
+            'review_main_incomplete',
+            'review_round_incomplete',
+            'review_phase_incomplete',
+          ]
         ),
       ],
       exhaustedWorkSlotIds: [],
@@ -1684,6 +1743,8 @@ describe('production review projection coverage', () => {
       limitations: [],
     });
     expect(envelope.publishing.summary.body).toContain('## No findings');
+    expect(envelope.publishing.summary.body).not.toContain('Why the review is incomplete');
+    expect(envelope.publishing.summary.body).not.toContain('review_phase_incomplete');
   });
 
   it('publishes only neutral coverage output when an assigned path lacks full patch proof', async () => {

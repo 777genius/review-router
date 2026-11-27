@@ -36,6 +36,17 @@ jobs:
         run: git restore --worktree -- dist
       - run: npm run lint
       - run: npm run typecheck
+      - name: Strict TypeScript 7.0.2 qualification
+        env:
+          npm_config_ignore_scripts: 'true'
+        run: |
+          npm exec --yes --package=typescript@7.0.2 --call '
+            set -eu
+            reviewrouter_tsc=$(command -v tsc)
+            reviewrouter_tsc_version=$("$reviewrouter_tsc" --version)
+            test "$reviewrouter_tsc_version" = "Version 7.0.2"
+            exec "$reviewrouter_tsc" --project tsconfig.json --noEmit --module preserve --moduleResolution bundler
+          '
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26.10'
@@ -70,9 +81,36 @@ jobs:
         run: |
           REVIEWROUTER_TEST_APPROVED_OCR_BINARY="$RUNNER_TEMP/reviewrouter-ocr/opencodereview" \
             npm test -- __tests__/unit/context-tools/ocr-native.test.ts --runInBand
-      - run: npm run build
+      - id: action-build
+        run: npm run build
       - name: Verify committed runtime artifacts
         run: |
           npm run check:context-gateway-release-metadata
           git diff --exit-code
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Stage generated runtime for review
+        id: stage-action-build
+        if: always() && steps.action-build.outcome == 'success'
+        env:
+          REQUESTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          candidate_dir="$RUNNER_TEMP/review-router-build"
+          mkdir -p "$candidate_dir"
+          cp -R dist "$candidate_dir/dist"
+          {
+            printf 'checkout_commit=%s\n' "$(git rev-parse HEAD)"
+            printf 'checkout_tree=%s\n' "$(git rev-parse 'HEAD^{tree}')"
+            printf 'requested_source=%s\n' "$REQUESTED_SOURCE_SHA"
+            printf 'run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'run_attempt=%s\n' "$GITHUB_RUN_ATTEMPT"
+          } > "$candidate_dir/provenance.txt"
+      - name: Preserve generated runtime and source identity
+        if: always() && steps.action-build.outcome == 'success' && steps.stage-action-build.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: review-router-build-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/review-router-build
+          if-no-files-found: error
+          retention-days: 7

@@ -1266,6 +1266,8 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(observation.qualityFlags).toEqual([
       'context_inspection_incomplete',
       'provider_warning',
+      'review_round_incomplete',
+      'review_phase_incomplete',
       'unverified_native_span',
     ]);
     expect(diagnostic).toHaveBeenCalledTimes(1);
@@ -1289,6 +1291,84 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(serialized).not.toContain(secretish);
     expect(serialized).not.toContain('calc.ts');
     expect(serialized).not.toContain('private_path_923.ts');
+  });
+
+  it.each([
+    {
+      name: 'missing main',
+      cause: 'review_main_incomplete',
+      runStop: null,
+      group: { main_completed: false, stop_cause: 'provider_error' },
+      phases: {},
+    },
+    {
+      name: 'run deadline after group completion',
+      cause: 'review_main_incomplete',
+      runStop: 'deadline',
+      group: {},
+      phases: {},
+    },
+    {
+      name: 'unfinished round',
+      cause: 'review_round_incomplete',
+      runStop: null,
+      group: { rounds: { configured: 2, started: 2, completed: 1 } },
+      phases: {},
+    },
+    {
+      name: 'cancelled relocation',
+      cause: 'review_phase_incomplete',
+      runStop: null,
+      group: {},
+      phases: {
+        relocation: { state: 'cancelled', reason: 'private_phase_reason_923' },
+      },
+    },
+    {
+      name: 'run compression stop',
+      cause: 'review_phase_incomplete',
+      runStop: 'compression',
+      group: {},
+      phases: {},
+    },
+    {
+      name: 'unfinished group compression stop',
+      cause: 'review_phase_incomplete',
+      runStop: null,
+      group: { main_completed: false, stop_cause: 'compression' },
+      phases: {},
+    },
+  ])('persists the finite $name cause with no uncovered paths', async (row) => {
+    const body = JSON.parse(nativeResultBody()) as Record<string, unknown>;
+    const outcome = body.reviewrouter_outcome as {
+      run_stop_cause: string | null;
+      groups: Record<string, unknown>[];
+    };
+    outcome.run_stop_cause = row.runStop;
+    Object.assign(outcome.groups[0], row.group);
+    Object.assign(outcome.groups[0].phases as object, row.phases);
+    const diagnostic = jest.fn<void, [OcrReviewAcceptanceDiagnostic]>();
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      acceptanceDiagnostic: diagnostic,
+      processRunner: processRunnerWriting(JSON.stringify(body)).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+      row.cause,
+    ]);
+    expect(diagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({ acceptedPartial: true, uncoveredPathCount: 0 })
+    );
+    expect(observation.payloadCanonicalJson).not.toContain('private_phase_reason_923');
+    expect(observation.payloadCanonicalJson).not.toContain(row.cause);
   });
 
   it('keeps an unverified span advisory when inspection and coverage are intact', async () => {
@@ -1424,6 +1504,9 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(observation.qualityFlags).toEqual([
       'context_inspection_incomplete',
       'provider_warning',
+      'review_main_incomplete',
+      'review_round_incomplete',
+      'review_phase_incomplete',
     ]);
     // The projection of this run must not count the unstarted group's files.
     expect(adapter.unfinishedPaths(workSlot.workSlotId)).toEqual(['calc.ts']);
@@ -1555,6 +1638,7 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(observation.qualityFlags).toEqual([
       'context_inspection_incomplete',
       'provider_warning',
+      'review_phase_incomplete',
     ]);
   });
 
@@ -1575,6 +1659,28 @@ describe('OcrReviewInvocationAdapter', () => {
     outcome.groups[0].filter_decision_valid = false;
     return JSON.stringify(body);
   };
+
+  it('explains a round stop without blaming the preserved filter', async () => {
+    const body = JSON.parse(preservedFilterResultBody()) as Record<string, unknown>;
+    const outcome = body.reviewrouter_outcome as {
+      groups: Record<string, unknown>[];
+    };
+    outcome.groups[0].rounds = { configured: 2, started: 2, completed: 1 };
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunnerWriting(JSON.stringify(body)).runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+      'review_round_incomplete',
+    ]);
+  });
 
   it('keeps context_inspection_incomplete when a preserved filter decision meets a normalization gap', async () => {
     const diagnostic = jest.fn<void, [OcrReviewAcceptanceDiagnostic]>();

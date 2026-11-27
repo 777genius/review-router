@@ -1166,6 +1166,36 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         ? ['provider_warning']
         : ['context_inspection_incomplete', 'provider_warning']
       : [];
+    // Persist only finite presentation causes; native diagnostic prose stays local.
+    // A preserved filter is advisory even when a separate round or path gap
+    // makes the observation partial.
+    if (qualityFlags.includes('context_inspection_incomplete')) {
+      if (accepted.classification.reasons.includes('missing_required_main')) {
+        qualityFlags.push('review_main_incomplete');
+      }
+      if (accepted.classification.reasons.includes('late_round_stop')) {
+        qualityFlags.push('review_round_incomplete');
+      }
+      const outcome = accepted.native.outcome;
+      const phaseIncomplete =
+        outcome.runStopCause === 'compression' ||
+        outcome.groups.some(
+          (group) =>
+            (!group.mainCompleted && group.stopCause === 'compression') ||
+            [
+              group.phases.plan,
+              group.phases.compression,
+              group.phases.relocation,
+            ].some(
+              (phase) =>
+                phase.state === 'failed' || phase.state === 'cancelled'
+            ) ||
+            ((group.phases.filter.state === 'failed' ||
+              group.phases.filter.state === 'cancelled') &&
+              group.filterDecisionValid !== false)
+        );
+      if (phaseIncomplete) qualityFlags.push('review_phase_incomplete');
+    }
     // Preserve the finite normalization cause across evidence serialization:
     // it ranks the observation below grounded evidence for reuse and explains
     // the cause when another degradation makes the slot partial.

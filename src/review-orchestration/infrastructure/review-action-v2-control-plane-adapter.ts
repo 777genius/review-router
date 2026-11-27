@@ -644,7 +644,11 @@ export class ReviewActionV2ControlPlaneAdapter
     const result = await this.client
       .execute(operationId, request)
       .catch((error) => {
-        if (isBenignSupersedeTargetRevisionMismatch(error)) {
+        if (
+          input.targetRevisionHash !==
+            input.authorization.facts.reviewRevisionHash &&
+          isBenignSupersedeTargetRevisionMismatch(error)
+        ) {
           return {
             status: ReviewExecutionMutationResultStatus.Restored,
             executionId: input.execution.executionId,

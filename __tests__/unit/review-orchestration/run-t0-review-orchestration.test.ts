@@ -2777,16 +2777,444 @@ describe('RunT0ReviewOrchestration', () => {
       .mockResolvedValueOnce(revisionOf(fixture.command))
       .mockResolvedValueOnce({
         ...revisionOf(fixture.command),
+        headSha: '9'.repeat(40),
+        reviewRevisionHash: hash('closed-new-head'),
         pullRequestState: 'closed',
       });
 
     const result = await fixture.useCase.execute(fixture.command);
 
     expect(result.status).toBe(ReviewOrchestrationResultStatus.Cancelled);
+    expect(fixture.controlPlane.startExecution).toHaveBeenCalledTimes(1);
     expect(fixture.dependencies.invocations.prepare).not.toHaveBeenCalled();
     expect(fixture.dependencies.projectionBuilder.build).not.toHaveBeenCalled();
     expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorization: expect.objectContaining({
+          authorizationId: authorization.authorizationId,
+          authorizationToken: 'authorization.renewed-token',
+        }),
+        execution: expect.objectContaining({
+          executionId: 'execution-1',
+          generation: '1',
+          streamVersion: '1',
+        }),
+        targetRevisionHash: authorization.facts.reviewRevisionHash,
+      })
+    );
+    expect(fixture.controlPlane.renewAuthorization).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not mutate RR when the PR is already closed before any admission', async () => {
+    const fixture = createFixture();
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        pullRequestState: 'closed',
+      });
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Cancelled);
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.restoreExecution).not.toHaveBeenCalled();
     expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+  });
+
+  it('cancels the exact supplied execution when the PR is closed before restore admission', async () => {
+    const fixture = createFixture();
+    const restored = restoredAdmission(fixture.command, {
+      state: RestoredReviewWorkSlotState.Pending,
+      acceptedObservationRefId: null,
+    }).restoredExecution;
+    fixture.controlPlane.restoreExecution.mockResolvedValue({
+      ...restored,
+      version: '2',
+      streamVersion: '3',
+    });
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        pullRequestState: 'closed',
+      });
+
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      restoredExecution: restored,
+      restoreOnly: true,
+    });
+
+    expect(result).toMatchObject({
+      status: ReviewOrchestrationResultStatus.Cancelled,
+      executionId: restored.executionId,
+    });
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorization,
+        execution: expect.objectContaining({
+          executionId: restored.executionId,
+          generation: restored.generation,
+          streamVersion: '3',
+        }),
+        targetRevisionHash: authorization.facts.reviewRevisionHash,
+      })
+    );
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { field: 'executionId', value: 'foreign-execution' },
+    { field: 'generation', value: '2' },
+    { field: 'authorizationId', value: 'foreign-authorization' },
+    { field: 'reviewRevisionHash', value: hash('foreign-revision') },
+    { field: 'planHash', value: hash('foreign-plan') },
+  ])(
+    'does not confirm cancellation from changed $field readback',
+    async ({ field, value }) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      fixture.controlPlane.restoreExecution.mockResolvedValue({
+        ...restored,
+        state: RestoredReviewExecutionState.Superseded,
+        [field]: value,
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: 'closed',
+        });
+
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        restoredExecution: restored,
+        restoreOnly: true,
+      });
+
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'review_orchestration_cancellation_unconfirmed',
+      });
+      expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    }
+  );
+
+  it('rejects a supplied execution from another authorization before cleanup I/O', async () => {
+    const fixture = createFixture();
+    const restored = restoredAdmission(fixture.command, {
+      state: RestoredReviewWorkSlotState.Pending,
+      acceptedObservationRefId: null,
+    }).restoredExecution;
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        pullRequestState: 'closed',
+      });
+
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      restoredExecution: {
+        ...restored,
+        authorizationId: 'foreign-authorization',
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: ReviewOrchestrationResultStatus.Failed,
+      failureCode: 'review_orchestration_cancellation_unconfirmed',
+    });
+    expect(fixture.controlPlane.restoreExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+  });
+
+  it.each(['present', 'absent', 'failed', 'foreign'] as const)(
+    'joins an initial %s execution restore when a sibling restore fails after PR closure',
+    async (outcome) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      let finishRestore!: (value: typeof restored | null) => void;
+      let failRestore!: (reason: Error) => void;
+      const pendingRestore = new Promise<typeof restored | null>(
+        (resolve, reject) => {
+          finishRestore = resolve;
+          failRestore = reject;
+        }
+      );
+      fixture.controlPlane.restoreExecution.mockReturnValue(pendingRestore);
+      fixture.controlPlane.restoreSnapshot.mockRejectedValue(
+        new Error('snapshot_restore_failed')
+      );
+      let closureObserved!: () => void;
+      const closedRead = new Promise<void>((resolve) => {
+        closureObserved = resolve;
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValueOnce(revisionOf(fixture.command))
+        .mockImplementation(async () => {
+          closureObserved();
+          return {
+            ...revisionOf(fixture.command),
+            pullRequestState: 'closed',
+          };
+        });
+
+      const resultPromise = fixture.useCase.execute(fixture.command);
+      await closedRead;
+      if (outcome === 'failed') {
+        failRestore(new Error('execution_restore_failed'));
+      } else {
+        finishRestore(
+          outcome === 'absent'
+            ? null
+            : outcome === 'foreign'
+              ? { ...restored, executionId: 'foreign-execution' }
+              : restored
+        );
+      }
+      const result = await resultPromise;
+
+      expect(result.status).toBe(
+        outcome === 'failed' || outcome === 'foreign'
+          ? ReviewOrchestrationResultStatus.Failed
+          : ReviewOrchestrationResultStatus.Cancelled
+      );
+      if (outcome === 'failed' || outcome === 'foreign') {
+        expect(result.failureCode).toBe(
+          'review_orchestration_cancellation_unconfirmed'
+        );
+      }
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        outcome === 'present' ? 1 : 0
+      );
+      if (outcome === 'present') {
+        expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            execution: expect.objectContaining({
+              executionId: fixture.command.executionId,
+              generation: restored.generation,
+              streamVersion: restored.streamVersion,
+            }),
+            targetRevisionHash: authorization.facts.reviewRevisionHash,
+          })
+        );
+      }
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['absent', 'present'] as const)(
+    'keeps a lost start ACK unconfirmed after an initial %s restore',
+    async (initialRead) => {
+      const fixture = createFixture();
+      if (initialRead === 'present') {
+        fixture.controlPlane.restoreExecution.mockResolvedValue(
+          restoredAdmission(fixture.command, {
+            state: RestoredReviewWorkSlotState.Pending,
+            acceptedObservationRefId: null,
+          }).restoredExecution
+        );
+      }
+      let startAttempted = false;
+      fixture.controlPlane.startExecution.mockImplementation(async () => {
+        startAttempted = true;
+        throw new Error('lost_start_ack');
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockImplementation(async () => ({
+          ...revisionOf(fixture.command),
+          pullRequestState: startAttempted ? 'closed' : 'open',
+        }));
+
+      const result = await fixture.useCase.execute(fixture.command);
+
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'review_orchestration_cancellation_unconfirmed',
+      });
+      expect(fixture.controlPlane.startExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it('preserves exact already-terminal RR work on PR-closed readback', async () => {
+    const fixture = createFixture();
+    const restored = restoredAdmission(fixture.command, {
+      state: RestoredReviewWorkSlotState.Satisfied,
+      acceptedObservationRefId: observationRef(
+        fixture.command.executionId,
+        'slot-1',
+        acceptedObservation.observationId
+      ),
+    }).restoredExecution;
+    fixture.controlPlane.restoreExecution.mockResolvedValue({
+      ...restored,
+      version: '2',
+      state: RestoredReviewExecutionState.Completed,
+    });
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        pullRequestState: 'closed',
+      });
+
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      restoredExecution: restored,
+    });
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Cancelled);
+    expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+  });
+
+  it.each(['restore_failed', 'supersede_refused', 'supersede_ack_lost'] as const)(
+    'does not claim confirmed cancellation after %s',
+    async (failure) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      if (failure === 'restore_failed') {
+        fixture.controlPlane.restoreExecution.mockRejectedValue(
+          new Error(failure)
+        );
+      } else {
+        // A missing restore cannot turn either refusal or lost ACK into success.
+        fixture.controlPlane.supersedeExecution.mockRejectedValue(
+          new Error(failure)
+        );
+      }
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: 'closed',
+        });
+
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        restoredExecution: restored,
+      });
+
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'review_orchestration_cancellation_unconfirmed',
+      });
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        failure === 'restore_failed' ? 0 : 1
+      );
+      expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
+
+  it('settles an admitted execution when failure-time GitHub read confirms closure', async () => {
+    const fixture = createFixture();
+    let failed = false;
+    fixture.controlPlane.lookupEvidence.mockImplementation(async () => {
+      failed = true;
+      throw new Error('evidence_lookup_failed');
+    });
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockImplementation(async () => ({
+        ...revisionOf(fixture.command),
+        pullRequestState: failed ? 'closed' : 'open',
+      }));
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Cancelled);
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.acquireInvocationLease).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+  });
+
+  it.each(['restore', 'supersede'] as const)(
+    'preserves outer abort during cancellation %s',
+    async (phase) => {
+      const fixture = createFixture();
+      const abort = new AbortController();
+      const reason = new Error('outer_cancelled');
+      Object.assign(fixture.dependencies, { signal: abort.signal });
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      fixture.controlPlane.restoreExecution.mockImplementation(async () => {
+        if (phase === 'restore') abort.abort(reason);
+        return restored;
+      });
+      fixture.controlPlane.supersedeExecution.mockImplementation(async () => {
+        abort.abort(reason);
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: 'closed',
+        });
+
+      await expect(
+        fixture.useCase.execute({
+          ...fixture.command,
+          restoredExecution: restored,
+        })
+      ).rejects.toBe(reason);
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        phase === 'restore' ? 0 : 1
+      );
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it('preserves outer abort during the failure-time GitHub read', async () => {
+    const fixture = createFixture();
+    const abort = new AbortController();
+    const reason = new Error('outer_cancelled');
+    Object.assign(fixture.dependencies, { signal: abort.signal });
+    let failed = false;
+    fixture.controlPlane.lookupEvidence.mockImplementation(async () => {
+      failed = true;
+      throw new Error('evidence_lookup_failed');
+    });
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockImplementation(async () => {
+        if (failed) abort.abort(reason);
+        return revisionOf(fixture.command);
+      });
+
+    await expect(fixture.useCase.execute(fixture.command)).rejects.toBe(reason);
+    expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
   });
 
   it('maps a control-plane race to cancellation when GitHub confirms the pull request closed', async () => {
@@ -2810,6 +3238,23 @@ describe('RunT0ReviewOrchestration', () => {
 
   it('releases a lease acquired concurrently with pull request closure', async () => {
     const fixture = createFixture();
+    const latest = {
+      ...restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Exhausted,
+        acceptedObservationRefId: null,
+      }).restoredExecution,
+      version: '5',
+      streamVersion: '4',
+    };
+    fixture.controlPlane.restoreExecution
+      .mockResolvedValueOnce(null)
+      .mockImplementation(async () => {
+        expect(
+          fixture.controlPlane.releaseInvocationLease
+        ).toHaveBeenCalledTimes(1);
+        // A concurrent parent transition, not lease release alone, advanced CAS.
+        return latest;
+      });
     jest
       .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
       .mockImplementation(async () =>
@@ -2831,6 +3276,18 @@ describe('RunT0ReviewOrchestration', () => {
       1
     );
     expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        execution: expect.objectContaining({
+          executionId: fixture.command.executionId,
+          generation: '1',
+          streamVersion: '4',
+          executionVersion: '5',
+        }),
+        targetRevisionHash: authorization.facts.reviewRevisionHash,
+      })
+    );
   });
 
   it('releases the lease and supersedes when revision moves after provider execution', async () => {

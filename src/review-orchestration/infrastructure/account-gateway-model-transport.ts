@@ -763,6 +763,7 @@ export class AccountGatewayModelTransport {
         responseReceived = false;
         httpStatus = null;
         currentRequestRef = undefined;
+        this.requestRef = undefined;
         denial = undefined;
         // Admission/model headers retain the existing whole-request deadline.
         // Socket errors can happen after application dispatch. Never infer non-entry.
@@ -835,13 +836,28 @@ export class AccountGatewayModelTransport {
         } finally {
           clearTimeout(controlTimer);
         }
+        // A closed allocation denial is already a terminal non-retry outcome.
+        const denialFact =
+          httpStatus === 403 &&
+          denial !== undefined &&
+          /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+            response.headers['content-type'] ?? ''
+          )
+            ? failureFact(denial, currentRequestRef)
+            : undefined;
+        const allocationDenied =
+          denialFact?.code === 'admission_limited' &&
+          denialFact.effect === 'not_dispatched' &&
+          denialFact.failureScope === 'allocation' &&
+          denialFact.requestRef === currentRequestRef;
         if (
           ticket &&
           !this.directProvider &&
           !this.codexRoute &&
           !this.auxiliaryDescription &&
           !this.companionDispatch &&
-          currentRequestRef
+          currentRequestRef &&
+          !allocationDenied
         ) {
           const successor = await ticket.retryAfterNativeRejection(
             currentRequestRef,

@@ -194,7 +194,12 @@ export class PreparedModelDispatch {
     signal: AbortSignal,
     explicitScope?: PreparedModelInvocationScope,
     outputAcceptanceCap?: number,
-    predecessor?: Readonly<{ dispatchId: string; notAfter: string }>
+    predecessor?: Readonly<{
+      dispatchId: string;
+      requestOrdinal: number;
+      nativeRequestRef: string;
+      notAfter: string;
+    }>
   ): Promise<PreparedModelDispatchTicket> {
     signal.throwIfAborted();
     const cap = this.capability;
@@ -234,6 +239,14 @@ export class PreparedModelDispatch {
       throw new Error('model_dispatch_route_mismatch');
     const authorization = this.input.authorization();
     const requestOrdinal = (this.ordinals.get(scope.workSlotId) ?? 0) + 1;
+    if (
+      predecessor &&
+      (requestOrdinal !== predecessor.requestOrdinal + 1 ||
+        Date.now() >= Date.parse(predecessor.notAfter))
+    ) {
+      this.fenced = true;
+      throw new Error('model_dispatch_retry_unavailable');
+    }
     if (requestOrdinal > cap.maxRequests) {
       // This request has no claim, but earlier calls may have paid. Keep the
       // invocation fenced; never turn this local bound into a whole-run refund.
@@ -283,6 +296,11 @@ export class PreparedModelDispatch {
         !/^[a-f0-9]{64}$/.test(result.receiptToken) ||
         !matchesClaim(result.dispatch, claim, authorization.authorizationId) ||
         result.dispatch.state !== 'dispatch_may_have_started' ||
+        (predecessor &&
+          (result.dispatch.role !== 'finding_discovery' ||
+            typeof result.dispatch.nativeRequestRef !== 'string' ||
+            !/^[A-Za-z0-9._~-]{1,200}$/.test(result.dispatch.nativeRequestRef) ||
+            result.dispatch.nativeRequestRef === predecessor.nativeRequestRef)) ||
         !Number.isFinite(Date.parse(result.notAfter)) ||
         Date.parse(result.notAfter) > Date.parse(cap.deadline)
       )
@@ -335,10 +353,17 @@ export class PreparedModelDispatch {
             `${path}/settle`,
             'POST',
             settlement,
-            headers
+            headers,
+            nativeRequestRef === undefined ? undefined : signal
           );
         } catch {
-          response = await this.json(path, 'GET', undefined, headers);
+          response = await this.json(
+            path,
+            'GET',
+            undefined,
+            headers,
+            nativeRequestRef === undefined ? undefined : signal
+          );
         }
         if (!agrees(response))
           throw new Error('model_dispatch_settlement_unconfirmed');
@@ -358,6 +383,7 @@ export class PreparedModelDispatch {
     return Object.freeze({
       claim,
       forwarded: () => {
+        if (this.fenced) throw new Error('model_dispatch_fenced');
         if (predecessor) {
           signal.throwIfAborted();
           if (
@@ -373,7 +399,11 @@ export class PreparedModelDispatch {
       },
       isCompleted: () => completed,
       retryAfterNativeRejection: async (requestRef, retrySignal) => {
-        retrySignal.throwIfAborted();
+        signal.throwIfAborted();
+        if (retrySignal !== signal) {
+          this.fenced = true;
+          throw new Error('model_dispatch_retry_signal_mismatch');
+        }
         if (
           !nativeRetryEnabled ||
           !retryBytes ||
@@ -425,7 +455,12 @@ export class PreparedModelDispatch {
             retrySignal,
             undefined,
             outputAcceptanceCap,
-            { dispatchId: claim.dispatchId, notAfter: result.notAfter }
+            {
+              dispatchId: claim.dispatchId,
+              requestOrdinal: claim.requestOrdinal,
+              nativeRequestRef: requestRef,
+              notAfter: result.notAfter,
+            }
           );
           if (
             retrySignal.aborted ||
@@ -468,7 +503,7 @@ export class PreparedModelDispatch {
       },
       failed: async () => {
         if (settling) return;
-        if (forwarded) this.fenced = true;
+        if (forwarded || predecessor !== undefined) this.fenced = true;
         await settle(
           forwarded
             ? { state: 'effect_unknown' }

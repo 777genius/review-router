@@ -1000,6 +1000,58 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ReviewExecutionMutationResultStatus.Applied,
+    ReviewExecutionMutationResultStatus.Restored,
+  ])(
+    'requires the original execution in a %s supersede receipt',
+    async (status) => {
+      const execute = jest.fn().mockResolvedValueOnce({
+        status,
+        executionId: execution.executionId,
+        streamVersion: execution.streamVersion,
+      });
+      const adapter = createAdapter(execute);
+      const input = {
+        authorization,
+        idempotencyKey: 'cancel-original-execution',
+        execution,
+        targetRevisionHash: authorization.facts.reviewRevisionHash,
+      };
+      await expect(adapter.supersedeExecution(input)).resolves.toBeUndefined();
+      for (const response of [
+        {
+          executionId: 'foreign-execution',
+          failure: 'review_action_v2_execution_supersede_execution_mismatch',
+        },
+        {
+          executionId: undefined,
+          failure: 'review_action_v2_execution_supersede_execution_id_missing',
+        },
+      ]) {
+        execute.mockResolvedValueOnce({
+          status,
+          executionId: response.executionId,
+          streamVersion: execution.streamVersion,
+        });
+        await expect(adapter.supersedeExecution(input)).rejects.toThrow(
+          response.failure
+        );
+      }
+      expect(execute).toHaveBeenCalledTimes(3);
+      expect(execute).toHaveBeenLastCalledWith(
+        ReviewActionV2OperationId.ReviewExecutionSupersede,
+        {
+          authorizationToken: authorization.authorizationToken,
+          idempotencyKey: input.idempotencyKey,
+          executionId: execution.executionId,
+          expectedStreamVersion: execution.streamVersion,
+          targetRevisionHash: authorization.facts.reviewRevisionHash,
+        }
+      );
+    }
+  );
+
   it('opens and seals a target-bound context gateway session', async () => {
     const execute = jest
       .fn()
@@ -1687,7 +1739,7 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     });
   });
 
-  it('rejects malformed, duplicate and ineligible unattached source hints', async () => {
+  it('rejects malformed and ineligible unattached source hints', async () => {
     const f = unattachedRestoreWireFixture();
     const withHint = (hint: unknown) => ({
       ...f.raw,
@@ -1700,13 +1752,6 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
       withHint({ ...f.hint, sourceOwnerIdHash: 'invalid' }),
       withHint({ ...f.hint, providerVoteIdentityHash: 'f'.repeat(64) }),
       withHint({ ...f.hint, manifestCanonicalJson: '{invalid' }),
-      {
-        ...f.raw,
-        persistedPlan: {
-          ...f.raw.persistedPlan,
-          unattachedAcceptedManifests: [f.hint, f.hint],
-        },
-      },
       {
         ...f.raw,
         persistedPlan: {
@@ -1733,6 +1778,45 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
       })).rejects.toThrow();
     }
     expect(execute).toHaveBeenCalledTimes(invalid.length);
+  });
+
+  it('rejects duplicate unattached hints within the restored slot count', async () => {
+    const f = unattachedRestoreWireFixture();
+    const raw = {
+      ...f.raw,
+      workSlots: [
+        ...f.raw.workSlots,
+        { ...f.raw.workSlots[0]!, workSlotId: 'second-slot' },
+      ],
+      persistedPlan: {
+        ...f.raw.persistedPlan,
+        workSlots: [
+          ...f.raw.persistedPlan.workSlots,
+          { ...f.raw.persistedPlan.workSlots[0]!, workSlotId: 'second-slot' },
+        ],
+      },
+    };
+    const execute = jest.fn().mockResolvedValueOnce(f.response(raw));
+    const adapter = createAdapter(execute);
+    const input = {
+      authorization,
+      reviewRevisionHash: startInput.reviewRevisionHash,
+    };
+    const restored = await adapter.restoreExecution(input);
+    expect(restored?.persistedPlan?.unattachedAcceptedManifests).toEqual([f.hint]);
+    execute.mockResolvedValueOnce(
+      f.response({
+        ...raw,
+        persistedPlan: {
+          ...raw.persistedPlan,
+          unattachedAcceptedManifests: [f.hint, f.hint],
+        },
+      })
+    );
+    await expect(adapter.restoreExecution(input)).rejects.toThrow(
+      'review_restore_unattached_manifest_scope_mismatch'
+    );
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it('restores original accepted manifests only for their exact satisfied slots', async () => {

@@ -505,7 +505,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         try {
           signal?.throwIfAborted();
           const restored =
-            knownExecution === undefined
+            knownExecution == null
               ? await controlPlane.restoreExecution({
                   authorization,
                   reviewRevisionHash: authorization.facts.reviewRevisionHash,
@@ -525,11 +525,15 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               controlPlane,
               identities: new DeterministicReviewOrchestrationIdentity(),
               // An earlier positive restore stays bound while its CAS refreshes.
-              ...(knownExecution === undefined
+              ...(knownExecution == null
                 ? { restoredExecution: restored }
                 : {}),
               signal,
             });
+          } else {
+            // A fresh absence cannot confirm termination of a start whose ACK
+            // was lost; its admission may still commit after this read.
+            throw new Error('review_orchestration_cancellation_unconfirmed');
           }
           signal?.throwIfAborted();
           return mapOrchestrationResultToCodexOutcome({ status });

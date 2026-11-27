@@ -660,6 +660,12 @@ export class ReviewActionV2ControlPlaneAdapter
         throw error;
       });
     requireMutationApplied(result.status, 'execution_supersede');
+    if (
+      requireString(result.executionId, 'execution_supersede_execution_id') !==
+      input.execution.executionId
+    ) {
+      throw new Error('review_action_v2_execution_supersede_execution_mismatch');
+    }
   }
 
   async lookupEvidence(

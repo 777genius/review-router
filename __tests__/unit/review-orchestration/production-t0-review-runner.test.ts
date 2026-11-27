@@ -2567,6 +2567,9 @@ process.stdin.once('data', () => {
     ['closed', 'read-aborted'],
     ['moved', 'ack-aborted'],
     ['later-moved', 'active'],
+    ['later-moved', 'appeared-after-null'],
+    ['later-moved', 'still-absent'],
+    ['later-moved', 'read-failed-after-null'],
     ['later-moved', 'absent-after-read'],
     ['later-moved', 'regressed'],
     ['later-moved', 'foreign-execution'],
@@ -2633,9 +2636,20 @@ process.stdin.once('data', () => {
       const abortReason = new Error('original_runner_aborted');
       let loadedPullRequest = false;
       const restore = jest.fn(async () => {
-        if (recovery === 'read-failed') throw new Error('restore_unavailable');
+        if (
+          recovery === 'read-failed' ||
+          (recovery === 'read-failed-after-null' && loadedPullRequest)
+        )
+          throw new Error('restore_unavailable');
         if (recovery === 'read-aborted') abort.abort(abortReason);
-        if (recovery === 'none') return null;
+        if (
+          recovery === 'none' ||
+          recovery === 'still-absent' ||
+          (!loadedPullRequest &&
+            (recovery === 'appeared-after-null' ||
+              recovery === 'read-failed-after-null'))
+        )
+          return null;
         if (loadedPullRequest) {
           if (recovery === 'absent-after-read') return null;
           return {
@@ -2692,7 +2706,11 @@ process.stdin.once('data', () => {
           if (recovery === 'ack-failed')
             throw new Error('supersede_not_acknowledged');
           if (recovery === 'ack-aborted') abort.abort(abortReason);
-          if (recovery === 'active' || recovery === 'absent-after-read') {
+          if (
+            recovery === 'active' ||
+            recovery === 'absent-after-read' ||
+            recovery === 'appeared-after-null'
+          ) {
             enteredAck();
             await ack;
           }
@@ -2767,7 +2785,11 @@ process.stdin.once('data', () => {
         if (recovery === 'read-aborted' || recovery === 'ack-aborted') {
           await expect(result).rejects.toBe(abortReason);
         } else {
-          if (recovery === 'active' || recovery === 'absent-after-read') {
+          if (
+            recovery === 'active' ||
+            recovery === 'absent-after-read' ||
+            recovery === 'appeared-after-null'
+          ) {
             let settled = false;
             void result.then(
               () => {
@@ -2785,6 +2807,9 @@ process.stdin.once('data', () => {
             releaseAck();
           }
           const failed = [
+            'none',
+            'still-absent',
+            'read-failed-after-null',
             'foreign-authorization',
             'foreign-revision',
             'foreign-execution',
@@ -2817,6 +2842,7 @@ process.stdin.once('data', () => {
         });
         const expectedSupersede = [
           'active',
+          'appeared-after-null',
           'absent-after-read',
           'ack-failed',
           'ack-aborted',
@@ -2831,7 +2857,8 @@ process.stdin.once('data', () => {
                 executionId: original.executionId,
                 generation: original.generation,
                 streamVersion:
-                  revision === 'later-moved' && recovery === 'active'
+                  revision === 'later-moved' &&
+                  (recovery === 'active' || recovery === 'appeared-after-null')
                     ? '8'
                     : original.streamVersion,
                 restoredExecution: expect.objectContaining({

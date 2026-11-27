@@ -353,6 +353,7 @@ function nativeRetryFixture(
     loseAcknowledgement?: boolean;
     afterProof?: () => void;
     alterReadback?: (value: Record<string, unknown>) => Record<string, unknown>;
+    alterClaim?: (value: Record<string, unknown>) => Record<string, unknown>;
   } = {}
 ) {
   const claims: Record<string, unknown>[] = [];
@@ -361,20 +362,22 @@ function nativeRetryFixture(
   let currentScope = { ...scope };
   const fetchImpl = jest.fn(
     async (url: string | URL | Request, init?: RequestInit) => {
+      init?.signal?.throwIfAborted();
       if (String(url).endsWith('/claim')) {
         const claim = JSON.parse(String(init?.body)) as Record<string, unknown>;
         claims.push(claim);
+        const dispatch = {
+          ...claim,
+          authorizationId: 'authorization',
+          role: 'finding_discovery',
+          nativeRequestRef: `native-${claims.length}`,
+          state: 'dispatch_may_have_started',
+        };
         return Response.json({
           status: 'claimed',
           receiptToken: 'b'.repeat(64),
           notAfter: new Date(Date.now() + 30_000).toISOString(),
-          dispatch: {
-            ...claim,
-            authorizationId: 'authorization',
-            role: 'finding_discovery',
-            nativeRequestRef: `native-${claims.length}`,
-            state: 'dispatch_may_have_started',
-          },
+          dispatch: options.alterClaim?.(dispatch) ?? dispatch,
         });
       }
       const settlement =
@@ -563,25 +566,57 @@ it('rejects a native reference changed in both the rejection header and readback
 });
 
 it('keeps the single-request gate during retry delay and refuses changed lease authority', async () => {
-  let proofObserved!: () => void;
-  const proof = new Promise<void>((resolve) => {
-    proofObserved = resolve;
-  });
-  const f = nativeRetryFixture({ afterProof: proofObserved });
+  const f = nativeRetryFixture();
   const signal = new AbortController().signal;
   const ticket = await f.dispatch.reserve(
     request({ max_output_tokens: 100 }),
     signal
   );
   ticket.forwarded();
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const timers = jest.requireActual<typeof import('timers/promises')>(
+    'timers/promises'
+  );
+  const delay = jest
+    .spyOn(timers, 'setTimeout')
+    .mockImplementationOnce(async (milliseconds, value, options) => {
+      expect(milliseconds).toBe(1000);
+      expect(options?.signal).toBe(signal);
+      entered();
+      await gate;
+      return value;
+    });
   const retry = ticket.retryAfterNativeRejection('native-1', signal);
-  await proof;
-  await expect(
-    f.dispatch.reserve(request({ max_output_tokens: 100 }), signal)
-  ).rejects.toThrow('model_dispatch_fenced');
-  f.replaceScope({ ...scope, leaseId: 'different-lease' });
-  await expect(retry).rejects.toThrow('model_dispatch_authority_changed');
-  expect(f.claims).toHaveLength(1);
+  try {
+    await Promise.race([
+      started,
+      retry.then(() => {
+        throw new Error('fixture_retry_delay_not_observed');
+      }),
+    ]);
+    expect(f.settlements).toEqual([
+      { state: 'not_dispatched', proof: 'native_rejection_after_forward' },
+    ]);
+    expect(f.claims).toHaveLength(1);
+    await expect(
+      f.dispatch.reserve(request({ max_output_tokens: 100 }), signal)
+    ).rejects.toThrow('model_dispatch_fenced');
+    f.replaceScope({ ...scope, leaseId: 'different-lease' });
+    release();
+    await expect(retry).rejects.toThrow('model_dispatch_authority_changed');
+    expect(f.claims).toHaveLength(1);
+  } finally {
+    release();
+    await retry.catch(() => undefined);
+    delay.mockRestore();
+  }
 });
 
 it('never claims a successor after cancellation during proof settlement', async () => {
@@ -661,3 +696,108 @@ it.each(['cancellation', 'deadline'] as const)(
     }
   }
 );
+
+it.each([
+  { label: 'missing native reference', patch: { nativeRequestRef: undefined } },
+  { label: 'invalid native reference', patch: { nativeRequestRef: 'invalid ref' } },
+  { label: 'reused native reference', patch: { nativeRequestRef: 'native-1' } },
+  { label: 'wrong role', patch: { role: 'lifecycle_verification' } },
+  { label: 'wrong ordinal', patch: { requestOrdinal: 1 } },
+])('refuses a successor claim with $label', async ({ patch }) => {
+  const f = nativeRetryFixture({
+    alterClaim: (row) =>
+      row.requestOrdinal === 2 ? { ...row, ...patch } : row,
+  });
+  const signal = new AbortController().signal;
+  const ticket = await f.dispatch.reserve(
+    request({ max_output_tokens: 100 }),
+    signal
+  );
+  ticket.forwarded();
+  await expect(
+    ticket.retryAfterNativeRejection('native-1', signal)
+  ).rejects.toThrow('model_dispatch_claim_unavailable');
+  expect(f.claims).toHaveLength(2);
+  expect(f.settlements).toEqual([
+    { state: 'not_dispatched', proof: 'native_rejection_after_forward' },
+  ]);
+  await expect(
+    f.dispatch.reserve(request({ max_output_tokens: 100 }), signal)
+  ).rejects.toThrow('model_dispatch_fenced');
+  expect(f.claims).toHaveLength(2);
+});
+
+it('fences a locally unforwarded successor before any further claim', async () => {
+  const f = nativeRetryFixture();
+  const signal = new AbortController().signal;
+  const ticket = await f.dispatch.reserve(
+    request({ max_output_tokens: 100 }),
+    signal
+  );
+  ticket.forwarded();
+  const child = await ticket.retryAfterNativeRejection('native-1', signal);
+  expect(child).not.toBeNull();
+  await child!.failed();
+  expect(f.settlements).toEqual([
+    { state: 'not_dispatched', proof: 'native_rejection_after_forward' },
+    { state: 'not_dispatched', proof: 'local_before_forward' },
+  ]);
+  await expect(
+    f.dispatch.reserve(request({ max_output_tokens: 100 }), signal)
+  ).rejects.toThrow('model_dispatch_fenced');
+  expect(f.claims).toHaveLength(2);
+});
+
+it.each([false, true])(
+  'refuses a replacement signal before retry I/O (original aborted: %s)',
+  async (aborted) => {
+    const f = nativeRetryFixture();
+    const original = new AbortController();
+    const ticket = await f.dispatch.reserve(
+      request({ max_output_tokens: 100 }),
+      original.signal
+    );
+    ticket.forwarded();
+    const reason = new Error('synthetic_original_cancelled');
+    if (aborted) original.abort(reason);
+    const replacement = new AbortController().signal;
+    await expect(
+      ticket.retryAfterNativeRejection('native-1', replacement)
+    ).rejects.toThrow(
+      aborted ? reason : 'model_dispatch_retry_signal_mismatch'
+    );
+    expect(f.fetchImpl).toHaveBeenCalledTimes(1);
+    expect(f.claims).toHaveLength(1);
+    expect(f.settlements).toHaveLength(0);
+    await expect(
+      f.dispatch.reserve(request({ max_output_tokens: 100 }), replacement)
+    ).rejects.toThrow('model_dispatch_fenced');
+    expect(f.fetchImpl).toHaveBeenCalledTimes(1);
+  }
+);
+
+it('uses original cancellation for native settlement and lost-ACK readback', async () => {
+  const original = new AbortController();
+  const f = nativeRetryFixture({
+    loseAcknowledgement: true,
+    afterProof: () => original.abort(new Error('synthetic_original_cancelled')),
+  });
+  const ticket = await f.dispatch.reserve(
+    request({ max_output_tokens: 100 }),
+    original.signal
+  );
+  ticket.forwarded();
+  await expect(
+    ticket.retryAfterNativeRejection('native-1', original.signal)
+  ).rejects.toThrow('model_dispatch_settlement_unconfirmed');
+  expect(f.fetchImpl.mock.calls.map(([, init]) => init?.method)).toEqual([
+    'POST',
+    'POST',
+    'GET',
+  ]);
+  expect(f.fetchImpl.mock.calls[1]![1]?.signal?.aborted).toBe(true);
+  expect(f.fetchImpl.mock.calls[2]![1]?.signal?.aborted).toBe(true);
+  expect(f.proofReads()).toBe(0);
+  expect(f.claims).toHaveLength(1);
+  expect(f.settlements).toHaveLength(1);
+});

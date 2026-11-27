@@ -30,6 +30,7 @@ import {
   type PrDescriptionGenerationPort,
   type PreparedReviewInvocation,
   type ProviderInvocationManifest,
+  type PersistedUnattachedReviewManifest,
   type ProviderInvocationManifestAssemblerPort,
   type ReviewActionV2ControlPlanePort,
   type ReviewContextAttestationPort,
@@ -640,6 +641,23 @@ export class RunT0ReviewOrchestration {
           );
         const restoredSatisfied =
           restoredSlot.state === RestoredReviewWorkSlotState.Satisfied;
+        // A known accepted source cannot become ordinary admission or fallback.
+        const restoredAcceptedHint =
+          command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
+            (hint) => hint.workSlotId === workSlot.workSlotId
+          ) ??
+          execution!.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
+            (hint) => hint.workSlotId === workSlot.workSlotId
+          );
+        if (restoredAcceptedHint && (
+          !command.restoreOnly ||
+          workSlot.taskKind !== ReviewTaskKind.FindingDiscovery ||
+          workSlot.attemptBudget !== 1 ||
+          persistedSlot?.nextAttemptOrdinal !== 2 ||
+          restoredSlot.state !== RestoredReviewWorkSlotState.Exhausted ||
+          restoredSlot.activeLeaseId !== null ||
+          restoredSlot.acceptedObservationRefId !== null
+        )) throw new Error('review_orchestration_unattached_source_changed');
         const lifecycleEvidenceUnavailable =
           workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation &&
           (!restoredSatisfied ||
@@ -655,10 +673,12 @@ export class RunT0ReviewOrchestration {
             restoredSlot.activeLeaseId !== null ||
             (persistedSlot?.nextAttemptOrdinal ?? 1) > 1);
         if (
-          (command.restoreOnly &&
-            (lifecycleEvidenceUnavailable || discoveryDispatchUncertain)) ||
-          restoredSlot.state === RestoredReviewWorkSlotState.Exhausted ||
-          restoredSlot.state === RestoredReviewWorkSlotState.Cancelled
+          !restoredAcceptedHint && (
+            (command.restoreOnly &&
+              (lifecycleEvidenceUnavailable || discoveryDispatchUncertain)) ||
+            restoredSlot.state === RestoredReviewWorkSlotState.Exhausted ||
+            restoredSlot.state === RestoredReviewWorkSlotState.Cancelled
+          )
         ) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
@@ -680,6 +700,7 @@ export class RunT0ReviewOrchestration {
           return;
         }
         if (
+          !restoredAcceptedHint &&
           restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied &&
           !this.canStartBatch()
         ) {
@@ -695,6 +716,7 @@ export class RunT0ReviewOrchestration {
           return;
         }
         if (
+          !restoredAcceptedHint &&
           restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied &&
           this.providerLaneBusyBudgetExhausted(
             busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0
@@ -720,6 +742,7 @@ export class RunT0ReviewOrchestration {
           ownerIdHash: command.ownerIdHash,
           revision: command,
           restoredSlot,
+          ...(restoredAcceptedHint ? { restoredAcceptedHint } : {}),
           restoreOnly: command.restoreOnly === true,
           busyPollsByProviderLane,
           admissionLimited: this.dependencies.reviewerScheduling
@@ -728,7 +751,23 @@ export class RunT0ReviewOrchestration {
           onEvent: (event) => {
             state = evolveReviewOrchestration(state, event);
           },
+        }).catch((error: unknown) => {
+          if (
+            !restoredAcceptedHint ||
+            error instanceof ReviewExecutionSupersededSignal ||
+            error instanceof ReviewExecutionCancelledSignal ||
+            error instanceof ReviewExecutionDeadlineReachedSignal
+          ) throw error;
+          this.dependencies.signal?.throwIfAborted();
+          // A recovery refusal is a run failure, never a reviewer-route fallback.
+          throw new Error(
+            'review_orchestration_unattached_observation_unavailable'
+          );
         });
+        if (restoredAcceptedHint && !outcome.observation)
+          throw new Error(
+            'review_orchestration_unattached_observation_unavailable'
+          );
         execution = {
           ...execution!,
           streamVersion: maxVersion(
@@ -1537,6 +1576,7 @@ export class RunT0ReviewOrchestration {
     readonly ownerIdHash: string;
     readonly revision: ReviewRevisionFacts;
     readonly restoredSlot: RestoredReviewWorkSlot;
+    readonly restoredAcceptedHint?: PersistedUnattachedReviewManifest;
     readonly restoreOnly: boolean;
     readonly busyPollsByProviderLane: Map<string, number>;
     readonly admissionLimited: boolean;
@@ -2197,7 +2237,10 @@ export class RunT0ReviewOrchestration {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
         }
       } catch (error) {
-        if (!(error instanceof ReviewMemoryAdmissionChangedSignal)) throw error;
+        if (
+          input.restoredAcceptedHint ||
+          !(error instanceof ReviewMemoryAdmissionChangedSignal)
+        ) throw error;
         // No authoritative lease was granted for this stale input. Prepare a
         // memory-free prompt/manifest at the same attempt ordinal; completed
         // investigation work is not repeated or reused under the new manifest.
@@ -2385,6 +2428,7 @@ export class RunT0ReviewOrchestration {
     readonly invocation: PreparedReviewInvocation;
     readonly revision: ReviewRevisionFacts;
     readonly restoredSlot: RestoredReviewWorkSlot;
+    readonly restoredAcceptedHint?: PersistedUnattachedReviewManifest;
     readonly onEvent: (event: {
       readonly type: ReviewOrchestrationEventType.SlotSatisfied;
       readonly workSlotId: string;
@@ -2393,6 +2437,10 @@ export class RunT0ReviewOrchestration {
     readonly observation: AcceptedReviewObservation;
     readonly streamVersion: string;
   } | null> {
+    const hint = input.restoredAcceptedHint;
+    if (hint) this.assertExecutionDeadlineAvailable();
+    if (hint && !isOriginalAcceptedManifest(input, input.manifest))
+      throw new Error('review_orchestration_unattached_manifest_mismatch');
     if (!isOriginalAcceptedManifest(input, input.manifest))
       await this.assertMemoryEligible(input.invocation);
     const lookup = await this.dependencies.controlPlane.lookupEvidence({
@@ -2402,6 +2450,18 @@ export class RunT0ReviewOrchestration {
       planHash: input.planHash,
       manifest: input.manifest,
     });
+    if (hint && (
+      lookup.kind !== ReviewEvidenceLookupKind.Hit ||
+      lookup.attachment.kind !== 'same_execution' ||
+      lookup.observation.observationId !== hint.observationId ||
+      lookup.observation.payloadHash !== hint.payloadHash ||
+      lookup.observation.providerInvocationKey !== hint.providerInvocationKey ||
+      lookup.observation.providerVoteIdentityHash !==
+        hint.providerVoteIdentityHash ||
+      lookup.attachment.sourceLeaseId !== hint.sourceLeaseId ||
+      lookup.attachment.sourceFencingToken !== hint.sourceFencingToken ||
+      lookup.attachment.sourceOwnerIdHash !== hint.sourceOwnerIdHash
+    )) throw new Error('review_orchestration_unattached_observation_mismatch');
     if (lookup.kind === ReviewEvidenceLookupKind.Miss) return null;
 
     await this.assertRevisionCurrent(input.revision);
@@ -2501,8 +2561,9 @@ export class RunT0ReviewOrchestration {
           );
       const adopted = await this.parentCommand(
         { ...input, execution: adoptionExecution },
-        (execution) =>
-          this.dependencies.controlPlane.adoptObservation({
+        (execution) => {
+          if (hint) this.assertExecutionDeadlineAvailable();
+          return this.dependencies.controlPlane.adoptObservation({
             authorization: input.authorization,
             idempotencyKey: this.idempotencyKey('adopt', [
               input.execution.executionId,
@@ -2517,7 +2578,8 @@ export class RunT0ReviewOrchestration {
             manifest: input.manifest,
             observation: lookup.observation,
             source: attachment,
-          })
+          });
+        }
       );
       streamVersion = adopted.streamVersion;
     }
@@ -3806,16 +3868,19 @@ function isOriginalAcceptedManifest(
     readonly execution: ReviewExecutionAdmission;
     readonly restoredSlot: RestoredReviewWorkSlot;
     readonly workSlot: ReviewWorkSlotPlan;
+    readonly restoredAcceptedHint?: PersistedUnattachedReviewManifest;
   },
   manifest: ProviderInvocationManifest
 ): boolean {
   if (
-    input.restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied ||
+    (!input.restoredAcceptedHint &&
+      input.restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied) ||
     input.execution.restoredExecution.executionId !==
       input.execution.executionId
   )
     return false;
   const original =
+    input.restoredAcceptedHint ??
     input.execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
       (value) => value.workSlotId === input.workSlot.workSlotId
     );

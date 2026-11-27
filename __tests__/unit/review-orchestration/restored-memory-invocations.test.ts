@@ -158,6 +158,66 @@ test('restores exact original memory manifest with verified memory-independent C
   expect(f.provider.executePreparedInvocation).not.toHaveBeenCalled();
 });
 
+
+test('restores an unattached source with original coverage and an unexecutable invocation', async () => {
+  const f = await fixture();
+  const hint = {
+    ...f.original,
+    observationId: 'accepted-original',
+    payloadHash: 'a'.repeat(64),
+    sourceLeaseId: 'released-source',
+    sourceFencingToken: '7',
+    sourceOwnerIdHash: 'd'.repeat(64),
+  };
+  const restored: RestoredReviewExecution = {
+    ...f.restored,
+    workSlots: f.restored.workSlots.map((slot) => ({
+      ...slot,
+      state: RestoredReviewWorkSlotState.Exhausted,
+      activeLeaseId: null,
+      acceptedObservationRefId: null,
+    })),
+    persistedPlan: {
+      planHash: 'c'.repeat(64),
+      assignmentManifestVersion: null,
+      assignmentManifestHash: null,
+      assignmentManifestCanonicalJson: null,
+      workSlots: [{ ...f.workSlot, nextAttemptOrdinal: 2 }],
+      acceptedManifests: [],
+      unattachedAcceptedManifests: [hint],
+      artifact: null,
+    },
+  };
+  const readOnly = restoredLifecycleInvocations(restored, f.adapter);
+  const invocation = await readOnly.prepare({ workSlot: f.workSlot, attemptOrdinal: 1 });
+  expect(invocation.coverageManifest).toEqual(f.first.coverageManifest);
+  expect(invocation.reviewPrompt).toBe('');
+  expect(invocation.immutableRequest).toBeNull();
+  const assemble = jest.fn();
+  await expect(restoredLifecycleManifestAssembler(restored, { assemble }).assemble(invocation))
+    .resolves.toEqual(hint);
+  expect(assemble).not.toHaveBeenCalled();
+  await expect(
+    readOnly.execute({
+      invocation,
+      manifest: hint,
+      lease: {
+        leaseId: hint.sourceLeaseId,
+        attemptId: 'original-attempt',
+        leaseCapability: 'original-capability',
+        fencingToken: hint.sourceFencingToken,
+        expiresAt: '2026-11-27T00:00:00.000Z',
+        resultReportUntil: '2026-11-27T00:01:00.000Z',
+        renewalCeilingReached: false,
+      },
+      sourceExecutionId: 'original-execution',
+      sourceReviewRevisionHash: restored.reviewRevisionHash,
+      signal: new AbortController().signal,
+    })
+  ).rejects.toThrow('review_restore_inference_forbidden');
+  expect(f.provider.executePreparedInvocation).not.toHaveBeenCalled();
+});
+
 test.each([
   'title',
   'reviewSkills',

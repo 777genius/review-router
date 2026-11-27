@@ -527,3 +527,36 @@ the actual artifact, keep official output unchanged, and rerun the ordinary gate
 on the resulting source commit. Never hand-edit the bundle or infer its identity
 from an artifact name alone. Registration and activation still require the
 existing release handoff and exact-source checks.
+
+### Restoring an unattached original accepted result
+
+The server may include `unattachedAcceptedManifests` inside the computed
+`persistedPlan` readback, separate from satisfied-only `acceptedManifests`.
+The immutable admitted plan, assignment hash and canonical slot list do not
+change. Qualify actual old decoder compatibility at this nested boundary;
+its strict top-level execution object must not receive a new field.
+
+This path is limited to the current original Running execution and an Exhausted
+finding-discovery slot whose single provider attempt was already spent.
+Reconstruct its original manifest and committed coverage through the existing
+read-only wrapper; never execute that invocation. Lookup must prove the exact
+original accepted observation, payload, reviewer, lease, owner and fence with a
+`same_execution` attachment. Adoption uses the existing RPC and refreshed
+execution CAS, within current original authorization/report authority.
+
+The source work deadline and report window remain distinct. Check the Action
+hard deadline and outer abort before lookup and after the adoption refresh.
+Retain a previously received hint across a later omission only while exact
+current lookup/adoption still proves the original source. Hint failures are
+run failures, never provider admission, reviewer fallback or context replay.
+A response without any hint retains the existing exhausted-slot behavior.
+
+The joined acceptance gate must cold-enter the compiled public runner after
+the real source release is applied but its acknowledgement is held, before the
+first child can close its transport. Supply only original runtime/authority;
+the child must discover source IDs and adopt the stored bytes without a new
+provider invocation, lease attempt, dispatch or preparation. A successful
+explicit restore within that live window does not add an automatic wakeup,
+after-close continuation, new authorization or deadline extension. The new
+source, actual old decoder and compiled PostgreSQL gates require their own
+results; earlier bundle qualification does not cover this behavior.

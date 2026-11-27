@@ -1582,6 +1582,72 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     expect(await adapter.restoreComparisonBaseline(input)).toBeNull();
   });
 
+  it('parses an original unattached hint outside the immutable plan bytes', async () => {
+    const f = unattachedRestoreWireFixture();
+    const execute = jest.fn().mockResolvedValue(f.response(f.raw));
+    const restored = await createAdapter(execute).restoreExecution({
+      authorization,
+      reviewRevisionHash: startInput.reviewRevisionHash,
+    });
+    expect(restored?.persistedPlan?.unattachedAcceptedManifests).toEqual([f.hint]);
+    expect(restored?.planHash).toBe(f.raw.planHash);
+    expect(restored?.persistedPlan?.assignmentManifestCanonicalJson).toBeNull();
+    expect(restored?.persistedPlan?.acceptedManifests).toEqual([]);
+    expect(restored?.workSlots[0]).toMatchObject({
+      state: RestoredReviewWorkSlotState.Exhausted,
+      activeLeaseId: null,
+      acceptedObservationRefId: null,
+    });
+  });
+
+  it('rejects malformed, duplicate and ineligible unattached source hints', async () => {
+    const f = unattachedRestoreWireFixture();
+    const withHint = (hint: unknown) => ({
+      ...f.raw,
+      persistedPlan: { ...f.raw.persistedPlan, unattachedAcceptedManifests: [hint] },
+    });
+    const invalid = [
+      withHint({ ...f.hint, extra: true }),
+      withHint({ ...f.hint, workSlotId: 'foreign-slot' }),
+      withHint({ ...f.hint, sourceFencingToken: '-1' }),
+      withHint({ ...f.hint, sourceOwnerIdHash: 'invalid' }),
+      withHint({ ...f.hint, providerVoteIdentityHash: 'f'.repeat(64) }),
+      withHint({ ...f.hint, manifestCanonicalJson: '{invalid' }),
+      {
+        ...f.raw,
+        persistedPlan: {
+          ...f.raw.persistedPlan,
+          unattachedAcceptedManifests: [f.hint, f.hint],
+        },
+      },
+      {
+        ...f.raw,
+        persistedPlan: {
+          ...f.raw.persistedPlan,
+          workSlots: [{ ...workSlot, attemptBudget: 2, nextAttemptOrdinal: 2 }],
+        },
+      },
+      {
+        ...f.raw,
+        persistedPlan: {
+          ...f.raw.persistedPlan,
+          workSlots: [{ ...workSlot, nextAttemptOrdinal: 1 }],
+        },
+      },
+      { ...f.raw, unattachedAcceptedManifests: [f.hint] },
+    ];
+    const execute = jest.fn();
+    const adapter = createAdapter(execute);
+    for (const raw of invalid) {
+      execute.mockResolvedValueOnce(f.response(raw));
+      await expect(adapter.restoreExecution({
+        authorization,
+        reviewRevisionHash: startInput.reviewRevisionHash,
+      })).rejects.toThrow();
+    }
+    expect(execute).toHaveBeenCalledTimes(invalid.length);
+  });
+
   it('restores original accepted manifests only for their exact satisfied slots', async () => {
     const raw = JSON.parse(canonicalExecution());
     raw.workSlots[0].state = RestoredReviewWorkSlotState.Satisfied;
@@ -2523,6 +2589,54 @@ function createAdapter(execute: jest.Mock) {
       serverTime: '2026-07-22T12:00:00.000Z',
     }),
   } as unknown as ReviewActionV2Client);
+}
+
+function unattachedRestoreWireFixture() {
+  const hint = {
+    workSlotId: workSlot.workSlotId,
+    ...providerManifest,
+    observationId: 'original-observation',
+    payloadHash: 'e'.repeat(64),
+    sourceLeaseId: 'released-original-lease',
+    sourceFencingToken: '7',
+    sourceOwnerIdHash: 'd'.repeat(64),
+  };
+  const raw = {
+    authorizationId: authorization.authorizationId,
+    executionId: execution.executionId,
+    generation: execution.generation,
+    version: execution.executionVersion,
+    planHash: startInput.planHash,
+    reviewRevisionHash: startInput.reviewRevisionHash,
+    state: RestoredReviewExecutionState.Running,
+    workSlots: [{
+      workSlotId: workSlot.workSlotId,
+      state: RestoredReviewWorkSlotState.Exhausted,
+      required: workSlot.required,
+      providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+      activeLeaseId: null,
+      acceptedObservationRefId: null,
+    }],
+    persistedPlan: {
+      planHash: startInput.planHash,
+      assignmentManifestVersion: null,
+      assignmentManifestCanonicalJson: null,
+      assignmentManifestHash: null,
+      workSlots: [{ ...workSlot, nextAttemptOrdinal: 2 }],
+      artifact: null,
+      acceptedManifests: [],
+      unattachedAcceptedManifests: [hint],
+    },
+  };
+  const response = (value: unknown) => ({
+    status: ReviewExecutionRestoreResultStatus.Found,
+    executionId: execution.executionId,
+    generation: execution.generation,
+    streamVersion: execution.streamVersion,
+    executionState: RestoredReviewExecutionState.Running,
+    executionCanonicalJson: canonicalJson(value),
+  });
+  return { raw, hint, response };
 }
 
 function renewalInput() {

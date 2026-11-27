@@ -379,7 +379,18 @@ export type RestoredReviewWorkSlot = Readonly<{
   acceptedObservationRefId: string | null;
 }>;
 
+export type PersistedUnattachedReviewManifest = ProviderInvocationManifest &
+  Readonly<{
+    workSlotId: string;
+    observationId: string;
+    payloadHash: string;
+    sourceLeaseId: string;
+    sourceFencingToken: string;
+    sourceOwnerIdHash: string;
+  }>;
+
 export type PersistedReviewExecutionPlan = Readonly<{
+  unattachedAcceptedManifests?: readonly PersistedUnattachedReviewManifest[];
   compatibilityKey?: string;
   acceptedManifests?: readonly (ProviderInvocationManifest & {
     readonly workSlotId: string;

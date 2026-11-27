@@ -86,22 +86,25 @@ export function restoredLifecycleInvocations(
   discovery: PreparedReviewInvocationPort
 ): PreparedReviewInvocationPort {
   const manifests = new Map(
-    restored.persistedPlan?.acceptedManifests?.map((value) => [
-      value.workSlotId,
-      value,
-    ]) ?? []
+    [
+      ...(restored.persistedPlan?.acceptedManifests ?? []),
+      ...(restored.persistedPlan?.unattachedAcceptedManifests ?? []),
+    ].map((value) => [value.workSlotId, value])
   );
-  const satisfied = new Set(
-    restored.workSlots
+  const readOnlySlots = new Set([
+    ...restored.workSlots
       .filter((slot) => slot.state === RestoredReviewWorkSlotState.Satisfied)
-      .map((slot) => slot.workSlotId)
-  );
+      .map((slot) => slot.workSlotId),
+    ...(restored.persistedPlan?.unattachedAcceptedManifests ?? []).map(
+      (hint) => hint.workSlotId
+    ),
+  ]);
   return {
     async prepare(input): Promise<PreparedReviewInvocation> {
       const original = manifests.get(input.workSlot.workSlotId);
       if (
         input.workSlot.taskKind !== ReviewTaskKind.LifecycleRevalidation &&
-        !satisfied.has(input.workSlot.workSlotId)
+        !readOnlySlots.has(input.workSlot.workSlotId)
       )
         return discovery.prepare(input);
       if (!original || input.attemptOrdinal !== 1)
@@ -140,7 +143,7 @@ export function restoredLifecycleInvocations(
     },
     async execute(input) {
       if (
-        satisfied.has(input.invocation.workSlotId) ||
+        readOnlySlots.has(input.invocation.workSlotId) ||
         (input.invocation.manifestFacts.taskKindSet.length === 1 &&
           input.invocation.manifestFacts.taskKindSet[0] ===
             ReviewTaskKind.LifecycleRevalidation)
@@ -157,20 +160,22 @@ export function restoredLifecycleManifestAssembler(
 ): ProviderInvocationManifestAssemblerPort {
   if (!restored?.persistedPlan) return discovery;
   const manifests = new Map(
-    restored?.persistedPlan?.acceptedManifests?.map((value) => [
-      value.workSlotId,
-      value,
-    ]) ?? []
+    [
+      ...(restored.persistedPlan.acceptedManifests ?? []),
+      ...(restored.persistedPlan.unattachedAcceptedManifests ?? []),
+    ].map((value) => [value.workSlotId, value])
   );
   return {
     async assemble(invocation) {
-      const satisfied = restored.workSlots.some(
+      const originalSource = restored.workSlots.some(
         (slot) =>
           slot.workSlotId === invocation.workSlotId &&
           slot.state === RestoredReviewWorkSlotState.Satisfied
+      ) || restored.persistedPlan?.unattachedAcceptedManifests?.some(
+        (hint) => hint.workSlotId === invocation.workSlotId
       );
       if (
-        !satisfied &&
+        !originalSource &&
         (invocation.manifestFacts.taskKindSet.length !== 1 ||
           invocation.manifestFacts.taskKindSet[0] !==
             ReviewTaskKind.LifecycleRevalidation)

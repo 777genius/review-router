@@ -328,7 +328,7 @@ describe('GitHubClient', () => {
       }
     );
 
-    it.each<[string, string, string, number, number?]>([
+    it.each<[string, string, string, number, number?, number?]>([
       [
         'IMF-fixdate',
         '2026-11-06T10:00:00Z',
@@ -356,6 +356,14 @@ describe('GitHubClient', () => {
         'Saturday, 01-Jan-50 00:00:03 GMT',
         3_000,
         1,
+      ],
+      [
+        'an RFC 850 retry crossing a century boundary',
+        '2099-12-31T23:59:59Z',
+        'Friday, 01-Jan-00 00:00:02 GMT',
+        3_000,
+        undefined,
+        503,
       ],
       [
         'RFC 850 more than 50 years ahead interpreted in the past',
@@ -392,14 +400,21 @@ describe('GitHubClient', () => {
       ],
     ])(
       'honors %s without shortening the announced wait',
-      async (_name, currentTime, retryAfter, expectedWait, resetSeconds) => {
+      async (
+        _name,
+        currentTime,
+        retryAfter,
+        expectedWait,
+        resetSeconds,
+        status = 429
+      ) => {
         const now = Date.parse(currentTime);
         const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
         const requests = nock('https://api.github.com')
           .get('/repos/owner/repo')
           .reply(
-            429,
-            { message: 'rate limit exceeded' },
+            status,
+            { message: status === 503 ? 'unavailable' : 'rate limit exceeded' },
             {
               'Retry-After': retryAfter,
               ...(resetSeconds === undefined

@@ -132004,6 +132004,10 @@ var PreparedModelDispatch = class {
       throw new Error("model_dispatch_route_mismatch");
     const authorization = this.input.authorization();
     const requestOrdinal = (this.ordinals.get(scope.workSlotId) ?? 0) + 1;
+    if (predecessor && (requestOrdinal !== predecessor.requestOrdinal + 1 || Date.now() >= Date.parse(predecessor.notAfter))) {
+      this.fenced = true;
+      throw new Error("model_dispatch_retry_unavailable");
+    }
     if (requestOrdinal > cap.maxRequests) {
       this.fenced = true;
       throw new ModelDispatchClaimDeniedError(
@@ -132046,7 +132050,7 @@ var PreparedModelDispatch = class {
         },
         signal
       );
-      if (result2.status !== "claimed" || !/^[a-f0-9]{64}$/.test(result2.receiptToken) || !matchesClaim(result2.dispatch, claim, authorization.authorizationId) || result2.dispatch.state !== "dispatch_may_have_started" || !Number.isFinite(Date.parse(result2.notAfter)) || Date.parse(result2.notAfter) > Date.parse(cap.deadline))
+      if (result2.status !== "claimed" || !/^[a-f0-9]{64}$/.test(result2.receiptToken) || !matchesClaim(result2.dispatch, claim, authorization.authorizationId) || result2.dispatch.state !== "dispatch_may_have_started" || predecessor && (result2.dispatch.role !== "finding_discovery" || typeof result2.dispatch.nativeRequestRef !== "string" || !/^[A-Za-z0-9._~-]{1,200}$/.test(result2.dispatch.nativeRequestRef) || result2.dispatch.nativeRequestRef === predecessor.nativeRequestRef) || !Number.isFinite(Date.parse(result2.notAfter)) || Date.parse(result2.notAfter) > Date.parse(cap.deadline))
         throw new Error("model_dispatch_claim_unavailable");
     } catch (error4) {
       this.active = false;
@@ -132077,10 +132081,17 @@ var PreparedModelDispatch = class {
             `${path40}/settle`,
             "POST",
             settlement,
-            headers
+            headers,
+            nativeRequestRef === void 0 ? void 0 : signal
           );
         } catch {
-          response = await this.json(path40, "GET", void 0, headers);
+          response = await this.json(
+            path40,
+            "GET",
+            void 0,
+            headers,
+            nativeRequestRef === void 0 ? void 0 : signal
+          );
         }
         if (!agrees(response))
           throw new Error("model_dispatch_settlement_unconfirmed");
@@ -132099,6 +132110,7 @@ var PreparedModelDispatch = class {
     return Object.freeze({
       claim,
       forwarded: () => {
+        if (this.fenced) throw new Error("model_dispatch_fenced");
         if (predecessor) {
           signal.throwIfAborted();
           if (Date.now() >= Math.min(
@@ -132111,7 +132123,11 @@ var PreparedModelDispatch = class {
       },
       isCompleted: () => completed,
       retryAfterNativeRejection: async (requestRef, retrySignal) => {
-        retrySignal.throwIfAborted();
+        signal.throwIfAborted();
+        if (retrySignal !== signal) {
+          this.fenced = true;
+          throw new Error("model_dispatch_retry_signal_mismatch");
+        }
         if (!nativeRetryEnabled || !retryBytes || explicitScope !== void 0 || predecessor !== void 0 || result2.dispatch.role !== "finding_discovery" || !forwarded || settling || retryAttempted || this.fenced || claim.requestOrdinal >= cap.maxRequests || Date.now() + 1e3 >= Date.parse(result2.notAfter))
           return null;
         retryAttempted = true;
@@ -132141,7 +132157,12 @@ var PreparedModelDispatch = class {
             retrySignal,
             void 0,
             outputAcceptanceCap,
-            { dispatchId: claim.dispatchId, notAfter: result2.notAfter }
+            {
+              dispatchId: claim.dispatchId,
+              requestOrdinal: claim.requestOrdinal,
+              nativeRequestRef: requestRef,
+              notAfter: result2.notAfter
+            }
           );
           if (retrySignal.aborted || Date.now() >= Date.parse(result2.notAfter)) {
             await successor.failed();
@@ -132178,7 +132199,7 @@ var PreparedModelDispatch = class {
       },
       failed: async () => {
         if (settling) return;
-        if (forwarded) this.fenced = true;
+        if (forwarded || predecessor !== void 0) this.fenced = true;
         await settle(
           forwarded ? { state: "effect_unknown" } : { state: "not_dispatched", proof: "local_before_forward" }
         );
@@ -132841,6 +132862,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         responseReceived = false;
         httpStatus = null;
         currentRequestRef = void 0;
+        this.requestRef = void 0;
         denial = void 0;
         response = await this.request(
           "POST",
@@ -132895,7 +132917,11 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         } finally {
           clearTimeout(controlTimer);
         }
-        if (ticket && !this.directProvider && !this.codexRoute && !this.auxiliaryDescription && !this.companionDispatch && currentRequestRef) {
+        const denialFact = httpStatus === 403 && denial !== void 0 && /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+          response.headers["content-type"] ?? ""
+        ) ? failureFact(denial, currentRequestRef) : void 0;
+        const allocationDenied = denialFact?.code === "admission_limited" && denialFact.effect === "not_dispatched" && denialFact.failureScope === "allocation" && denialFact.requestRef === currentRequestRef;
+        if (ticket && !this.directProvider && !this.codexRoute && !this.auxiliaryDescription && !this.companionDispatch && currentRequestRef && !allocationDenied) {
           const successor = await ticket.retryAfterNativeRejection(
             currentRequestRef,
             controller.signal
@@ -215314,6 +215340,9 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
       throw error4;
     });
     requireMutationApplied(result2.status, "execution_supersede");
+    if (requireString2(result2.executionId, "execution_supersede_execution_id") !== input.execution.executionId) {
+      throw new Error("review_action_v2_execution_supersede_execution_mismatch");
+    }
   }
   async lookupEvidence(input) {
     const result2 = await this.client.execute(
@@ -247493,7 +247522,7 @@ var ProductionT0ReviewRunner = class {
       const stoppedBeforePlanning = async (status, knownExecution) => {
         try {
           signal?.throwIfAborted();
-          const restored = knownExecution === void 0 ? await controlPlane.restoreExecution({
+          const restored = knownExecution == null ? await controlPlane.restoreExecution({
             authorization,
             reviewRevisionHash: authorization.facts.reviewRevisionHash
           }) : knownExecution;
@@ -247511,9 +247540,11 @@ var ProductionT0ReviewRunner = class {
               controlPlane,
               identities: new DeterministicReviewOrchestrationIdentity(),
               // An earlier positive restore stays bound while its CAS refreshes.
-              ...knownExecution === void 0 ? { restoredExecution: restored } : {},
+              ...knownExecution == null ? { restoredExecution: restored } : {},
               signal
             });
+          } else {
+            throw new Error("review_orchestration_cancellation_unconfirmed");
           }
           signal?.throwIfAborted();
           return mapOrchestrationResultToCodexOutcome({ status });

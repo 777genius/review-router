@@ -215210,6 +215210,9 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
       throw error3;
     });
     requireMutationApplied(result2.status, "execution_supersede");
+    if (requireString3(result2.executionId, "execution_supersede_execution_id") !== input.execution.executionId) {
+      throw new Error("review_action_v2_execution_supersede_execution_mismatch");
+    }
   }
   async lookupEvidence(input) {
     const result2 = await this.client.execute(
@@ -223059,7 +223062,7 @@ var ProductionT0ReviewRunner = class {
       const stoppedBeforePlanning = async (status, knownExecution) => {
         try {
           signal?.throwIfAborted();
-          const restored = knownExecution === void 0 ? await controlPlane.restoreExecution({
+          const restored = knownExecution == null ? await controlPlane.restoreExecution({
             authorization,
             reviewRevisionHash: authorization.facts.reviewRevisionHash
           }) : knownExecution;
@@ -223077,9 +223080,11 @@ var ProductionT0ReviewRunner = class {
               controlPlane,
               identities: new DeterministicReviewOrchestrationIdentity(),
               // An earlier positive restore stays bound while its CAS refreshes.
-              ...knownExecution === void 0 ? { restoredExecution: restored } : {},
+              ...knownExecution == null ? { restoredExecution: restored } : {},
               signal
             });
+          } else {
+            throw new Error("review_orchestration_cancellation_unconfirmed");
           }
           signal?.throwIfAborted();
           return mapOrchestrationResultToCodexOutcome({ status });

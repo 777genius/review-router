@@ -3013,23 +3013,77 @@ describe('RunT0ReviewOrchestration', () => {
     expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
   });
 
-  it('cancels the exact supplied execution when the PR is closed before restore admission', async () => {
+  it.each(['closed', 'moved'] as const)(
+    'reconciles the exact supplied execution when the PR is %s before restore admission',
+    async (revision) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      fixture.controlPlane.restoreExecution.mockReset();
+      fixture.controlPlane.restoreExecution.mockResolvedValue({
+        ...restored,
+        version: '2',
+        streamVersion: '3',
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: revision === 'closed' ? 'closed' : 'open',
+          ...(revision === 'moved'
+            ? { headSha: '9'.repeat(40), reviewRevisionHash: hash('moved-head') }
+            : {}),
+        });
+
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        restoredExecution: restored,
+        restoreOnly: true,
+      });
+
+      expect(result).toMatchObject({
+        status:
+          revision === 'closed'
+            ? ReviewOrchestrationResultStatus.Cancelled
+            : ReviewOrchestrationResultStatus.Superseded,
+        executionId: restored.executionId,
+      });
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authorization,
+          execution: expect.objectContaining({
+            executionId: restored.executionId,
+            generation: restored.generation,
+            streamVersion: '3',
+          }),
+          targetRevisionHash: authorization.facts.reviewRevisionHash,
+        })
+      );
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it('does not claim supersession when the original execution cleanup is unconfirmed before restore admission', async () => {
     const fixture = createFixture();
     const restored = restoredAdmission(fixture.command, {
       state: RestoredReviewWorkSlotState.Pending,
       acceptedObservationRefId: null,
     }).restoredExecution;
-    fixture.controlPlane.restoreExecution.mockReset();
-    fixture.controlPlane.restoreExecution.mockResolvedValue({
-      ...restored,
-      version: '2',
-      streamVersion: '3',
-    });
+    fixture.controlPlane.restoreExecution.mockResolvedValue(restored);
+    fixture.controlPlane.supersedeExecution.mockRejectedValue(
+      new Error('supersede_acknowledgement_lost')
+    );
     jest
       .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
       .mockResolvedValue({
         ...revisionOf(fixture.command),
-        pullRequestState: 'closed',
+        headSha: '9'.repeat(40),
+        reviewRevisionHash: hash('moved-head'),
       });
 
     const result = await fixture.useCase.execute({
@@ -3039,22 +3093,13 @@ describe('RunT0ReviewOrchestration', () => {
     });
 
     expect(result).toMatchObject({
-      status: ReviewOrchestrationResultStatus.Cancelled,
+      status: ReviewOrchestrationResultStatus.Failed,
       executionId: restored.executionId,
+      failureCode: 'review_orchestration_cancellation_unconfirmed',
     });
     expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
-    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
-      expect.objectContaining({
-        authorization,
-        execution: expect.objectContaining({
-          executionId: restored.executionId,
-          generation: restored.generation,
-          streamVersion: '3',
-        }),
-        targetRevisionHash: authorization.facts.reviewRevisionHash,
-      })
-    );
     expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.acquireInvocationLease).not.toHaveBeenCalled();
     expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
     expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
   });

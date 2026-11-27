@@ -315,7 +315,11 @@ export class RunT0ReviewOrchestration {
     let initialExecutionRestore:
       | Promise<RestoredReviewExecution | null>
       | undefined;
-    const cancelledResult = async (): Promise<ReviewOrchestrationResult> => {
+    const stoppedResult = async (
+      status:
+        | ReviewOrchestrationResultStatus.Cancelled
+        | ReviewOrchestrationResultStatus.Superseded
+    ): Promise<ReviewOrchestrationResult> => {
       this.dependencies.signal?.throwIfAborted();
       let initialRestoredExecution: RestoredReviewExecution | null | undefined;
       if (
@@ -393,9 +397,7 @@ export class RunT0ReviewOrchestration {
         });
       }
       return {
-        status: acknowledged
-          ? ReviewOrchestrationResultStatus.Cancelled
-          : ReviewOrchestrationResultStatus.Failed,
+        status: acknowledged ? status : ReviewOrchestrationResultStatus.Failed,
         state,
         ...(cancelledExecution
           ? { executionId: cancelledExecution.executionId }
@@ -423,13 +425,10 @@ export class RunT0ReviewOrchestration {
       const admittedRevision =
         await this.dependencies.revisionGuard.loadCurrentRevision();
       if (admittedRevision.pullRequestState === 'closed') {
-        return await cancelledResult();
+        return await stoppedResult(ReviewOrchestrationResultStatus.Cancelled);
       }
       if (!sameRevision(admittedRevision, command)) {
-        state = evolveReviewOrchestration(state, {
-          type: ReviewOrchestrationEventType.Superseded,
-        });
-        return { status: ReviewOrchestrationResultStatus.Superseded, state };
+        return await stoppedResult(ReviewOrchestrationResultStatus.Superseded);
       }
       state = evolveReviewOrchestration(state, {
         type: ReviewOrchestrationEventType.RevisionConfirmed,
@@ -1518,7 +1517,7 @@ export class RunT0ReviewOrchestration {
         error instanceof ReviewExecutionCancelledSignal ||
         (await this.pullRequestClosedAfterFailure())
       ) {
-        return await cancelledResult();
+        return await stoppedResult(ReviewOrchestrationResultStatus.Cancelled);
       }
       if (!isTerminal(state.phase)) {
         state = evolveReviewOrchestration(state, {

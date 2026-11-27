@@ -5,11 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 const repository = '777genius/review-router';
-const version = '1.13.1-rr.7';
+const version = '1.13.1-rr.6';
 const tag = `ocr-v${version}`;
 const assetName = 'opencodereview-linux-amd64';
 const manifestPath =
-  'tools/ocr/qualifications/managed-tracked-inventory-v1.manifest';
+  'tools/ocr/qualifications/unified-model-routes-v3.manifest';
 const maximumBytes = 128 * 1024 * 1024;
 let phase = 'validate';
 let writeIssued = false;
@@ -125,7 +125,7 @@ function publish(): void {
   need(Array.isArray(profiles));
   const matching = profiles
     .map(record)
-    .filter((profile) => profile.profileRef === 'ocr-managed-v6');
+    .filter((profile) => profile.profileRef === 'ocr-managed-v5');
   need(matching.length === 1);
   const profile = matching[0]!;
   need(

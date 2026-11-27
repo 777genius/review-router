@@ -25,6 +25,7 @@ import {
   type OcrModelProtocol,
 } from '../review-orchestration/infrastructure/ocr-review-managed-run';
 import type { AdmittedRuntimeConfig } from '../control-plane/runtime-config';
+import bundledProfiles from '../control-plane/review-agent-profiles.json';
 
 /** The generated profile contract is the single strict parser for all engines.
  * Old gateway-only profiles retain their original bytes and explicit refs. */
@@ -152,6 +153,22 @@ export async function resolveApprovedOcrBinary(input: {
   ) {
     throw new Error('review_action_v2_ocr_asset_identity_invalid');
   }
+  const isForkProfile = input.approvedAgent.profileRef === 'ocr-managed-v6';
+  if (isForkProfile) {
+    const pinned = bundledProfiles.find(
+      (profile) => profile.profileRef === 'ocr-managed-v6'
+    );
+    if (
+      !pinned ||
+      pinned.agentKind !== 'ocr' ||
+      pinned.packageVersion !== packageVersion ||
+      pinned.binarySha256 !== binarySha256
+    )
+      throw new Error('review_action_v2_ocr_asset_identity_invalid');
+  }
+  const repository = isForkProfile
+    ? 'agent-teams-ai/open-code-review'
+    : '777genius/review-router';
   const directory = await fs.mkdtemp(
     path.join(env.RUNNER_TEMP || os.tmpdir(), 'reviewrouter-ocr-binary-')
   );
@@ -176,7 +193,7 @@ export async function resolveApprovedOcrBinary(input: {
     try {
       signal.throwIfAborted();
       const response = await (input.fetchImpl ?? fetch)(
-        `https://github.com/777genius/review-router/releases/download/ocr-v${packageVersion}/opencodereview-linux-amd64`,
+        `https://github.com/${repository}/releases/download/ocr-v${packageVersion}/opencodereview-linux-amd64`,
         {
           signal,
           credentials: 'omit',

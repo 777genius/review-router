@@ -7,7 +7,7 @@ import path from 'node:path';
 const repoRoot = path.resolve(__dirname, '../../..');
 const script = path.join(repoRoot, 'scripts/native-ocr/publish.ts');
 const sourceSha = 'a'.repeat(40);
-const tag = 'ocr-v1.13.1-rr.7';
+const tag = 'ocr-v1.13.1-rr.6';
 
 // The actual Node entrypoint runs with a no-network subprocess boundary. Remote
 // state evolves across calls, including partial writes and uncertain outcomes.
@@ -33,14 +33,14 @@ function output(value, options) {
   return options && options.encoding ? bytes.toString(options.encoding) : bytes;
 }
 function release() {
-  return {id: 71, tag_name: 'ocr-v1.13.1-rr.7', target_commitish: scenario === 'metadata-default-branch' ? 'main' : sha,
+  return {id: 71, tag_name: 'ocr-v1.13.1-rr.6', target_commitish: scenario === 'metadata-default-branch' ? 'main' : sha,
     draft: !published, prerelease: true};
 }
 cp.spawnSync = (command, args) => {
   log(command, args);
   if (scenario === 'tag-lookup-failed') return {status: 1, stdout: 'HTTP/2.0 500 Server Error\n\n{}'};
   if (!tagExists) return {status: 1, stdout: 'HTTP/2.0 404 Not Found\n\n{}'};
-  return {status: 0, stdout: 'HTTP/2.0 200 OK\n\n' + JSON.stringify({ref: 'refs/tags/ocr-v1.13.1-rr.7',
+  return {status: 0, stdout: 'HTTP/2.0 200 OK\n\n' + JSON.stringify({ref: 'refs/tags/ocr-v1.13.1-rr.6',
     object: {type: 'commit', sha: published && scenario === 'wrong-final-tag' ? 'b'.repeat(40) : sha}})};
 };
 cp.execFileSync = (command, args, options) => {
@@ -60,7 +60,7 @@ cp.execFileSync = (command, args, options) => {
   }
   if (command.endsWith('/opencodereview')) {
     if (options.env.GH_TOKEN || options.env.GITHUB_TOKEN) throw Error('native_received_mutation_token');
-    return output('open-code-review 1.13.1-rr.7 linux/amd64\nhttps://github.com/alibaba/open-code-review\n', options);
+    return output('open-code-review 1.13.1-rr.6 linux/amd64\nhttps://github.com/alibaba/open-code-review\n', options);
   }
   if (command !== 'gh') throw Error('unexpected_command');
   if (args[0] === 'run') {
@@ -134,15 +134,15 @@ describe('native OCR publication entrypoint', () => {
     );
     fs.writeFileSync(
       path.join(directory, 'MANIFEST'),
-      `release_version=1.13.1-rr.7\nbinary=opencodereview\nbinary_sha256=${digest}\n`
+      `release_version=1.13.1-rr.6\nbinary=opencodereview\nbinary_sha256=${digest}\n`
     );
     fs.writeFileSync(
       path.join(directory, 'profiles.json'),
       JSON.stringify([
         {
-          profileRef: 'ocr-managed-v6',
+          profileRef: 'ocr-managed-v5',
           agentKind: 'ocr',
-          packageVersion: '1.13.1-rr.7',
+          packageVersion: '1.13.1-rr.6',
           binarySha256: digest,
         },
       ])

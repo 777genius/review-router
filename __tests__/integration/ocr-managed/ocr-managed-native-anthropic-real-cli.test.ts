@@ -1,9 +1,10 @@
-/** Real rr.7 binary against native Messages fixtures, never a paid provider. */
+/** Pinned managed fork binary against native Messages fixtures, never a paid provider. */
 import { execFileSync } from 'child_process';
 import { createServer } from 'http';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import bundledProfiles from '../../../src/control-plane/review-agent-profiles.json';
 import {
   buildOcrChildEnvironment,
   buildOcrManagedConfigJson,
@@ -23,10 +24,17 @@ const binary =
   path.resolve(__dirname, '../../../tools/ocr/out/opencodereview');
 let available = false;
 try {
-  available = execFileSync(binary, ['--version'], {
-    encoding: 'utf8',
-    timeout: 10_000,
-  }).includes('1.13.1-rr.7');
+  const profile = bundledProfiles.find(
+    (candidate) => candidate.profileRef === 'ocr-managed-v6'
+  );
+  available =
+    profile !== undefined &&
+    execFileSync(binary, ['--version'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+    })
+      .split('\n')[0]
+      ?.trim() === `open-code-review ${profile.packageVersion} linux/amd64`;
 } catch {
   /* Optional build artifact; required jobs fail explicitly below. */
 }

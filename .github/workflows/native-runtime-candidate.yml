@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       expected_source_sha:
-        description: Exact current main commit to qualify and publish as the native OCR prerelease
+        description: Exact current Action main commit to qualify against the pinned managed fork release
         required: true
         type: string
   pull_request:
@@ -13,10 +13,14 @@ on:
       - '.github/workflows/native-runtime-candidate.yml'
       - 'tools/ocr/**'
       - 'src/codex-oauth/codex-bootstrap.ts'
+      - 'src/codex-oauth/ocr-managed-bootstrap.ts'
+      - 'src/control-plane/review-agent-profiles.json'
       - 'src/codex-oauth/codex-auth-refresh-validation.ts'
       - 'src/review-orchestration/infrastructure/anthropic-messages-codec.ts'
       - 'scripts/native-ocr/**'
-      - '__tests__/unit/github/native-ocr-publication.test.ts'
+      - '__tests__/unit/github/native-ocr-download.test.ts'
+      - '__tests__/unit/github/release-workflow.test.ts'
+      - '__tests__/unit/review-orchestration/ocr-managed-bootstrap.test.ts'
       - 'src/control-plane/review-model-dispatch-profile.json'
       - '__tests__/integration/ocr-managed/**'
       - '__tests__/integration/codex-oauth/codex-auth-refresh-real-cli.test.ts'
@@ -37,7 +41,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Validate manual publication source
+      - name: Validate manual qualification source
         if: github.event_name == 'workflow_dispatch'
         env:
           EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
@@ -53,23 +57,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: false
-      - id: ocr-build
-        name: Build candidate and test finite managed transports
-        env:
-          TMPDIR: ${{ runner.temp }}
-        run: |
-          test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
-          tools/ocr/build.sh --test-managed --out "$RUNNER_TEMP/reviewrouter-ocr"
-          cd "$RUNNER_TEMP/reviewrouter-ocr"
-          sha256sum --check --strict opencodereview.sha256
-          cat MANIFEST
-      - name: Verify committed native qualification manifest
-        run: diff -u tools/ocr/qualifications/managed-tracked-inventory-v1.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
       - run: npm ci
+      - id: ocr-download
+        name: Verify and download pinned managed fork release
+        run: node scripts/native-ocr/download.ts "$RUNNER_TEMP/reviewrouter-ocr"
       - name: Fetch immutable official auth helper
         run: |
           mkdir -p "$RUNNER_TEMP/reviewrouter-auth-codex"
@@ -79,7 +70,7 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
           REVIEWROUTER_OCR_REQUIRED: '1'
-          REVIEWROUTER_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview
+          REVIEWROUTER_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview-linux-amd64
           REVIEWROUTER_CODEX_AUTH_REQUIRED: '1'
           REVIEWROUTER_CODEX_AUTH_BINARY: ${{ runner.temp }}/reviewrouter-auth-codex/package/vendor/x86_64-unknown-linux-musl/bin/codex
         run: |
@@ -87,41 +78,11 @@ jobs:
             __tests__/integration/ocr-managed/ocr-managed-real-cli.test.ts \
             __tests__/integration/ocr-managed/ocr-managed-native-anthropic-real-cli.test.ts \
             __tests__/integration/codex-oauth/codex-auth-refresh-real-cli.test.ts
-      - name: Preserve candidate bytes and exact build recipe
-        if: always() && steps.ocr-build.outcome == 'success'
+      - name: Preserve consumed native release and its qualification evidence
+        if: always() && steps.ocr-download.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: native-runtime-candidate-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            ${{ runner.temp }}/reviewrouter-ocr/opencodereview
-            ${{ runner.temp }}/reviewrouter-ocr/opencodereview.sha256
-            ${{ runner.temp }}/reviewrouter-ocr/MANIFEST
+          name: native-consumer-qualification-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/reviewrouter-ocr/
           if-no-files-found: error
           retention-days: 7
-
-  publish:
-    if: github.event_name == 'workflow_dispatch' && needs.qualify.result == 'success'
-    needs: qualify
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-      actions: read
-    concurrency:
-      group: native-ocr-publication-${{ github.repository }}
-      cancel-in-progress: false
-    steps:
-      - name: Checkout qualified source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-      - name: Publish verified native prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
-        run: node scripts/native-ocr/publish.ts

@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: true
+          fetch-depth: 0
       - name: Download, validate and commit official CI artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -28,7 +29,7 @@ jobs:
           expected_source=ccbcabb8764a41c41c5fb4aae907c5902e51fac3
           expected_tree=9c43961709548718980bdbf03c2d05b27bfc7e00
           expected_zip=0c1087e9d182de9a324fd997518abbe5375cecea4f6c9d2e16656b628d4c0ecc
-          test "$(git rev-parse HEAD^^)" = "$expected_source"
+          test "$(git merge-base "$expected_source" HEAD)" = "$expected_source"
           test "$(git rev-parse "${expected_source}^{tree}")" = "$expected_tree"
           test "$(git diff --name-only "$expected_source" HEAD)" = ".github/workflows/restore-411-runtime.yml"
           curl --fail --location --silent --show-error \

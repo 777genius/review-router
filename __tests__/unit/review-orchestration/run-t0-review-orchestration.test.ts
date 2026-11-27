@@ -2432,6 +2432,171 @@ describe('RunT0ReviewOrchestration', () => {
     }
   );
 
+
+  it.each(['queued', 'active', 'fallback'] as const)(
+    'recovers accepted work before an allocation stops its %s lane',
+    async (layout) => {
+      const fixture = unattachedAcceptedFixture(true);
+      const original = fixture.command.workSlots[0]!;
+      const blocked = {
+        ...fixture.command.workSlots[1]!,
+        providerVoteIdentityHash: layout === 'active'
+          ? original.providerVoteIdentityHash
+          : hash('blocked-vote'),
+      };
+      const unused: ReviewWorkSlotPlan = {
+        ...blocked,
+        workSlotId: 'slot-3',
+        shardKey: 'batch-3',
+        providerVoteIdentityHash: hash('unused-fallback-vote'),
+      };
+      const workSlots = [
+        blocked,
+        original,
+        ...(layout === 'fallback' ? [unused] : []),
+      ];
+      const restored: RestoredReviewExecution = {
+        ...fixture.restored,
+        workSlots: workSlots.map((slot) => ({
+          workSlotId: slot.workSlotId,
+          state: slot.workSlotId === original.workSlotId
+            ? RestoredReviewWorkSlotState.Exhausted
+            : RestoredReviewWorkSlotState.Pending,
+          required: slot.required,
+          providerVoteIdentityHash: slot.providerVoteIdentityHash,
+          activeLeaseId: null,
+          acceptedObservationRefId: null,
+        })),
+        persistedPlan: {
+          ...fixture.restored.persistedPlan!,
+          workSlots: workSlots.map((slot) => ({
+            ...slot,
+            nextAttemptOrdinal: slot.workSlotId === original.workSlotId ? 2 : 1,
+          })),
+        },
+      };
+      fixture.setCurrent(restored);
+      Object.assign(fixture.dependencies, {
+        reviewerScheduling: {
+          ...(layout === 'fallback' ? { providerMode: 'fallback' as const } : {}),
+          maxParallelReviewers: 1,
+          reviewers: [
+            {
+              reviewerId: 'blocked',
+              providerVoteIdentityHash: blocked.providerVoteIdentityHash,
+              concurrencyGroupId: 'shared',
+            },
+            ...(layout === 'active' ? [] : [{
+              reviewerId: 'original',
+              providerVoteIdentityHash: original.providerVoteIdentityHash,
+              concurrencyGroupId: 'shared',
+            }]),
+            ...(layout === 'fallback' ? [{
+              reviewerId: 'unused',
+              providerVoteIdentityHash: unused.providerVoteIdentityHash,
+              concurrencyGroupId: 'unused',
+            }] : []),
+          ],
+          concurrencyGroups: [
+            { id: 'shared', maxParallel: 1 },
+            ...(layout === 'fallback' ? [{ id: 'unused', maxParallel: 1 }] : []),
+          ],
+        } satisfies NonNullable<
+          RunT0ReviewOrchestrationDependencies['reviewerScheduling']
+        >,
+      });
+      Object.assign(fixture.dependencies.invocationFailureClassifier, {
+        classify: jest.fn(
+          () => ReviewInvocationFailureClass.AuthenticationUnavailable
+        ),
+        scope: jest.fn(() => 'allocation'),
+      });
+      jest.mocked(fixture.dependencies.invocationManifestAssembler.assemble)
+        .mockImplementation(async (invocation) => {
+          if (invocation.workSlotId === original.workSlotId) return fixture.hint;
+          const slot = workSlots.find(
+            (candidate) => candidate.workSlotId === invocation.workSlotId
+          );
+          if (!slot) throw new Error('unexpected_work_slot');
+          const canonical = JSON.stringify({ workSlotId: slot.workSlotId });
+          return {
+            manifestCanonicalJson: canonical,
+            manifestKey: hash(canonical),
+            providerInvocationKey: hash('invocation-' + slot.workSlotId),
+            providerVoteIdentityHash: slot.providerVoteIdentityHash,
+          };
+        });
+      fixture.controlPlane.lookupEvidence.mockImplementation(async ({ workSlot }) =>
+        workSlot.workSlotId === original.workSlotId
+          ? fixture.hit
+          : { kind: ReviewEvidenceLookupKind.Miss }
+      );
+      const events: string[] = [];
+      const adopt = fixture.controlPlane.adoptObservation.getMockImplementation()!;
+      fixture.controlPlane.adoptObservation.mockImplementation(async (request) => {
+        events.push('adopt');
+        return adopt(request);
+      });
+      jest.mocked(fixture.dependencies.invocations.execute)
+        .mockImplementation(async () => {
+          events.push('provider-stop');
+          throw new Error('allocation_authentication_unavailable');
+        });
+      if (layout === 'fallback') {
+        const finalize =
+          fixture.controlPlane.finalizeExecution.getMockImplementation()!;
+        fixture.controlPlane.finalizeExecution.mockImplementation(async (request) => {
+          fixture.setCurrent({
+            ...fixture.current(),
+            state: RestoredReviewExecutionState.Completed,
+          });
+          return finalize(request);
+        });
+      }
+
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        workSlots,
+        workSlotsCanonicalJson: canonicalizeReviewWorkSlots(workSlots),
+        restoredExecution: restored,
+        allowPartial: true,
+      });
+
+      expect(result.status).toBe(layout === 'fallback'
+        ? ReviewOrchestrationResultStatus.Completed
+        : ReviewOrchestrationResultStatus.PartialCompleted);
+      expect(events).toEqual(['adopt', 'provider-stop']);
+      expect(fixture.controlPlane.adoptObservation).toHaveBeenCalledTimes(1);
+      expect(
+        jest.mocked(fixture.dependencies.invocations.prepare).mock.calls
+          .map(([request]) => request.workSlot.workSlotId)
+      ).toEqual([original.workSlotId, blocked.workSlotId]);
+      expect(
+        fixture.controlPlane.acquireInvocationLease.mock.calls
+          .map(([request]) => request.workSlot.workSlotId)
+      ).toEqual([blocked.workSlotId]);
+      expect(
+        jest.mocked(fixture.dependencies.invocations.execute).mock.calls
+          .map(([request]) => request.invocation.workSlotId)
+      ).toEqual([blocked.workSlotId]);
+      expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acceptedEvidence: [expect.objectContaining({
+            workSlotId: original.workSlotId,
+            observation: acceptedObservation,
+          })],
+          exhaustedWorkSlotIds: layout === 'fallback'
+            ? [blocked.workSlotId, unused.workSlotId]
+            : [blocked.workSlotId],
+        })
+      );
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledTimes(1);
+    }
+  );
+
   it.each([
     'miss', 'replay_required', 'cross_execution', 'observation', 'payload',
     'invocation', 'vote', 'lease', 'fence', 'owner', 'lookup_failure',
@@ -2542,16 +2707,21 @@ describe('RunT0ReviewOrchestration', () => {
   });
 
   it.each([
-    ['deadline', 'before_lookup'],
-    ['deadline', 'after_refresh'],
-    ['abort', 'before_lookup'],
-    ['abort', 'after_refresh'],
-  ])('stops hinted adoption on %s %s', async (cause, boundary) => {
-    const fixture = unattachedAcceptedFixture();
+    ['deadline', 'before_lookup', false],
+    ['deadline', 'after_refresh', false],
+    ['abort', 'before_lookup', false],
+    ['abort', 'after_refresh', false],
+    ['deadline', 'before_lookup', true],
+    ['deadline', 'after_refresh', true],
+    ['abort', 'before_lookup', true],
+    ['abort', 'after_refresh', true],
+  ] as const)('stops hinted adoption on %s %s with scheduling=%s', async (cause, boundary, scheduled) => {
+    const fixture = unattachedAcceptedFixture(scheduled);
     const abort = new AbortController();
+    const abortReason = new Error('outer_cancelled');
     Object.assign(fixture.dependencies, { signal: abort.signal });
     const stop = () => {
-      if (cause === 'abort') abort.abort(new Error('outer_cancelled'));
+      if (cause === 'abort') abort.abort(abortReason);
       else fixture.expire();
     };
     if (boundary === 'before_lookup') {
@@ -2564,7 +2734,7 @@ describe('RunT0ReviewOrchestration', () => {
       });
     }
     const running = fixture.useCase.execute(fixture.command);
-    if (cause === 'abort') await expect(running).rejects.toThrow('outer_cancelled');
+    if (cause === 'abort') await expect(running).rejects.toBe(abortReason);
     else await expect(running).resolves.toMatchObject({
       status: ReviewOrchestrationResultStatus.Failed,
       failureCode: 'review_orchestration_execution_deadline_reached',

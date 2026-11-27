@@ -184,8 +184,7 @@ export class GitHubClient {
 function createResilientOctokit(
   initialToken: string,
   tokenProvider?: GitHubTokenProvider,
-  sleep: (delayMs: number) => Promise<void> = (delayMs) =>
-    new Promise((resolve) => setTimeout(resolve, delayMs))
+  sleep?: (delayMs: number) => Promise<void>
 ): Octokit {
   const octokit = new Octokit();
   octokit.hook.wrap('request', async (request, options) => {
@@ -234,11 +233,33 @@ function createResilientOctokit(
         core.info(
           `GitHub read retry ${retries}/${GITHUB_READ_RETRY_DELAYS_MS.length} in ${waitMs} ms after ${describeFailure(failureClass, status)}`
         );
-        await sleep(waitMs);
+        if (sleep) await sleep(waitMs);
+        else await waitForGitHubReadRetry(waitMs, options.request?.signal);
+        options.request?.signal?.throwIfAborted();
       }
     }
   });
   return octokit;
+}
+
+function waitForGitHubReadRetry(
+  delayMs: number,
+  signal?: AbortSignal
+): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
 }
 
 function getHttpStatus(error: unknown): number | undefined {

@@ -1,6 +1,7 @@
 import * as core from '../../../src/actions/core';
 import { GitHubClient } from '../../../src/github/client';
 import nock from 'nock';
+import { getEventListeners } from 'node:events';
 
 function waits(sleep: jest.Mock): number[] {
   return sleep.mock.calls.map(([delayMs]) => delayMs as number);
@@ -17,6 +18,26 @@ function expectJitteredWaits(
     expect(delayMs).toBeGreaterThanOrEqual(scheduledMs[index] / 2);
     expect(delayMs).toBeLessThanOrEqual(scheduledMs[index]);
   });
+}
+
+function retryThenSuccessfulFetch() {
+  return jest
+    .fn(
+      async () =>
+        new Response(JSON.stringify({ id: 1, name: 'repo' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'Service unavailable' }), {
+        status: 503,
+        headers: {
+          'content-type': 'application/json',
+          'retry-after': '2',
+        },
+      })
+    );
 }
 
 describe('GitHubClient', () => {
@@ -607,6 +628,107 @@ describe('GitHubClient', () => {
       ).resolves.toMatchObject({ status: 200 });
       expect(sleep).toHaveBeenCalledWith(2_000);
       expect(requests.isDone()).toBe(true);
+    });
+
+    it.each(['abort', 'complete'] as const)(
+      'cleans up the default retry wait when it must %s',
+      async (ending) => {
+        jest.useFakeTimers({
+          doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'],
+        });
+        const controller = new AbortController();
+        const reason = new Error('cancelled_during_github_retry_wait');
+        const initialListeners = getEventListeners(
+          controller.signal,
+          'abort'
+        ).length;
+        let enteredWait!: () => void;
+        const waiting = new Promise<void>((resolve) => {
+          enteredWait = resolve;
+        });
+        const info = jest.spyOn(core, 'info').mockImplementation((message) => {
+          if (message.startsWith('GitHub read retry 1/3')) enteredWait();
+        });
+        const requestFetch = retryThenSuccessfulFetch();
+        let completion: Promise<void> | undefined = undefined;
+        try {
+          const client = new GitHubClient(mockToken);
+          const request = client.octokit.rest.repos.get({
+            owner: 'owner',
+            repo: 'repo',
+            request: { signal: controller.signal, fetch: requestFetch },
+          });
+          let settled = false;
+          completion = request.then(
+            () => {
+              settled = true;
+            },
+            () => {
+              settled = true;
+            }
+          );
+          await Promise.race([
+            waiting,
+            completion.then(() => {
+              throw new Error('read_finished_before_retry_wait');
+            }),
+          ]);
+          expect(requestFetch).toHaveBeenCalledTimes(1);
+          expect(jest.getTimerCount()).toBe(1);
+          expect(getEventListeners(controller.signal, 'abort')).toHaveLength(
+            initialListeners + 1
+          );
+
+          if (ending === 'abort') {
+            controller.abort(reason);
+            // Let rejection microtasks finish without advancing the 2 s wait.
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            expect(settled).toBe(true);
+            await expect(request).rejects.toBe(reason);
+            expect(requestFetch).toHaveBeenCalledTimes(1);
+          } else {
+            await jest.advanceTimersByTimeAsync(1_999);
+            expect(requestFetch).toHaveBeenCalledTimes(1);
+            await jest.advanceTimersByTimeAsync(1);
+            await expect(request).resolves.toMatchObject({ status: 200 });
+            expect(requestFetch).toHaveBeenCalledTimes(2);
+          }
+
+          expect(jest.getTimerCount()).toBe(0);
+          expect(getEventListeners(controller.signal, 'abort')).toHaveLength(
+            initialListeners
+          );
+        } finally {
+          try {
+            controller.abort(reason);
+            await jest.runOnlyPendingTimersAsync();
+            await completion;
+          } finally {
+            info.mockRestore();
+            jest.useRealTimers();
+          }
+        }
+      }
+    );
+
+    it('checks cancellation after the one-argument injected wait before another read', async () => {
+      const controller = new AbortController();
+      const reason = new Error('cancelled_during_injected_github_wait');
+      const requestFetch = retryThenSuccessfulFetch();
+      const sleep = jest.fn(async () => {
+        controller.abort(reason);
+      });
+      const client = new GitHubClient(mockToken, { sleep });
+      await expect(
+        client.octokit.rest.repos.get({
+          owner: 'owner',
+          repo: 'repo',
+          request: { signal: controller.signal, fetch: requestFetch },
+        })
+      ).rejects.toBe(reason);
+      expect(sleep).toHaveBeenCalledTimes(1);
+      expect(sleep).toHaveBeenCalledWith(2_000);
+      expect(requestFetch).toHaveBeenCalledTimes(1);
     });
 
     it('does not wait or retry beyond the bounded server delay', async () => {

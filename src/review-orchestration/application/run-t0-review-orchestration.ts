@@ -627,9 +627,22 @@ export class RunT0ReviewOrchestration {
           ),
         };
       };
+      const restoredAcceptedHintFor = (workSlotId: string) =>
+        command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
+          (hint) => hint.workSlotId === workSlotId
+        ) ??
+        execution!.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
+          (hint) => hint.workSlotId === workSlotId
+        );
       const runWorkSlot = async (
         workSlot: ReviewWorkSlotPlan
       ): Promise<void> => {
+        if (
+          acceptedEvidence.some(
+            (item) => item.workSlotId === workSlot.workSlotId
+          )
+        )
+          return;
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
           throw new Error('review_orchestration_restored_work_slot_missing');
@@ -641,13 +654,9 @@ export class RunT0ReviewOrchestration {
         const restoredSatisfied =
           restoredSlot.state === RestoredReviewWorkSlotState.Satisfied;
         // A known accepted source cannot become ordinary admission or fallback.
-        const restoredAcceptedHint =
-          command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
-            (hint) => hint.workSlotId === workSlot.workSlotId
-          ) ??
-          execution!.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
-            (hint) => hint.workSlotId === workSlot.workSlotId
-          );
+        const restoredAcceptedHint = restoredAcceptedHintFor(
+          workSlot.workSlotId
+        );
         if (restoredAcceptedHint && (
           !command.restoreOnly ||
           workSlot.taskKind !== ReviewTaskKind.FindingDiscovery ||
@@ -916,6 +925,13 @@ export class RunT0ReviewOrchestration {
           });
         };
         try {
+          // Existing accepted work is read-only recovery. Resolve it before
+          // provider stops or fallback selection can discard a later slot.
+          for (const slot of command.workSlots) {
+            if (!restoredAcceptedHintFor(slot.workSlotId)) continue;
+            this.runAbort.signal.throwIfAborted();
+            await runWorkSlot(slot);
+          }
           while (pending.length || active.size) {
             while (
               !parentFailure &&
@@ -957,7 +973,10 @@ export class RunT0ReviewOrchestration {
                   fallbackOutcomes.set(
                     lane.providerVoteIdentityHash,
                     fallbackLaneOutcome(
-                      false,
+                      reviewerCompletedRequiredWork(
+                        lane.slots,
+                        acceptedEvidence
+                      ),
                       stopReasons.get(lane.providerVoteIdentityHash)
                     )
                   );

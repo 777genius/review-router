@@ -2718,13 +2718,6 @@ export function createScmReadGitHubClient(input: {
   const { signal, timeoutMs = 30_000 } = input;
   const github = new GitHubClient(input.token, {
     tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
-    ...(signal
-      ? {
-          sleep: async (ms: number) => {
-            await delay(ms, undefined, { signal });
-          },
-        }
-      : {}),
   });
   if (signal) {
     github.octokit.hook.wrap('request', (request, options) => {

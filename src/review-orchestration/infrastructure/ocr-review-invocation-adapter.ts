@@ -620,11 +620,9 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
   }
 
   /** Model-free: deterministic preview and semantic capture only (§5.2). */
-  async prepare(input: {
-    readonly workSlot: ReviewWorkSlotPlan;
-    readonly attemptOrdinal: number;
-    readonly signal?: AbortSignal;
-  }): Promise<OcrPreparedReviewInvocation> {
+  async prepare(
+    input: Parameters<PreparedReviewInvocationPort['prepare']>[0]
+  ): Promise<OcrPreparedReviewInvocation> {
     this.options.signal?.throwIfAborted();
     input.signal?.throwIfAborted();
     const assignment = this.assignments.get(input.workSlot.workSlotId);
@@ -647,7 +645,9 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       // and without claiming an OCR observation (§4.3).
       throw new Error('review_action_v2_ocr_nothing_to_review');
     }
-    const memorySnapshot = this.options.reviewMemory?.current();
+    const memorySnapshot = input.originalManifest
+      ? undefined
+      : this.options.reviewMemory?.current();
     const ruleText = memorySnapshot
       ? appendOcrReviewMemory(
           this.options.ruleText,
@@ -939,9 +939,14 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       let processResult: OcrReviewProcessResult | undefined;
       try {
         this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-        return await this.runInvocation(input, assignment, preimages, (result) => {
-          processResult = result;
-        });
+        return await this.runInvocation(
+          input,
+          assignment,
+          preimages,
+          (result) => {
+            processResult = result;
+          }
+        );
       } catch (error) {
         try {
           this.options.failureDiagnostic?.(
@@ -1187,8 +1192,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
               group.phases.compression,
               group.phases.relocation,
             ].some(
-              (phase) =>
-                phase.state === 'failed' || phase.state === 'cancelled'
+              (phase) => phase.state === 'failed' || phase.state === 'cancelled'
             ) ||
             ((group.phases.filter.state === 'failed' ||
               group.phases.filter.state === 'cancelled') &&
@@ -1334,7 +1338,10 @@ function parseOcrPreviewCoverage(
         )
       : undefined;
     const legacyPaths =
-      value.selected_paths ?? value.selectedPaths ?? value.paths ?? groupedPaths;
+      value.selected_paths ??
+      value.selectedPaths ??
+      value.paths ??
+      groupedPaths;
     if (!Array.isArray(legacyPaths)) {
       throw new Error('review_action_v2_ocr_preview_contract_invalid');
     }
@@ -1344,11 +1351,7 @@ function parseOcrPreviewCoverage(
   const observed = new Set<string>();
   const selected = new Set<string>();
   for (const file of files) {
-    if (
-      typeof file !== 'object' ||
-      file === null ||
-      Array.isArray(file)
-    ) {
+    if (typeof file !== 'object' || file === null || Array.isArray(file)) {
       throw new Error('review_action_v2_ocr_preview_contract_invalid');
     }
     const entry = file as Record<string, unknown>;
@@ -1377,19 +1380,14 @@ function parseOcrPreviewCoverage(
         entry.will_review ||
         (entry.exclude_reason !== 'user_exclude' &&
           (typeof entry.exclude_reason !== 'string' ||
-            !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(
-              entry.exclude_reason
-            )))
+            !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(entry.exclude_reason)))
       ) {
         throw new Error('review_action_v2_ocr_preview_scope_invalid');
       }
       continue;
     }
     if (entry.will_review) {
-      if (
-        entry.exclude_reason !== undefined &&
-        entry.exclude_reason !== ''
-      ) {
+      if (entry.exclude_reason !== undefined && entry.exclude_reason !== '') {
         throw new Error('review_action_v2_ocr_preview_contract_invalid');
       }
       selected.add(path);

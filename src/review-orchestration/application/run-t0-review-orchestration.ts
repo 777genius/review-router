@@ -321,15 +321,22 @@ export class RunT0ReviewOrchestration {
         | ReviewOrchestrationResultStatus.Superseded
     ): Promise<ReviewOrchestrationResult> => {
       this.dependencies.signal?.throwIfAborted();
+      const currentAuthorization = authorization;
       let initialRestoredExecution: RestoredReviewExecution | null | undefined;
       if (
         !execution &&
         !command.restoredExecution &&
         !executionStartAttempted &&
-        initialExecutionRestore
+        currentAuthorization
       ) {
-        // A sibling restore failure does not prove this execution is absent.
+        // An omitted or failed restore does not prove this execution is absent.
         try {
+          validateAuthorizationScope(command, currentAuthorization);
+          initialExecutionRestore ??=
+            this.dependencies.controlPlane.restoreExecution({
+              authorization: currentAuthorization,
+              reviewRevisionHash: command.reviewRevisionHash,
+            });
           initialRestoredExecution = await initialExecutionRestore;
         } catch {
           this.dependencies.signal?.throwIfAborted();
@@ -340,9 +347,8 @@ export class RunT0ReviewOrchestration {
         !execution &&
         !command.restoredExecution &&
         !executionStartAttempted &&
-        (!initialExecutionRestore || initialRestoredExecution === null);
+        initialRestoredExecution === null;
       let cancelledExecution = execution;
-      const currentAuthorization = authorization;
       if (!acknowledged && currentAuthorization) {
         try {
           validateAuthorizationScope(command, currentAuthorization);
@@ -381,7 +387,6 @@ export class RunT0ReviewOrchestration {
             execution: original,
             controlPlane: this.dependencies.controlPlane,
             identities: this.dependencies.identities,
-            restoredExecution: initialRestoredExecution ?? undefined,
             signal: this.dependencies.signal,
           });
           acknowledged = true;
@@ -628,13 +633,35 @@ export class RunT0ReviewOrchestration {
           ),
         };
       };
-      const restoredAcceptedHintFor = (workSlotId: string) =>
-        command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
-          (hint) => hint.workSlotId === workSlotId
-        ) ??
-        execution!.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
-          (hint) => hint.workSlotId === workSlotId
-        );
+      const restoredAcceptedHintFor = (workSlotId: string) => {
+        const retained =
+          command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
+            (hint) => hint.workSlotId === workSlotId
+          );
+        const refreshed =
+          execution!.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
+            (hint) => hint.workSlotId === workSlotId
+          );
+        if (
+          retained &&
+          refreshed &&
+          !(
+            [
+              'manifestCanonicalJson',
+              'manifestKey',
+              'providerInvocationKey',
+              'providerVoteIdentityHash',
+              'observationId',
+              'payloadHash',
+              'sourceLeaseId',
+              'sourceFencingToken',
+              'sourceOwnerIdHash',
+            ] as const
+          ).every((key) => retained[key] === refreshed[key])
+        )
+          throw new Error('review_orchestration_unattached_source_changed');
+        return retained ?? refreshed;
+      };
       const runWorkSlot = async (
         workSlot: ReviewWorkSlotPlan
       ): Promise<void> => {
@@ -658,17 +685,44 @@ export class RunT0ReviewOrchestration {
         const restoredAcceptedHint = restoredAcceptedHintFor(
           workSlot.workSlotId
         );
-        if (
-          restoredAcceptedHint &&
-          (!command.restoreOnly ||
+        if (restoredAcceptedHint) {
+          const stillUnattached =
+            restoredSlot.state === RestoredReviewWorkSlotState.Exhausted &&
+            restoredSlot.acceptedObservationRefId === null;
+          const alreadyAttached =
+            restoredSatisfied &&
+            restoredSlot.acceptedObservationRefId ===
+              observationRefId(
+                execution!.executionId,
+                workSlot.workSlotId,
+                restoredAcceptedHint.observationId
+              );
+          const acceptedManifest =
+            execution!.restoredExecution.persistedPlan?.acceptedManifests?.find(
+              (manifest) => manifest.workSlotId === workSlot.workSlotId
+            );
+          if (
+            !command.restoreOnly ||
             workSlot.taskKind !== ReviewTaskKind.FindingDiscovery ||
             workSlot.attemptBudget !== 1 ||
             persistedSlot?.nextAttemptOrdinal !== 2 ||
-            restoredSlot.state !== RestoredReviewWorkSlotState.Exhausted ||
             restoredSlot.activeLeaseId !== null ||
-            restoredSlot.acceptedObservationRefId !== null)
-        )
-          throw new Error('review_orchestration_unattached_source_changed');
+            (!stillUnattached && !alreadyAttached) ||
+            (alreadyAttached &&
+              acceptedManifest &&
+              !(
+                [
+                  'manifestCanonicalJson',
+                  'manifestKey',
+                  'providerInvocationKey',
+                  'providerVoteIdentityHash',
+                ] as const
+              ).every(
+                (key) => acceptedManifest[key] === restoredAcceptedHint[key]
+              ))
+          )
+            throw new Error('review_orchestration_unattached_source_changed');
+        }
         const lifecycleEvidenceUnavailable =
           workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation &&
           (!restoredSatisfied ||
@@ -1645,12 +1699,19 @@ export class RunT0ReviewOrchestration {
             workSlot: input.workSlot,
             attemptOrdinal,
             ...(reviewerSignal ? { signal: reviewerSignal } : {}),
+            ...(input.restoredAcceptedHint
+              ? { originalManifest: input.restoredAcceptedHint }
+              : {}),
           });
         reviewerSignal?.throwIfAborted();
-        const authoritativeManifest =
-          await this.dependencies.invocationManifestAssembler.assemble(
-            authoritativeInvocation
-          );
+        const authoritativeManifest = input.restoredAcceptedHint
+          ? await this.dependencies.invocationManifestAssembler.assemble(
+              authoritativeInvocation,
+              input.restoredAcceptedHint
+            )
+          : await this.dependencies.invocationManifestAssembler.assemble(
+              authoritativeInvocation
+            );
         validateManifest(authoritativeManifest);
         if (!isOriginalAcceptedManifest(input, authoritativeManifest))
           await this.assertMemoryEligible(authoritativeInvocation);

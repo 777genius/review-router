@@ -544,6 +544,12 @@ original accepted observation, payload, reviewer, lease, owner and fence with a
 `same_execution` attachment. Adoption uses the existing RPC and refreshed
 execution CAS, within current original authorization/report authority.
 
+A hint first observed in a refreshed read uses the same original-manifest
+preparation and assembly path, without capturing current memory. Conflicting
+retained and refreshed source identities are rejected. If the refreshed slot
+is already Satisfied by that exact original observation, verify its original
+lookup proof and reuse the attachment without another adoption or lease.
+
 The source work deadline and report window remain distinct. Check the Action
 hard deadline and outer abort before lookup and after the adoption refresh.
 Retain a previously received hint across a later omission only while exact

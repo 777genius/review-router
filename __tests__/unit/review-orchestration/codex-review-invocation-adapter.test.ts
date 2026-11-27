@@ -63,6 +63,45 @@ const emptyProbePlan = createReviewInvestigationProbePlan({
 });
 
 describe('Codex T0 prepared invocation', () => {
+  it('prepares original coverage without reading current memory and keeps ordinary memory admission', async () => {
+    const snapshot = freezeReviewMemorySnapshot(reviewMemoryBundle());
+    const current = jest.fn(() => snapshot);
+    const provider = {
+      prepareInvocation: jest.fn(async (prompt: string) =>
+        preparedInvocation(prompt)
+      ),
+      describePreparedEnvironmentContract: jest
+        .fn()
+        .mockReturnValue({ PATH: '/usr/bin' }),
+    } as unknown as CodexProvider;
+    const adapter = new CodexReviewInvocationAdapter(
+      provider,
+      new PromptBuilder(DEFAULT_CONFIG as ReviewConfig),
+      [assignment],
+      10_000,
+      true,
+      undefined,
+      false,
+      'xhigh',
+      undefined,
+      undefined,
+      { current }
+    );
+    const ordinary = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    expect(current).toHaveBeenCalledTimes(1);
+    expect(ordinary.manifestFacts.memoryBundleHash).toBe(snapshot.hash);
+    current.mockClear();
+    const original = await adapter.prepare({
+      workSlot,
+      attemptOrdinal: 1,
+      originalManifest: { ...manifestFixture, workSlotId: workSlot.workSlotId },
+    });
+    expect(current).not.toHaveBeenCalled();
+    expect(original.manifestFacts.memoryBundleHash).toBeNull();
+    expect(original.reviewPrompt).not.toContain(snapshot.renderedPrompt);
+    expect(original.coverageManifest).toEqual(ordinary.coverageManifest);
+  });
+
   it('delivers the same qualified frozen memory to investigation context and binds its hash', async () => {
     const memory = freezeReviewMemorySnapshot(
       reviewMemoryBundle({

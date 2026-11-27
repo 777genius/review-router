@@ -8,6 +8,7 @@ import {
   type PreparedReviewInvocationPort,
   type ProviderInvocationManifestAssemblerPort,
   type PreparedReviewInvocationManifestFacts,
+  type ProviderInvocationManifest,
 } from '../application';
 import {
   createReviewPromptCoverageManifest,
@@ -101,8 +102,16 @@ export function restoredLifecycleInvocations(
   ]);
   return {
     async prepare(input): Promise<PreparedReviewInvocation> {
-      const original = manifests.get(input.workSlot.workSlotId);
+      const captured = manifests.get(input.workSlot.workSlotId);
+      const original = input.originalManifest ?? captured;
       if (
+        input.originalManifest &&
+        (input.originalManifest.workSlotId !== input.workSlot.workSlotId ||
+          (captured && !sameManifest(input.originalManifest, captured)))
+      )
+        throw new Error('review_restore_accepted_manifest_scope_mismatch');
+      if (
+        !input.originalManifest &&
         input.workSlot.taskKind !== ReviewTaskKind.LifecycleRevalidation &&
         !readOnlySlots.has(input.workSlot.workSlotId)
       )
@@ -119,6 +128,7 @@ export function restoredLifecycleInvocations(
           input.workSlot.providerVoteIdentityHash
       )
         throw new Error('review_restore_accepted_manifest_scope_mismatch');
+      readOnlySlots.add(input.workSlot.workSlotId);
       const coverage =
         input.workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation
           ? createReviewPromptCoverageManifest({
@@ -127,7 +137,11 @@ export function restoredLifecycleInvocations(
               assignedPaths: [],
               pathCoverage: [],
             })
-          : await restoreDiscoveryCoverage(discovery, input, wire);
+          : await restoreDiscoveryCoverage(
+              discovery,
+              { ...input, originalManifest: original },
+              wire
+            );
       return Object.freeze({
         workSlotId: input.workSlot.workSlotId,
         attemptOrdinal: 1,
@@ -166,14 +180,30 @@ export function restoredLifecycleManifestAssembler(
     ].map((value) => [value.workSlotId, value])
   );
   return {
-    async assemble(invocation) {
-      const originalSource = restored.workSlots.some(
-        (slot) =>
-          slot.workSlotId === invocation.workSlotId &&
-          slot.state === RestoredReviewWorkSlotState.Satisfied
-      ) || restored.persistedPlan?.unattachedAcceptedManifests?.some(
-        (hint) => hint.workSlotId === invocation.workSlotId
-      );
+    async assemble(invocation, originalManifest) {
+      if (originalManifest) {
+        const slot = restored.workSlots.find(
+          (value) => value.workSlotId === invocation.workSlotId
+        );
+        const captured = manifests.get(invocation.workSlotId);
+        if (
+          originalManifest.workSlotId !== invocation.workSlotId ||
+          slot?.providerVoteIdentityHash !==
+            originalManifest.providerVoteIdentityHash ||
+          (captured && !sameManifest(originalManifest, captured))
+        )
+          throw new Error('review_restore_accepted_manifest_scope_mismatch');
+        return originalManifest;
+      }
+      const originalSource =
+        restored.workSlots.some(
+          (slot) =>
+            slot.workSlotId === invocation.workSlotId &&
+            slot.state === RestoredReviewWorkSlotState.Satisfied
+        ) ||
+        restored.persistedPlan?.unattachedAcceptedManifests?.some(
+          (hint) => hint.workSlotId === invocation.workSlotId
+        );
       if (
         !originalSource &&
         (invocation.manifestFacts.taskKindSet.length !== 1 ||
@@ -239,6 +269,17 @@ async function restoreDiscoveryCoverage(
   if (hash(canonicalJson(context)) !== original.contextManifestHash)
     throw new Error('review_restore_coverage_commitment_mismatch');
   return rebuilt.coverageManifest;
+}
+function sameManifest(
+  left: ProviderInvocationManifest,
+  right: ProviderInvocationManifest
+): boolean {
+  return (
+    left.manifestCanonicalJson === right.manifestCanonicalJson &&
+    left.manifestKey === right.manifestKey &&
+    left.providerInvocationKey === right.providerInvocationKey &&
+    left.providerVoteIdentityHash === right.providerVoteIdentityHash
+  );
 }
 function hash(value: string) {
   return createHash('sha256').update(value).digest('hex');

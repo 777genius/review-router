@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: true
+          persist-credentials: false
           fetch-depth: 0
       - name: Download, validate and commit official CI artifact
         env:
@@ -61,14 +61,23 @@ jobs:
           digest = hashlib.sha256((root / "dist/context-gateway.js").read_bytes()).hexdigest()
           assert digest == release["contextGatewayEntrypointDigest"], "Gateway digest mismatch"
           PY
-          cp -a "$RUNNER_TEMP/official-build/dist/." dist/
-          git add -f dist
+          # Restore only reviewed tracked artifacts; redirection preserves Git modes.
+          while IFS= read -r -d '' runtime_file; do
+            test -f "$RUNNER_TEMP/official-build/$runtime_file"
+            cat "$RUNNER_TEMP/official-build/$runtime_file" > "$runtime_file"
+          done < <(git ls-files -z -- dist)
+          git add -u -- dist
           git diff --cached --name-only
           if git diff --cached --quiet; then
             echo 'Runtime already identical'
             exit 0
           fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'iliya'
+          git config user.email 'iliyazelenkog@gmail.com'
           git commit -m 'build: synchronize committed Action runtime with qualified CI artifact'
-          git push origin HEAD:refs/heads/fix/pr1028-github-retry-waits-20261127
+          test "$(git show -s --format=%an HEAD)" = 'iliya'
+          test "$(git show -s --format=%ae HEAD)" = 'iliyazelenkog@gmail.com'
+          test "$(git show -s --format=%cn HEAD)" = 'iliya'
+          test "$(git show -s --format=%ce HEAD)" = 'iliyazelenkog@gmail.com'
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            push origin HEAD:refs/heads/fix/pr1028-github-retry-waits-20261127

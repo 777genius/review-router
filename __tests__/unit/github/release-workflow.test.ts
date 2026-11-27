@@ -14,10 +14,9 @@ const auditedActionShas: Readonly<Record<string, string>> = {
   'actions/upload-artifact': 'ea165f8d65b6e75b540449e92b4886f43607fa02',
 };
 const auditedExternalUseCounts: Readonly<Record<string, number>> = {
-  [checkoutActionReference]: 19,
+  [checkoutActionReference]: 18,
   'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1': 2,
-  'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e': 2,
-  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 16,
+  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 15,
   'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02': 2,
 };
 const checkoutCredentialException = {
@@ -46,6 +45,7 @@ interface ParsedWorkflow {
       permissions?: Record<string, string>;
       steps: Array<{
         name?: string;
+        if?: string;
         run?: string;
         with?: Record<string, unknown>;
         env?: Record<string, string>;
@@ -172,7 +172,7 @@ describe('workflow security and release', () => {
         (total, count) => total + count,
         0
       )
-    ).toBe(41);
+    ).toBe(37);
   });
 
   it('finds semantic uses keys without scanning block scalar text', () => {
@@ -291,7 +291,7 @@ jobs:
     expect(steps[verify].run).toContain('git status --short');
   });
 
-  it('keeps native qualification read-only and publishes only its successful exact dispatch artifact', () => {
+  it('qualifies the pinned fork release without a competing native publisher', () => {
     const workflow = readWorkflow('native-runtime-candidate.yml');
     expect(workflow.on.workflow_dispatch).toEqual({
       inputs: {
@@ -303,6 +303,7 @@ jobs:
       },
     });
     expect(workflow.permissions).toEqual({ contents: 'read' });
+    expect(Object.keys(workflow.jobs)).toEqual(['qualify']);
     const qualify = workflow.jobs.qualify;
     expect(qualify.permissions).toBeUndefined();
     expect(qualify.if).toContain("github.event_name == 'workflow_dispatch'");
@@ -310,7 +311,7 @@ jobs:
       'github.event.pull_request.head.repo.full_name == github.repository'
     );
     const validation = qualify.steps.find(
-      (step) => step.name === 'Validate manual publication source'
+      (step) => step.name === 'Validate manual qualification source'
     )!;
     expect(validation.env).toEqual({
       EXPECTED_SOURCE_SHA: '${{ inputs.expected_source_sha }}',
@@ -323,28 +324,41 @@ jobs:
     expect(validation.run).toContain(
       'git ls-remote --exit-code origin refs/heads/main'
     );
-    const artifact = qualify.steps.find(
-      (step) => step.name === 'Preserve candidate bytes and exact build recipe'
+    for (const name of ['ci.yml', 'native-runtime-candidate.yml']) {
+      const candidate = readWorkflow(name);
+      const steps = Object.values(candidate.jobs).flatMap((job) => job.steps);
+      const download = steps.find(
+        (step) =>
+          step.name === 'Verify and download pinned managed fork release'
+      );
+      expect(download?.run).toBe(
+        'node scripts/native-ocr/download.ts "$RUNNER_TEMP/reviewrouter-ocr"'
+      );
+      expect(JSON.stringify(steps)).not.toContain('tools/ocr/build.sh');
+      expect(JSON.stringify(steps)).not.toContain('actions/setup-go@');
+      expect(JSON.stringify(steps)).not.toContain('native-ocr/publish.ts');
+    }
+    const realCli = qualify.steps.find(
+      (step) =>
+        step.name ===
+        'Require real binaries against synthetic local wire fixtures'
     )!;
+    expect(realCli.env).toMatchObject({
+      REVIEWROUTER_OCR_REQUIRED: '1',
+      REVIEWROUTER_OCR_BINARY:
+        '${{ runner.temp }}/reviewrouter-ocr/opencodereview-linux-amd64',
+    });
+    const artifact = qualify.steps.find(
+      (step) =>
+        step.name ===
+        'Preserve consumed native release and its qualification evidence'
+    )!;
+    expect(artifact.if).toBe(
+      "always() && steps.ocr-download.outcome == 'success'"
+    );
     expect(artifact.with?.name).toBe(
-      'native-runtime-candidate-${{ github.event.pull_request.head.sha || github.sha }}'
+      'native-consumer-qualification-${{ github.event.pull_request.head.sha || github.sha }}'
     );
-    const publish = workflow.jobs.publish;
-    expect(publish.needs).toBe('qualify');
-    expect(publish.if).toBe(
-      "github.event_name == 'workflow_dispatch' && needs.qualify.result == 'success'"
-    );
-    expect(publish.permissions).toEqual({ contents: 'write', actions: 'read' });
-    expect(publish.steps[0].with).toEqual({
-      ref: '${{ github.sha }}',
-      'persist-credentials': false,
-    });
-    expect(publish.steps.at(-1)).toMatchObject({
-      run: 'node scripts/publish-native-ocr.mts',
-      env: {
-        GH_TOKEN: '${{ github.token }}',
-        EXPECTED_SOURCE_SHA: '${{ inputs.expected_source_sha }}',
-      },
-    });
+    expect(artifact.with?.path).toBe('${{ runner.temp }}/reviewrouter-ocr/');
   });
 });

@@ -266,7 +266,9 @@ export class ReviewInteractionHandler {
             } catch {
               // The review is already admitted. A comment publication error
               // cannot reclassify it as a failed review request.
-              logger.warn('ReviewRouter review was queued but its acknowledgement could not be posted.');
+              logger.warn(
+                'ReviewRouter review was queued but its acknowledgement could not be posted.'
+              );
             }
           }
           return;
@@ -596,43 +598,56 @@ export class ReviewInteractionHandler {
   }
 
   private async postHelp(prNumber: number): Promise<void> {
-    await this.postNotice(prNumber, [
-      '**ReviewRouter commands**',
-      '',
-      'In the PR conversation:',
-      '- `/rr help` — show these commands (no model call).',
-      '- `/rr review` — request a review of the current HEAD (write, maintain, or admin required).',
-      '- `/rr status` — show the current HEAD, recent matching GitHub Actions review status, and finding overrides. A passing workflow does not prove complete review coverage.',
-      '- `@review-router-ai review` — alternative text trigger when this is the installed App account; `/rr` works regardless of its GitHub login.',
-      '',
-      'Reply directly to a ReviewRouter inline finding:',
-      '- `/rr skip [reason]` / `/rr unskip [reason]` — permission-checked finding overrides.',
-      '- `/rr explain` or an ordinary question — ask for an explanation **when the qualified managed conversation provider is enabled** (same-repository PRs only).',
-      '- `/rr fixed` or @review-router-ai fixed — check one finding against the current HEAD with evidence when qualified managed Gateway is enabled; never auto-close the thread.',
-      '- `/rr suggest fix` — propose one human-applied GitHub suggestion for a verified current-HEAD inline finding through qualified managed Gateway; no automatic commits or thread resolution.',
-      '',
-      'Unconfigured providers and fork PRs cannot run secret-backed reviews. Review requests may be queued or rejected; the PR checks report final results.',
-    ].join('\n'));
+    await this.postNotice(
+      prNumber,
+      [
+        '**ReviewRouter commands**',
+        '',
+        'In the PR conversation:',
+        '- `/rr help` — show these commands (no model call).',
+        '- `/rr review` — request a review of the current HEAD (write, maintain, or admin required).',
+        '- `/rr status` — show the current HEAD, recent matching GitHub Actions review status, and finding overrides. A passing workflow does not prove complete review coverage.',
+        '- `@review-router-ai review` — alternative text trigger when this is the installed App account; `/rr` works regardless of its GitHub login.',
+        '',
+        'Reply directly to a ReviewRouter inline finding:',
+        '- `/rr skip [reason]` / `/rr unskip [reason]` — permission-checked finding overrides.',
+        '- `/rr explain` or an ordinary question — ask for an explanation **when the qualified managed conversation provider is enabled** (same-repository PRs only).',
+        '- `/rr fixed` or @review-router-ai fixed — check one finding against the current HEAD with evidence when qualified managed Gateway is enabled; never auto-close the thread.',
+        '- `/rr suggest fix` — propose one human-applied GitHub suggestion for a verified current-HEAD inline finding through qualified managed Gateway; no automatic commits or thread resolution.',
+        '',
+        'Unconfigured providers and fork PRs cannot run secret-backed reviews. Review requests may be queued or rejected; the PR checks report final results.',
+      ].join('\n')
+    );
   }
 
   private async postStatus(prNumber: number, headSha?: string): Promise<void> {
     const lines = [
       '**ReviewRouter status**',
       '',
-      headSha ? `Current PR HEAD: \`${headSha.slice(0, 12)}\`.` : 'Current PR HEAD could not be verified.',
+      headSha
+        ? `Current PR HEAD: \`${headSha.slice(0, 12)}\`.`
+        : 'Current PR HEAD could not be verified.',
     ];
     if (headSha) {
       try {
         const { owner, repo, octokit } = this.actionsClient;
         const { data } = await octokit.rest.actions.listWorkflowRunsForRepo({
-          owner, repo, event: 'pull_request', per_page: 100,
+          owner,
+          repo,
+          event: 'pull_request',
+          per_page: 100,
         });
         const configuredFile =
           process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || 'reviewrouter.yml';
         const matching = ((data.workflow_runs || []) as WorkflowRunSummary[])
-          .filter((run) => this.matchesReviewWorkflowRun(
-            run, configuredFile, prNumber, headSha
-          ))
+          .filter((run) =>
+            this.matchesReviewWorkflowRun(
+              run,
+              configuredFile,
+              prNumber,
+              headSha
+            )
+          )
           .sort(compareWorkflowRunsNewestFirst);
         const latest = matching[0];
         if (latest?.id) {
@@ -644,10 +659,14 @@ export class ReviewInteractionHandler {
             `Latest matching GitHub Actions review: [run #${latest.id}](https://github.com/${owner}/${repo}/actions/runs/${latest.id}) — ${state}.`
           );
         } else {
-          lines.push('No matching review workflow run found among the most recent 100 pull_request runs for this HEAD.');
+          lines.push(
+            'No matching review workflow run found among the most recent 100 pull_request runs for this HEAD.'
+          );
         }
       } catch {
-        lines.push('GitHub Actions status is unavailable (permissions or API error).');
+        lines.push(
+          'GitHub Actions status is unavailable (permissions or API error).'
+        );
       }
     }
     lines.push(
@@ -1160,7 +1179,6 @@ function isFailedWorkflowConclusion(conclusion?: string | null): boolean {
   );
 }
 
-
 function safeWorkflowState(value: string | null | undefined): string {
   // Never render arbitrary GitHub response text as Markdown or GitHub mention.
   return typeof value === 'string' && /^[a-z_]{1,40}$/.test(value)
@@ -1194,18 +1212,28 @@ export function parseInteractionCommand(body: string): ParsedCommand | null {
     const override = /^\/rr\s+(skip|unskip)\b(?:\s+([\s\S]*))?$/i.exec(trimmed);
     if (!override) return null;
     const reason = (override[2] || '').trim();
-    if (/(?:^|\n)[ \t]*(?:\/rr\b|@(?:codex|reviewrouter|review-router-ai)\b)/i.test(reason))
+    if (
+      /(?:^|\n)[ \t]*(?:\/rr\b|@(?:codex|reviewrouter|review-router-ai)\b)/i.test(
+        reason
+      )
+    )
       return null;
     return { kind: override[1].toLowerCase() as CommandKind, reason };
   }
   // The real App login may vary; /rr is the canonical fallback.
-  const mentioned = /^@(codex|reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(review|status|help)\s*$/i.exec(trimmed);
+  const mentioned =
+    /^@(codex|reviewrouter(?:-ai)?|review-router-ai(?:\[bot\])?)\s+(review|status|help)\s*$/i.exec(
+      trimmed
+    );
   if (mentioned) {
     const kind = mentioned[2].toLowerCase() as CommandKind;
-    if (mentioned[1].toLowerCase() === 'codex' && kind !== 'review') return null;
+    if (mentioned[1].toLowerCase() === 'codex' && kind !== 'review')
+      return null;
     return { kind, reason: '' };
   }
-  const slash = /^\/rr\s+(skip|unskip|status|review|help)\b(?:\s+(.+))?$/i.exec(trimmed);
+  const slash = /^\/rr\s+(skip|unskip|status|review|help)\b(?:\s+(.+))?$/i.exec(
+    trimmed
+  );
   if (!slash) return null;
   const kind = slash[1].toLowerCase() as CommandKind;
   const reason = (slash[2] || '').trim();

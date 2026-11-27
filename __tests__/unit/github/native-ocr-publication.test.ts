@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const repoRoot = path.resolve(__dirname, '../../..');
-const script = path.join(repoRoot, 'scripts/publish-native-ocr.mts');
+const script = path.join(repoRoot, 'scripts/native-ocr/publish.ts');
 const sourceSha = 'a'.repeat(40);
 const tag = 'ocr-v1.13.1-rr.6';
 

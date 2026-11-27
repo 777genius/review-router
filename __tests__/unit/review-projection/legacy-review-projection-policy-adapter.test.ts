@@ -175,17 +175,20 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     const presented = await guarded.projectPresentation(query);
     expect(presented.placements[0]).toMatchObject({
       kind: FindingPlacementKind.Summary,
-      reason: 'insufficient independent reviewer agreement for inline publication',
+      reason:
+        'insufficient independent reviewer agreement for inline publication',
     });
     expect(presented.summaryBody).toContain('**Reviewer agreement:** 1');
     expect(presented.summaryBody).toContain('Runtime crash on valid request');
     expect(presented.checkSummary).toBe(presented.summaryBody);
-    expect(guarded.evaluateMergeGate({
-      failOnSeverity: FindingSeverity.Major,
-      occurrences: [singleOccurrence],
-      coverage: query.coverage,
-      lifecycleInventoryComplete: true,
-    }).conclusion).toBe('fail');
+    expect(
+      guarded.evaluateMergeGate({
+        failOnSeverity: FindingSeverity.Major,
+        occurrences: [singleOccurrence],
+        coverage: query.coverage,
+        lifecycleInventoryComplete: true,
+      }).conclusion
+    ).toBe('fail');
 
     const confirmed = await guarded.projectPresentation({
       ...query,
@@ -213,14 +216,18 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
       });
       expect(mixed.placements[0]).toMatchObject({
         kind: FindingPlacementKind.Summary,
-        reason: 'insufficient independent reviewer agreement for inline publication',
+        reason:
+          'insufficient independent reviewer agreement for inline publication',
       });
       expect(mixed.summaryBody).toContain('**Reviewer agreement:** 1');
 
       const deterministicOnly = await guarded.projectPresentation({
         ...query,
         occurrences: [
-          occurrence({ anchorVerified: true, providerVoteKeys: [deterministicVote] }),
+          occurrence({
+            anchorVerified: true,
+            providerVoteKeys: [deterministicVote],
+          }),
         ],
       });
       expect(deterministicOnly.placements[0]?.reason).not.toBe(

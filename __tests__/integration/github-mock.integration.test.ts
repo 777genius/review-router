@@ -24,7 +24,10 @@ import { ImpactAnalyzer } from '../../src/analysis/impact';
 import { EvidenceScorer } from '../../src/analysis/evidence';
 import { MermaidGenerator } from '../../src/output/mermaid';
 import { FeedbackFilter } from '../../src/github/feedback';
-import { ClaudeCodeProvider, type ClaudeCodeAuthMode } from '../../src/providers/claude-code';
+import {
+  ClaudeCodeProvider,
+  type ClaudeCodeAuthMode,
+} from '../../src/providers/claude-code';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -155,163 +158,173 @@ describe('GitHub integration mock (no network)', () => {
   };
 
   it.each(['fake', 'claude-oauth', 'claude-api-key'] as const)(
-    'uses a synthetic %s CLI/provider to post summary and inline comments', async (mode) => {
-    const fakeOctokit: any = {
-      rest: {
-        pulls: {
-          get: jest.fn().mockResolvedValue({
-            data: {
-              number: 1,
-              title: 'Test PR',
-              body: '',
-              user: { login: 'dev' },
-              draft: false,
-              labels: [],
-              additions: 2,
-              deletions: 0,
-              base: { sha: 'base' },
-              head: { sha: 'head' },
-            },
-          }),
-          listFiles: jest.fn().mockResolvedValue({
-            data: [
-              {
-                filename: 'src/app.ts',
-                status: 'modified',
+    'uses a synthetic %s CLI/provider to post summary and inline comments',
+    async (mode) => {
+      const fakeOctokit: any = {
+        rest: {
+          pulls: {
+            get: jest.fn().mockResolvedValue({
+              data: {
+                number: 1,
+                title: 'Test PR',
+                body: '',
+                user: { login: 'dev' },
+                draft: false,
+                labels: [],
                 additions: 2,
                 deletions: 0,
-                changes: 2,
-                patch: '@@ -1,1 +1,2 @@\n const x = 1;\n+console.log(x);\n',
+                base: { sha: 'base' },
+                head: { sha: 'head' },
               },
-            ],
+            }),
+            listFiles: jest.fn().mockResolvedValue({
+              data: [
+                {
+                  filename: 'src/app.ts',
+                  status: 'modified',
+                  additions: 2,
+                  deletions: 0,
+                  changes: 2,
+                  patch: '@@ -1,1 +1,2 @@\n const x = 1;\n+console.log(x);\n',
+                },
+              ],
+            }),
+            createReview: jest.fn().mockResolvedValue({}),
+            listReviewComments: jest.fn().mockResolvedValue({ data: [] }),
+          },
+          issues: {
+            createComment: jest.fn().mockResolvedValue({}),
+            updateComment: jest.fn().mockResolvedValue({}),
+            deleteComment: jest.fn().mockResolvedValue({}),
+            listComments: jest.fn().mockResolvedValue({ data: [] }),
+          },
+        },
+        paginate: jest.fn().mockResolvedValue([]),
+        request: jest.fn().mockResolvedValue({ data: '@@ diff' }),
+      };
+
+      fakeOctokit.issues = fakeOctokit.rest.issues;
+      fakeOctokit.pulls = fakeOctokit.rest.pulls;
+
+      const fakeClient = {
+        octokit: fakeOctokit,
+        owner: 'owner',
+        repo: 'repo',
+        getFileContent: async () => null, // Mock getFileContent method
+      } as any;
+
+      const temp =
+        mode === 'fake'
+          ? null
+          : fs.mkdtempSync(
+              path.join(os.tmpdir(), 'reviewrouter-claude-publication-')
+            );
+      let selectedProvider: Provider = new FakeProvider();
+      const originalEnv = process.env;
+      try {
+        if (temp) {
+          const binary = path.join(temp, 'synthetic-claude');
+          const script =
+            [
+              '#!/usr/bin/env node',
+              'const fs = require("fs");',
+              'const prompt = fs.readFileSync(0, "utf8");',
+              `const expected = ${JSON.stringify(mode === 'claude-api-key' ? 'api' : 'oauth')};`,
+              'const actual = process.env.ANTHROPIC_API_KEY ? "api" : "oauth";',
+              'if (Boolean(process.env.ANTHROPIC_API_KEY) === Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN)) process.exit(4);',
+              'if (actual !== expected) process.exit(6);',
+              'if (!process.env.CLAUDE_CONFIG_DIR || !prompt.trim() || process.env.GITHUB_TOKEN) process.exit(5);',
+              'const finding = {file:"src/app.ts",line:2,startLine:null,endLine:null,severity:"major",title:"Synthetic issue",message:"Review the changed line.",suggestion:null};',
+              'console.log(JSON.stringify({structured_output:{findings:[finding],revalidations:[]}}));',
+            ].join('\n') + '\n';
+          fs.writeFileSync(binary, script, { mode: 0o700 });
+          process.env = {
+            ...originalEnv,
+            ANTHROPIC_API_KEY: 'sk-ant-api03-unselected-synthetic',
+            CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-unselected-synthetic',
+          };
+          const claude = new ClaudeCodeProvider('sonnet', {
+            authMode: mode as ClaudeCodeAuthMode,
+          });
+          Object.defineProperty(claude, 'resolveBinary', {
+            configurable: true,
+            value: async () => binary,
+          });
+          selectedProvider = claude;
+        }
+        const selectedConfig: ReviewConfig = temp
+          ? {
+              ...config,
+              providers: ['claude/sonnet'],
+              synthesisModel: 'claude/sonnet',
+            }
+          : config;
+
+        const components: ReviewComponents = {
+          config: selectedConfig,
+          providerRegistry: {
+            createProviders: async () => [selectedProvider],
+          } as any,
+          promptBuilder: new PromptBuilder(selectedConfig),
+          llmExecutor: new StubLLMExecutor(selectedProvider) as any,
+          deduplicator: new Deduplicator(),
+          consensus: new ConsensusEngine({
+            minAgreement: 1,
+            minSeverity: 'minor',
+            maxComments: 10,
           }),
-          createReview: jest.fn().mockResolvedValue({}),
-          listReviewComments: jest.fn().mockResolvedValue({ data: [] }),
-        },
-        issues: {
-          createComment: jest.fn().mockResolvedValue({}),
-          updateComment: jest.fn().mockResolvedValue({}),
-          deleteComment: jest.fn().mockResolvedValue({}),
-          listComments: jest.fn().mockResolvedValue({ data: [] }),
-        },
-      },
-      paginate: jest.fn().mockResolvedValue([]),
-      request: jest.fn().mockResolvedValue({ data: '@@ diff' }),
-    };
-
-    fakeOctokit.issues = fakeOctokit.rest.issues;
-    fakeOctokit.pulls = fakeOctokit.rest.pulls;
-
-    const fakeClient = {
-      octokit: fakeOctokit,
-      owner: 'owner',
-      repo: 'repo',
-      getFileContent: async () => null, // Mock getFileContent method
-    } as any;
-
-    const temp = mode === 'fake'
-      ? null
-      : fs.mkdtempSync(path.join(os.tmpdir(), 'reviewrouter-claude-publication-'));
-    let selectedProvider: Provider = new FakeProvider();
-    const originalEnv = process.env;
-    try {
-      if (temp) {
-        const binary = path.join(temp, 'synthetic-claude');
-        const script = [
-          '#!/usr/bin/env node',
-          'const fs = require("fs");',
-          'const prompt = fs.readFileSync(0, "utf8");',
-          `const expected = ${JSON.stringify(mode === 'claude-api-key' ? 'api' : 'oauth')};`,
-          'const actual = process.env.ANTHROPIC_API_KEY ? "api" : "oauth";',
-          'if (Boolean(process.env.ANTHROPIC_API_KEY) === Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN)) process.exit(4);',
-          'if (actual !== expected) process.exit(6);',
-          'if (!process.env.CLAUDE_CONFIG_DIR || !prompt.trim() || process.env.GITHUB_TOKEN) process.exit(5);',
-          'const finding = {file:"src/app.ts",line:2,startLine:null,endLine:null,severity:"major",title:"Synthetic issue",message:"Review the changed line.",suggestion:null};',
-          'console.log(JSON.stringify({structured_output:{findings:[finding],revalidations:[]}}));',
-        ].join('\n') + '\n';
-        fs.writeFileSync(binary, script, { mode: 0o700 });
-        process.env = {
-          ...originalEnv,
-          ANTHROPIC_API_KEY: 'sk-ant-api03-unselected-synthetic',
-          CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-unselected-synthetic',
+          synthesis: new SynthesisEngine(selectedConfig),
+          testCoverage: new TestCoverageAnalyzer(),
+          astAnalyzer: new ASTAnalyzer(),
+          cache: new CacheManager(),
+          incrementalReviewer: {
+            shouldUseIncremental: async () => false,
+            getLastReview: async () => null,
+            saveReview: async () => {},
+            getChangedFilesSince: async () => [],
+            mergeFindings: (prev: any, curr: any) => curr,
+            generateIncrementalSummary: () => '',
+          } as any,
+          costTracker: new CostTracker({
+            getPricing: async () => ({
+              modelId: 'fake',
+              promptPrice: 0,
+              completionPrice: 0,
+              isFree: true,
+            }),
+          } as any),
+          security: new SecurityScanner(),
+          rules: new RulesEngine([]),
+          prLoader: new PullRequestLoader(fakeClient),
+          commentPoster: new CommentPoster(fakeClient),
+          formatter: new MarkdownFormatter(),
+          contextRetriever: new ContextRetriever(),
+          impactAnalyzer: new ImpactAnalyzer(),
+          evidenceScorer: new EvidenceScorer(),
+          mermaidGenerator: new MermaidGenerator(),
+          feedbackFilter: {
+            loadSuppressed: async () => new Set(),
+            loadReviewCommentState: async () => ({
+              suppressed: new Set(),
+              alreadyPosted: new Set(),
+            }),
+            shouldPost: () => true,
+          } as unknown as FeedbackFilter,
         };
-        const claude = new ClaudeCodeProvider('sonnet', {
-          authMode: mode as ClaudeCodeAuthMode,
-        });
-        Object.defineProperty(claude, 'resolveBinary', {
-          configurable: true,
-          value: async () => binary,
-        });
-        selectedProvider = claude;
+
+        const orchestrator = new ReviewOrchestrator(components);
+        const review = await orchestrator.execute(1);
+
+        expect(review).toBeTruthy();
+        expect(fakeOctokit.issues.createComment).toHaveBeenCalled();
+        expect(fakeOctokit.pulls.createReview).toHaveBeenCalled();
+      } finally {
+        process.env = originalEnv;
+        if (temp) fs.rmSync(temp, { recursive: true, force: true });
       }
-      const selectedConfig: ReviewConfig = temp
-        ? { ...config, providers: ['claude/sonnet'], synthesisModel: 'claude/sonnet' }
-        : config;
-
-    const components: ReviewComponents = {
-      config: selectedConfig,
-      providerRegistry: {
-        createProviders: async () => [selectedProvider],
-      } as any,
-      promptBuilder: new PromptBuilder(selectedConfig),
-      llmExecutor: new StubLLMExecutor(selectedProvider) as any,
-      deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({
-        minAgreement: 1,
-        minSeverity: 'minor',
-        maxComments: 10,
-      }),
-      synthesis: new SynthesisEngine(selectedConfig),
-      testCoverage: new TestCoverageAnalyzer(),
-      astAnalyzer: new ASTAnalyzer(),
-      cache: new CacheManager(),
-      incrementalReviewer: {
-        shouldUseIncremental: async () => false,
-        getLastReview: async () => null,
-        saveReview: async () => {},
-        getChangedFilesSince: async () => [],
-        mergeFindings: (prev: any, curr: any) => curr,
-        generateIncrementalSummary: () => '',
-      } as any,
-      costTracker: new CostTracker({
-        getPricing: async () => ({
-          modelId: 'fake',
-          promptPrice: 0,
-          completionPrice: 0,
-          isFree: true,
-        }),
-      } as any),
-      security: new SecurityScanner(),
-      rules: new RulesEngine([]),
-      prLoader: new PullRequestLoader(fakeClient),
-      commentPoster: new CommentPoster(fakeClient),
-      formatter: new MarkdownFormatter(),
-      contextRetriever: new ContextRetriever(),
-      impactAnalyzer: new ImpactAnalyzer(),
-      evidenceScorer: new EvidenceScorer(),
-      mermaidGenerator: new MermaidGenerator(),
-      feedbackFilter: {
-        loadSuppressed: async () => new Set(),
-        loadReviewCommentState: async () => ({
-          suppressed: new Set(),
-          alreadyPosted: new Set(),
-        }),
-        shouldPost: () => true,
-      } as unknown as FeedbackFilter,
-    };
-
-    const orchestrator = new ReviewOrchestrator(components);
-    const review = await orchestrator.execute(1);
-
-    expect(review).toBeTruthy();
-    expect(fakeOctokit.issues.createComment).toHaveBeenCalled();
-    expect(fakeOctokit.pulls.createReview).toHaveBeenCalled();
-    } finally {
-      process.env = originalEnv;
-      if (temp) fs.rmSync(temp, { recursive: true, force: true });
-    }
-  }, 20000);
-
+    },
+    20000
+  );
 
   it('updates the existing summary comment when findings exist', async () => {
     const fakeOctokit: any = {

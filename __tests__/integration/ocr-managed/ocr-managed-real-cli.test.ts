@@ -455,6 +455,7 @@ function startScriptedStub(script: ScriptedStubScript): Promise<{
 }
 
 interface ScriptedScenarioResult {
+  ruleText: string;
   projection?: import('../../../src/review-orchestration/application').CurrentReviewProjection;
   replayProjection?: import('../../../src/review-orchestration/application').CurrentReviewProjection;
   observation?: ReviewObservationPayload;
@@ -488,7 +489,9 @@ async function runScriptedScenario(input: {
   readonly reviewMemory?: ReviewMemorySnapshot;
   readonly skillsGitRoots?: readonly ReviewSkillsGitRootDiagnostic[];
   readonly projectSkills?: boolean;
+  readonly project?: boolean;
   readonly assignedPaths?: readonly string[];
+  readonly files?: PRContext['files'];
   /** Offer an unsafe reopen seam after truncation; the adapter must ignore it. */
   readonly reopenRetry?: boolean;
 }): Promise<ScriptedScenarioResult> {
@@ -544,20 +547,22 @@ async function runScriptedScenario(input: {
       author: 'tester',
       draft: false,
       labels: [],
-      files: (input.assignedPaths ?? ['calc.ts']).map((filename) => ({
-        filename,
-        status: 'modified',
-        additions: 1,
-        deletions: 1,
-        changes: 2,
-        patch: git(
-          input.checkoutRoot,
-          'diff',
-          `${mergeBaseSha}..${headSha}`,
-          '--',
-          filename
-        ),
-      })),
+      files:
+        input.files ??
+        (input.assignedPaths ?? ['calc.ts']).map((filename) => ({
+          filename,
+          status: 'modified',
+          additions: 1,
+          deletions: 1,
+          changes: 2,
+          patch: git(
+            input.checkoutRoot,
+            'diff',
+            `${mergeBaseSha}..${headSha}`,
+            '--',
+            filename
+          ),
+        })),
       diff: '',
       additions: 1,
       deletions: 1,
@@ -742,7 +747,10 @@ async function runScriptedScenario(input: {
       | import('../../../src/review-orchestration/application').CurrentReviewProjection
       | undefined;
     let replayProjection: typeof projection;
-    if (observation && input.reviewSkills && input.projectSkills) {
+    if (
+      observation &&
+      (input.project || (input.reviewSkills && input.projectSkills))
+    ) {
       const evidence = [
         {
           workSlotId: prepared.workSlotId,
@@ -783,18 +791,20 @@ async function runScriptedScenario(input: {
               targets: [],
             }),
           },
-          skillsReceipt: {
-            render: (acceptedEvidence) =>
-              receipt.render({
-                skills: input.reviewSkills!,
-                changedPaths: pr.files.map((file) => file.filename),
-                gitRoots: input.skillsGitRoots,
-                acceptedEvidence,
-              }),
-            unavailable: () => {
-              throw new Error('fixture_receipt_did_not_fit');
-            },
-          },
+          skillsReceipt: input.reviewSkills
+            ? {
+                render: (acceptedEvidence) =>
+                  receipt.render({
+                    skills: input.reviewSkills!,
+                    changedPaths: pr.files.map((file) => file.filename),
+                    gitRoots: input.skillsGitRoots,
+                    acceptedEvidence,
+                  }),
+                unavailable: () => {
+                  throw new Error('fixture_receipt_did_not_fit');
+                },
+              }
+            : undefined,
         }).build({
           acceptedEvidence: evidence,
           exhaustedWorkSlotIds: [],
@@ -805,16 +815,19 @@ async function runScriptedScenario(input: {
       replayProjection = await project(new ReviewSkillsReceiptCollector());
     }
     return {
+      ruleText: prepared.reviewPrompt,
       ...(projection ? { projection, replayProjection } : {}),
       ...(observation !== undefined ? { observation } : {}),
       ...(rejection !== undefined ? { rejection } : {}),
       ...(firstRejection !== undefined ? { firstRejection } : {}),
       reopened,
       previewSelectedPaths: prepared.previewSelectedPaths,
-      previewCoveragePaths: prepared.coverageManifest.paths.map(({ path, kind }) => ({
-        path,
-        kind,
-      })),
+      previewCoveragePaths: prepared.coverageManifest.paths.map(
+        ({ path, kind }) => ({
+          path,
+          kind,
+        })
+      ),
       requests: stub.requests,
       maxInFlight: stub.maxInFlight,
       resultRaw,
@@ -860,6 +873,247 @@ describeHarness(
       await new Promise((resolve) => server?.close(() => resolve(undefined)));
       if (workspace) fs.rmSync(workspace, { recursive: true, force: true });
     });
+
+    it('reviews admitted ignored tracked changes and accounts for every deletion', async () => {
+      const repo = path.join(workspace, 'ignored-tracked-inventory');
+      fs.mkdirSync(path.join(repo, 'tmp'), { recursive: true });
+      git(repo, 'init', '-q');
+      fs.writeFileSync(path.join(repo, '.gitignore'), 'tmp/\n');
+      const write = (name: string, content: string) =>
+        fs.writeFileSync(path.join(repo, name), content);
+      write('calc.ts', 'export const visible = 1;\n');
+      write('deleted.ts', 'export const ordinaryDeleted = 1;\n');
+      write('empty-deleted.ts', '');
+      write('tmp/deleted.ts', 'export const ignoredDeleted = 1;\n');
+      write('tmp/empty-deleted.ts', '');
+      write('tmp/modified.ts', 'export const ignoredModified = 1;\n');
+      const renameBody =
+        Array.from(
+          { length: 30 },
+          (_, index) => 'export const renameLine' + index + ' = ' + index + ';'
+        ).join('\n') + '\n';
+      write('rename.ts', renameBody);
+      git(repo, 'add', '-f', '.');
+      git(repo, 'commit', '-qm', 'tracked baseline with ignored paths');
+      const baseSha = git(repo, 'rev-parse', 'HEAD').trim();
+      write('calc.ts', 'export const visible = "VISIBLE_NEW_MARKER";\n');
+      write(
+        'tmp/modified.ts',
+        'export const ignoredModified = "IGNORED_MODIFIED_MARKER";\n'
+      );
+      git(repo, 'mv', '-f', 'rename.ts', 'tmp/renamed.ts');
+      write(
+        'tmp/renamed.ts',
+        renameBody + 'export const renamed = "IGNORED_RENAME_MARKER";\n'
+      );
+      for (const name of [
+        'deleted.ts',
+        'empty-deleted.ts',
+        'tmp/deleted.ts',
+        'tmp/empty-deleted.ts',
+      ])
+        fs.unlinkSync(path.join(repo, name));
+      git(repo, 'add', '-u');
+      git(
+        repo,
+        'commit',
+        '-qm',
+        'modify delete and rename tracked ignored files'
+      );
+      const headSha = git(repo, 'rev-parse', 'HEAD').trim();
+      const selected = ['calc.ts', 'tmp/modified.ts', 'tmp/renamed.ts'];
+      const deleted = [
+        'deleted.ts',
+        'empty-deleted.ts',
+        'tmp/deleted.ts',
+        'tmp/empty-deleted.ts',
+      ];
+      const assignedPaths = [...selected, ...deleted].sort();
+      const files: PRContext['files'] = assignedPaths.map((filename) => {
+        const renamed = filename === 'tmp/renamed.ts';
+        const paths = renamed ? ['rename.ts', filename] : [filename];
+        const [added, removed] = git(
+          repo,
+          'diff',
+          '--numstat',
+          baseSha + '..' + headSha,
+          '--',
+          ...paths
+        ).split('\t');
+        const additions = Number(added);
+        const deletions = Number(removed);
+        return {
+          filename,
+          status: deleted.includes(filename)
+            ? 'removed'
+            : renamed
+              ? 'renamed'
+              : 'modified',
+          ...(renamed ? { previous_filename: 'rename.ts' } : {}),
+          additions,
+          deletions,
+          changes: additions + deletions,
+          patch: git(repo, 'diff', baseSha + '..' + headSha, '--', ...paths),
+        };
+      });
+      const { executionInput: reviewSkills } =
+        await materializeReviewSkillsWithDiagnostics({
+          capture: createCapturedReviewSkills({
+            baseSha,
+            webSkills: [],
+            gitSources: [],
+          }),
+          baseSha,
+          checkoutRoot: repo,
+        });
+      const scenario = await runScriptedScenario({
+        workspace,
+        checkoutRoot: repo,
+        assignedPaths,
+        files,
+        reviewSkills,
+        project: true,
+        script: { nComments: 0, contentLen: 0, filterMode: 'approve' },
+      });
+      expect(JSON.parse(scenario.ruleText)).toEqual({
+        reviewrouter_managed_paths: assignedPaths,
+        rules: assignedPaths.map((path) => ({
+          path,
+          rule: expect.stringContaining('reviewrouter-managed-v1'),
+          merge_system_rule: true,
+          reviewrouter_exact_path: true,
+        })),
+      });
+      expect(scenario.rejection).toBeUndefined();
+      expect(scenario.previewSelectedPaths).toEqual(selected);
+      expect(scenario.previewCoveragePaths).toEqual(
+        assignedPaths.map((name) => ({
+          path: name,
+          kind: deleted.includes(name) ? 'policy_excluded' : 'full_patch',
+        }))
+      );
+      expect(scenario.observation?.qualityFlags).toEqual([]);
+      const mainRequests = scenario.requests.filter(
+        (request) => request.kind === 'main'
+      );
+      expect(mainRequests.length).toBeGreaterThan(0);
+      const delivered = mainRequests
+        .map((request) => request.inputText)
+        .join('\n');
+      for (const marker of [
+        'VISIBLE_NEW_MARKER',
+        'IGNORED_MODIFIED_MARKER',
+        'IGNORED_RENAME_MARKER',
+      ])
+        expect(delivered).toContain(marker);
+      const native = parseOcrNativeReviewResult(
+        scenario.resultRaw,
+        scenario.admission
+      );
+      expect(
+        native.outcome.groups.flatMap((group) => group.paths).sort()
+      ).toEqual(selected);
+      expect(classifyOcrReviewOutcome(native.outcome).partial).toBe(false);
+      expect(scenario.projection?.coverageComplete).toBe(true);
+    }, 120_000);
+
+    it('keeps ignored secrets binaries provider files and unassigned changes out of model requests', async () => {
+      const repo = path.join(workspace, 'ignored-tracked-hard-exclusions');
+      fs.mkdirSync(path.join(repo, 'tmp'), { recursive: true });
+      fs.mkdirSync(path.join(repo, 'vendor'));
+      git(repo, 'init', '-q');
+      fs.writeFileSync(path.join(repo, '.gitignore'), 'tmp/\nvendor/\n');
+      fs.writeFileSync(
+        path.join(repo, 'calc.ts'),
+        'export const visible = 1;\n'
+      );
+      const contents: Record<string, string | Buffer> = {
+        'tmp/.env': 'FAKE_SECRET_IGNORED_MARKER=old\n',
+        'tmp/image.ts': Buffer.from('BINARY_IGNORED_MARKER\u0000old'),
+        'vendor/provider.ts':
+          'export const value = "PROVIDER_EXCLUDED_MARKER";\n',
+        'tmp/unassigned.ts':
+          'export const value = "UNASSIGNED_IGNORED_MARKER";\n',
+      };
+      for (const [name, content] of Object.entries(contents))
+        fs.writeFileSync(path.join(repo, name), content);
+      git(repo, 'add', '-f', '.');
+      git(repo, 'commit', '-qm', 'hard exclusion baseline');
+      const baseSha = git(repo, 'rev-parse', 'HEAD').trim();
+      fs.writeFileSync(
+        path.join(repo, 'calc.ts'),
+        'export const visible = "ALLOWED_NEW_MARKER";\n'
+      );
+      for (const [name, content] of Object.entries(contents)) {
+        const bytes =
+          typeof content === 'string' ? Buffer.from(content) : content;
+        fs.writeFileSync(
+          path.join(repo, name),
+          Buffer.concat([bytes, Buffer.from('changed\n')])
+        );
+      }
+      git(repo, 'add', '-u');
+      git(repo, 'commit', '-qm', 'all tracked paths changed');
+      fs.writeFileSync(
+        path.join(repo, 'tmp', 'untracked.ts'),
+        'UNTRACKED_IGNORED_MARKER\n'
+      );
+      const assignedPaths = [
+        'calc.ts',
+        'tmp/.env',
+        'tmp/image.ts',
+        'vendor/provider.ts',
+      ];
+      const { executionInput: reviewSkills } =
+        await materializeReviewSkillsWithDiagnostics({
+          capture: createCapturedReviewSkills({
+            baseSha,
+            webSkills: [],
+            gitSources: [],
+          }),
+          baseSha,
+          checkoutRoot: repo,
+        });
+      const scenario = await runScriptedScenario({
+        workspace,
+        checkoutRoot: repo,
+        assignedPaths,
+        reviewSkills,
+        project: true,
+        script: { nComments: 0, contentLen: 0, filterMode: 'approve' },
+      });
+      expect(JSON.parse(scenario.ruleText)).toEqual({
+        reviewrouter_managed_paths: assignedPaths,
+        rules: assignedPaths.map((path) => ({
+          path,
+          rule: expect.stringContaining('reviewrouter-managed-v1'),
+          merge_system_rule: true,
+          reviewrouter_exact_path: true,
+        })),
+      });
+      expect(scenario.rejection).toBeUndefined();
+      expect(scenario.previewSelectedPaths).toEqual(['calc.ts']);
+      expect(scenario.previewCoveragePaths).toEqual(
+        assignedPaths.map((name) => ({
+          path: name,
+          kind: name === 'calc.ts' ? 'full_patch' : 'policy_excluded',
+        }))
+      );
+      const delivered = scenario.requests
+        .map((request) => request.inputText)
+        .join('\n');
+      expect(delivered).toContain('ALLOWED_NEW_MARKER');
+      for (const marker of [
+        'FAKE_SECRET_IGNORED_MARKER',
+        'BINARY_IGNORED_MARKER',
+        'PROVIDER_EXCLUDED_MARKER',
+        'UNASSIGNED_IGNORED_MARKER',
+        'UNTRACKED_IGNORED_MARKER',
+      ])
+        expect(delivered).not.toContain(marker);
+      expect(scenario.observation?.qualityFlags).toEqual([]);
+      expect(scenario.projection?.coverageComplete).toBe(true);
+    }, 120_000);
 
     it('real native OCR excludes tracked vendor JSON without hiding eligible review', async () => {
       const repo = path.join(workspace, 'native-provider-directory-coverage');
@@ -913,7 +1167,10 @@ describeHarness(
         const repo = path.join(workspace, `baseline-policy-${skillsKind}`);
         fs.mkdirSync(repo);
         git(repo, 'init', '-q');
-        fs.writeFileSync(path.join(repo, 'calc.ts'), 'export const value = 1;\n');
+        fs.writeFileSync(
+          path.join(repo, 'calc.ts'),
+          'export const value = 1;\n'
+        );
         git(repo, 'add', '.');
         git(repo, 'commit', '-qm', 'base');
         const baseSha = git(repo, 'rev-parse', 'HEAD').trim();
@@ -1405,11 +1662,11 @@ describeHarness(
       expect(JSON.stringify(scenario.requests)).not.toContain(
         'UNASSIGNED_SOURCE_MARKER'
       );
-      const groups = (
-        scenario.resultRaw?.reviewrouter_outcome as {
-          groups: { paths: string[] }[];
-        }
-      ).groups;
+      expect(scenario.resultRaw).toBeDefined();
+      const groups = parseOcrNativeReviewResult(
+        scenario.resultRaw,
+        scenario.admission
+      ).outcome.groups;
       expect(groups.flatMap((group) => group.paths).sort()).toEqual([
         'calc.ts',
         'src/Foo.ts',

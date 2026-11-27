@@ -20,16 +20,37 @@ mutation credentials.
 
 ## Qualification toolchain scope
 
-The repository's `AGENTS.md` explicitly retains its pinned toolchain adoption.
-Existing Jest/ts-jest and ESLint parser gates continue to use the lockfile's
-TypeScript 5.9.3 dependency; they do not establish TypeScript 7 compiler/API
-conformance. Changed maintained source also receives a strict TypeScript 7.0.2
-check of the same project and source inventory with `--noEmit --module preserve
---moduleResolution bundler`, matching the actual esbuild source boundary.
-TypeScript 7 rejects the retained Node10 resolution setting; that default check
-is recorded as rejected, not successful. This bounded runtime fix does not
-migrate those embedded tools or change the required assertions, coverage, or
-committed-artifact checks.
+Qualification pins native TypeScript 7.0.2. The strict project preserves every
+existing source/test/types root and also covers Jest setup and maintained native
+publisher/toolchain scripts. `module: preserve` and `moduleResolution: bundler`
+match the actual esbuild source boundary; the old Node10 resolver is unsupported
+by TypeScript 7. Runtime and Action consumers remain CommonJS.
+
+Jest keeps its existing discovery, mocks, timeout, coverage and committed-artifact
+checks. Babel-Jest performs TypeScript syntax erasure and CommonJS transformation
+using the existing Babel 7 generation; type checking remains the separate native
+compiler gate. Its official Jest preset retains mock hoisting and coverage.
+The SWC pilot was rejected because getter-only exports broke existing spies;
+tests and production module exports are not changed to accommodate a transformer.
+
+Lint preserves the 66 enabled assertions from ESLint 8.57.1 and
+typescript-eslint 8.59.1: 63 native Oxlint rules, the two original formatting rules
+through the maintained Stylistic plugin, and rejection of legacy octal syntax by
+the native parser in the original strict module mode, including script-style
+TypeScript files. The original explicit-any warning, underscore exceptions and
+the one generated-validator control-regex exception remain. Type-only value
+usage is still rejected through `reportVarsOnlyUsedAsTypes`. The lint command
+enumerates the original TypeScript roots explicitly and includes the changed
+publisher/toolchain scripts; it does not hide tracked source through Git ignore.
+Behavior fixtures cover these migration boundaries without loading a classic
+TypeScript API. Architecture tests use the real OXC AST and retain their
+dependency-inversion and process-launch assertions. Prettier uses its supported
+Babel TypeScript syntax parser explicitly.
+
+The dependency lock must contain only TypeScript 7.0.2, without ts-jest,
+typescript-eslint compiler-API consumers or a transitive classic compiler.
+The authoritative CI still runs every existing native OCR/E2E, test and rebuilt
+artifact gate. A tool migration is not runtime activation or deployment evidence.
 
 ## Memory inputs
 

@@ -106,9 +106,9 @@ describe('Codex OAuth terminal outcome comment upsert', () => {
           'https://token.actions.githubusercontent.com/request'
         )
       ) {
-        expect((init?.headers as Record<string, string>).authorization).toBe(
-          'Bearer runner-oidc-request-token'
-        );
+        expect(
+          (init?.headers as Record<string, string> | undefined)?.authorization
+        ).toBe('Bearer runner-oidc-request-token');
         return jsonResponse({ value: 'runner-oidc-token' });
       }
       if (
@@ -188,9 +188,9 @@ describe('Codex OAuth terminal outcome comment upsert', () => {
           'https://token.actions.githubusercontent.com/request'
         )
       ) {
-        expect((init?.headers as Record<string, string>).authorization).toBe(
-          'Bearer runner-oidc-request-token'
-        );
+        expect(
+          (init?.headers as Record<string, string> | undefined)?.authorization
+        ).toBe('Bearer runner-oidc-request-token');
         return jsonResponse({ value: 'runner-oidc-token' });
       }
       if (

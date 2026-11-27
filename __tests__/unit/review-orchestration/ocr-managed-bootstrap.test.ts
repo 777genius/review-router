@@ -20,6 +20,7 @@ import {
 } from '../../../src/codex-oauth/ocr-managed-bootstrap';
 import { buildOcrManagedConfigJson } from '../../../src/review-orchestration/infrastructure/ocr-review-managed-run';
 import { GATEWAY_CODEX_MODEL_SETTINGS_ENV } from '../../../src/control-plane/admitted-gateway-codex-model-settings';
+import bundledProfiles from '../../../src/control-plane/review-agent-profiles.json';
 
 function profileJson(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -430,6 +431,85 @@ describe('run-owned approved OCR release assets', () => {
     ).toBe(handle.binaryPath);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     await handle.cleanup();
+    await handle.cleanup();
+    expect(fs.readdirSync(workspace)).toEqual([]);
+  });
+
+  it('downloads the exactly pinned fork profile from the organization release', async () => {
+    const fork = {
+      ...approvedAgent,
+      profileRef: 'ocr-managed-v6',
+      reviewSkillsVersion: 1 as const,
+    };
+    jest.spyOn(bundledProfiles, 'find').mockReturnValue({
+      ...fork,
+      modelTransports: [...fork.modelTransports],
+    });
+    const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >(async () => new Response(bytes));
+    const handle = await resolveApprovedOcrBinary({
+      approvedAgent: fork,
+      env,
+      fetchImpl,
+    });
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      'https://github.com/agent-teams-ai/open-code-review/releases/download/ocr-v1.2.3/opencodereview-linux-amd64'
+    );
+    expect(fetchImpl.mock.calls[0][1]).toMatchObject({ credentials: 'omit' });
+    expect(fs.readFileSync(handle.binaryPath)).toEqual(bytes);
+    await handle.cleanup();
+    expect(fs.readdirSync(workspace)).toEqual([]);
+  });
+
+  it.each(['missing', 'version', 'digest'] as const)(
+    'refuses an unpinned fork %s before downloading',
+    async (failure) => {
+      const fork = { ...approvedAgent, profileRef: 'ocr-managed-v6' };
+      jest.spyOn(bundledProfiles, 'find').mockReturnValue(
+        failure === 'missing'
+          ? undefined
+          : {
+              ...fork,
+              modelTransports: [...fork.modelTransports],
+              ...(failure === 'version'
+                ? { packageVersion: '9.9.9' }
+                : { binarySha256: 'f'.repeat(64) }),
+            }
+      );
+      const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+        ReturnType<typeof fetch>,
+        Parameters<typeof fetch>
+      >();
+      await expect(
+        resolveApprovedOcrBinary({ approvedAgent: fork, env, fetchImpl })
+      ).rejects.toThrow('review_action_v2_ocr_asset_identity_invalid');
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(fs.readdirSync(workspace)).toEqual([]);
+    }
+  );
+
+  it('keeps the frozen rr.6 binary on its original release URL', async () => {
+    const legacyBytes = Buffer.from('#!/bin/sh\necho "ocr-fake 1.13.1-rr.6"\n');
+    const legacy = {
+      ...approvedAgent,
+      profileRef: 'ocr-managed-v5',
+      packageVersion: '1.13.1-rr.6',
+      binarySha256: createHash('sha256').update(legacyBytes).digest('hex'),
+    };
+    const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >(async () => new Response(legacyBytes));
+    const handle = await resolveApprovedOcrBinary({
+      approvedAgent: legacy,
+      env,
+      fetchImpl,
+    });
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      'https://github.com/777genius/review-router/releases/download/ocr-v1.13.1-rr.6/opencodereview-linux-amd64'
+    );
     await handle.cleanup();
     expect(fs.readdirSync(workspace)).toEqual([]);
   });

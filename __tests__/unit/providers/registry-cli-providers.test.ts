@@ -35,7 +35,6 @@ describe('ProviderRegistry - New CLI Providers', () => {
       expect(providers[1].name).toBe('claude/opus');
     });
 
-
     it('instantiates the same Claude Code provider for API-key auth', () => {
       process.env.REVIEW_AUTH_MODE = ' claude-api-key ';
       const config: ReviewConfig = {
@@ -60,16 +59,20 @@ describe('ProviderRegistry - New CLI Providers', () => {
       expect((providers[1] as any).options.authMode).toBe('claude-api-key');
     });
 
-    it.each(['bad-mode', ''])('rejects invalid explicit Claude auth mode (%s)', (mode) => {
-      process.env.REVIEW_AUTH_MODE = 'codex-oauth-rotating';
-      process.env.REVIEWROUTER_CLAUDE_AUTH_MODE = mode;
-      const config: ReviewConfig = {
-        ...DEFAULT_CONFIG,
-        providers: ['claude/sonnet'],
-      };
-      expect(() => (registry as any).instantiate(config.providers, config))
-        .toThrow('claude_auth_mode_invalid');
-    });
+    it.each(['bad-mode', ''])(
+      'rejects invalid explicit Claude auth mode (%s)',
+      (mode) => {
+        process.env.REVIEW_AUTH_MODE = 'codex-oauth-rotating';
+        process.env.REVIEWROUTER_CLAUDE_AUTH_MODE = mode;
+        const config: ReviewConfig = {
+          ...DEFAULT_CONFIG,
+          providers: ['claude/sonnet'],
+        };
+        expect(() =>
+          (registry as any).instantiate(config.providers, config)
+        ).toThrow('claude_auth_mode_invalid');
+      }
+    );
 
     it('refuses contradictory primary/Claude modes rather than using ambient credentials', () => {
       process.env.REVIEW_AUTH_MODE = 'claude-oauth';
@@ -78,8 +81,9 @@ describe('ProviderRegistry - New CLI Providers', () => {
         ...DEFAULT_CONFIG,
         providers: ['claude/sonnet'],
       };
-      expect(() => (registry as any).instantiate(config.providers, config))
-        .toThrow('claude_auth_mode_invalid');
+      expect(() =>
+        (registry as any).instantiate(config.providers, config)
+      ).toThrow('claude_auth_mode_invalid');
     });
 
     it('should instantiate Codex providers', async () => {

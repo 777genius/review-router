@@ -59,7 +59,7 @@ const nativeTest = binary ? test : test.skip;
 const candidateManifest = fs.readFileSync(
   path.resolve(
     __dirname,
-    '../../../tools/ocr/qualifications/unified-model-routes-v3.manifest'
+    '../../../tools/ocr/qualifications/managed-tracked-inventory-v1.manifest'
   ),
   'utf8'
 );

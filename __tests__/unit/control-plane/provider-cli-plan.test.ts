@@ -81,7 +81,6 @@ describe('resolveProviderCliPlan', () => {
     expect(plan.codexOauthNeeded).toBe(false);
   });
 
-
   it('uses the existing Claude CLI for API-key mode without demanding OAuth', () => {
     const plan = resolveProviderCliPlan({
       REVIEW_AUTH_MODE: ' claude-api-key ',

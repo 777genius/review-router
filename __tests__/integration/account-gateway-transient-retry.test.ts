@@ -17,7 +17,10 @@ import {
   AccountGatewayModelTransport,
   type GatewayTransportDiagnostic,
 } from '../../src/review-orchestration/infrastructure/account-gateway-model-transport';
-import { parseReviewModelDispatchSettlementV2 } from '../../src/control-plane/generated/review-action-v2/review-model-dispatch-contract';
+import {
+  parseReviewModelDispatchSettlement,
+  parseReviewModelDispatchSettlementV2,
+} from '../../src/control-plane/generated/review-action-v2/review-model-dispatch-contract';
 import { PreparedModelDispatch } from '../../src/review-orchestration/infrastructure/prepared-model-dispatch';
 import { OcrReviewInvocationAdapter } from '../../src/review-orchestration/infrastructure/ocr-review-invocation-adapter';
 import {
@@ -234,6 +237,10 @@ async function assertAdapterKeepsUnknownTransport(
 }
 
 type ProbeMode =
+  | 'dispatch-native-rejection-recovery'
+  | 'dispatch-native-rejection-unconfirmed'
+  | 'dispatch-native-rejection-repeated'
+  | 'dispatch-native-rejection-deadline'
   | 'dispatch-positive-denial-recovery'
   | 'dispatch-socket-loss-terminal'
   | 'positive-denial-recovery'
@@ -267,12 +274,17 @@ type ProbeMode =
   | 'dispatch-truncated-then-502';
 
 async function transientRetry(mode: ProbeMode): Promise<void> {
+  const originalNow = Date.now;
   const root = process.env.RR_TRANSIENT_RETRY_PROBE_ROOT;
   assert(root, 'disposable_probe_root_required');
   const diagnostics: GatewayTransportDiagnostic[] = [];
   let requests = 0;
   let claims = 0;
+  const claimHistory: Record<string, unknown>[] = [];
+  const requestBodies: string[] = [];
   const settlements: unknown[] = [];
+  const nativeRetry = mode.startsWith('dispatch-native-rejection-');
+  let originalRejectedDeadline = 0;
   const incompleteProbe =
     mode.startsWith('dispatch-incomplete-') ||
     mode.startsWith('incomplete-known-legacy');
@@ -300,13 +312,15 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
         const sent = truncatedCap
           ? turnBody(requests)
-          : truncatedFirst && requests > 1
+          : (truncatedFirst || nativeRetry) && requests > 1
             ? nextBody
             : body;
         const expectedBody = withDispatch
           ? JSON.stringify({ ...JSON.parse(sent), max_output_tokens: 100 })
           : sent;
-        assert.equal(Buffer.concat(chunks).toString('utf8'), expectedBody);
+        const requestBody = Buffer.concat(chunks).toString('utf8');
+        requestBodies.push(requestBody);
+        assert.equal(requestBody, expectedBody);
         if (withDispatch)
           dispatchHeaders.push(
             request.headers['x-reviewrouter-model-request-ordinal'] as
@@ -325,6 +339,22 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         }
         if (mode === 'dispatch-truncated-then-unknown' && requests === 2) {
           request.socket.destroy();
+          return;
+        }
+        if (
+          nativeRetry &&
+          (requests === 2 ||
+            (mode === 'dispatch-native-rejection-repeated' && requests === 3))
+        ) {
+          reply.writeHead(502, {
+            'content-type': 'application/json',
+            'x-reviewrouter-request-ref': `synthetic-native-${requests}`,
+          });
+          // The HTTP error body never authorizes a retry. Only the independent
+          // authenticated control-plane proof below can authorize a successor.
+          reply.end(
+            '{"error":{"code":"upstream_failure","effect":"effect_unknown"}}'
+          );
           return;
         }
         if (
@@ -416,7 +446,9 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         }
         reply.writeHead(200, {
           'content-type': 'text/event-stream',
-          'x-reviewrouter-request-ref': 'synthetic-recovered',
+          'x-reviewrouter-request-ref': nativeRetry
+            ? `synthetic-native-${requests}`
+            : 'synthetic-recovered',
         });
         if (
           incompleteProbe ||
@@ -467,7 +499,13 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
     assert(address && typeof address !== 'string');
     transport = new AccountGatewayModelTransport(
       `https://127.0.0.1:${address.port}`,
-      () => token,
+      () => {
+        // Authorization is read immediately before the transport's onDispatch
+        // guard and socket creation. Expiry here must still prevent a POST.
+        if (mode === 'dispatch-native-rejection-deadline' && claims === 3)
+          Date.now = () => originalRejectedDeadline;
+        return token;
+      },
       (diagnostic) => {
         diagnostics.push(diagnostic);
       },
@@ -492,7 +530,13 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
           providerIndex: 0,
           model: 'fixture-model',
           deadline: new Date(Date.now() + 60_000).toISOString(),
-          maxRequests: 2,
+          ...(nativeRetry
+            ? {
+                capacityPolicy: 'model-dispatch-policy.capacity128.v1',
+                retryPolicy: 'native-rejection-once.v1',
+              }
+            : {}),
+          maxRequests: nativeRetry ? 3 : 2,
           maxConcurrentRequests: 1,
           maxRequestBytes: 64_000,
           maxResponseBytes: 64_000,
@@ -506,24 +550,53 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
           if (String(url).endsWith('/claim')) {
             claims++;
             claim = value;
+            claimHistory.push(claim);
+            const notAfter = new Date(Date.now() + 30_000).toISOString();
+            if (nativeRetry && claims === 2)
+              originalRejectedDeadline = Date.parse(notAfter);
             return Response.json({
               status: 'claimed',
               receiptToken: 'b'.repeat(64),
-              notAfter: new Date(Date.now() + 30_000).toISOString(),
+              notAfter,
               dispatch: {
                 ...claim,
                 authorizationId: 'authorization',
+                ...(nativeRetry
+                  ? {
+                      role: 'finding_discovery',
+                      nativeRequestRef: `synthetic-native-${claims}`,
+                    }
+                  : {}),
                 state: 'dispatch_may_have_started',
               },
             });
           }
           settlements.push(value);
+          const nativeProof = value.proof === 'native_rejection_after_forward';
           return Response.json({
             dispatch: {
               ...claim,
               authorizationId: 'authorization',
-              state: value.state,
+              state:
+                nativeProof && mode === 'dispatch-native-rejection-unconfirmed'
+                  ? 'effect_unknown'
+                  : value.state,
               terminalReceipt: value.receipt,
+              ...(nativeRetry
+                ? {
+                    role: 'finding_discovery',
+                    nativeRequestRef: `synthetic-native-${claims}`,
+                  }
+                : {}),
+              ...(nativeProof &&
+              mode !== 'dispatch-native-rejection-unconfirmed'
+                ? {
+                    nativeRetryProof: {
+                      kind: 'native_rejection_after_forward',
+                      reason: 'admission_storage_conflict',
+                    },
+                  }
+                : {}),
             },
           });
         },
@@ -538,6 +611,132 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         fencingToken: '1',
         preparedManifestKey: 'manifest',
       }));
+    }
+    if (nativeRetry) {
+      const paid = await bounded(
+        transport.responses(Buffer.from(body)),
+        'native-paid'
+      );
+      assert.equal(paid.httpStatus, 200);
+      assert(
+        (await bounded(drain(paid.body), 'native-paid-drain')).includes(
+          'response.completed'
+        )
+      );
+      await transport.drainSettlements();
+      assert.equal(requests, 1);
+      assert.equal(transport.actualModel, 'fixture-model');
+
+      if (
+        mode === 'dispatch-native-rejection-unconfirmed' ||
+        mode === 'dispatch-native-rejection-deadline'
+      ) {
+        await assert.rejects(
+          bounded(
+            transport.responses(Buffer.from(nextBody)),
+            'native-unconfirmed'
+          ),
+          /account_gateway_transport_unknown/u
+        );
+        assert.equal(
+          requests,
+          2,
+          'unconfirmed or expired retry never sends a successor'
+        );
+        assert.equal(
+          claims,
+          mode === 'dispatch-native-rejection-deadline' ? 3 : 2
+        );
+        assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+        if (mode === 'dispatch-native-rejection-deadline') {
+          assert.deepEqual(dispatchHeaders, ['1', '2']);
+          assert.deepEqual(
+            parseReviewModelDispatchSettlementV2(settlements[2]),
+            {
+              state: 'not_dispatched',
+              proof: 'local_before_forward',
+            }
+          );
+        }
+      } else {
+        const retried = await bounded(
+          transport.responses(Buffer.from(nextBody)),
+          'native-successor'
+        );
+        const text = await bounded(
+          drain(retried.body),
+          'native-successor-drain'
+        );
+        await transport.drainSettlements();
+        assert.equal(
+          requests,
+          3,
+          'only the rejected turn receives one successor'
+        );
+        assert.equal(claims, 3, 'the rejected reservation is not refunded');
+        assert.deepEqual(dispatchHeaders, ['1', '2', '3']);
+        assert.equal(
+          requestBodies[2],
+          requestBodies[1],
+          'successor body stays byte-identical'
+        );
+        assert.notEqual(
+          requestBodies[2],
+          requestBodies[0],
+          'the earlier paid turn is never replayed'
+        );
+        assert.equal(
+          claimHistory[2]!.retryOfDispatchId,
+          claimHistory[1]!.dispatchId
+        );
+        assert.notEqual(
+          claimHistory[2]!.dispatchId,
+          claimHistory[1]!.dispatchId
+        );
+        assert.equal(claimHistory[1]!.retryOfDispatchId, undefined);
+        assert.deepEqual(
+          settlements.map(
+            (value) => parseReviewModelDispatchSettlement(value).state
+          ),
+          [
+            'completed',
+            'not_dispatched',
+            mode === 'dispatch-native-rejection-recovery'
+              ? 'completed'
+              : 'effect_unknown',
+          ]
+        );
+        assert.deepEqual(parseReviewModelDispatchSettlement(settlements[1]), {
+          state: 'not_dispatched',
+          proof: 'native_rejection_after_forward',
+        });
+        if (mode === 'dispatch-native-rejection-recovery') {
+          assert.equal(retried.httpStatus, 200);
+          assert(text.includes('response.completed'));
+          assert.equal(transport.actualModel, 'fixture-model');
+        } else {
+          assert.equal(retried.httpStatus, 502);
+          assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+        }
+      }
+      assert.equal(
+        parseReviewModelDispatchSettlementV2(settlements[0]).state,
+        'completed'
+      );
+      assert.equal(transport.releaseRetrySafeFailure(), false);
+      if (mode !== 'dispatch-native-rejection-recovery') {
+        const requestCount = requests;
+        await assert.rejects(
+          transport.responses(Buffer.from(nextBody)),
+          /account_gateway_inference_denied/u
+        );
+        assert.equal(
+          requests,
+          requestCount,
+          'the consumer remains fenced after an unresolved or repeated rejection'
+        );
+      }
+      return;
     }
     if (
       mode === 'accepted-socket-loss-terminal' ||
@@ -1012,6 +1211,7 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         'diagnostics must retain only closed fields'
       );
   } finally {
+    Date.now = originalNow;
     transport?.cancelHeldStreams();
     server.closeAllConnections();
     await bounded(
@@ -1025,6 +1225,10 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
 // --probe marker travels in its env (see the jest shell below).
 if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
   for (const mode of [
+    'dispatch-native-rejection-recovery',
+    'dispatch-native-rejection-unconfirmed',
+    'dispatch-native-rejection-repeated',
+    'dispatch-native-rejection-deadline',
     'incomplete-known-legacy-preterminal-done',
     'dispatch-incomplete-preterminal-done',
     'incomplete-known-legacy',
@@ -1182,8 +1386,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 31\b/);
-      expect(result.stdout).toMatch(/# pass 31\b/);
+      expect(result.stdout).toMatch(/# tests 35\b/);
+      expect(result.stdout).toMatch(/# pass 35\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

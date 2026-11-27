@@ -89833,7 +89833,7 @@ var require_pipeline = __commonJS({
           callback();
         }
       };
-      const wait2 = () => new Promise2((resolve6, reject) => {
+      const wait3 = () => new Promise2((resolve6, reject) => {
         if (error4) {
           reject(error4);
         } else {
@@ -89856,16 +89856,16 @@ var require_pipeline = __commonJS({
       );
       try {
         if (writable.writableNeedDrain) {
-          await wait2();
+          await wait3();
         }
         for await (const chunk of iterable) {
           if (!writable.write(chunk)) {
-            await wait2();
+            await wait3();
           }
         }
         if (end) {
           writable.end();
-          await wait2();
+          await wait3();
         }
         finish();
       } catch (err) {
@@ -103803,7 +103803,7 @@ function createRawFileUploadStream(filePath) {
     let sourcePath = filePath;
     const stats = yield fs22.promises.lstat(filePath);
     if (stats.isSymbolicLink()) {
-      sourcePath = yield (0, import_promises3.realpath)(filePath);
+      sourcePath = yield (0, import_promises4.realpath)(filePath);
     }
     const fileStream = fs22.createReadStream(sourcePath, {
       highWaterMark: bufferSize
@@ -103817,12 +103817,12 @@ function createRawFileUploadStream(filePath) {
     return uploadStream;
   });
 }
-var stream2, fs22, import_promises3, __awaiter6, WaterMarkedUploadStream;
+var stream2, fs22, import_promises4, __awaiter6, WaterMarkedUploadStream;
 var init_stream = __esm({
   "node_modules/@actions/artifact/lib/internal/upload/stream.js"() {
     stream2 = __toESM(require("stream"), 1);
     fs22 = __toESM(require("fs"), 1);
-    import_promises3 = require("fs/promises");
+    import_promises4 = require("fs/promises");
     init_core();
     init_config();
     __awaiter6 = function(thisArg, _arguments, P2, generator) {
@@ -103882,7 +103882,7 @@ function createZipUploadStream(uploadSpecification_1) {
       if (file.sourcePath !== null) {
         let sourcePath = file.sourcePath;
         if (file.stats.isSymbolicLink()) {
-          sourcePath = yield (0, import_promises4.realpath)(file.sourcePath);
+          sourcePath = yield (0, import_promises5.realpath)(file.sourcePath);
         }
         zip.file(sourcePath, {
           name: file.destinationPath
@@ -103900,10 +103900,10 @@ function createZipUploadStream(uploadSpecification_1) {
     return zipUploadStream;
   });
 }
-var import_promises4, import_archiver, __awaiter7, DEFAULT_COMPRESSION_LEVEL, zipErrorCallback, zipWarningCallback, zipFinishCallback, zipEndCallback;
+var import_promises5, import_archiver, __awaiter7, DEFAULT_COMPRESSION_LEVEL, zipErrorCallback, zipWarningCallback, zipFinishCallback, zipEndCallback;
 var init_zip = __esm({
   "node_modules/@actions/artifact/lib/internal/upload/zip.js"() {
-    import_promises4 = require("fs/promises");
+    import_promises5 = require("fs/promises");
     import_archiver = __toESM(require_archiver(), 1);
     init_core();
     init_config();
@@ -117284,7 +117284,7 @@ var require_unzip = __commonJS({
 function exists2(path40) {
   return __awaiter10(this, void 0, void 0, function* () {
     try {
-      yield import_promises5.default.access(path40);
+      yield import_promises6.default.access(path40);
       return true;
     } catch (error4) {
       if (error4.code === "ENOENT") {
@@ -117459,17 +117459,17 @@ function resolveOrCreateDirectory() {
   return __awaiter10(this, arguments, void 0, function* (downloadPath = getGitHubWorkspaceDir()) {
     if (!(yield exists2(downloadPath))) {
       debug2(`Artifact destination folder does not exist, creating: ${downloadPath}`);
-      yield import_promises5.default.mkdir(downloadPath, { recursive: true });
+      yield import_promises6.default.mkdir(downloadPath, { recursive: true });
     } else {
       debug2(`Artifact destination folder already exists: ${downloadPath}`);
     }
     return downloadPath;
   });
 }
-var import_promises5, fsSync2, crypto8, stream3, path18, import_unzip_stream, __awaiter10, scrubQueryParameters;
+var import_promises6, fsSync2, crypto8, stream3, path18, import_unzip_stream, __awaiter10, scrubQueryParameters;
 var init_download_artifact = __esm({
   "node_modules/@actions/artifact/lib/internal/download/download-artifact.js"() {
-    import_promises5 = __toESM(require("fs/promises"), 1);
+    import_promises6 = __toESM(require("fs/promises"), 1);
     fsSync2 = __toESM(require("fs"), 1);
     crypto8 = __toESM(require("crypto"), 1);
     stream3 = __toESM(require("stream"), 1);
@@ -118107,7 +118107,7 @@ var require_light = __commonJS({
           return this.check(weight, now);
         }
         async __register__(index, weight, expiration) {
-          var now, wait2;
+          var now, wait3;
           await this.yieldLoop();
           now = Date.now();
           if (this.conditionsCheck(weight)) {
@@ -118115,11 +118115,11 @@ var require_light = __commonJS({
             if (this.storeOptions.reservoir != null) {
               this.storeOptions.reservoir -= weight;
             }
-            wait2 = Math.max(this._nextRequest - now, 0);
-            this._nextRequest = now + wait2 + this.storeOptions.minTime;
+            wait3 = Math.max(this._nextRequest - now, 0);
+            this._nextRequest = now + wait3 + this.storeOptions.minTime;
             return {
               success: true,
-              wait: wait2,
+              wait: wait3,
               reservoir: this.storeOptions.reservoir
             };
           } else {
@@ -118599,7 +118599,7 @@ var require_light = __commonJS({
               return this.Events.trigger("error", e);
             }
           }
-          _run(index, job, wait2) {
+          _run(index, job, wait3) {
             var clearGlobalState, free, run3;
             job.doRun();
             clearGlobalState = this._clearGlobalState.bind(this, index);
@@ -118608,10 +118608,10 @@ var require_light = __commonJS({
             return this._scheduled[index] = {
               timeout: setTimeout(() => {
                 return job.doExecute(this._limiter, clearGlobalState, run3, free);
-              }, wait2),
+              }, wait3),
               expiration: job.options.expiration != null ? setTimeout(function() {
                 return job.doExpire(clearGlobalState, run3, free);
-              }, wait2 + job.options.expiration) : void 0,
+              }, wait3 + job.options.expiration) : void 0,
               job
             };
           }
@@ -118628,7 +118628,7 @@ var require_light = __commonJS({
               }
               this.Events.trigger("debug", `Draining ${options.id}`, { args, options });
               index = this._randomIndex();
-              return this._store.__register__(index, options.weight, options.expiration).then(({ success, wait: wait2, reservoir }) => {
+              return this._store.__register__(index, options.weight, options.expiration).then(({ success, wait: wait3, reservoir }) => {
                 var empty;
                 this.Events.trigger("debug", `Drained ${options.id}`, { success, args, options });
                 if (success) {
@@ -118640,7 +118640,7 @@ var require_light = __commonJS({
                   if (reservoir === 0) {
                     this.Events.trigger("depleted", empty);
                   }
-                  this._run(index, next, wait2);
+                  this._run(index, next, wait3);
                   return this.Promise.resolve(options.weight);
                 } else {
                   return this.Promise.resolve(null);
@@ -131668,7 +131668,7 @@ var import_http = require("http");
 var import_https = require("https");
 var import_perf_hooks2 = require("perf_hooks");
 var import_stream = require("stream");
-var import_promises = require("stream/promises");
+var import_promises2 = require("stream/promises");
 
 // src/github/pr-description-markers.ts
 var PR_DESCRIPTION_START_MARKER = "<!-- review-router-summary:start -->";
@@ -131700,10 +131700,11 @@ function stripOwnedPrDescriptionBlocks(body2) {
 }
 
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
-var import_promises2 = require("timers/promises");
+var import_promises3 = require("timers/promises");
 
 // src/review-orchestration/infrastructure/prepared-model-dispatch.ts
 var import_crypto4 = require("crypto");
+var import_promises = require("timers/promises");
 
 // src/control-plane/generated/review-action-v2/review-model-dispatch-contract.ts
 var reviewModelWireProtocols = [
@@ -131738,6 +131739,13 @@ var reviewModelDispatchCapacity128Contract = Object.freeze({
   policyVersion: "model-dispatch-policy.capacity128.v1",
   capacityPolicy: "model-dispatch-policy.capacity128.v1",
   maxRequests: 128
+});
+var reviewModelDispatchNativeRetryContract = Object.freeze({
+  ...reviewModelDispatchCapacity128Contract,
+  policyVersion: "model-dispatch-policy.native-retry.v1",
+  retryPolicy: "native-rejection-once.v1",
+  nativeRetryProof: "native_rejection_after_forward",
+  maxNativeRetries: 1
 });
 var reviewModelDispatchHeaders = Object.freeze({
   dispatchVersion: "x-reviewrouter-model-dispatch-version",
@@ -131780,14 +131788,18 @@ function parseReviewModelDispatchCapabilityV2(value) {
   );
 }
 function parseReviewModelDispatchCapability(value) {
+  if (record(value) && Object.hasOwn(value, "retryPolicy"))
+    return parseCapability(value, reviewModelDispatchNativeRetryContract);
   return record(value) && Object.hasOwn(value, "capacityPolicy") ? parseCapability(value, reviewModelDispatchCapacity128Contract) : parseReviewModelDispatchCapabilityV2(value);
 }
 function parseCapability(value, contract) {
-  const capacity128 = contract === reviewModelDispatchCapacity128Contract;
+  const capacity128 = contract !== reviewModelDispatchContract;
+  const nativeRetry = contract === reviewModelDispatchNativeRetryContract;
   if (!record(value) || !keys(value, [
     "extensionId",
     "version",
     ...capacity128 ? ["capacityPolicy"] : [],
+    ...nativeRetry ? ["retryPolicy"] : [],
     "routeIdentityHash",
     "transport",
     "wireProtocol",
@@ -131801,7 +131813,7 @@ function parseCapability(value, contract) {
     "maxRequestBytes",
     "maxResponseBytes",
     "maxOutputTokens"
-  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || capacity128 && value.capacityPolicy !== reviewModelDispatchCapacity128Contract.capacityPolicy || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
+  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || capacity128 && value.capacityPolicy !== reviewModelDispatchCapacity128Contract.capacityPolicy || nativeRetry && (value.retryPolicy !== reviewModelDispatchNativeRetryContract.retryPolicy || value.transport !== "account_gateway") || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
     value.transport,
     value.wireProtocol
   ) || !Number.isSafeInteger(value.providerIndex) || Number(value.providerIndex) < 0 || Number(value.providerIndex) > 15 || typeof value.model !== "string" || !value.model.trim() || value.model.length > 256 || Object.hasOwn(value, "configuredModel") && (value.transport !== "runner_local_anthropic" || !anthropicModelAliases.includes(
@@ -131851,6 +131863,9 @@ function reviewModelWireProtocolMatchesTransport(transport, protocol) {
 function reviewModelDispatchOutputUsageIsWithinLimit(usage, maxOutputTokens) {
   return typeof usage.outputTokens === "number" && Number.isSafeInteger(usage.outputTokens) && usage.outputTokens >= 0 && Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 && usage.outputTokens <= maxOutputTokens;
 }
+function reviewModelDispatchAllowsNativeRetry(capability) {
+  return capability?.transport === "account_gateway" && "retryPolicy" in capability && capability.retryPolicy === reviewModelDispatchNativeRetryContract.retryPolicy;
+}
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -131874,7 +131889,8 @@ var MODEL_DISPATCH_CLAIM_DENIAL_CODES = [
   "model_dispatch_effect_unresolved",
   "model_dispatch_authority_changed",
   "model_dispatch_ordinal_invalid",
-  "model_dispatch_authorization_denied"
+  "model_dispatch_authorization_denied",
+  "model_dispatch_retry_denied"
 ];
 var ModelDispatchClaimDeniedError = class extends Error {
   constructor(code, httpStatus, source) {
@@ -131965,7 +131981,7 @@ var PreparedModelDispatch = class {
       throw new Error("model_dispatch_request_bound");
     return normalized;
   }
-  async reserve(bytes2, signal, explicitScope, outputAcceptanceCap) {
+  async reserve(bytes2, signal, explicitScope, outputAcceptanceCap, predecessor) {
     signal.throwIfAborted();
     const cap = this.capability;
     if (this.fenced || this.active || Date.now() >= Date.parse(cap.deadline))
@@ -131973,6 +131989,10 @@ var PreparedModelDispatch = class {
     const scope = explicitScope ?? this.scope?.();
     if (!scope || scope.attemptOrdinal !== 1)
       throw new Error("model_dispatch_scope_unavailable");
+    const nativeRetryEnabled = reviewModelDispatchAllowsNativeRetry(cap);
+    if (predecessor !== void 0 && !nativeRetryEnabled)
+      throw new Error("model_dispatch_retry_unavailable");
+    const retryBytes = nativeRetryEnabled ? Buffer.from(bytes2) : void 0;
     const raw = JSON.parse(
       new TextDecoder("utf-8", { fatal: true }).decode(bytes2)
     );
@@ -132012,7 +132032,8 @@ var PreparedModelDispatch = class {
       routeIdentityHash: cap.routeIdentityHash,
       providerRequestEnvelopeHash: hash2(bytes2),
       requestBytes: bytes2.byteLength,
-      maxOutputTokens: Number(output)
+      maxOutputTokens: Number(output),
+      ...predecessor ? { retryOfDispatchId: predecessor.dispatchId } : {}
     };
     let result2;
     try {
@@ -132036,14 +132057,18 @@ var PreparedModelDispatch = class {
     let forwarded = false;
     let settling = false;
     let completed = false;
-    const settle = async (settlement) => {
+    let retryAttempted = false;
+    const settle = async (settlement, nativeRequestRef) => {
       if (settling) return;
       settling = true;
       const path40 = `${reviewModelDispatchContract.basePath}/${encodeURIComponent(claim.dispatchId)}`;
       const headers = { [reviewModelDispatchContract.receiptHeader]: result2.receiptToken };
       const agrees = (value) => {
         const dispatch = value?.dispatch;
-        return !!dispatch && matchesClaim(dispatch, claim, authorization.authorizationId) && dispatch.state === settlement.state && (settlement.state !== "completed" || canonicalJson(dispatch.terminalReceipt) === canonicalJson(settlement.receipt));
+        return !!dispatch && matchesClaim(dispatch, claim, authorization.authorizationId) && dispatch.state === settlement.state && (nativeRequestRef === void 0 || dispatch.role === "finding_discovery" && nativeRequestRef === result2.dispatch.nativeRequestRef && dispatch.nativeRequestRef === nativeRequestRef && dispatch.nativeRetryProof !== void 0 && canonicalJson(dispatch.nativeRetryProof) === canonicalJson({
+          kind: "native_rejection_after_forward",
+          reason: "admission_storage_conflict"
+        })) && (settlement.state !== "completed" || canonicalJson(dispatch.terminalReceipt) === canonicalJson(settlement.receipt));
       };
       try {
         let response;
@@ -132064,7 +132089,7 @@ var PreparedModelDispatch = class {
         this.fenced = true;
         throw new Error("model_dispatch_settlement_unconfirmed");
       } finally {
-        this.active = false;
+        if (nativeRequestRef === void 0 || this.fenced) this.active = false;
       }
     };
     if (signal.aborted || Date.now() >= Date.parse(result2.notAfter)) {
@@ -132074,9 +132099,61 @@ var PreparedModelDispatch = class {
     return Object.freeze({
       claim,
       forwarded: () => {
+        if (predecessor) {
+          signal.throwIfAborted();
+          if (Date.now() >= Math.min(
+            Date.parse(predecessor.notAfter),
+            Date.parse(result2.notAfter)
+          ))
+            throw new Error("model_dispatch_deadline");
+        }
         forwarded = true;
       },
       isCompleted: () => completed,
+      retryAfterNativeRejection: async (requestRef, retrySignal) => {
+        retrySignal.throwIfAborted();
+        if (!nativeRetryEnabled || !retryBytes || explicitScope !== void 0 || predecessor !== void 0 || result2.dispatch.role !== "finding_discovery" || !forwarded || settling || retryAttempted || this.fenced || claim.requestOrdinal >= cap.maxRequests || Date.now() + 1e3 >= Date.parse(result2.notAfter))
+          return null;
+        retryAttempted = true;
+        try {
+          await settle(
+            {
+              state: "not_dispatched",
+              proof: "native_rejection_after_forward"
+            },
+            requestRef
+          );
+          retrySignal.throwIfAborted();
+          if (Date.now() + 1e3 >= Date.parse(result2.notAfter))
+            throw new Error("model_dispatch_deadline");
+          await (0, import_promises.setTimeout)(1e3, void 0, { signal: retrySignal });
+          retrySignal.throwIfAborted();
+          if (Date.now() >= Date.parse(result2.notAfter))
+            throw new Error("model_dispatch_deadline");
+          const currentScope = this.scope?.();
+          if (!currentScope || this.input.authorization().authorizationId !== authorization.authorizationId || Object.entries(scope).some(
+            ([key, value]) => key !== "leaseCapability" && currentScope[key] !== value
+          ))
+            throw new Error("model_dispatch_authority_changed");
+          this.active = false;
+          const successor = await this.reserve(
+            retryBytes,
+            retrySignal,
+            void 0,
+            outputAcceptanceCap,
+            { dispatchId: claim.dispatchId, notAfter: result2.notAfter }
+          );
+          if (retrySignal.aborted || Date.now() >= Date.parse(result2.notAfter)) {
+            await successor.failed();
+            throw new Error("model_dispatch_deadline");
+          }
+          return successor;
+        } catch (error4) {
+          this.active = false;
+          this.fenced = true;
+          throw error4;
+        }
+      },
       complete: async (receipt) => {
         if (!forwarded) throw new Error("model_dispatch_not_forwarded");
         if (receipt.actualModel !== cap.model || !reviewModelDispatchOutputUsageIsWithinLimit(
@@ -132158,7 +132235,7 @@ function hash2(bytes2) {
   return (0, import_crypto4.createHash)("sha256").update(bytes2).digest("hex");
 }
 function matchesClaim(value, claim, authorizationId) {
-  return !!value && value.authorizationId === authorizationId && Object.entries(claim).every(
+  return !!value && value.authorizationId === authorizationId && value.retryOfDispatchId === claim.retryOfDispatchId && Object.entries(claim).every(
     ([key, field]) => key === "leaseCapability" || value[key] === field
   );
 }
@@ -132818,13 +132895,24 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         } finally {
           clearTimeout(controlTimer);
         }
+        if (ticket && !this.directProvider && !this.codexRoute && !this.auxiliaryDescription && !this.companionDispatch && currentRequestRef) {
+          const successor = await ticket.retryAfterNativeRejection(
+            currentRequestRef,
+            controller.signal
+          );
+          if (successor) {
+            ticket = successor;
+            this.contextToolsGuard?.();
+            continue;
+          }
+        }
         const referenced = response.headers["x-reviewrouter-request-ref"] !== void 0;
         if (!this.directProvider && !this.auxiliaryDescription && httpStatus === 503 && !referenced && /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
           response.headers["content-type"] ?? ""
         ) && denial !== void 0 && saturationDenial(denial, ["relay_saturated"])) {
           if (waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits || import_perf_hooks2.performance.now() + 1e3 > waitUntil)
             break;
-          await (0, import_promises2.setTimeout)(1e3, void 0, { signal: controller.signal });
+          await (0, import_promises3.setTimeout)(1e3, void 0, { signal: controller.signal });
           waits++;
           if (import_perf_hooks2.performance.now() >= waitUntil) break;
           continue;
@@ -133006,7 +133094,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       bounded3.once("end", dispose);
       bounded3.once("close", dispose);
       this.trackSettlement(
-        (0, import_promises.pipeline)(isStream ? response : import_stream.Readable.from([denial]), bounded3, {
+        (0, import_promises2.pipeline)(isStream ? response : import_stream.Readable.from([denial]), bounded3, {
           signal: controller.signal
         }).then(
           () => {
@@ -133212,7 +133300,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
       );
       request3.once("error", reject);
       if (body2 instanceof import_stream.Readable) {
-        void (0, import_promises.pipeline)(body2, request3, { signal }).catch(reject);
+        void (0, import_promises2.pipeline)(body2, request3, { signal }).catch(reject);
       } else request3.end(body2);
     });
   }
@@ -133335,7 +133423,7 @@ async function startLocalGatewayModelTransport(transport, observe, directProvide
             "cache-control": "no-store",
             ...upstream.requestRef ? { "x-reviewrouter-request-ref": upstream.requestRef } : {}
           });
-          await (0, import_promises.pipeline)(upstream.body, reply, { signal: controller.signal });
+          await (0, import_promises2.pipeline)(upstream.body, reply, { signal: controller.signal });
         } catch (error4) {
           if (stage !== "upstream_request")
             observeTransport(
@@ -165616,6 +165704,20 @@ function validateUsagePriceSnapshot(value) {
   }
 }
 
+// src/control-plane/generated/review-action-v2/native-usage-context.ts
+function validNativeUsageContext(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (Object.keys(value).length !== 6 || value.schemaVersion !== 1 || ![value.providerId, value.productId, value.profileId].every(
+    (id) => typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(id)
+  ) || typeof value.modelId !== "string" || !value.modelId.length || value.modelId.length > 256 || [...value.modelId].some(
+    (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
+  ) || !value.billing || typeof value.billing !== "object" || Array.isArray(value.billing))
+    return false;
+  return value.billing.status === "unknown" ? Object.keys(value.billing).length === 1 : value.billing.status === "known" && Object.keys(value.billing).length === 2 && ["subscription", "credits", "free", "payg", "mixed"].includes(
+    value.billing.kind
+  );
+}
+
 // src/control-plane/generated/review-action-v2/usage-v1.ts
 var UsageError = class extends Error {
   constructor(code) {
@@ -165668,9 +165770,13 @@ function validateUsageFact(f2) {
       "correctionReason",
       "childCallIds"
     ],
-    ["serviceTier", "priceSnapshot"]
+    ["serviceTier", "priceSnapshot", "nativeContext", "nativeEvidenceVersion"]
   );
   if (Object.hasOwn(f2, "serviceTier")) text3(f2.serviceTier, true);
+  if (Object.hasOwn(f2, "nativeEvidenceVersion") && (f2.nativeEvidenceVersion !== 2 || f2.authority !== "native" || f2.identity?.route !== "gateway"))
+    invalid3();
+  if (Object.hasOwn(f2, "nativeContext") && (f2.authority !== "native" || f2.identity?.route !== "gateway" || f2.nativeEvidenceVersion !== 2 || !validNativeUsageContext(f2.nativeContext)))
+    invalid3();
   if (Object.hasOwn(f2, "priceSnapshot") && f2.priceSnapshot !== null) {
     try {
       validateUsagePriceSnapshot(f2.priceSnapshot);
@@ -211912,7 +212018,7 @@ async function superviseLease(input) {
     abort.abort(error4);
     rejectLeaseFailure(error4);
   };
-  const wait2 = (delayMs) => new Promise((resolve6) => {
+  const wait3 = (delayMs) => new Promise((resolve6) => {
     const timer = setTimeout(resolve6, delayMs);
     timer.unref?.();
     wake = () => {
@@ -211928,7 +212034,7 @@ async function superviseLease(input) {
         return;
       }
       const atCeiling = Date.parse(currentLease.expiresAt) >= Date.parse(currentLease.resultReportUntil);
-      await wait2(
+      await wait3(
         atCeiling ? remaining : Math.min(3e4, Math.max(1e3, Math.floor(remaining / 2)))
       );
       if (stopped) return;
@@ -212075,7 +212181,7 @@ var RunT0ReviewOrchestration = class {
     let execution;
     let executionStartAttempted = false;
     let initialExecutionRestore;
-    const cancelledResult = async () => {
+    const stoppedResult = async (status) => {
       this.dependencies.signal?.throwIfAborted();
       let initialRestoredExecution;
       if (!execution && !command.restoredExecution && !executionStartAttempted && initialExecutionRestore) {
@@ -212122,7 +212228,7 @@ var RunT0ReviewOrchestration = class {
         });
       }
       return {
-        status: acknowledged ? "cancelled" /* Cancelled */ : "failed" /* Failed */,
+        status: acknowledged ? status : "failed" /* Failed */,
         state: state3,
         ...cancelledExecution ? { executionId: cancelledExecution.executionId } : {},
         ...acknowledged ? {} : { failureCode: "review_orchestration_cancellation_unconfirmed" }
@@ -212141,13 +212247,10 @@ var RunT0ReviewOrchestration = class {
       });
       const admittedRevision = await this.dependencies.revisionGuard.loadCurrentRevision();
       if (admittedRevision.pullRequestState === "closed") {
-        return await cancelledResult();
+        return await stoppedResult("cancelled" /* Cancelled */);
       }
       if (!sameRevision(admittedRevision, command)) {
-        state3 = evolveReviewOrchestration(state3, {
-          type: "superseded" /* Superseded */
-        });
-        return { status: "superseded" /* Superseded */, state: state3 };
+        return await stoppedResult("superseded" /* Superseded */);
       }
       state3 = evolveReviewOrchestration(state3, {
         type: "revision_confirmed" /* RevisionConfirmed */
@@ -213006,7 +213109,7 @@ var RunT0ReviewOrchestration = class {
         };
       }
       if (error4 instanceof ReviewExecutionCancelledSignal || await this.pullRequestClosedAfterFailure()) {
-        return await cancelledResult();
+        return await stoppedResult("cancelled" /* Cancelled */);
       }
       if (!isTerminal3(state3.phase)) {
         state3 = evolveReviewOrchestration(state3, {
@@ -217258,7 +217361,7 @@ function observeNativeReviewSkillsSupply(delegate, collector, requestCount) {
 
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
 var import_os7 = require("os");
-var import_promises14 = require("node:fs/promises");
+var import_promises15 = require("node:fs/promises");
 var import_node_fs2 = require("node:fs");
 
 // src/context-tools/ocr-session.ts
@@ -226371,7 +226474,7 @@ function bindContextToolCredentials(input) {
 }
 
 // src/context-tools/https-mcp-client.ts
-var import_promises6 = require("node:dns/promises");
+var import_promises7 = require("node:dns/promises");
 var import_node_https2 = require("node:https");
 var import_node_net = require("node:net");
 
@@ -228747,7 +228850,7 @@ async function boundedLookup(hostname2, timeoutMs) {
   let timer;
   try {
     return await Promise.race([
-      (0, import_promises6.lookup)(hostname2, { all: true, verbatim: true }),
+      (0, import_promises7.lookup)(hostname2, { all: true, verbatim: true }),
       new Promise((_resolve, reject) => {
         timer = setTimeout(
           () => reject(contextToolsError("deadline")),
@@ -229263,7 +229366,7 @@ var import_crypto53 = require("crypto");
 var import_child_process20 = require("child_process");
 var path30 = __toESM(require("path"));
 var import_util35 = require("util");
-var import_promises15 = require("node:timers/promises");
+var import_promises16 = require("node:timers/promises");
 
 // src/review-investigation/fixtures/review-investigation-capability-v1.golden.json
 var review_investigation_capability_v1_golden_default = {
@@ -235332,7 +235435,7 @@ var CooperativeReviewLeaseSupervisor = class {
       abort.abort(error4);
       rejectLeaseFailure(error4);
     };
-    const wait2 = async (delayMs) => {
+    const wait3 = async (delayMs) => {
       await new Promise((resolve6) => {
         const timer = setTimeout(resolve6, delayMs);
         timer.unref?.();
@@ -235349,7 +235452,7 @@ var CooperativeReviewLeaseSupervisor = class {
           failLease(new Error("review_action_v2_lease_expired"));
           return;
         }
-        await wait2(
+        await wait3(
           currentLease.renewalCeilingReached ? remaining : Math.min(3e4, Math.max(1e3, Math.floor(remaining / 2)))
         );
         if (stopped) return;
@@ -235435,7 +235538,7 @@ function compareCodeUnits4(left, right) {
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
 var import_child_process14 = require("child_process");
 var import_crypto42 = require("crypto");
-var import_promises9 = require("fs/promises");
+var import_promises10 = require("fs/promises");
 var os13 = __toESM(require("os"));
 var path24 = __toESM(require("path"));
 var import_util30 = require("util");
@@ -235795,7 +235898,7 @@ function gitOptions(root, encoding) {
 
 // src/context-gateway/context-gateway-v4-replay-material.ts
 var import_crypto40 = require("crypto");
-var import_promises7 = require("fs/promises");
+var import_promises8 = require("fs/promises");
 var import_path6 = __toESM(require("path"));
 var MAX_ENTRIES = 2e3;
 var MAX_STATE_BYTES = 2 * 1024 * 1024;
@@ -235810,12 +235913,12 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
   entries = [];
   mutationTail = Promise.resolve();
   async initialize() {
-    await (0, import_promises7.mkdir)(import_path6.default.dirname(this.config.replayMaterialPath), {
+    await (0, import_promises8.mkdir)(import_path6.default.dirname(this.config.replayMaterialPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises7.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises8.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -235829,7 +235932,7 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
     if (this.entries.length > 0) {
       throw new Error("context_gateway_v4_replay_already_active");
     }
-    const encrypted = await (0, import_promises7.readFile)(this.config.replayMaterialPath, "utf8");
+    const encrypted = await (0, import_promises8.readFile)(this.config.replayMaterialPath, "utf8");
     const raw = decryptContextGatewayV4ReplayMaterial({
       encryptedCanonicalJson: encrypted,
       secret: this.config.secret,
@@ -236046,15 +236149,15 @@ function isRecord8(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 async function atomicPrivateWrite(target, content) {
-  await (0, import_promises7.mkdir)(import_path6.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises8.mkdir)(import_path6.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto40.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises7.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises7.rename)(temporary, target);
+  await (0, import_promises8.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises8.rename)(temporary, target);
 }
 
 // src/context-gateway/context-gateway-v4-recorder.ts
 var import_crypto41 = require("crypto");
-var import_promises8 = require("fs/promises");
+var import_promises9 = require("fs/promises");
 var import_path7 = __toESM(require("path"));
 var MAX_EVENTS = 2e3;
 var CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
@@ -236075,12 +236178,12 @@ var ContextGatewayV4Recorder = class {
   terminalFailureClass = null;
   now;
   async initialize() {
-    await (0, import_promises8.mkdir)(import_path7.default.dirname(this.config.transcriptPath), {
+    await (0, import_promises9.mkdir)(import_path7.default.dirname(this.config.transcriptPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises8.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises9.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -236094,7 +236197,7 @@ var ContextGatewayV4Recorder = class {
     if (this.events.length > 0) {
       throw new Error("context_gateway_v4_recorder_already_active");
     }
-    const raw = await (0, import_promises8.readFile)(this.config.transcriptPath, "utf8");
+    const raw = await (0, import_promises9.readFile)(this.config.transcriptPath, "utf8");
     if (raw.length < 2 || Buffer.byteLength(raw, "utf8") > CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES) {
       throw new Error("context_gateway_v4_recorder_state_size_invalid");
     }
@@ -236284,10 +236387,10 @@ function sanitizeReason(value) {
   return value;
 }
 async function atomicPrivateWrite2(target, content) {
-  await (0, import_promises8.mkdir)(import_path7.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises9.mkdir)(import_path7.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto41.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises8.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises8.rename)(temporary, target);
+  await (0, import_promises9.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises9.rename)(temporary, target);
 }
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
@@ -236366,7 +236469,7 @@ var ContextGatewayInvocationSessionFactory = class {
     const { checkoutTreeOid } = revisionTreeOids;
     const gatewayBinaryHash = sha25612(gatewayBundleSnapshot);
     const gatewayPolicyVersion = this.policyVersion();
-    const directory = await (0, import_promises9.mkdtemp)(
+    const directory = await (0, import_promises10.mkdtemp)(
       path24.join(os13.tmpdir(), "reviewrouter-context-gateway-")
     );
     const gatewayBundlePath = path24.join(directory, "context-gateway.cjs");
@@ -236374,12 +236477,12 @@ var ContextGatewayInvocationSessionFactory = class {
     const replayMaterialPath = path24.join(directory, "replay-material.json");
     let requiredWitness = null;
     try {
-      await (0, import_promises9.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
+      await (0, import_promises10.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
         flag: "wx",
         mode: 448
       });
     } catch (error4) {
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
       throw error4;
     }
     const confinementEvidenceHash = sha25612(
@@ -236416,7 +236519,7 @@ var ContextGatewayInvocationSessionFactory = class {
         }
       });
     } catch (error4) {
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
       throw error4;
     }
     const secret = Buffer.from(serverSession.gatewaySessionSecret, "base64url");
@@ -236503,7 +236606,7 @@ var ContextGatewayInvocationSessionFactory = class {
     return this.options.policyVersion ?? CONTEXT_GATEWAY_POLICY_VERSION;
   }
   async gatewayBundleSnapshot() {
-    this.gatewayBundleSnapshotPromise ??= (0, import_promises9.readFile)(
+    this.gatewayBundleSnapshotPromise ??= (0, import_promises10.readFile)(
       this.options.gatewayBundlePath
     );
     return Buffer.from(await this.gatewayBundleSnapshotPromise);
@@ -236627,7 +236730,7 @@ var ContextGatewayInvocationSession = class {
       );
     }
     const { transcriptCanonicalJson, replayMaterialCanonicalJson } = createWireSealPayload(transcript, replayMaterial);
-    await (0, import_promises9.rm)(this.replayMaterialPath);
+    await (0, import_promises10.rm)(this.replayMaterialPath);
     const attestation = await this.attestations.sealGatewaySession({
       invocationLease: this.currentInvocationLease(),
       session: this.serverSession,
@@ -236760,7 +236863,7 @@ var ContextGatewayInvocationSession = class {
     }
     this.secret.fill(0);
     try {
-      await (0, import_promises9.rm)(this.directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(this.directory, { recursive: true, force: true });
     } catch (error4) {
       failures.push(error4);
     }
@@ -236911,7 +237014,7 @@ async function cleanupOpenedGatewaySession(input) {
   }
   input.secret.fill(0);
   try {
-    await (0, import_promises9.rm)(input.directory, { recursive: true, force: true });
+    await (0, import_promises10.rm)(input.directory, { recursive: true, force: true });
   } catch (error4) {
     failures.push(error4);
   }
@@ -236926,19 +237029,19 @@ function throwCleanupFailures(failures) {
   throw new AggregateError(failures, "context_gateway_dispose_failed");
 }
 async function readBoundedCanonicalJson(file, maximumBytes) {
-  const metadata2 = await (0, import_promises9.stat)(file);
+  const metadata2 = await (0, import_promises10.stat)(file);
   if (!metadata2.isFile() || metadata2.size < 2 || metadata2.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const parsed = JSON.parse(await (0, import_promises9.readFile)(file, "utf8"));
+  const parsed = JSON.parse(await (0, import_promises10.readFile)(file, "utf8"));
   return canonicalJson2(parsed);
 }
 async function readBoundedText(file, maximumBytes) {
-  const metadata2 = await (0, import_promises9.stat)(file);
+  const metadata2 = await (0, import_promises10.stat)(file);
   if (!metadata2.isFile() || metadata2.size < 2 || metadata2.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const value = await (0, import_promises9.readFile)(file, "utf8");
+  const value = await (0, import_promises10.readFile)(file, "utf8");
   if (Buffer.byteLength(value, "utf8") !== metadata2.size) {
     throw new Error("context_gateway_output_size_invalid");
   }
@@ -237094,14 +237197,14 @@ function sha25612(value) {
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
 var import_child_process17 = require("child_process");
 var import_crypto44 = require("crypto");
-var import_promises13 = require("fs/promises");
+var import_promises14 = require("fs/promises");
 var os14 = __toESM(require("os"));
 var path28 = __toESM(require("path"));
 var import_util33 = require("util");
 
 // src/context-gateway/context-gateway-recorder.ts
 var import_crypto43 = require("crypto");
-var import_promises10 = require("fs/promises");
+var import_promises11 = require("fs/promises");
 var path25 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
 var ContextGatewayRecorder = class {
@@ -237117,22 +237220,22 @@ var ContextGatewayRecorder = class {
   hadFailure = false;
   async initialize() {
     await Promise.all([
-      (0, import_promises10.mkdir)(path25.dirname(this.config.transcriptPath), {
+      (0, import_promises11.mkdir)(path25.dirname(this.config.transcriptPath), {
         recursive: true,
         mode: 448
       }),
-      (0, import_promises10.mkdir)(path25.dirname(this.config.replayMaterialPath), {
+      (0, import_promises11.mkdir)(path25.dirname(this.config.replayMaterialPath), {
         recursive: true,
         mode: 448
       })
     ]);
     try {
-      await (0, import_promises10.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises11.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
       });
-      await (0, import_promises10.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises11.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -237327,7 +237430,7 @@ var ContextGatewayRecorder = class {
   }
 };
 async function readBoundedState(file) {
-  const value = await (0, import_promises10.readFile)(file, "utf8");
+  const value = await (0, import_promises11.readFile)(file, "utf8");
   if (value.length < 2 || Buffer.byteLength(value, "utf8") > MAX_RECORDER_STATE_BYTES) {
     throw new Error("context_gateway_recorder_state_size_invalid");
   }
@@ -237346,15 +237449,15 @@ function parseCanonicalState(raw, kind) {
   return parsed;
 }
 async function atomicPrivateWrite3(target, content) {
-  await (0, import_promises10.mkdir)(path25.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises11.mkdir)(path25.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto43.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises10.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises10.rename)(temporary, target);
+  await (0, import_promises11.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises11.rename)(temporary, target);
 }
 
 // src/context-gateway/filesystem-context-gateway.ts
 var import_child_process15 = require("child_process");
-var import_promises11 = require("fs/promises");
+var import_promises12 = require("fs/promises");
 var import_os6 = require("os");
 var path26 = __toESM(require("path"));
 var import_util31 = require("util");
@@ -237383,7 +237486,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
   revisionTreeOidPromises = /* @__PURE__ */ new Map();
   static async create(input) {
-    const root = await (0, import_promises11.realpath)(input.root);
+    const root = await (0, import_promises12.realpath)(input.root);
     requireGitOid(input.checkoutTreeOid, "checkout_tree_oid");
     requireGitOid(input.baseSha, "base_sha");
     requireGitOid(input.mergeBaseSha, "merge_base_sha");
@@ -237635,7 +237738,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
               }
             )).sort();
           } finally {
-            await (0, import_promises11.rm)(isolatedGit.gitDirectory, {
+            await (0, import_promises12.rm)(isolatedGit.gitDirectory, {
               recursive: true,
               force: true
             });
@@ -237767,7 +237870,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     const attributesPath = path26.isAbsolute(gitPath) ? gitPath : path26.resolve(this.root, gitPath);
     let infoAttributes;
     try {
-      infoAttributes = await (0, import_promises11.readFile)(attributesPath);
+      infoAttributes = await (0, import_promises12.readFile)(attributesPath);
     } catch (error4) {
       if (error4.code !== "ENOENT") throw error4;
       infoAttributes = null;
@@ -237805,23 +237908,23 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     ]);
   }
   async createIsolatedGitDirectory(policy) {
-    const gitDirectory = await (0, import_promises11.mkdtemp)(
+    const gitDirectory = await (0, import_promises12.mkdtemp)(
       path26.join((0, import_os6.tmpdir)(), "reviewrouter-context-git-")
     );
     try {
       const [objectsPathOutput, objectFormatOutput] = await Promise.all([
         this.gitText(["rev-parse", "--git-path", "objects"]),
         this.gitText(["rev-parse", "--show-object-format=storage"]),
-        (0, import_promises11.mkdir)(path26.join(gitDirectory, "objects", "info"), { recursive: true }),
-        (0, import_promises11.mkdir)(path26.join(gitDirectory, "refs", "heads"), { recursive: true }),
-        (0, import_promises11.mkdir)(path26.join(gitDirectory, "info"), { recursive: true }),
-        (0, import_promises11.mkdir)(path26.join(gitDirectory, "worktree"), { recursive: true })
+        (0, import_promises12.mkdir)(path26.join(gitDirectory, "objects", "info"), { recursive: true }),
+        (0, import_promises12.mkdir)(path26.join(gitDirectory, "refs", "heads"), { recursive: true }),
+        (0, import_promises12.mkdir)(path26.join(gitDirectory, "info"), { recursive: true }),
+        (0, import_promises12.mkdir)(path26.join(gitDirectory, "worktree"), { recursive: true })
       ]);
       const rawObjectsPath = objectsPathOutput.trim();
       if (rawObjectsPath.length === 0) {
         throw new Error("context_gateway_git_objects_path_invalid");
       }
-      const objectsPath = await (0, import_promises11.realpath)(
+      const objectsPath = await (0, import_promises12.realpath)(
         path26.isAbsolute(rawObjectsPath) ? rawObjectsPath : path26.resolve(this.root, rawObjectsPath)
       );
       if (objectsPath.includes("\0") || objectsPath.includes("\n")) {
@@ -237833,14 +237936,14 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       }
       const config2 = objectFormat === "sha256" ? "[core]\n	repositoryformatversion = 1\n	bare = false\n[extensions]\n	objectformat = sha256\n" : "[core]\n	repositoryformatversion = 0\n	bare = false\n";
       await Promise.all([
-        (0, import_promises11.writeFile)(path26.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
-        (0, import_promises11.writeFile)(path26.join(gitDirectory, "config"), config2),
-        (0, import_promises11.writeFile)(
+        (0, import_promises12.writeFile)(path26.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
+        (0, import_promises12.writeFile)(path26.join(gitDirectory, "config"), config2),
+        (0, import_promises12.writeFile)(
           path26.join(gitDirectory, "objects", "info", "alternates"),
           `${objectsPath}
 `
         ),
-        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises11.writeFile)(
+        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises12.writeFile)(
           path26.join(gitDirectory, "info", "attributes"),
           policy.infoAttributes
         )
@@ -237854,7 +237957,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       });
       return Object.freeze({ gitDirectory, indexPath, workTreePath });
     } catch (error4) {
-      await (0, import_promises11.rm)(gitDirectory, { recursive: true, force: true });
+      await (0, import_promises12.rm)(gitDirectory, { recursive: true, force: true });
       throw error4;
     }
   }
@@ -237944,7 +238047,7 @@ function boundedInteger(value, minimum, maximum, field) {
 
 // src/context-gateway/filesystem-context-gateway-v4.ts
 var import_child_process16 = require("child_process");
-var import_promises12 = require("fs/promises");
+var import_promises13 = require("fs/promises");
 var import_path8 = __toESM(require("path"));
 var import_util32 = require("util");
 var execFileAsync5 = (0, import_util32.promisify)(import_child_process16.execFile);
@@ -237971,7 +238074,7 @@ var FilesystemContextGatewayV4 = class _FilesystemContextGatewayV4 {
   operationsStarted = 0;
   budgetExhaustionRecorded = false;
   static async create(input) {
-    const root = await (0, import_promises12.realpath)(input.root);
+    const root = await (0, import_promises13.realpath)(input.root);
     requireGitOid(
       input.checkoutTreeOid,
       "context_gateway_v4_checkout_tree_oid"
@@ -238781,7 +238884,7 @@ var ContextAttestationReplayRunner = class {
     const plan = parseReplayPlan(candidate);
     const [targetCheckoutTreeOid, gatewayBinaryHash] = await Promise.all([
       this.checkoutTreeOid(targetRevision.headSha),
-      (0, import_promises13.readFile)(this.options.gatewayBundlePath).then(sha2562)
+      (0, import_promises14.readFile)(this.options.gatewayBundlePath).then(sha2562)
     ]);
     if (plan.gatewayBinaryHash !== gatewayBinaryHash) {
       return null;
@@ -238798,7 +238901,7 @@ var ContextAttestationReplayRunner = class {
     if (plan.gatewayPolicyVersion !== CONTEXT_GATEWAY_POLICY_VERSION) {
       return null;
     }
-    const directory = await (0, import_promises13.mkdtemp)(
+    const directory = await (0, import_promises14.mkdtemp)(
       path28.join(os14.tmpdir(), "reviewrouter-context-replay-")
     );
     const secret = (0, import_crypto44.randomBytes)(32);
@@ -238876,11 +238979,11 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises13.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises14.rm)(directory, { recursive: true, force: true });
     }
   }
   async replayV4(input) {
-    const directory = await (0, import_promises13.mkdtemp)(
+    const directory = await (0, import_promises14.mkdtemp)(
       path28.join(os14.tmpdir(), "reviewrouter-context-replay-v4-")
     );
     const secret = (0, import_crypto44.randomBytes)(32);
@@ -238974,7 +239077,7 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises13.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises14.rm)(directory, { recursive: true, force: true });
     }
   }
   async checkoutTreeOid(expectedHeadSha) {
@@ -247443,7 +247546,7 @@ var ProductionT0ReviewRunner = class {
         controlPlane,
         deadline: executionDeadline,
         signal,
-        sleep: (ms) => (0, import_promises15.setTimeout)(ms, void 0, { signal })
+        sleep: (ms) => (0, import_promises16.setTimeout)(ms, void 0, { signal })
       });
       if (restoredPublication)
         return mapOrchestrationResultToCodexOutcome(restoredPublication);
@@ -247787,7 +247890,7 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 if (!receipt.nativeConnected || receipt.hadFailure)
                   throw contextToolsError("required_context_unavailable");
               });
-              await (0, import_promises14.writeFile)(
+              await (0, import_promises15.writeFile)(
                 input2.ocr.run.configPath,
                 buildOcrManagedConfigJson({
                   baseUrl: modelTransport.baseUrl,
@@ -249016,7 +249119,7 @@ function createScmReadGitHubClient(input) {
     tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
     ...signal ? {
       sleep: async (ms) => {
-        await (0, import_promises15.setTimeout)(ms, void 0, { signal });
+        await (0, import_promises16.setTimeout)(ms, void 0, { signal });
       }
     } : {}
   });
@@ -252140,11 +252243,11 @@ function assertSafeOwnerRepoPart(value, label) {
 }
 
 // src/codex-oauth/terminal-outcome-publication.ts
-var import_promises16 = require("node:timers/promises");
+var import_promises17 = require("node:timers/promises");
 function createPublicationGitHubClient(token, options = {}) {
   const client2 = new GitHubClient(token, {
     sleep: async (ms) => {
-      await (0, import_promises16.setTimeout)(ms, void 0, { signal: options.signal });
+      await (0, import_promises17.setTimeout)(ms, void 0, { signal: options.signal });
     }
   });
   if (options.signal || options.timeoutMs) {

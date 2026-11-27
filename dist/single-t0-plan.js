@@ -120050,6 +120050,13 @@ var reviewModelDispatchCapacity128Contract = Object.freeze({
   capacityPolicy: "model-dispatch-policy.capacity128.v1",
   maxRequests: 128
 });
+var reviewModelDispatchNativeRetryContract = Object.freeze({
+  ...reviewModelDispatchCapacity128Contract,
+  policyVersion: "model-dispatch-policy.native-retry.v1",
+  retryPolicy: "native-rejection-once.v1",
+  nativeRetryProof: "native_rejection_after_forward",
+  maxNativeRetries: 1
+});
 var reviewModelDispatchHeaders = Object.freeze({
   dispatchVersion: "x-reviewrouter-model-dispatch-version",
   requestOrdinal: "x-reviewrouter-model-request-ordinal",
@@ -120082,14 +120089,18 @@ function parseReviewModelDispatchCapabilityV2(value) {
   );
 }
 function parseReviewModelDispatchCapability(value) {
+  if (record(value) && Object.hasOwn(value, "retryPolicy"))
+    return parseCapability(value, reviewModelDispatchNativeRetryContract);
   return record(value) && Object.hasOwn(value, "capacityPolicy") ? parseCapability(value, reviewModelDispatchCapacity128Contract) : parseReviewModelDispatchCapabilityV2(value);
 }
 function parseCapability(value, contract) {
-  const capacity128 = contract === reviewModelDispatchCapacity128Contract;
+  const capacity128 = contract !== reviewModelDispatchContract;
+  const nativeRetry = contract === reviewModelDispatchNativeRetryContract;
   if (!record(value) || !keys(value, [
     "extensionId",
     "version",
     ...capacity128 ? ["capacityPolicy"] : [],
+    ...nativeRetry ? ["retryPolicy"] : [],
     "routeIdentityHash",
     "transport",
     "wireProtocol",
@@ -120103,7 +120114,7 @@ function parseCapability(value, contract) {
     "maxRequestBytes",
     "maxResponseBytes",
     "maxOutputTokens"
-  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || capacity128 && value.capacityPolicy !== reviewModelDispatchCapacity128Contract.capacityPolicy || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
+  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || capacity128 && value.capacityPolicy !== reviewModelDispatchCapacity128Contract.capacityPolicy || nativeRetry && (value.retryPolicy !== reviewModelDispatchNativeRetryContract.retryPolicy || value.transport !== "account_gateway") || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
     value.transport,
     value.wireProtocol
   ) || !Number.isSafeInteger(value.providerIndex) || Number(value.providerIndex) < 0 || Number(value.providerIndex) > 15 || typeof value.model !== "string" || !value.model.trim() || value.model.length > 256 || Object.hasOwn(value, "configuredModel") && (value.transport !== "runner_local_anthropic" || !anthropicModelAliases.includes(
@@ -120192,7 +120203,8 @@ var MODEL_DISPATCH_CLAIM_DENIAL_CODES = [
   "model_dispatch_effect_unresolved",
   "model_dispatch_authority_changed",
   "model_dispatch_ordinal_invalid",
-  "model_dispatch_authorization_denied"
+  "model_dispatch_authorization_denied",
+  "model_dispatch_retry_denied"
 ];
 function scopedModelInvocations(invocations, transport) {
   return {
@@ -126638,6 +126650,20 @@ function validateUsagePriceSnapshot(value) {
   }
 }
 
+// src/control-plane/generated/review-action-v2/native-usage-context.ts
+function validNativeUsageContext(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (Object.keys(value).length !== 6 || value.schemaVersion !== 1 || ![value.providerId, value.productId, value.profileId].every(
+    (id) => typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(id)
+  ) || typeof value.modelId !== "string" || !value.modelId.length || value.modelId.length > 256 || [...value.modelId].some(
+    (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
+  ) || !value.billing || typeof value.billing !== "object" || Array.isArray(value.billing))
+    return false;
+  return value.billing.status === "unknown" ? Object.keys(value.billing).length === 1 : value.billing.status === "known" && Object.keys(value.billing).length === 2 && ["subscription", "credits", "free", "payg", "mixed"].includes(
+    value.billing.kind
+  );
+}
+
 // src/control-plane/generated/review-action-v2/usage-v1.ts
 var UsageError = class extends Error {
   constructor(code) {
@@ -126690,9 +126716,13 @@ function validateUsageFact(f) {
       "correctionReason",
       "childCallIds"
     ],
-    ["serviceTier", "priceSnapshot"]
+    ["serviceTier", "priceSnapshot", "nativeContext", "nativeEvidenceVersion"]
   );
   if (Object.hasOwn(f, "serviceTier")) text2(f.serviceTier, true);
+  if (Object.hasOwn(f, "nativeEvidenceVersion") && (f.nativeEvidenceVersion !== 2 || f.authority !== "native" || f.identity?.route !== "gateway"))
+    invalid2();
+  if (Object.hasOwn(f, "nativeContext") && (f.authority !== "native" || f.identity?.route !== "gateway" || f.nativeEvidenceVersion !== 2 || !validNativeUsageContext(f.nativeContext)))
+    invalid2();
   if (Object.hasOwn(f, "priceSnapshot") && f.priceSnapshot !== null) {
     try {
       validateUsagePriceSnapshot(f.priceSnapshot);
@@ -195558,7 +195588,7 @@ var RunT0ReviewOrchestration = class {
     let execution;
     let executionStartAttempted = false;
     let initialExecutionRestore;
-    const cancelledResult = async () => {
+    const stoppedResult = async (status) => {
       this.dependencies.signal?.throwIfAborted();
       let initialRestoredExecution;
       if (!execution && !command.restoredExecution && !executionStartAttempted && initialExecutionRestore) {
@@ -195605,7 +195635,7 @@ var RunT0ReviewOrchestration = class {
         });
       }
       return {
-        status: acknowledged ? "cancelled" /* Cancelled */ : "failed" /* Failed */,
+        status: acknowledged ? status : "failed" /* Failed */,
         state: state3,
         ...cancelledExecution ? { executionId: cancelledExecution.executionId } : {},
         ...acknowledged ? {} : { failureCode: "review_orchestration_cancellation_unconfirmed" }
@@ -195624,13 +195654,10 @@ var RunT0ReviewOrchestration = class {
       });
       const admittedRevision = await this.dependencies.revisionGuard.loadCurrentRevision();
       if (admittedRevision.pullRequestState === "closed") {
-        return await cancelledResult();
+        return await stoppedResult("cancelled" /* Cancelled */);
       }
       if (!sameRevision(admittedRevision, command)) {
-        state3 = evolveReviewOrchestration(state3, {
-          type: "superseded" /* Superseded */
-        });
-        return { status: "superseded" /* Superseded */, state: state3 };
+        return await stoppedResult("superseded" /* Superseded */);
       }
       state3 = evolveReviewOrchestration(state3, {
         type: "revision_confirmed" /* RevisionConfirmed */
@@ -196489,7 +196516,7 @@ var RunT0ReviewOrchestration = class {
         };
       }
       if (error3 instanceof ReviewExecutionCancelledSignal || await this.pullRequestClosedAfterFailure()) {
-        return await cancelledResult();
+        return await stoppedResult("cancelled" /* Cancelled */);
       }
       if (!isTerminal4(state3.phase)) {
         state3 = evolveReviewOrchestration(state3, {

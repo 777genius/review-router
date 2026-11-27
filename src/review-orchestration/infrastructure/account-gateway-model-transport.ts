@@ -835,6 +835,24 @@ export class AccountGatewayModelTransport {
         } finally {
           clearTimeout(controlTimer);
         }
+        if (
+          ticket &&
+          !this.directProvider &&
+          !this.codexRoute &&
+          !this.auxiliaryDescription &&
+          !this.companionDispatch &&
+          currentRequestRef
+        ) {
+          const successor = await ticket.retryAfterNativeRejection(
+            currentRequestRef,
+            controller.signal
+          );
+          if (successor) {
+            ticket = successor;
+            this.contextToolsGuard?.();
+            continue;
+          }
+        }
         // Only the closed, positive pre-request denial permits another POST.
         // Missing response headers/references and bare proxy errors prove nothing.
         // Reuse the existing dispatch ticket: relay saturation is rejected before

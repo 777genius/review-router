@@ -1,7 +1,9 @@
 import { createHash } from 'crypto';
+import { setTimeout as wait } from 'timers/promises';
 import {
   parseReviewModelDispatchCapability,
   reviewModelDispatchContract as contract,
+  reviewModelDispatchAllowsNativeRetry,
   reviewModelDispatchIdPreimage,
   reviewModelDispatchOutputUsageIsWithinLimit,
   type ReviewModelDispatchCapability,
@@ -23,6 +25,7 @@ export const MODEL_DISPATCH_CLAIM_DENIAL_CODES = [
   'model_dispatch_authority_changed',
   'model_dispatch_ordinal_invalid',
   'model_dispatch_authorization_denied',
+  'model_dispatch_retry_denied',
 ] as const;
 export class ModelDispatchClaimDeniedError extends Error {
   constructor(
@@ -77,6 +80,10 @@ export type PreparedModelDispatchTicket = Readonly<{
   claim: ReviewModelDispatchClaimV2;
   forwarded(): void;
   isCompleted(): boolean;
+  retryAfterNativeRejection(
+    requestRef: string,
+    signal: AbortSignal
+  ): Promise<PreparedModelDispatchTicket | null>;
   complete(
     receipt: Omit<
       ReviewModelDispatchTerminalReceiptV2,
@@ -186,7 +193,8 @@ export class PreparedModelDispatch {
     bytes: Uint8Array,
     signal: AbortSignal,
     explicitScope?: PreparedModelInvocationScope,
-    outputAcceptanceCap?: number
+    outputAcceptanceCap?: number,
+    predecessor?: Readonly<{ dispatchId: string; notAfter: string }>
   ): Promise<PreparedModelDispatchTicket> {
     signal.throwIfAborted();
     const cap = this.capability;
@@ -195,6 +203,10 @@ export class PreparedModelDispatch {
     const scope = explicitScope ?? this.scope?.();
     if (!scope || scope.attemptOrdinal !== 1)
       throw new Error('model_dispatch_scope_unavailable');
+    const nativeRetryEnabled = reviewModelDispatchAllowsNativeRetry(cap);
+    if (predecessor !== undefined && !nativeRetryEnabled)
+      throw new Error('model_dispatch_retry_unavailable');
+    const retryBytes = nativeRetryEnabled ? Buffer.from(bytes) : undefined;
     const raw: unknown = JSON.parse(
       new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     );
@@ -253,6 +265,7 @@ export class PreparedModelDispatch {
       providerRequestEnvelopeHash: hash(bytes),
       requestBytes: bytes.byteLength,
       maxOutputTokens: Number(output),
+      ...(predecessor ? { retryOfDispatchId: predecessor.dispatchId } : {}),
     };
     let result: ReviewModelDispatchClaimResultV2;
     try {
@@ -283,7 +296,11 @@ export class PreparedModelDispatch {
     let forwarded = false;
     let settling = false;
     let completed = false;
-    const settle = async (settlement: ReviewModelDispatchSettlementV2) => {
+    let retryAttempted = false;
+    const settle = async (
+      settlement: ReviewModelDispatchSettlementV2,
+      nativeRequestRef?: string
+    ) => {
       if (settling) return;
       settling = true;
       const path = `${contract.basePath}/${encodeURIComponent(claim.dispatchId)}`;
@@ -296,6 +313,16 @@ export class PreparedModelDispatch {
           !!dispatch &&
           matchesClaim(dispatch, claim, authorization.authorizationId) &&
           dispatch.state === settlement.state &&
+          (nativeRequestRef === undefined ||
+            (dispatch.role === 'finding_discovery' &&
+              nativeRequestRef === result.dispatch.nativeRequestRef &&
+              dispatch.nativeRequestRef === nativeRequestRef &&
+              dispatch.nativeRetryProof !== undefined &&
+              canonicalJson(dispatch.nativeRetryProof) ===
+                canonicalJson({
+                  kind: 'native_rejection_after_forward',
+                  reason: 'admission_storage_conflict',
+                }))) &&
           (settlement.state !== 'completed' ||
             canonicalJson(dispatch.terminalReceipt) ===
               canonicalJson(settlement.receipt))
@@ -320,7 +347,8 @@ export class PreparedModelDispatch {
         this.fenced = true;
         throw new Error('model_dispatch_settlement_unconfirmed');
       } finally {
-        this.active = false;
+        // Keep the existing single-request gate during the one retry pause.
+        if (nativeRequestRef === undefined || this.fenced) this.active = false;
       }
     };
     if (signal.aborted || Date.now() >= Date.parse(result.notAfter)) {
@@ -330,9 +358,89 @@ export class PreparedModelDispatch {
     return Object.freeze({
       claim,
       forwarded: () => {
+        if (predecessor) {
+          signal.throwIfAborted();
+          if (
+            Date.now() >=
+            Math.min(
+              Date.parse(predecessor.notAfter),
+              Date.parse(result.notAfter)
+            )
+          )
+            throw new Error('model_dispatch_deadline');
+        }
         forwarded = true;
       },
       isCompleted: () => completed,
+      retryAfterNativeRejection: async (requestRef, retrySignal) => {
+        retrySignal.throwIfAborted();
+        if (
+          !nativeRetryEnabled ||
+          !retryBytes ||
+          explicitScope !== undefined ||
+          predecessor !== undefined ||
+          result.dispatch.role !== 'finding_discovery' ||
+          !forwarded ||
+          settling ||
+          retryAttempted ||
+          this.fenced ||
+          claim.requestOrdinal >= cap.maxRequests ||
+          Date.now() + 1_000 >= Date.parse(result.notAfter)
+        )
+          return null;
+        retryAttempted = true;
+        try {
+          // Only authenticated RR settlement/readback can attest non-entry.
+          // The original reservation remains spent and cannot be replayed.
+          await settle(
+            {
+              state: 'not_dispatched',
+              proof: 'native_rejection_after_forward',
+            },
+            requestRef
+          );
+          retrySignal.throwIfAborted();
+          if (Date.now() + 1_000 >= Date.parse(result.notAfter))
+            throw new Error('model_dispatch_deadline');
+          await wait(1_000, undefined, { signal: retrySignal });
+          retrySignal.throwIfAborted();
+          if (Date.now() >= Date.parse(result.notAfter))
+            throw new Error('model_dispatch_deadline');
+          const currentScope = this.scope?.();
+          if (
+            !currentScope ||
+            this.input.authorization().authorizationId !==
+              authorization.authorizationId ||
+            Object.entries(scope).some(
+              ([key, value]) =>
+                key !== 'leaseCapability' &&
+                currentScope[key as keyof PreparedModelInvocationScope] !==
+                  value
+            )
+          )
+            throw new Error('model_dispatch_authority_changed');
+          this.active = false;
+          const successor = await this.reserve(
+            retryBytes,
+            retrySignal,
+            undefined,
+            outputAcceptanceCap,
+            { dispatchId: claim.dispatchId, notAfter: result.notAfter }
+          );
+          if (
+            retrySignal.aborted ||
+            Date.now() >= Date.parse(result.notAfter)
+          ) {
+            await successor.failed();
+            throw new Error('model_dispatch_deadline');
+          }
+          return successor;
+        } catch (error) {
+          this.active = false;
+          this.fenced = true;
+          throw error;
+        }
+      },
       complete: async (receipt) => {
         if (!forwarded) throw new Error('model_dispatch_not_forwarded');
         if (
@@ -456,6 +564,7 @@ function matchesClaim(
   return (
     !!value &&
     value.authorizationId === authorizationId &&
+    value.retryOfDispatchId === claim.retryOfDispatchId &&
     Object.entries(claim).every(
       ([key, field]) =>
         key === 'leaseCapability' ||

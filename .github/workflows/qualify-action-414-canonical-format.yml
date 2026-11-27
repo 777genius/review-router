@@ -1,0 +1,205 @@
+name: Action 414 canonical format
+
+on:
+  push:
+    branches: [qualification/action-414-canonical-format-20261127]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: action-414-canonical-format-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: source
+    steps:
+      - name: Check out the exact reviewed Action source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 414e73f9c068d79588db321dbdd9dd6ffc9f0f29
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "24.21.0"
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+      - name: Verify source identity and install the locked tooling
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = v24.21.0
+          test "$(git rev-parse HEAD)" = 414e73f9c068d79588db321dbdd9dd6ffc9f0f29
+          test "$(git rev-parse 'HEAD^{tree}')" = a33f363f0a83045d88a412386946f57cd94273ee
+          test "$(git hash-object -- package-lock.json)" = 43651b59184cbd63ee7641744362e8af4be72ef1
+          test "$(git hash-object -- .prettierrc)" = 5a05ecbdd9a2345b1f7b2fed54984203e6dde42d
+          test "$(git hash-object -- .prettierignore)" = 4aa1ec0d2cbed51e1533036ce112ca61e7629d56
+          npm ci
+          git restore --worktree -- dist
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          test "$(node node_modules/prettier/bin/prettier.cjs --version)" = 3.8.0
+      - name: Format exactly four source files and export bounded records
+        id: format
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { createHash } from 'node:crypto';
+          import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+          import path from 'node:path';
+          import * as prettier from 'prettier';
+
+          const sourceSha = '414e73f9c068d79588db321dbdd9dd6ffc9f0f29';
+          const sourceTree = 'a33f363f0a83045d88a412386946f57cd94273ee';
+          const expected = new Map([
+            ['src/review-orchestration/application/run-t0-review-orchestration.ts', '0abf849b47f720e62b35bc9500dfb48f68c66d66'],
+            ['__tests__/unit/review-orchestration/run-t0-review-orchestration.test.ts', 'b49350650c4d2c13e3b1f8a3ee330c5a62b51485'],
+            ['src/github/client.ts', '031998996262c26f247736ec27f7acf081ce9f24'],
+            ['__tests__/unit/github/client.test.ts', 'c6aa8811920ccc01996626ed0a528611ddfd22e7'],
+          ]);
+          const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+          assert.equal(git('rev-parse', 'HEAD'), sourceSha);
+          assert.equal(git('rev-parse', 'HEAD^{tree}'), sourceTree);
+          assert.equal(git('hash-object', '--', 'package-lock.json'), '43651b59184cbd63ee7641744362e8af4be72ef1');
+          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          const tool = lock.packages['node_modules/prettier'];
+          assert.equal(tool.version, '3.8.0');
+          assert.equal(tool.integrity, 'sha512-yEPsovQfpxYfgWNhCfECjG5AQaO+K3dp6XERmOepyPDVqcJm+bjyCVO3pmU+nAPe0N5dDvekfGezt/EIiRe1TA==');
+          assert.equal(prettier.version, tool.version);
+          for (const [file, originalGitBlob] of expected) {
+            assert.equal(git('hash-object', '--', file), originalGitBlob);
+            const info = await prettier.getFileInfo(file, { ignorePath: '.prettierignore' });
+            assert.equal(info.ignored, false);
+            assert.equal(info.inferredParser, 'typescript');
+          }
+          const files = [...expected.keys()];
+          const cli = 'node_modules/prettier/bin/prettier.cjs';
+          execFileSync(process.execPath, [cli, '--write', ...files], { stdio: 'inherit' });
+          execFileSync(process.execPath, [cli, '--check', ...files], { stdio: 'inherit' });
+          const output = path.join(process.env.RUNNER_TEMP, 'action-414-format');
+          mkdirSync(output, { recursive: true });
+          const entries = [];
+          const records = [];
+          for (const [file, originalGitBlob] of expected) {
+            const bytes = readFileSync(file);
+            const entry = {
+              path: file,
+              originalGitBlob,
+              formattedGitBlob: git('hash-object', '--', file),
+              formattedSha256: createHash('sha256').update(bytes).digest('hex'),
+              formattedBytes: bytes.length,
+            };
+            const destination = path.join(output, 'files', file);
+            mkdirSync(path.dirname(destination), { recursive: true });
+            writeFileSync(destination, bytes);
+            entries.push(entry);
+            const base64 = bytes.toString('base64');
+            const chunkCount = Math.ceil(base64.length / 16384);
+            for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
+              records.push({
+                ...entry,
+                sourceSha,
+                sourceTree,
+                encoding: 'base64',
+                chunkIndex,
+                chunkCount,
+                contentBase64: base64.slice(chunkIndex * 16384, (chunkIndex + 1) * 16384),
+              });
+            }
+          }
+          const changed = git('diff', '--name-only').split('\n').filter(Boolean);
+          assert(changed.every((file) => expected.has(file)));
+          assert.equal(git('ls-files', '--others', '--exclude-standard'), '');
+          execFileSync('git', ['diff', '--exit-code', '--', 'dist'], { stdio: 'inherit' });
+          const manifest = {
+            contract: 'reviewrouter.action-canonical-format.v1',
+            sourceSha,
+            sourceTree,
+            workflowSha: process.env.GITHUB_SHA,
+            workflowRef: process.env.GITHUB_WORKFLOW_REF,
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            nodeVersion: process.version,
+            npmVersion: execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim(),
+            prettierVersion: prettier.version,
+            prettierIntegrity: tool.integrity,
+            entries,
+          };
+          writeFileSync(path.join(output, 'format-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+          writeFileSync(path.join(output, 'format.patch'), execFileSync('git', ['diff', '--', ...files]));
+          const lines = records.map((record) => 'ACTION_CANONICAL_FORMAT_OUTPUT ' + JSON.stringify(record));
+          assert(Buffer.byteLength(lines.join('\n')) < 900000, 'format_export_too_large');
+          for (const line of lines) console.log(line);
+          console.log('ACTION_CANONICAL_FORMAT_MANIFEST ' + JSON.stringify(manifest));
+          NODE
+      - name: Run the retained stock lint gate
+        if: always() && steps.format.outcome == 'success'
+        run: npm run lint
+      - name: Run strict TypeScript 7.0.2 on the same project
+        if: always() && steps.format.outcome == 'success'
+        env:
+          npm_config_ignore_scripts: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm exec --yes --package=typescript@7.0.2 --call '
+            set -eu
+            reviewrouter_tsc=$(command -v tsc)
+            reviewrouter_tsc_version=$("$reviewrouter_tsc" --version)
+            test "$reviewrouter_tsc_version" = "Version 7.0.2"
+            exec "$reviewrouter_tsc" --project tsconfig.json --noEmit --module preserve --moduleResolution bundler
+          ' 2>&1 | tee "$RUNNER_TEMP/action-414-format/strict-types.log"
+      - name: Execute both changed Jest suites with the stock deadline
+        if: always() && steps.format.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run test -- --maxWorkers=2 --detectOpenHandles --testTimeout=20000 \
+            --runTestsByPath __tests__/unit/github/client.test.ts \
+            __tests__/unit/review-orchestration/run-t0-review-orchestration.test.ts \
+            --json --outputFile="$RUNNER_TEMP/action-414-format/focused-jest.json" \
+            2>&1 | tee "$RUNNER_TEMP/action-414-format/focused-jest.log"
+      - name: Verify qualification preserved the formatted source and committed runtime
+        if: always() && steps.format.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { createHash } from 'node:crypto';
+          import { readFileSync } from 'node:fs';
+          import path from 'node:path';
+          const manifest = JSON.parse(readFileSync(path.join(process.env.RUNNER_TEMP, 'action-414-format/format-manifest.json'), 'utf8'));
+          for (const entry of manifest.entries) {
+            const bytes = readFileSync(entry.path);
+            assert.equal(bytes.length, entry.formattedBytes);
+            assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.formattedSha256);
+            assert.equal(execFileSync('git', ['hash-object', '--', entry.path], { encoding: 'utf8' }).trim(), entry.formattedGitBlob);
+          }
+          const changed = execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+          assert(changed.every((file) => manifest.entries.some((entry) => entry.path === file)));
+          assert.equal(execFileSync('git', ['ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' }).trim(), '');
+          NODE
+          git diff --exit-code -- dist
+      - name: Preserve the exact formatting and qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: action-414-canonical-format-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/action-414-format/
+          if-no-files-found: error
+          retention-days: 7

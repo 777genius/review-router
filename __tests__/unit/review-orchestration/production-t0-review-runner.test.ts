@@ -2796,7 +2796,7 @@ process.stdin.once('data', () => {
             failed
               ? {
                   outcome: CodexOAuthV2ReviewOutcome.Failed,
-                  reason: CodexOAuthV2TerminalReason.Unknown,
+                  reason: CodexOAuthV2TerminalReason.ExecutionFailed,
                   blockingFailure:
                     'review_orchestration_cancellation_unconfirmed',
                 }

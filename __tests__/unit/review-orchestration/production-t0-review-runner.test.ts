@@ -2553,6 +2553,315 @@ process.stdin.once('data', () => {
     }
   );
 
+  it.each([
+    ['closed', 'none'],
+    ['moved', 'none'],
+    ['closed', 'active'],
+    ['moved', 'active'],
+    ['closed', 'terminal'],
+    ['moved', 'terminal'],
+    ['closed', 'foreign-authorization'],
+    ['moved', 'foreign-revision'],
+    ['closed', 'read-failed'],
+    ['moved', 'ack-failed'],
+    ['closed', 'read-aborted'],
+    ['moved', 'ack-aborted'],
+    ['later-moved', 'active'],
+    ['later-moved', 'absent-after-read'],
+    ['later-moved', 'regressed'],
+    ['later-moved', 'foreign-execution'],
+  ] as const)(
+    'confirms original execution before %s result with %s readback',
+    async (revision, recovery) => {
+      const root = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), 't0-original-cancellation-'))
+      );
+      const previousEnv = { ...process.env };
+      const git = (...args: string[]) =>
+        execFileSync('git', args, {
+          cwd: root,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }).trim();
+      git('init', '--quiet');
+      fs.writeFileSync(
+        path.join(root, 'review.ts'),
+        'export const value = 1;\n'
+      );
+      git('add', 'review.ts');
+      git(
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '--quiet',
+        '-m',
+        'original'
+      );
+      const headSha = git('rev-parse', 'HEAD');
+      const admitted = authorization(1);
+      admitted.expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+      admitted.facts = {
+        ...admitted.facts,
+        baseSha: headSha,
+        mergeBaseSha: headSha,
+        headSha,
+      };
+      const original: RestoredReviewExecution = {
+        executionId: 'original-execution',
+        generation: '2',
+        version: '5',
+        streamVersion: '7',
+        state: RestoredReviewExecutionState.Running,
+        authorizationId: admitted.authorizationId,
+        reviewRevisionHash: admitted.facts.reviewRevisionHash,
+        planHash: '8'.repeat(64),
+        workSlots: [
+          {
+            workSlotId: 'original-slot',
+            state: RestoredReviewWorkSlotState.Leased,
+            required: true,
+            providerVoteIdentityHash:
+              admitted.facts.providerVoteLanes[0]!.providerVoteIdentityHash,
+            activeLeaseId: 'original-lease',
+            acceptedObservationRefId: null,
+          },
+        ],
+      };
+      const abort = new AbortController();
+      const abortReason = new Error('original_runner_aborted');
+      let loadedPullRequest = false;
+      const restore = jest.fn(async () => {
+        if (recovery === 'read-failed') throw new Error('restore_unavailable');
+        if (recovery === 'read-aborted') abort.abort(abortReason);
+        if (recovery === 'none') return null;
+        if (loadedPullRequest) {
+          if (recovery === 'absent-after-read') return null;
+          return {
+            ...original,
+            executionId:
+              recovery === 'foreign-execution'
+                ? 'foreign-execution'
+                : original.executionId,
+            version: recovery === 'regressed' ? '4' : '6',
+            streamVersion: recovery === 'regressed' ? '6' : '8',
+          };
+        }
+        if (
+          recovery === 'terminal' ||
+          recovery === 'foreign-authorization' ||
+          recovery === 'foreign-revision'
+        )
+          return {
+            ...original,
+            state: RestoredReviewExecutionState.Superseded,
+            authorizationId:
+              recovery === 'foreign-authorization'
+                ? 'foreign-authorization'
+                : original.authorizationId,
+            reviewRevisionHash:
+              recovery === 'foreign-revision'
+                ? '9'.repeat(64)
+                : original.reviewRevisionHash,
+            workSlots: original.workSlots.map((slot) => ({
+              ...slot,
+              state: RestoredReviewWorkSlotState.Cancelled,
+              activeLeaseId: null,
+            })),
+          };
+        return original;
+      });
+      let enteredAck!: () => void;
+      let releaseAck!: () => void;
+      const ackEntered = new Promise<'ack'>((resolve) => {
+        enteredAck = () => resolve('ack');
+      });
+      const ack = new Promise<void>((resolve) => {
+        releaseAck = resolve;
+      });
+      const supersede = jest.fn(
+        async (
+          input: Parameters<
+            ReviewActionV2ControlPlaneAdapter['supersedeExecution']
+          >[0]
+        ) => {
+          expect(input.targetRevisionHash).toBe(
+            admitted.facts.reviewRevisionHash
+          );
+          if (recovery === 'ack-failed')
+            throw new Error('supersede_not_acknowledged');
+          if (recovery === 'ack-aborted') abort.abort(abortReason);
+          if (recovery === 'active' || recovery === 'absent-after-read') {
+            enteredAck();
+            await ack;
+          }
+        }
+      );
+      const controlPlane = {
+        currentAuthorization: () => admitted,
+        restoreExecution: restore,
+        supersedeExecution: supersede,
+        startExecution: jest.fn(),
+        acquireInvocationLease: jest.fn(),
+        renewAuthorization: jest.fn(),
+        requestPublication: jest.fn(),
+      };
+      const current = jest
+        .spyOn(GitHubReviewRevisionGuard.prototype, 'loadCurrentRevision')
+        .mockResolvedValue({
+          ...admitted.facts,
+          pullRequestState: revision === 'closed' ? 'closed' : 'open',
+          ...(revision === 'moved'
+            ? { headSha: 'f'.repeat(40), reviewRevisionHash: 'f'.repeat(64) }
+            : {}),
+        });
+      const loadPr = jest
+        .spyOn(PullRequestLoader.prototype, 'load')
+        .mockImplementation(async () => {
+          loadedPullRequest = true;
+          return {
+            ...pullRequest(['review.ts']),
+            baseSha: headSha,
+            headSha: 'f'.repeat(40),
+          };
+        });
+      const execute = jest.spyOn(
+        RunT0ReviewOrchestration.prototype,
+        'executeAuthorized'
+      );
+      const provider = jest.spyOn(CodexProvider.prototype, 'review');
+      const fetchImpl = jest.fn(async () => {
+        throw new Error('unexpected_transport');
+      });
+      try {
+        const result = new ProductionT0ReviewRunner(fetchImpl).run({
+          apiUrl: 'https://fixture.invalid',
+          audience: 'reviewrouter',
+          workflowSchemaVersion: 1,
+          repository: 'fixture/repository',
+          pullRequestNumber: 1,
+          headSha,
+          workspacePath: root,
+          scmReadToken: 'fixture-scm',
+          scmReadTokenExpiresAt: admitted.expiresAt,
+          refreshScmReadToken: async () => {
+            throw new Error('unexpected_refresh');
+          },
+          accountGateway: {
+            signal: abort.signal,
+            runtimeConfig: parseAdmittedRuntimeConfig({
+              protocolVersion: 1,
+              configVersion: 1,
+              runtimeEnv: {
+                ...admittedAgentEnv,
+                CODEX_MODEL: 'gpt-memory-test',
+                CODEX_AGENTIC_CONTEXT: 'false',
+                UPDATE_PR_DESCRIPTION: 'false',
+              },
+            }),
+            controlPlane,
+            modelTransport: {},
+          } as never,
+        });
+        if (recovery === 'read-aborted' || recovery === 'ack-aborted') {
+          await expect(result).rejects.toBe(abortReason);
+        } else {
+          if (recovery === 'active' || recovery === 'absent-after-read') {
+            let settled = false;
+            void result.then(
+              () => {
+                settled = true;
+              },
+              () => {
+                settled = true;
+              }
+            );
+            await expect(
+              Promise.race([ackEntered, result.then(() => 'result')])
+            ).resolves.toBe('ack');
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            expect(settled).toBe(false);
+            releaseAck();
+          }
+          const failed = [
+            'foreign-authorization',
+            'foreign-revision',
+            'foreign-execution',
+            'read-failed',
+            'ack-failed',
+            'regressed',
+          ].includes(recovery);
+          await expect(result).resolves.toEqual(
+            failed
+              ? {
+                  outcome: CodexOAuthV2ReviewOutcome.Failed,
+                  reason: CodexOAuthV2TerminalReason.Unknown,
+                  blockingFailure:
+                    'review_orchestration_cancellation_unconfirmed',
+                }
+              : revision === 'closed'
+                ? {
+                    outcome: CodexOAuthV2ReviewOutcome.Cancelled,
+                    reason: CodexOAuthV2CancellationReason.PullRequestClosed,
+                  }
+                : { outcome: CodexOAuthV2ReviewOutcome.Superseded }
+          );
+        }
+        expect(restore).toHaveBeenCalledTimes(
+          revision === 'later-moved' ? 2 : 1
+        );
+        expect(restore).toHaveBeenCalledWith({
+          authorization: admitted,
+          reviewRevisionHash: admitted.facts.reviewRevisionHash,
+        });
+        const expectedSupersede = [
+          'active',
+          'absent-after-read',
+          'ack-failed',
+          'ack-aborted',
+        ].includes(recovery);
+        expect(supersede).toHaveBeenCalledTimes(expectedSupersede ? 1 : 0);
+        if (expectedSupersede)
+          expect(supersede).toHaveBeenCalledWith(
+            expect.objectContaining({
+              authorization: admitted,
+              targetRevisionHash: admitted.facts.reviewRevisionHash,
+              execution: expect.objectContaining({
+                executionId: original.executionId,
+                generation: original.generation,
+                streamVersion:
+                  revision === 'later-moved' && recovery === 'active'
+                    ? '8'
+                    : original.streamVersion,
+                restoredExecution: expect.objectContaining({
+                  planHash: original.planHash,
+                }),
+              }),
+            })
+          );
+        expect(loadPr).toHaveBeenCalledTimes(
+          revision === 'later-moved' ? 1 : 0
+        );
+        expect(controlPlane.startExecution).not.toHaveBeenCalled();
+        expect(controlPlane.acquireInvocationLease).not.toHaveBeenCalled();
+        expect(controlPlane.renewAuthorization).not.toHaveBeenCalled();
+        expect(controlPlane.requestPublication).not.toHaveBeenCalled();
+        expect(execute).not.toHaveBeenCalled();
+        expect(provider).not.toHaveBeenCalled();
+        expect(fetchImpl).not.toHaveBeenCalled();
+      } finally {
+        releaseAck();
+        current.mockRestore();
+        loadPr.mockRestore();
+        execute.mockRestore();
+        provider.mockRestore();
+        process.env = previousEnv;
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
+
   it('marks only a closed pull request as an intentional cancellation', () => {
     expect(
       mapOrchestrationResultToCodexOutcome({

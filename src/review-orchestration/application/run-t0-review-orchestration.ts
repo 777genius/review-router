@@ -371,42 +371,14 @@ export class RunT0ReviewOrchestration {
           )
             throw new Error('review_orchestration_cancellation_scope_mismatch');
           cancelledExecution = original;
-          this.dependencies.signal?.throwIfAborted();
-          const latest =
-            initialRestoredExecution ??
-            (await this.dependencies.controlPlane.restoreExecution({
-              authorization: currentAuthorization,
-              reviewRevisionHash: currentAuthorization.facts.reviewRevisionHash,
-            }));
-          this.dependencies.signal?.throwIfAborted();
-          const current = latest
-            ? refreshExecutionAdmission(original, latest)
-            : original;
-          const alreadyTerminal =
-            latest !== null &&
-            [
-              RestoredReviewExecutionState.Superseded,
-              RestoredReviewExecutionState.Completed,
-              RestoredReviewExecutionState.Partial,
-              RestoredReviewExecutionState.Failed,
-            ].includes(latest.state);
-          if (!alreadyTerminal) {
-            // A missing restore is not terminal proof. The exact original
-            // execution may still acknowledge an idempotent supersession.
-            this.dependencies.signal?.throwIfAborted();
-            await this.dependencies.controlPlane.supersedeExecution({
-              authorization: currentAuthorization,
-              idempotencyKey: this.idempotencyKey('cancel-closed-pr', [
-                current.executionId,
-                current.generation,
-                current.streamVersion,
-                currentAuthorization.facts.reviewRevisionHash,
-              ]),
-              execution: current,
-              targetRevisionHash: currentAuthorization.facts.reviewRevisionHash,
-            });
-            this.dependencies.signal?.throwIfAborted();
-          }
+          await confirmReviewExecutionCancellation({
+            authorization: currentAuthorization,
+            execution: original,
+            controlPlane: this.dependencies.controlPlane,
+            identities: this.dependencies.identities,
+            restoredExecution: initialRestoredExecution ?? undefined,
+            signal: this.dependencies.signal,
+          });
           acknowledged = true;
         } catch {
           this.dependencies.signal?.throwIfAborted();
@@ -3223,6 +3195,70 @@ export class RunT0ReviewOrchestration {
 
   private identity(namespace: string, parts: readonly string[]): string {
     return this.dependencies.identities.deterministicId(namespace, parts);
+  }
+}
+
+/**
+ * Confirm termination of the original admitted execution without new authority.
+ * Callers retain their command-plan checks and admission history.
+ */
+export async function confirmReviewExecutionCancellation(input: {
+  readonly authorization: ReviewRunAuthorization;
+  readonly execution: ReviewExecutionAdmission;
+  readonly controlPlane: ReviewActionV2ControlPlanePort;
+  readonly identities: ReviewOrchestrationIdentityPort;
+  /** An authenticated readback just loaded by this caller. */
+  readonly restoredExecution?: RestoredReviewExecution;
+  readonly signal?: AbortSignal;
+}): Promise<void> {
+  const { authorization, execution, controlPlane, signal } = input;
+  signal?.throwIfAborted();
+  if (
+    execution.executionId !== execution.restoredExecution.executionId ||
+    execution.generation !== execution.restoredExecution.generation ||
+    execution.restoredExecution.authorizationId !==
+      authorization.authorizationId ||
+    execution.restoredExecution.reviewRevisionHash !==
+      authorization.facts.reviewRevisionHash
+  )
+    throw new Error('review_orchestration_cancellation_scope_mismatch');
+  const latest =
+    input.restoredExecution ??
+    (await controlPlane.restoreExecution({
+      authorization,
+      reviewRevisionHash: authorization.facts.reviewRevisionHash,
+    }));
+  signal?.throwIfAborted();
+  const current = latest
+    ? refreshExecutionAdmission(execution, latest)
+    : execution;
+  const alreadyTerminal =
+    latest !== null &&
+    [
+      RestoredReviewExecutionState.Superseded,
+      RestoredReviewExecutionState.Completed,
+      RestoredReviewExecutionState.Partial,
+      RestoredReviewExecutionState.Failed,
+    ].includes(latest.state);
+  if (!alreadyTerminal) {
+    // A missing restore is not terminal proof. The exact original
+    // execution may still acknowledge an idempotent supersession.
+    signal?.throwIfAborted();
+    await controlPlane.supersedeExecution({
+      authorization,
+      idempotencyKey: input.identities.deterministicId(
+        'idempotency-cancel-closed-pr',
+        [
+          current.executionId,
+          current.generation,
+          current.streamVersion,
+          authorization.facts.reviewRevisionHash,
+        ]
+      ),
+      execution: current,
+      targetRevisionHash: authorization.facts.reviewRevisionHash,
+    });
+    signal?.throwIfAborted();
   }
 }
 

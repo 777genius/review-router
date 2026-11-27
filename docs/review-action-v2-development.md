@@ -493,6 +493,13 @@ renewal, current-target discovery or new cancellation endpoint is introduced.
 The adapter must propagate a target-revision denial for the original-revision
 cancellation path instead of manufacturing an acknowledgement.
 
+The public runner applies the same confirmation before early closed/moved
+outcomes, including base/head drift observed during PR loading. Bind cleanup to
+the original authenticated restored execution. An initial successful null
+restore stays mutation-free; a missing later readback cannot erase known
+admission. Closed returns Cancelled; moved returns Superseded only after
+confirmed original-execution termination.
+
 ### Completed output and GitHub freshness
 
 Persist a validated completed non-context invocation through the original scoped

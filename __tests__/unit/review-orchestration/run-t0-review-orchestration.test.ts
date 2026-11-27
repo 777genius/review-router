@@ -2804,7 +2804,7 @@ describe('RunT0ReviewOrchestration', () => {
         execution: expect.objectContaining({
           executionId: 'execution-1',
           generation: '1',
-          streamVersion: '1',
+          streamVersion: '2',
         }),
         targetRevisionHash: authorization.facts.reviewRevisionHash,
       })
@@ -2836,6 +2836,7 @@ describe('RunT0ReviewOrchestration', () => {
       state: RestoredReviewWorkSlotState.Pending,
       acceptedObservationRefId: null,
     }).restoredExecution;
+    fixture.controlPlane.restoreExecution.mockReset();
     fixture.controlPlane.restoreExecution.mockResolvedValue({
       ...restored,
       version: '2',
@@ -2889,6 +2890,7 @@ describe('RunT0ReviewOrchestration', () => {
         state: RestoredReviewWorkSlotState.Pending,
         acceptedObservationRefId: null,
       }).restoredExecution;
+      fixture.controlPlane.restoreExecution.mockReset();
       fixture.controlPlane.restoreExecution.mockResolvedValue({
         ...restored,
         state: RestoredReviewExecutionState.Superseded,
@@ -2961,6 +2963,7 @@ describe('RunT0ReviewOrchestration', () => {
           failRestore = reject;
         }
       );
+      fixture.controlPlane.restoreExecution.mockReset();
       fixture.controlPlane.restoreExecution.mockReturnValue(pendingRestore);
       fixture.controlPlane.restoreSnapshot.mockRejectedValue(
         new Error('snapshot_restore_failed')
@@ -3031,6 +3034,7 @@ describe('RunT0ReviewOrchestration', () => {
     async (initialRead) => {
       const fixture = createFixture();
       if (initialRead === 'present') {
+        fixture.controlPlane.restoreExecution.mockReset();
         fixture.controlPlane.restoreExecution.mockResolvedValue(
           restoredAdmission(fixture.command, {
             state: RestoredReviewWorkSlotState.Pending,
@@ -3073,6 +3077,7 @@ describe('RunT0ReviewOrchestration', () => {
         acceptedObservation.observationId
       ),
     }).restoredExecution;
+    fixture.controlPlane.restoreExecution.mockReset();
     fixture.controlPlane.restoreExecution.mockResolvedValue({
       ...restored,
       version: '2',
@@ -3105,6 +3110,7 @@ describe('RunT0ReviewOrchestration', () => {
         acceptedObservationRefId: null,
       }).restoredExecution;
       if (failure === 'restore_failed') {
+        fixture.controlPlane.restoreExecution.mockReset();
         fixture.controlPlane.restoreExecution.mockRejectedValue(
           new Error(failure)
         );
@@ -3173,6 +3179,7 @@ describe('RunT0ReviewOrchestration', () => {
         state: RestoredReviewWorkSlotState.Pending,
         acceptedObservationRefId: null,
       }).restoredExecution;
+      fixture.controlPlane.restoreExecution.mockReset();
       fixture.controlPlane.restoreExecution.mockImplementation(async () => {
         if (phase === 'restore') abort.abort(reason);
         return restored;
@@ -3252,6 +3259,7 @@ describe('RunT0ReviewOrchestration', () => {
       streamVersion: '4',
     };
     fixture.controlPlane.restoreExecution
+      .mockReset()
       .mockResolvedValueOnce(null)
       .mockImplementation(async () => {
         expect(

@@ -1543,14 +1543,15 @@ describe('production review projection coverage', () => {
             category: 'correctness',
             endLine: 1,
             evidence: [],
-            message: 'A useful finding remains available from the incomplete review.',
+            message:
+              'When the query returns null, dereferencing result.id throws before the API returns its response.',
             normalizedFailureModeHash: '9'.repeat(64),
             path: 'src/a.ts',
             placementConfidence: null,
             severity: 'major',
             startLine: 1,
             suggestion: null,
-            title: 'Preserved incomplete finding',
+            title: 'Null result crashes API request',
           }]
         ),
       ],
@@ -1564,7 +1565,10 @@ describe('production review projection coverage', () => {
       unreviewedFiles: 0,
     });
     expect(envelope.publishing.summary.body).toContain(explanation);
-    expect(envelope.publishing.summary.body).toContain('Preserved incomplete finding');
+    expect(projection.findingCount).toBe(1);
+    expect(envelope.publishing.summary.body).toContain(
+      'Null result crashes API request'
+    );
     expect(envelope.publishing.summary.body).toContain('<!-- reviewrouter:review-status:incomplete -->');
     expect(envelope.publishing.summary.body).not.toContain(cause);
     expect(envelope.publishing.summary.allClear).toBe(false);

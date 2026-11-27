@@ -133,6 +133,7 @@ import {
   ReviewOrchestrationResultStatus,
   ReviewTaskKind,
   RunT0ReviewOrchestration,
+  confirmReviewExecutionCancellation,
   type ReviewPublicationUnavailableFact,
   type ReviewRunAuthorization,
   type RestoredReviewExecution,
@@ -495,15 +496,61 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       if (checkedOutHead !== authorization.facts.headSha) {
         throw new Error('review_action_v2_checked_out_revision_mismatch');
       }
+      const stoppedBeforePlanning = async (
+        status:
+          | ReviewOrchestrationResultStatus.Cancelled
+          | ReviewOrchestrationResultStatus.Superseded,
+        knownExecution?: RestoredReviewExecution | null
+      ): Promise<CodexOAuthV2ReviewResult> => {
+        try {
+          signal?.throwIfAborted();
+          const restored =
+            knownExecution === undefined
+              ? await controlPlane.restoreExecution({
+                  authorization,
+                  reviewRevisionHash: authorization.facts.reviewRevisionHash,
+                })
+              : knownExecution;
+          signal?.throwIfAborted();
+          if (restored) {
+            await confirmReviewExecutionCancellation({
+              authorization,
+              execution: {
+                executionId: restored.executionId,
+                generation: restored.generation,
+                streamVersion: restored.streamVersion,
+                executionVersion: restored.version,
+                restoredExecution: restored,
+              },
+              controlPlane,
+              identities: new DeterministicReviewOrchestrationIdentity(),
+              // An earlier positive restore stays bound while its CAS refreshes.
+              ...(knownExecution === undefined
+                ? { restoredExecution: restored }
+                : {}),
+              signal,
+            });
+          }
+          signal?.throwIfAborted();
+          return mapOrchestrationResultToCodexOutcome({ status });
+        } catch {
+          signal?.throwIfAborted();
+          return mapOrchestrationResultToCodexOutcome({
+            status: ReviewOrchestrationResultStatus.Failed,
+            failureCode: 'review_orchestration_cancellation_unconfirmed',
+          });
+        }
+      };
       const currentRevision = await revisionGuard.loadCurrentRevision();
       if (currentRevision.pullRequestState === 'closed') {
-        return {
-          outcome: CodexOAuthV2ReviewOutcome.Cancelled,
-          reason: CodexOAuthV2CancellationReason.PullRequestClosed,
-        };
+        return await stoppedBeforePlanning(
+          ReviewOrchestrationResultStatus.Cancelled
+        );
       }
       if (!sameAuthorizedRevision(currentRevision, authorization)) {
-        return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
+        return await stoppedBeforePlanning(
+          ReviewOrchestrationResultStatus.Superseded
+        );
       }
 
       // Persisted publication identity has priority over inventory-driven selection.
@@ -541,7 +588,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         pr.baseSha.toLowerCase() !== authorization.facts.baseSha ||
         pr.headSha.toLowerCase() !== authorization.facts.headSha
       ) {
-        return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
+        return await stoppedBeforePlanning(
+          ReviewOrchestrationResultStatus.Superseded,
+          preplanningRestore
+        );
       }
       signal?.throwIfAborted();
       const captureMemory = (

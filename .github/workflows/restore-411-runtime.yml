@@ -1,0 +1,72 @@
+name: Restore verified Action 411 runtime
+
+on:
+  push:
+    branches:
+      - fix/pr1028-github-retry-waits-20261127
+    paths:
+      - .github/workflows/restore-411-runtime.yml
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    if: github.event.head_commit.message == 'ci: stage verified Action 411 runtime restoration'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+      - name: Download, validate and commit official CI artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_source=ccbcabb8764a41c41c5fb4aae907c5902e51fac3
+          expected_tree=9c43961709548718980bdbf03c2d05b27bfc7e00
+          expected_zip=0c1087e9d182de9a324fd997518abbe5375cecea4f6c9d2e16656b628d4c0ecc
+          test "$(git rev-parse HEAD^)" = "$expected_source"
+          test "$(git rev-parse 'HEAD^^{tree}')" = "$expected_tree"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/restore-411-runtime.yml"
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/777genius/review-router/actions/artifacts/15231463229/zip" \
+            -o "$RUNNER_TEMP/official-build.zip"
+          echo "$expected_zip  $RUNNER_TEMP/official-build.zip" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/official-build"
+          unzip -q "$RUNNER_TEMP/official-build.zip" -d "$RUNNER_TEMP/official-build"
+          test "$(find "$RUNNER_TEMP/official-build" -type f | wc -l)" -eq 11
+          grep -Fx "requested_source=$expected_source" "$RUNNER_TEMP/official-build/provenance.txt"
+          grep -Fx "checkout_tree=$expected_tree" "$RUNNER_TEMP/official-build/provenance.txt"
+          grep -Fx 'run_id=46066994364' "$RUNNER_TEMP/official-build/provenance.txt"
+          python3 - "$RUNNER_TEMP/official-build" <<'PY'
+          import hashlib, json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          expected = {
+              "dist/cli/index.js", "dist/cli/index.js.map", "dist/context-gateway.js",
+              "dist/context-gateway.js.map", "dist/context-gateway.release.json",
+              "dist/index.js", "dist/index.js.map", "dist/newtest-one-shot-job.js",
+              "dist/runtime-migration.js", "dist/single-t0-plan.js", "provenance.txt"
+          }
+          actual = {str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()}
+          assert actual == expected, (actual - expected, expected - actual)
+          release = json.loads((root / "dist/context-gateway.release.json").read_text())
+          digest = hashlib.sha256((root / "dist/context-gateway.js").read_bytes()).hexdigest()
+          assert digest == release["contextGatewayEntrypointDigest"], "Gateway digest mismatch"
+          PY
+          cp -a "$RUNNER_TEMP/official-build/dist/." dist/
+          git add -f dist
+          git diff --cached --name-only
+          if git diff --cached --quiet; then
+            echo 'Runtime already identical'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'build: synchronize committed Action runtime with qualified CI artifact'
+          git push origin HEAD:refs/heads/fix/pr1028-github-retry-waits-20261127

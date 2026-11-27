@@ -428,6 +428,7 @@ suggested patches still require a unique verified span.
 An incomplete review with a closed `effect_unknown`, `dispatch_started` or
 `response_started` failure fact explains that the request may have reached the
 provider and that automatic replay was withheld. An unclassified Gateway error
-does not establish an upstream HTTP cause or exhausted quota. The user can wait
-for the run to finish and start a new review. This display-only diagnostic does
-not reopen dispatch, alter settlement or change coverage acceptance.
+does not establish an upstream HTTP cause or exhausted quota. A GitHub run
+finishing does not establish that the earlier provider request has stopped;
+starting another review can repeat that work. This display-only diagnostic
+does not reopen dispatch, alter settlement or change coverage acceptance.

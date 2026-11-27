@@ -320,9 +320,6 @@ describe('production review projection coverage', () => {
         expect(summary).toContain(
           'This review is incomplete and does not approve the changes.'
         );
-        expect(summary).toContain(
-          'Wait for this run to finish, then start a new review.'
-        );
       } else {
         expect(summary).toContain(
           'The review request did not produce a confirmed result.'
@@ -331,6 +328,15 @@ describe('production review projection coverage', () => {
       }
       expect(summary).toContain(
         'Automatic retry was withheld to avoid running the request twice.'
+      );
+      expect(summary).toContain(
+        'The earlier provider request may still be running after this GitHub run finishes.'
+      );
+      expect(summary).toContain(
+        'Starting a new review may repeat that work.'
+      );
+      expect(summary).not.toContain(
+        'Wait for this run to finish, then start a new review.'
       );
       expect(summary).not.toContain('retries were exhausted');
       const complete = await builder.build({

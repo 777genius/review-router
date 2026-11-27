@@ -88,6 +88,9 @@ export function providerFailureMessage(
     (incompleteReview
       ? 'This review is incomplete and does not approve the changes. '
       : 'An incomplete review does not approve the changes. ') +
-    'Wait for this run to finish, then start a new review.'
+    (notice === 'upstream_failure_unknown' ||
+    notice === 'request_outcome_unknown'
+      ? 'The earlier provider request may still be running after this GitHub run finishes. Starting a new review may repeat that work.'
+      : 'Wait for this run to finish, then start a new review.')
   );
 }

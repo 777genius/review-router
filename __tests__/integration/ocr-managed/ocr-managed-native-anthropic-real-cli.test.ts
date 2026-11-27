@@ -1,4 +1,4 @@
-/** Real rr.6 binary against native Messages fixtures, never a paid provider. */
+/** Real rr.7 binary against native Messages fixtures, never a paid provider. */
 import { execFileSync } from 'child_process';
 import { createServer } from 'http';
 import * as fs from 'fs';
@@ -26,7 +26,7 @@ try {
   available = execFileSync(binary, ['--version'], {
     encoding: 'utf8',
     timeout: 10_000,
-  }).includes('1.13.1-rr.6');
+  }).includes('1.13.1-rr.7');
 } catch {
   /* Optional build artifact; required jobs fail explicitly below. */
 }

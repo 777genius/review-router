@@ -15,7 +15,7 @@ on:
       - 'src/codex-oauth/codex-bootstrap.ts'
       - 'src/codex-oauth/codex-auth-refresh-validation.ts'
       - 'src/review-orchestration/infrastructure/anthropic-messages-codec.ts'
-      - 'scripts/publish-native-ocr.mts'
+      - 'scripts/native-ocr/**'
       - '__tests__/unit/github/native-ocr-publication.test.ts'
       - 'src/control-plane/review-model-dispatch-profile.json'
       - '__tests__/integration/ocr-managed/**'
@@ -64,9 +64,11 @@ jobs:
         run: |
           test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
           tools/ocr/build.sh --test-managed --out "$RUNNER_TEMP/reviewrouter-ocr"
-          diff -u tools/ocr/qualifications/unified-model-routes-v3.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
           cd "$RUNNER_TEMP/reviewrouter-ocr"
           sha256sum --check --strict opencodereview.sha256
+          cat MANIFEST
+      - name: Verify committed native qualification manifest
+        run: diff -u tools/ocr/qualifications/managed-tracked-inventory-v1.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
       - run: npm ci
       - name: Fetch immutable official auth helper
         run: |
@@ -122,4 +124,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
-        run: node scripts/publish-native-ocr.mts
+        run: node scripts/native-ocr/publish.ts

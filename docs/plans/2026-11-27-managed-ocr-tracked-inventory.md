@@ -132,6 +132,53 @@ they are not defensible alternatives. The strongest counterexample is a
   and requested two corrections, both incorporated: preserve the existing
   effective-path provider-directory policy rather than inventing a rename-out
   ban; require actual captured native profile/version/digest in adoption proof.
-- Round 2: pending after incorporating round 1.
-- Implementation, checks, merge, publication and activation: pending; this plan
-  alone is not evidence for any of these outcomes.
+- Round 2 (recovered prior-session evidence): review exposed that an excluded
+  secret could remain available through native `file_read_diff`. The restored
+  successor patch guards managed diff-map insertion with the existing
+  secret/binary exclusion policy; native loop tests exercise the real tool
+  call, credential renames and permitted related/deleted context. Historical
+  test reports qualify the previous lost candidate only, not these restored
+  bytes.
+- Source recovery: the old public working tree and temporary native candidate
+  were absent after environment restarts. The exact rr.6 baseline was rebuilt
+  with Go 1.26.10 and matched its published SHA-256
+  `9dd5f115747d24100f0767133a3288d268f3bc399675f5b826e7a867d101ee5c`.
+  The new patch was reconstructed against the exact upstream commit and all
+  twelve unchanged baseline patches, then published in Draft PR #410 at
+  `22cc0c3f91e12d82e860f5077d5e6ab49dc1b8cd`.
+- Current source checkpoint adds real Action-to-native tests for the seven-path
+  tracked inventory and negative admission/hard-exclusion controls. It also
+  wires the restored Go regression suites into the existing candidate job.
+  A separate manifest-comparison step preserves actual build artifacts for
+  inspection when the committed qualification receipt is still pending;
+  publication continues to require the entire qualification job to succeed.
+- Toolchain qualification replaces embedded classic TypeScript APIs with
+  native syntax tooling and retains standalone strict TypeScript 7 checking,
+  Jest test inventory, coverage configuration and architecture assertions. The dependency lock,
+  compiler, lint, formatting, complete tests and committed bundles must be
+  regenerated and verified before merge; a source checkpoint is not a PASS.
+- Current candidate compile/gofmt, RED/GREEN, real CLI qualification, exact rr.7
+  binary manifest/profile, independent final review, CI, merge, release and
+  adoption readback remain pending. No environment-interrupted run is accepted
+  as successful evidence.
+
+### Restored-source review and qualification checkpoint
+
+- Independent source review of the restored native patch found no P0/P1/P2
+  defects in the managed inventory scope. It checked old/new secret paths,
+  provider-directory precedence, copied-map semantics and actual diff-tool
+  fixtures. A separate review found no critical defects in the new Action
+  harness, publisher move or fail-closed candidate workflow.
+- Toolchain review found and corrected differing defaults for constant loops,
+  block function declarations and strict module parsing of script-style
+  TypeScript. Negative fixtures invoke the native lint boundary. The original
+  production dependency versions are unchanged; the lock resolves one native
+  TypeScript 7.0.2 compiler and no classic compiler API consumers.
+- The combined restored root source passed `npm run typecheck` with TypeScript
+  7.0.2. Focused existing provider/Codex/CLI tests and migrated architecture/lint
+  fixtures passed. Full lint, formatting, Jest, E2E and CI remain required.
+- The first native build in the restored environment stopped because the OS
+  killed SDK compilation processes; no native test result was produced. A
+  bounded retry uses lower GC/memory limits without changing build flags.
+- The published rr.6 binary was downloaded again and verified against its
+  immutable SHA-256 for the forthcoming baseline RED comparison.

@@ -1,6 +1,6 @@
 import { readFile } from 'fs/promises';
 import path from 'path';
-import ts from 'typescript';
+import { parseSource } from '../../helpers/native-source';
 
 const APPLICATION_PORT = path.resolve(
   'src/review-investigation/application/investigation-gateway-port.ts'
@@ -67,20 +67,21 @@ describe('investigation gateway dependency inversion boundary', () => {
   });
 });
 
-async function sourceFile(filePath: string): Promise<ts.SourceFile> {
-  return ts.createSourceFile(
-    filePath,
-    await readFile(filePath, 'utf8'),
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS
-  );
+async function sourceFile(
+  filePath: string
+): Promise<{ text: string; imports: string[] }> {
+  const text = await readFile(filePath, 'utf8');
+  const parsed = parseSource(filePath, text);
+  return {
+    text,
+    imports: parsed.body
+      .filter((statement) => statement.type === 'ImportDeclaration')
+      .map((statement) => statement.source.value),
+  };
 }
 
-function importSpecifiers(source: ts.SourceFile): readonly string[] {
-  return source.statements
-    .filter(ts.isImportDeclaration)
-    .map((statement) => statement.moduleSpecifier)
-    .filter(ts.isStringLiteral)
-    .map((specifier) => specifier.text);
+function importSpecifiers(source: {
+  imports: readonly string[];
+}): readonly string[] {
+  return source.imports;
 }

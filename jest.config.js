@@ -1,6 +1,17 @@
 /** @type {import('jest').Config} */
 module.exports = {
-  preset: 'ts-jest',
+  transform: {
+    '^.+\\.tsx?$': [
+      'babel-jest',
+      {
+        presets: [['@babel/preset-typescript', { allowDeclareFields: true }]],
+        plugins: [
+          '@babel/plugin-transform-dynamic-import',
+          '@babel/plugin-transform-modules-commonjs',
+        ],
+      },
+    ],
+  },
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__'],
   testMatch: ['**/__tests__/**/*.test.ts', '!**/__tests__/helpers/**'],

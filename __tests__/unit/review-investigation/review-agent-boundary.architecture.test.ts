@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'fs/promises';
 import path from 'path';
-import ts from 'typescript';
+import type { Node } from 'oxc-parser';
+import { parseSource, visitSource } from '../../helpers/native-source';
 
 const CONTRACT_ROOTS = Object.freeze([
   path.resolve('src/review-investigation/application'),
@@ -17,19 +18,48 @@ const FORBIDDEN_LAUNCH_PROPERTIES = new Set([
 ]);
 
 describe('Review Investigation application boundary', () => {
+  it.each([
+    ['infrastructure import', "import type { X } from '../infrastructure/x';"],
+    ['NodeJS.ProcessEnv', 'export type Env = NodeJS.ProcessEnv;'],
+    ['launch property command', 'export interface Port { command: string; }'],
+    ['launch property args', 'export type Port = (args: string[]) => void;'],
+    ['launch property cwd', "export function run(cwd = 'x') {}"],
+    [
+      'launch property executable',
+      'export class Port { constructor(public executable: string) {} }',
+    ],
+    [
+      'launch property credentialEnvironment',
+      'export interface Port { [credentialEnvironment: string]: unknown; }',
+    ],
+    ['process access', 'export const value = process.env;'],
+  ])('rejects %s with the native parser', (reason, source) => {
+    expect(inspect('fixture.ts', source)).toEqual([
+      expect.stringContaining(reason),
+    ]);
+  });
+
+  it('does not confuse comments or string data with imports and launch contracts', () => {
+    expect(
+      inspect(
+        'fixture.ts',
+        "export const value = 'process.env'; // command: string"
+      )
+    ).toEqual([]);
+  });
+
+  it('rejects unparsable input instead of accepting an empty AST', () => {
+    expect(() => inspect('fixture.ts', 'export interface {')).toThrow(
+      'Architecture fixture parse failed'
+    );
+  });
+
   it('does not expose process launch, environment, auth-injection, or infrastructure details', async () => {
     const violations: string[] = [];
 
     for (const filePath of await contractFiles()) {
       const sourceText = await readFile(filePath, 'utf8');
-      const sourceFile = ts.createSourceFile(
-        filePath,
-        sourceText,
-        ts.ScriptTarget.Latest,
-        true,
-        ts.ScriptKind.TS
-      );
-      inspect(sourceFile, sourceFile, violations);
+      violations.push(...inspect(filePath, sourceText));
     }
 
     expect(violations).toEqual([]);
@@ -47,53 +77,62 @@ async function contractFiles(): Promise<readonly string[]> {
   return files.flat().sort();
 }
 
-function inspect(
-  node: ts.Node,
-  sourceFile: ts.SourceFile,
-  violations: string[]
-): void {
-  if (
-    ts.isImportDeclaration(node) &&
-    ts.isStringLiteral(node.moduleSpecifier) &&
-    /(?:^|\/)infrastructure(?:\/|$)/u.test(node.moduleSpecifier.text)
-  ) {
-    violations.push(location(sourceFile, node, 'infrastructure import'));
-  }
-  if (
-    ts.isTypeReferenceNode(node) &&
-    node.getText(sourceFile) === 'NodeJS.ProcessEnv'
-  ) {
-    violations.push(location(sourceFile, node, 'NodeJS.ProcessEnv'));
-  }
-  if (
-    (ts.isPropertySignature(node) || ts.isParameter(node)) &&
-    node.name &&
-    FORBIDDEN_LAUNCH_PROPERTIES.has(propertyName(node.name))
-  ) {
+function inspect(filePath: string, sourceText: string): string[] {
+  const violations: string[] = [];
+  const report = (node: Node, message: string): void => {
+    const line = sourceText.slice(0, node.start).split('\n').length;
     violations.push(
-      location(sourceFile, node, `launch property ${propertyName(node.name)}`)
+      path.relative(process.cwd(), filePath) + ':' + line + ':' + message
     );
-  }
-  if (
-    ts.isPropertyAccessExpression(node) &&
-    node.expression.getText(sourceFile) === 'process'
-  ) {
-    violations.push(location(sourceFile, node, 'process access'));
-  }
-  ts.forEachChild(node, (child) => inspect(child, sourceFile, violations));
+  };
+  visitSource(parseSource(filePath, sourceText), (node) => {
+    if (
+      node.type === 'ImportDeclaration' &&
+      /(?:^|\/)infrastructure(?:\/|$)/u.test(node.source.value)
+    ) {
+      report(node, 'infrastructure import');
+    }
+    if (
+      node.type === 'TSTypeReference' &&
+      sourceText.slice(node.start, node.end) === 'NodeJS.ProcessEnv'
+    ) {
+      report(node, 'NodeJS.ProcessEnv');
+    }
+    if (node.type === 'TSPropertySignature') {
+      const name = propertyName(node.key);
+      if (FORBIDDEN_LAUNCH_PROPERTIES.has(name)) {
+        report(node, 'launch property ' + name);
+      }
+    }
+    const parameters =
+      'params' in node
+        ? node.params
+        : node.type === 'TSIndexSignature'
+          ? node.parameters
+          : [];
+    for (const parameter of parameters) {
+      const name = propertyName(parameter);
+      if (FORBIDDEN_LAUNCH_PROPERTIES.has(name)) {
+        report(parameter, 'launch property ' + name);
+      }
+    }
+    if (
+      node.type === 'MemberExpression' &&
+      !node.computed &&
+      sourceText.slice(node.object.start, node.object.end) === 'process'
+    ) {
+      report(node, 'process access');
+    }
+  });
+  return violations;
 }
 
-function propertyName(name: ts.PropertyName | ts.BindingName): string {
-  return ts.isIdentifier(name) || ts.isStringLiteral(name)
-    ? name.text
-    : name.getText();
-}
-
-function location(
-  sourceFile: ts.SourceFile,
-  node: ts.Node,
-  message: string
-): string {
-  const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-  return `${path.relative(process.cwd(), sourceFile.fileName)}:${line + 1}:${message}`;
+function propertyName(node: Node): string {
+  if (node.type === 'Identifier') return node.name;
+  if (node.type === 'Literal' && typeof node.value === 'string')
+    return node.value;
+  if (node.type === 'AssignmentPattern') return propertyName(node.left);
+  if (node.type === 'RestElement') return propertyName(node.argument);
+  if (node.type === 'TSParameterProperty') return propertyName(node.parameter);
+  return '';
 }

@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "preserve",
+    "moduleResolution": "bundler",
     "outDir": "dist",
     "rootDir": ".",
     "strict": true,
@@ -15,6 +15,13 @@
     "noImplicitReturns": true,
     "types": ["node", "jest"]
   },
-  "include": ["src", "__tests__", "types"],
+  "include": [
+    "src",
+    "__tests__",
+    "types",
+    "jest.setup.ts",
+    "scripts/toolchain/**/*.ts",
+    "scripts/native-ocr/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

@@ -46,6 +46,7 @@ interface ParsedWorkflow {
       permissions?: Record<string, string>;
       steps: Array<{
         name?: string;
+        if?: string;
         run?: string;
         with?: Record<string, unknown>;
         env?: Record<string, string>;
@@ -326,6 +327,16 @@ jobs:
     const artifact = qualify.steps.find(
       (step) => step.name === 'Preserve candidate bytes and exact build recipe'
     )!;
+    const manifestCheck = qualify.steps.find(
+      (step) => step.name === 'Verify committed native qualification manifest'
+    )!;
+    expect(manifestCheck.run).toContain(
+      'diff -u tools/ocr/qualifications/managed-tracked-inventory-v1.manifest'
+    );
+    expect(manifestCheck.run).toContain('reviewrouter-ocr/MANIFEST');
+    expect(artifact.if).toBe(
+      "always() && steps.ocr-build.outcome == 'success'"
+    );
     expect(artifact.with?.name).toBe(
       'native-runtime-candidate-${{ github.event.pull_request.head.sha || github.sha }}'
     );
@@ -340,7 +351,7 @@ jobs:
       'persist-credentials': false,
     });
     expect(publish.steps.at(-1)).toMatchObject({
-      run: 'node scripts/publish-native-ocr.mts',
+      run: 'node scripts/native-ocr/publish.ts',
       env: {
         GH_TOKEN: '${{ github.token }}',
         EXPECTED_SOURCE_SHA: '${{ inputs.expected_source_sha }}',

@@ -18,7 +18,7 @@
 #             modified), or a URL to clone. Default:
 #             https://github.com/alibaba/open-code-review.git
 #   --out     Output directory. Default: <this-dir>/out
-#   --test-managed  Run the finite managed transport regression suite first.
+#   --test-managed  Run managed transport and tracked-inventory regressions first.
 #
 # Environment:
 #   OCR_UPSTREAM  Same as --source.
@@ -30,7 +30,7 @@ TOOLCHAIN=go1.26.10
 UPSTREAM_COMMIT=8eb83340a487b1150af00701b94f01af97e4b4d6 # v1.13.1
 UPSTREAM_NAME=alibaba/open-code-review
 OUTCOME_SCHEMA_VERSION=reviewrouter.ocr-outcome/v1
-RELEASE_VERSION=1.13.1-rr.6
+RELEASE_VERSION=1.13.1-rr.7
 BUILD_FLAGS="-trimpath -buildvcs=false -ldflags -X=main.Version=$RELEASE_VERSION"
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
@@ -96,6 +96,10 @@ if [ "$test_managed" = true ]; then
       go test -p 1 -trimpath -buildvcs=false ./internal/llm \
       -run '^(TestManagedAnthropic|TestResolveManagedEndpoint|TestSerializing)' ) \
     || die "managed transport regression failed"
+  ( cd "$src" && env GOTOOLCHAIN="$TOOLCHAIN" CGO_ENABLED=0 LC_ALL=C \
+      go test -p 1 -trimpath -buildvcs=false ./internal/diff ./internal/agent \
+      -run '^(TestReviewRouterManagedTracked|TestReviewRouterManagedDiffToolHardExclusions)' ) \
+    || die "managed tracked inventory regression failed"
 fi
 
 # --- 3. build with the pinned toolchain ------------------------------------

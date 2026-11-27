@@ -1,49 +1,8 @@
-diff --git a/internal/diff/git.go b/internal/diff/git.go
---- a/internal/diff/git.go
-+++ b/internal/diff/git.go
-@@ -8,6 +8,7 @@
- 	"context"
- 	"errors"
- 	"fmt"
-+	"maps"
- 	"net/url"
- 	"os"
- 	"os/exec"
-@@ -62,6 +63,8 @@
- 	commit string // single commit hash/ref
- 
- 	mergeBase string // cached common ancestor for range mode
-+
-+	managedPaths map[string]bool
- }
- 
- // DiffSet separates the diffs a review may process from files excluded by the
-@@ -126,6 +129,12 @@
- 	}
- }
- 
-+// SetManagedPaths retains explicitly admitted tracked changes through the
-+// gitignore prefilter. Untracked discovery and provider exclusions stay intact.
-+func (p *Provider) SetManagedPaths(paths map[string]bool) {
-+	p.managedPaths = maps.Clone(paths)
-+}
-+
- // InputResolution carries this run's frozen, immutable commit endpoints, per the
- // run-manifest input-mode matrix. An empty field means "not applicable or not
- // resolvable" — a root commit and a merge commit have no single comparison base,
-@@ -446,7 +455,7 @@
- 		if isProviderDirExcluded(path) {
- 			result.excludedAt = append(result.excludedAt, len(result.Included)+len(result.Excluded))
- 			result.Excluded = append(result.Excluded, d)
--		} else if !p.isPathExcluded(path, patterns) {
-+		} else if p.managedPaths[path] || !p.isPathExcluded(path, patterns) {
- 			result.Included = append(result.Included, d)
- 		}
- 	}
 diff --git a/internal/agent/agent.go b/internal/agent/agent.go
+index 055d2c2..11b338b 100644
 --- a/internal/agent/agent.go
 +++ b/internal/agent/agent.go
-@@ -341,8 +341,8 @@
+@@ -341,8 +341,8 @@ func (a *Agent) Run(ctx context.Context) ([]model.LlmComment, error) {
  	telemetry.SetAttr(diffSpan, "lines.deleted", int64(a.totalDeletions))
  	diffSpan.End()
  
@@ -54,7 +13,7 @@ diff --git a/internal/agent/agent.go b/internal/agent/agent.go
  	a.injectDiffMap()
  	a.args.Tools.Freeze()
  
-@@ -607,14 +607,19 @@
+@@ -607,14 +607,19 @@ func (a *Agent) newDiffProvider() *diff.Provider {
  		}
  	}
  
@@ -77,7 +36,7 @@ diff --git a/internal/agent/agent.go b/internal/agent/agent.go
  }
  
  // loadDiffs populates the diff-related fields used by normal review runs.
-@@ -651,6 +656,12 @@
+@@ -651,6 +656,12 @@ func (a *Agent) injectDiffMap() {
  	m := make(map[string]string, len(a.diffs))
  	for i := range a.diffs {
  		d := &a.diffs[i]
@@ -90,181 +49,9 @@ diff --git a/internal/agent/agent.go b/internal/agent/agent.go
  		m[effectivePath(*d)] = d.Diff
  	}
  	dm := tool.NewDiffMap(m)
-diff --git a/internal/diff/reviewrouter_tracked_inventory_test.go b/internal/diff/reviewrouter_tracked_inventory_test.go
-new file mode 100644
---- /dev/null
-+++ b/internal/diff/reviewrouter_tracked_inventory_test.go
-@@ -0,0 +1,168 @@
-+// SPDX-License-Identifier: Apache-2.0
-+// Copyright 2026 alibaba/open-code-review Contributors
-+
-+package diff
-+
-+import (
-+	"context"
-+	"maps"
-+	"os"
-+	"path/filepath"
-+	"slices"
-+	"testing"
-+
-+	"github.com/alibaba/open-code-review/internal/model"
-+)
-+
-+func trackedInventoryRepo(t *testing.T, mode Mode) string {
-+	t.Helper()
-+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-+	repo := t.TempDir()
-+	runGitTest(t, repo, "init", "-q")
-+	runGitTest(t, repo, "config", "user.email", "test@example.com")
-+	runGitTest(t, repo, "config", "user.name", "Test User")
-+	runGitTest(t, repo, "config", "commit.gpgsign", "false")
-+	write := func(path, content string) {
-+		t.Helper()
-+		full := filepath.Join(repo, filepath.FromSlash(path))
-+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-+			t.Fatal(err)
-+		}
-+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
-+			t.Fatal(err)
-+		}
-+	}
-+	write(".gitignore", "ignored/\nvendor/\n")
-+	modified := []string{"normal.go", "ignored/modify.go", "ignored/[x].go", "ignored/x.go", "ignored/Upper.go", "ignored/upper.go", "ignored/unassigned.go", "ignored/false.go", "vendor/blocked.go"}
-+	for _, path := range modified {
-+		write(path, "package fixture\n// "+path+" before\n")
-+	}
-+	write("ignored/delete.go", "package deleted\n")
-+	write("ignored/empty.go", "")
-+	renames := map[string]string{
-+		"rename-in.go": "ignored/renamed-in.go", "ignored/rename-out.go": "renamed-out.go",
-+		"rename-vendor.go": "vendor/renamed-in.go", "vendor/rename-out.go": "code-out.go",
-+	}
-+	for old := range renames {
-+		write(old, "package rename\n// unique original "+old+"\n")
-+	}
-+	runGitTest(t, repo, "add", "-f", ".")
-+	runGitTest(t, repo, "commit", "-q", "-m", "baseline")
-+	for _, path := range modified {
-+		write(path, "package fixture\n// "+path+" after\n")
-+	}
-+	for _, path := range []string{"ignored/delete.go", "ignored/empty.go"} {
-+		if err := os.Remove(filepath.Join(repo, path)); err != nil {
-+			t.Fatal(err)
-+		}
-+	}
-+	for old, next := range renames {
-+		if err := os.Rename(filepath.Join(repo, old), filepath.Join(repo, next)); err != nil {
-+			t.Fatal(err)
-+		}
-+		runGitTest(t, repo, "add", "-f", next)
-+	}
-+	runGitTest(t, repo, "add", "-u")
-+	if mode != ModeWorkspace {
-+		runGitTest(t, repo, "commit", "-q", "-m", "tracked changes")
-+	}
-+	write("ignored/untracked.go", "package untracked\n")
-+	return repo
-+}
-+
-+func trackedInventoryProvider(repo string, mode Mode) *Provider {
-+	switch mode {
-+	case ModeCommit:
-+		return NewCommitProvider(repo, "HEAD", nil)
-+	case ModeRange:
-+		return NewProvider(repo, "HEAD^", "HEAD", nil)
-+	default:
-+		return NewWorkspaceProvider(repo, nil)
-+	}
-+}
-+
-+func trackedInventoryPaths(diffs []model.Diff) []string {
-+	paths := make([]string, 0, len(diffs))
-+	for _, d := range diffs {
-+		path := d.NewPath
-+		if path == "/dev/null" {
-+			path = d.OldPath
-+		}
-+		paths = append(paths, path)
-+	}
-+	slices.Sort(paths)
-+	return paths
-+}
-+
-+func TestReviewRouterManagedTrackedProvider(t *testing.T) {
-+	for name, mode := range map[string]Mode{"workspace": ModeWorkspace, "commit": ModeCommit, "range": ModeRange} {
-+		t.Run(name, func(t *testing.T) {
-+			repo := trackedInventoryRepo(t, mode)
-+			provider := trackedInventoryProvider(repo, mode)
-+			inventory := map[string]bool{
-+				"ignored/modify.go": true, "ignored/delete.go": true, "ignored/empty.go": true,
-+				"ignored/renamed-in.go": true, "renamed-out.go": true, "code-out.go": true,
-+				"ignored/[x].go": true, "ignored/Upper.go": true, "ignored/false.go": false,
-+				"vendor/blocked.go": true, "vendor/renamed-in.go": true, "ignored/untracked.go": true,
-+			}
-+			provider.SetManagedPaths(inventory)
-+			set, err := provider.GetDiffSet(context.Background())
-+			if err != nil {
-+				t.Fatal(err)
-+			}
-+			want := []string{"code-out.go", "ignored/Upper.go", "ignored/[x].go", "ignored/delete.go", "ignored/empty.go", "ignored/modify.go", "ignored/renamed-in.go", "normal.go", "renamed-out.go"}
-+			slices.Sort(want)
-+			if got := trackedInventoryPaths(set.Included); !slices.Equal(got, want) {
-+				t.Fatalf("included %v; want %v", got, want)
-+			}
-+			if got := trackedInventoryPaths(set.Excluded); !slices.Equal(got, []string{"vendor/blocked.go", "vendor/renamed-in.go"}) {
-+				t.Fatalf("provider directory exclusions changed: %v", got)
-+			}
-+			for _, d := range set.Included {
-+				switch d.OldPath {
-+				case "ignored/empty.go", "ignored/delete.go":
-+					if !d.IsDeleted {
-+						t.Errorf("lost deletion identity: %+v", d)
-+					}
-+				case "rename-in.go", "ignored/rename-out.go", "vendor/rename-out.go":
-+					if !d.IsRenamed {
-+						t.Errorf("lost rename identity: %+v", d)
-+					}
-+				}
-+			}
-+		})
-+	}
-+}
-+
-+func TestReviewRouterManagedTrackedProviderCopiesInventory(t *testing.T) {
-+	repo := trackedInventoryRepo(t, ModeWorkspace)
-+	provider := NewWorkspaceProvider(repo, nil)
-+	inventory := map[string]bool{"ignored/modify.go": true, "ignored/false.go": false}
-+	provider.SetManagedPaths(inventory)
-+	delete(inventory, "ignored/modify.go")
-+	inventory["ignored/unassigned.go"] = true
-+	inventory["ignored/false.go"] = true
-+	got, err := provider.GetDiff(context.Background())
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+	if paths := trackedInventoryPaths(got); !slices.Equal(paths, []string{"code-out.go", "ignored/modify.go", "normal.go", "renamed-out.go"}) {
-+		t.Fatalf("caller mutated provider inventory: %v", paths)
-+	}
-+	for name, inventory := range map[string]map[string]bool{"nil": nil, "empty": {}} {
-+		t.Run(name, func(t *testing.T) {
-+			provider.SetManagedPaths(inventory)
-+			if !maps.Equal(provider.managedPaths, inventory) || (provider.managedPaths == nil) != (inventory == nil) {
-+				t.Fatal("inventory nil/empty distinction changed")
-+			}
-+			got, err := provider.GetDiff(context.Background())
-+			if err != nil {
-+				t.Fatal(err)
-+			}
-+			if paths := trackedInventoryPaths(got); !slices.Equal(paths, []string{"code-out.go", "normal.go", "renamed-out.go"}) {
-+				t.Fatalf("legacy ignore behavior changed: %v", paths)
-+			}
-+		})
-+	}
-+}
 diff --git a/internal/agent/reviewrouter_tracked_inventory_test.go b/internal/agent/reviewrouter_tracked_inventory_test.go
 new file mode 100644
+index 0000000..814bd6f
 --- /dev/null
 +++ b/internal/agent/reviewrouter_tracked_inventory_test.go
 @@ -0,0 +1,241 @@
@@ -319,9 +106,9 @@ new file mode 100644
 +	write("source-secret.go", "FAKE_SECRET_NEW_PATH_MARKER\n")
 +	modified := map[string]string{
 +		"tmp/modified.go": "package fixture\n// SELECTED_CONTENT_MARKER\n",
-+		"related.go": "package related\n// RELATED_CONTEXT_MARKER\n",
++		"related.go":      "package related\n// RELATED_CONTEXT_MARKER\n",
 +		"tmp/.env.direct": "FAKE_SECRET_DIRECT_MARKER\n",
-+		"tmp/data.bin": "\x00binary before\n", "vendor/blocked.go": "package vendor\n",
++		"tmp/data.bin":    "\x00binary before\n", "vendor/blocked.go": "package vendor\n",
 +	}
 +	for path, content := range modified {
 +		write(path, content+"before\n")
@@ -505,6 +292,223 @@ new file mode 100644
 +			}
 +			if !strings.Contains(result, "SAFE_MARKER") || !strings.Contains(result, "RELATED_MARKER") {
 +				t.Fatal("ordinary context excluded")
++			}
++		})
++	}
++}
+diff --git a/internal/diff/git.go b/internal/diff/git.go
+index babfd1e..04a33ca 100644
+--- a/internal/diff/git.go
++++ b/internal/diff/git.go
+@@ -8,6 +8,7 @@ import (
+ 	"context"
+ 	"errors"
+ 	"fmt"
++	"maps"
+ 	"net/url"
+ 	"os"
+ 	"os/exec"
+@@ -62,6 +63,8 @@ type Provider struct {
+ 	commit string // single commit hash/ref
+ 
+ 	mergeBase string // cached common ancestor for range mode
++
++	managedPaths map[string]bool
+ }
+ 
+ // DiffSet separates the diffs a review may process from files excluded by the
+@@ -126,6 +129,12 @@ func NewWorkspaceProvider(repoDir string, runner *gitcmd.Runner) *Provider {
+ 	}
+ }
+ 
++// SetManagedPaths retains explicitly admitted tracked changes through the
++// gitignore prefilter. Untracked discovery and provider exclusions stay intact.
++func (p *Provider) SetManagedPaths(paths map[string]bool) {
++	p.managedPaths = maps.Clone(paths)
++}
++
+ // InputResolution carries this run's frozen, immutable commit endpoints, per the
+ // run-manifest input-mode matrix. An empty field means "not applicable or not
+ // resolvable" — a root commit and a merge commit have no single comparison base,
+@@ -446,7 +455,7 @@ func (p *Provider) partitionDiffs(diffs []model.Diff) DiffSet {
+ 		if isProviderDirExcluded(path) {
+ 			result.excludedAt = append(result.excludedAt, len(result.Included)+len(result.Excluded))
+ 			result.Excluded = append(result.Excluded, d)
+-		} else if !p.isPathExcluded(path, patterns) {
++		} else if p.managedPaths[path] || !p.isPathExcluded(path, patterns) {
+ 			result.Included = append(result.Included, d)
+ 		}
+ 	}
+diff --git a/internal/diff/reviewrouter_tracked_inventory_test.go b/internal/diff/reviewrouter_tracked_inventory_test.go
+new file mode 100644
+index 0000000..3d9068d
+--- /dev/null
++++ b/internal/diff/reviewrouter_tracked_inventory_test.go
+@@ -0,0 +1,168 @@
++// SPDX-License-Identifier: Apache-2.0
++// Copyright 2026 alibaba/open-code-review Contributors
++
++package diff
++
++import (
++	"context"
++	"maps"
++	"os"
++	"path/filepath"
++	"slices"
++	"testing"
++
++	"github.com/alibaba/open-code-review/internal/model"
++)
++
++func trackedInventoryRepo(t *testing.T, mode Mode) string {
++	t.Helper()
++	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
++	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
++	repo := t.TempDir()
++	runGitTest(t, repo, "init", "-q")
++	runGitTest(t, repo, "config", "user.email", "test@example.com")
++	runGitTest(t, repo, "config", "user.name", "Test User")
++	runGitTest(t, repo, "config", "commit.gpgsign", "false")
++	write := func(path, content string) {
++		t.Helper()
++		full := filepath.Join(repo, filepath.FromSlash(path))
++		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
++			t.Fatal(err)
++		}
++		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
++			t.Fatal(err)
++		}
++	}
++	write(".gitignore", "ignored/\nvendor/\n")
++	modified := []string{"normal.go", "ignored/modify.go", "ignored/[x].go", "ignored/x.go", "ignored/Upper.go", "ignored/upper.go", "ignored/unassigned.go", "ignored/false.go", "vendor/blocked.go"}
++	for _, path := range modified {
++		write(path, "package fixture\n// "+path+" before\n")
++	}
++	write("ignored/delete.go", "package deleted\n")
++	write("ignored/empty.go", "")
++	renames := map[string]string{
++		"rename-in.go": "ignored/renamed-in.go", "ignored/rename-out.go": "renamed-out.go",
++		"rename-vendor.go": "vendor/renamed-in.go", "vendor/rename-out.go": "code-out.go",
++	}
++	for old := range renames {
++		write(old, "package rename\n// unique original "+old+"\n")
++	}
++	runGitTest(t, repo, "add", "-f", ".")
++	runGitTest(t, repo, "commit", "-q", "-m", "baseline")
++	for _, path := range modified {
++		write(path, "package fixture\n// "+path+" after\n")
++	}
++	for _, path := range []string{"ignored/delete.go", "ignored/empty.go"} {
++		if err := os.Remove(filepath.Join(repo, path)); err != nil {
++			t.Fatal(err)
++		}
++	}
++	for old, next := range renames {
++		if err := os.Rename(filepath.Join(repo, old), filepath.Join(repo, next)); err != nil {
++			t.Fatal(err)
++		}
++		runGitTest(t, repo, "add", "-f", next)
++	}
++	runGitTest(t, repo, "add", "-u")
++	if mode != ModeWorkspace {
++		runGitTest(t, repo, "commit", "-q", "-m", "tracked changes")
++	}
++	write("ignored/untracked.go", "package untracked\n")
++	return repo
++}
++
++func trackedInventoryProvider(repo string, mode Mode) *Provider {
++	switch mode {
++	case ModeCommit:
++		return NewCommitProvider(repo, "HEAD", nil)
++	case ModeRange:
++		return NewProvider(repo, "HEAD^", "HEAD", nil)
++	default:
++		return NewWorkspaceProvider(repo, nil)
++	}
++}
++
++func trackedInventoryPaths(diffs []model.Diff) []string {
++	paths := make([]string, 0, len(diffs))
++	for _, d := range diffs {
++		path := d.NewPath
++		if path == "/dev/null" {
++			path = d.OldPath
++		}
++		paths = append(paths, path)
++	}
++	slices.Sort(paths)
++	return paths
++}
++
++func TestReviewRouterManagedTrackedProvider(t *testing.T) {
++	for name, mode := range map[string]Mode{"workspace": ModeWorkspace, "commit": ModeCommit, "range": ModeRange} {
++		t.Run(name, func(t *testing.T) {
++			repo := trackedInventoryRepo(t, mode)
++			provider := trackedInventoryProvider(repo, mode)
++			inventory := map[string]bool{
++				"ignored/modify.go": true, "ignored/delete.go": true, "ignored/empty.go": true,
++				"ignored/renamed-in.go": true, "renamed-out.go": true, "code-out.go": true,
++				"ignored/[x].go": true, "ignored/Upper.go": true, "ignored/false.go": false,
++				"vendor/blocked.go": true, "vendor/renamed-in.go": true, "ignored/untracked.go": true,
++			}
++			provider.SetManagedPaths(inventory)
++			set, err := provider.GetDiffSet(context.Background())
++			if err != nil {
++				t.Fatal(err)
++			}
++			want := []string{"code-out.go", "ignored/Upper.go", "ignored/[x].go", "ignored/delete.go", "ignored/empty.go", "ignored/modify.go", "ignored/renamed-in.go", "normal.go", "renamed-out.go"}
++			slices.Sort(want)
++			if got := trackedInventoryPaths(set.Included); !slices.Equal(got, want) {
++				t.Fatalf("included %v; want %v", got, want)
++			}
++			if got := trackedInventoryPaths(set.Excluded); !slices.Equal(got, []string{"vendor/blocked.go", "vendor/renamed-in.go"}) {
++				t.Fatalf("provider directory exclusions changed: %v", got)
++			}
++			for _, d := range set.Included {
++				switch d.OldPath {
++				case "ignored/empty.go", "ignored/delete.go":
++					if !d.IsDeleted {
++						t.Errorf("lost deletion identity: %+v", d)
++					}
++				case "rename-in.go", "ignored/rename-out.go", "vendor/rename-out.go":
++					if !d.IsRenamed {
++						t.Errorf("lost rename identity: %+v", d)
++					}
++				}
++			}
++		})
++	}
++}
++
++func TestReviewRouterManagedTrackedProviderCopiesInventory(t *testing.T) {
++	repo := trackedInventoryRepo(t, ModeWorkspace)
++	provider := NewWorkspaceProvider(repo, nil)
++	inventory := map[string]bool{"ignored/modify.go": true, "ignored/false.go": false}
++	provider.SetManagedPaths(inventory)
++	delete(inventory, "ignored/modify.go")
++	inventory["ignored/unassigned.go"] = true
++	inventory["ignored/false.go"] = true
++	got, err := provider.GetDiff(context.Background())
++	if err != nil {
++		t.Fatal(err)
++	}
++	if paths := trackedInventoryPaths(got); !slices.Equal(paths, []string{"code-out.go", "ignored/modify.go", "normal.go", "renamed-out.go"}) {
++		t.Fatalf("caller mutated provider inventory: %v", paths)
++	}
++	for name, inventory := range map[string]map[string]bool{"nil": nil, "empty": {}} {
++		t.Run(name, func(t *testing.T) {
++			provider.SetManagedPaths(inventory)
++			if !maps.Equal(provider.managedPaths, inventory) || (provider.managedPaths == nil) != (inventory == nil) {
++				t.Fatal("inventory nil/empty distinction changed")
++			}
++			got, err := provider.GetDiff(context.Background())
++			if err != nil {
++				t.Fatal(err)
++			}
++			if paths := trackedInventoryPaths(got); !slices.Equal(paths, []string{"code-out.go", "normal.go", "renamed-out.go"}) {
++				t.Fatalf("legacy ignore behavior changed: %v", paths)
 +			}
 +		})
 +	}

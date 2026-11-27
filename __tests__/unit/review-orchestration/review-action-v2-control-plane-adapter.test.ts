@@ -1,3 +1,7 @@
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { build as buildBundle } from 'esbuild';
 import profiles from '../../../src/control-plane/review-agent-profiles.json';
 import { parseReviewAgentProfiles } from '../../../src/control-plane/generated/review-action-v2/review-agent-profile';
 import { createHash } from 'crypto';
@@ -90,6 +94,89 @@ function reviewInvestigationDescriptor(
 }
 
 describe('ReviewActionV2ControlPlaneAdapter', () => {
+
+  const oldReaderSource = process.env.REVIEWROUTER_PRE_B_READER_DIR;
+  const oldReaderTest = oldReaderSource ? it : it.skip;
+  oldReaderTest('keeps nested restore hints compatible with the actual unchanged pre-B decoder', async () => {
+    if (!oldReaderSource || !path.isAbsolute(oldReaderSource))
+      throw new Error('old_reader_absolute_source_required');
+    const baseline = 'cd2140516d32c10650c1e37f4470d10c767806b2';
+    const adapterPath =
+      'src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts';
+    expect(execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: oldReaderSource, encoding: 'utf8',
+    }).trim()).toBe(baseline);
+    expect(execFileSync('git', ['status', '--porcelain=v1', '--', 'src'], {
+      cwd: oldReaderSource, encoding: 'utf8',
+    })).toBe('');
+    const source = readFileSync(path.join(oldReaderSource, adapterPath));
+    expect(createHash('sha1')
+      .update(Buffer.from(`blob ${source.length}\0`))
+      .update(source).digest('hex'))
+      .toBe('3f43384a193b24c38995c0d1b796a99384ce5249');
+    mkdirSync(path.join(process.cwd(), 'tmp'), { recursive: true });
+    const scratch = mkdtempSync(path.join(process.cwd(), 'tmp/old-reader-'));
+    const driver = path.resolve(
+      '__tests__/integration/fixtures/accepted-source-old-reader.ts'
+    );
+    const bundle = path.join(scratch, 'reader.cjs');
+    try {
+      await buildBundle({
+        entryPoints: [driver],
+        outfile: bundle,
+        bundle: true,
+        platform: 'node',
+        target: 'node24',
+        logLevel: 'silent',
+        external: ['tree-sitter', 'tree-sitter-*'],
+        plugins: [{
+          name: 'exact-pre-b-reader',
+          setup(build) {
+            build.onResolve({ filter: /^\.\.\/\.\.\/\.\.\/src\// }, (input) => {
+              if (input.importer !== driver) return undefined;
+              return { path: path.join(oldReaderSource, input.path.slice(9)) + '.ts' };
+            });
+          },
+        }],
+      });
+      const f = unattachedRestoreWireFixture();
+      const run = (value: unknown) => {
+        const input = path.join(scratch, 'input.json');
+        writeFileSync(input, JSON.stringify({
+          authorization: authorizationResponse(),
+          restore: f.response(value),
+          reviewRevisionHash: f.raw.reviewRevisionHash,
+        }), { mode: 0o600 });
+        return spawnSync(process.execPath, [bundle, input], {
+          encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536,
+        });
+      };
+      const accepted = run(f.raw);
+      expect({ status: accepted.status, stderr: accepted.stderr })
+        .toEqual({ status: 0, stderr: '' });
+      const parsed: unknown = JSON.parse(accepted.stdout);
+      expect(parsed).toMatchObject({
+        restored: {
+          executionId: f.raw.executionId,
+          planHash: f.raw.planHash,
+          workSlots: [{ state: RestoredReviewWorkSlotState.Exhausted }],
+          persistedPlan: {
+            planHash: f.raw.persistedPlan.planHash,
+            workSlots: f.raw.persistedPlan.workSlots,
+            acceptedManifests: [],
+          },
+        },
+      });
+      expect(parsed).not.toHaveProperty('restored.persistedPlan.unattachedAcceptedManifests');
+      const rejected = run({ ...f.raw, unattachedAcceptedManifests: [f.hint] });
+      expect({ status: rejected.status, stderr: rejected.stderr })
+        .toEqual({ status: 1, stderr: 'review_action_v2_canonical_json_fields_invalid' });
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+
   it('rejects a different numeric repository before git reads or control-plane effects', async () => {
     const execute = jest.fn();
     const previousHome = process.env.CODEX_HOME;

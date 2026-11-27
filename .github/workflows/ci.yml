@@ -69,8 +69,16 @@ jobs:
       # --maxWorkers=2: Limit parallelism to reduce resource contention
       # --detectOpenHandles surfaces lingering async resources
       # Use per-test timeout and open-handle detection to avoid hangs
+      - name: Check out the exact pre-change restore reader
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: cd2140516d32c10650c1e37f4470d10c767806b2
+          path: tmp/accepted-source-reader-before-b
+          sparse-checkout: src
+          persist-credentials: false
       - name: Run tests with required managed OCR qualification
         env:
+          REVIEWROUTER_PRE_B_READER_DIR: ${{ github.workspace }}/tmp/accepted-source-reader-before-b
           REVIEWROUTER_OCR_REQUIRED: '1'
           REVIEWROUTER_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview
         run: npm run test -- --maxWorkers=2 --detectOpenHandles --testTimeout=20000

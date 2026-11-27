@@ -1,0 +1,242 @@
+name: Action restore boundary qualification
+
+on:
+  push:
+    branches: [qualification/action-restore-boundaries-20261128]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: action-restore-boundaries-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    if: github.repository == '777genius/review-router' && github.ref == 'refs/heads/qualification/action-restore-boundaries-20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: source
+    steps:
+      - name: Check out the exact reviewed Action source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 79acbbf55e3dd60c7d7141f657692707722706e6
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "24.21.0"
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+      - name: Verify source identity and install the locked tooling
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = v24.21.0
+          test "$(git rev-parse HEAD)" = 79acbbf55e3dd60c7d7141f657692707722706e6
+          test "$(git rev-parse 'HEAD^{tree}')" = 88dab24a59b5e6426da606f73f3b9a60c1c2414c
+          test "$(git hash-object -- package-lock.json)" = 43651b59184cbd63ee7641744362e8af4be72ef1
+          test "$(git hash-object -- .prettierrc)" = 5a05ecbdd9a2345b1f7b2fed54984203e6dde42d
+          test "$(git hash-object -- .prettierignore)" = 4aa1ec0d2cbed51e1533036ce112ca61e7629d56
+          npm ci
+          git restore --worktree -- dist
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          test "$(node node_modules/prettier/bin/prettier.cjs --version)" = 3.8.0
+      - name: Format the exact reviewed files and export changed outputs
+        id: format
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { createHash } from 'node:crypto';
+          import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+          import path from 'node:path';
+          import * as prettier from 'prettier';
+
+          const sourceSha = '79acbbf55e3dd60c7d7141f657692707722706e6';
+          const sourceTree = '88dab24a59b5e6426da606f73f3b9a60c1c2414c';
+          const expected = new Map([["__tests__/unit/review-orchestration/codex-review-invocation-adapter.test.ts","03dd94d6775ac66c3f9ab7079fd8f20aa794c95f"],["__tests__/unit/review-orchestration/ocr-review-invocation-adapter.test.ts","7e5165f67e4bc604c9d7ec6e592451220b7fcbaf"],["__tests__/unit/review-orchestration/run-t0-review-orchestration.test.ts","a12038d6d1670a3a06a1f68f80d32ca94c909ba1"],["src/review-orchestration/application/review-orchestration-ports.ts","4dff9f1698aa22ee815f4902620a2af2ae5c3d25"],["src/review-orchestration/application/run-t0-review-orchestration.ts","bcd25e8775b5a122aae77affc27dddb927e6a589"],["src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts","9b17c449bdc1686bec7de8df59d4e27e3cbf6faf"],["src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts","13a845bd952ddbcb1e72253be8c597a520119c46"],["src/review-orchestration/infrastructure/restored-lifecycle-invocations.ts","d438326f067354b43f4abb6c77ee2ac28ce57fae"],["__tests__/unit/github/client-factory-retry.test.ts","82e62bf5fe7b096f833f348d5f9efb32c84e3766"]]);
+          const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+          assert.equal(git('rev-parse', 'HEAD'), sourceSha);
+          assert.equal(git('rev-parse', 'HEAD^{tree}'), sourceTree);
+          assert.equal(git('hash-object', '--', 'package-lock.json'), '43651b59184cbd63ee7641744362e8af4be72ef1');
+          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          const tool = lock.packages['node_modules/prettier'];
+          assert.equal(tool.version, '3.8.0');
+          assert.equal(tool.integrity, 'sha512-yEPsovQfpxYfgWNhCfECjG5AQaO+K3dp6XERmOepyPDVqcJm+bjyCVO3pmU+nAPe0N5dDvekfGezt/EIiRe1TA==');
+          assert.equal(prettier.version, tool.version);
+          for (const [file, originalGitBlob] of expected) {
+            assert.equal(git('hash-object', '--', file), originalGitBlob);
+            const info = await prettier.getFileInfo(file, { ignorePath: '.prettierignore' });
+            assert.equal(info.ignored, false);
+            assert.equal(info.inferredParser, 'typescript');
+          }
+          const files = [...expected.keys()];
+          const cli = 'node_modules/prettier/bin/prettier.cjs';
+          execFileSync(process.execPath, [cli, '--write', ...files], { stdio: 'inherit' });
+          execFileSync(process.execPath, [cli, '--check', ...files], { stdio: 'inherit' });
+          const output = path.join(process.env.RUNNER_TEMP, 'action-restore-boundaries');
+          mkdirSync(output, { recursive: true });
+          const entries = [];
+          const records = [];
+          for (const [file, originalGitBlob] of expected) {
+            const bytes = readFileSync(file);
+            const entry = {
+              path: file,
+              originalGitBlob,
+              formattedGitBlob: git('hash-object', '--', file),
+              formattedSha256: createHash('sha256').update(bytes).digest('hex'),
+              formattedBytes: bytes.length,
+            };
+            const destination = path.join(output, 'files', file);
+            mkdirSync(path.dirname(destination), { recursive: true });
+            writeFileSync(destination, bytes);
+            entries.push(entry);
+            if (entry.formattedGitBlob === originalGitBlob) continue;
+            const base64 = bytes.toString('base64');
+            const chunkCount = Math.ceil(base64.length / 16384);
+            for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
+              records.push({
+                ...entry,
+                sourceSha,
+                sourceTree,
+                encoding: 'base64',
+                chunkIndex,
+                chunkCount,
+                contentBase64: base64.slice(chunkIndex * 16384, (chunkIndex + 1) * 16384),
+              });
+            }
+          }
+          const changed = git('diff', '--name-only').split('\n').filter(Boolean);
+          assert(changed.every((file) => expected.has(file)));
+          assert.equal(git('ls-files', '--others', '--exclude-standard'), '');
+          execFileSync('git', ['diff', '--exit-code', '--', 'dist'], { stdio: 'inherit' });
+          const manifest = {
+            contract: 'reviewrouter.action-canonical-format.v1',
+            sourceSha,
+            sourceTree,
+            workflowSha: process.env.GITHUB_SHA,
+            workflowRef: process.env.GITHUB_WORKFLOW_REF,
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            nodeVersion: process.version,
+            npmVersion: execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim(),
+            prettierVersion: prettier.version,
+            prettierIntegrity: tool.integrity,
+            entries,
+          };
+          writeFileSync(path.join(output, 'format-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+          writeFileSync(path.join(output, 'format.patch'), execFileSync('git', ['diff', '--', ...files]));
+          const lines = records.map((record) => 'ACTION_CANONICAL_FORMAT_OUTPUT ' + JSON.stringify(record));
+          assert(Buffer.byteLength(lines.join('\n')) < 1200000, 'format_export_too_large');
+          for (const line of lines) console.log(line);
+          console.log('ACTION_CANONICAL_FORMAT_MANIFEST ' + JSON.stringify(manifest));
+          NODE
+      - name: Run the retained stock lint gate
+        if: always() && steps.format.outcome == 'success'
+        run: npm run lint
+      - name: Run the retained stock TypeScript gate
+        if: always() && steps.format.outcome == 'success'
+        run: npm run typecheck
+      - name: Run strict TypeScript 7.0.2 on the same project
+        if: always() && steps.format.outcome == 'success'
+        env:
+          npm_config_ignore_scripts: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm exec --yes --package=typescript@7.0.2 --call '
+            set -eu
+            reviewrouter_tsc=$(command -v tsc)
+            reviewrouter_tsc_version=$("$reviewrouter_tsc" --version)
+            test "$reviewrouter_tsc_version" = "Version 7.0.2"
+            exec "$reviewrouter_tsc" --project tsconfig.json --noEmit --module preserve --moduleResolution bundler
+          ' 2>&1 | tee "$RUNNER_TEMP/action-restore-boundaries/strict-types.log"
+      - name: Execute the restoration and real-factory Jest suites
+        id: tests
+        if: always() && steps.format.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run test -- --maxWorkers=2 --detectOpenHandles --testTimeout=20000 \
+            --runTestsByPath __tests__/unit/github/client.test.ts \
+            __tests__/unit/github/client-factory-retry.test.ts \
+            __tests__/unit/review-orchestration/run-t0-review-orchestration.test.ts \
+            __tests__/unit/review-orchestration/restored-memory-invocations.test.ts \
+            __tests__/unit/review-orchestration/codex-review-invocation-adapter.test.ts \
+            __tests__/unit/review-orchestration/ocr-review-invocation-adapter.test.ts \
+            --json --outputFile="$RUNNER_TEMP/action-restore-boundaries/focused-jest.json" \
+            2>&1 | tee "$RUNNER_TEMP/action-restore-boundaries/focused-jest.log"
+      - name: Require every selected regression suite without skips
+        if: always() && steps.tests.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import path from 'node:path';
+          const result = JSON.parse(readFileSync(path.join(process.env.RUNNER_TEMP, 'action-restore-boundaries/focused-jest.json'), 'utf8'));
+          const expected = [
+            '__tests__/unit/github/client.test.ts',
+            '__tests__/unit/github/client-factory-retry.test.ts',
+            '__tests__/unit/review-orchestration/run-t0-review-orchestration.test.ts',
+            '__tests__/unit/review-orchestration/restored-memory-invocations.test.ts',
+            '__tests__/unit/review-orchestration/codex-review-invocation-adapter.test.ts',
+            '__tests__/unit/review-orchestration/ocr-review-invocation-adapter.test.ts',
+          ].sort();
+          assert.equal(result.success, true);
+          assert.equal(result.numFailedTests, 0);
+          assert.equal(result.numPendingTests, 0);
+          assert.equal(result.numFailedTestSuites, 0);
+          assert.equal(result.numPendingTestSuites, 0);
+          assert(result.numTotalTests > 0);
+          assert.deepEqual(result.testResults.map((suite) => path.relative(process.cwd(), suite.name)).sort(), expected);
+          for (const suite of result.testResults) {
+            assert.equal(suite.status, 'passed', suite.name);
+            assert(suite.assertionResults.length > 0, suite.name);
+            for (const test of suite.assertionResults) assert.equal(test.status, 'passed', test.fullName);
+          }
+          console.log('ACTION_RESTORE_BOUNDARY_TESTS ' + JSON.stringify({ sourceSha: '79acbbf55e3dd60c7d7141f657692707722706e6', suites: result.numPassedTestSuites, tests: result.numPassedTests, skipped: result.numPendingTests }));
+          NODE
+      - name: Verify qualification preserved the formatted source and committed runtime
+        if: always() && steps.format.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { createHash } from 'node:crypto';
+          import { readFileSync } from 'node:fs';
+          import path from 'node:path';
+          const manifest = JSON.parse(readFileSync(path.join(process.env.RUNNER_TEMP, 'action-restore-boundaries/format-manifest.json'), 'utf8'));
+          for (const entry of manifest.entries) {
+            const bytes = readFileSync(entry.path);
+            assert.equal(bytes.length, entry.formattedBytes);
+            assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.formattedSha256);
+            assert.equal(execFileSync('git', ['hash-object', '--', entry.path], { encoding: 'utf8' }).trim(), entry.formattedGitBlob);
+          }
+          const changed = execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+          assert(changed.every((file) => manifest.entries.some((entry) => entry.path === file)));
+          assert.equal(execFileSync('git', ['ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' }).trim(), '');
+          NODE
+          git diff --exit-code -- dist
+      - name: Preserve the exact formatting and qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: action-restore-boundaries-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/action-restore-boundaries/
+          if-no-files-found: error
+          retention-days: 7

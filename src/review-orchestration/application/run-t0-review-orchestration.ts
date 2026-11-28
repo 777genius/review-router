@@ -323,12 +323,8 @@ export class RunT0ReviewOrchestration {
       this.dependencies.signal?.throwIfAborted();
       const currentAuthorization = authorization;
       let initialRestoredExecution: RestoredReviewExecution | null | undefined;
-      if (
-        !execution &&
-        !command.restoredExecution &&
-        !executionStartAttempted &&
-        currentAuthorization
-      ) {
+      let preStartRestoredExecution: RestoredReviewExecution | null = null;
+      if (!execution && !command.restoredExecution && currentAuthorization) {
         // An omitted or failed restore does not prove this execution is absent.
         try {
           validateAuthorizationScope(command, currentAuthorization);
@@ -337,7 +333,18 @@ export class RunT0ReviewOrchestration {
               authorization: currentAuthorization,
               reviewRevisionHash: command.reviewRevisionHash,
             });
-          initialRestoredExecution = await initialExecutionRestore;
+          const restoredBeforeStart = await initialExecutionRestore;
+          if (executionStartAttempted) {
+            // A lost start ACK can hide work admitted after this earlier read.
+            preStartRestoredExecution = restoredBeforeStart;
+            initialRestoredExecution =
+              await this.dependencies.controlPlane.restoreExecution({
+                authorization: currentAuthorization,
+                reviewRevisionHash: command.reviewRevisionHash,
+              });
+          } else {
+            initialRestoredExecution = restoredBeforeStart;
+          }
         } catch {
           this.dependencies.signal?.throwIfAborted();
         }
@@ -381,12 +388,19 @@ export class RunT0ReviewOrchestration {
                 original.generation !== restored.generation))
           )
             throw new Error('review_orchestration_cancellation_scope_mismatch');
+          validateRestoredExecutionContinuity(
+            preStartRestoredExecution,
+            original
+          );
           cancelledExecution = original;
           await confirmReviewExecutionCancellation({
             authorization: currentAuthorization,
             execution: original,
             controlPlane: this.dependencies.controlPlane,
             identities: this.dependencies.identities,
+            ...(executionStartAttempted && initialRestoredExecution
+              ? { restoredExecution: initialRestoredExecution }
+              : {}),
             signal: this.dependencies.signal,
           });
           acknowledged = true;
@@ -1674,6 +1688,13 @@ export class RunT0ReviewOrchestration {
       input.workSlot.providerVoteIdentityHash
     );
     const waitSignal = reviewerSignal ?? this.dependencies.signal;
+    const originalManifest =
+      input.restoredAcceptedHint ??
+      (input.restoredSlot.state === RestoredReviewWorkSlotState.Satisfied
+        ? input.execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
+            (manifest) => manifest.workSlotId === input.workSlot.workSlotId
+          )
+        : undefined);
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest: ProviderInvocationManifest | null = null;
     let handledInvestigationOrdinal: number | null = null;
@@ -1699,15 +1720,13 @@ export class RunT0ReviewOrchestration {
             workSlot: input.workSlot,
             attemptOrdinal,
             ...(reviewerSignal ? { signal: reviewerSignal } : {}),
-            ...(input.restoredAcceptedHint
-              ? { originalManifest: input.restoredAcceptedHint }
-              : {}),
+            ...(originalManifest ? { originalManifest } : {}),
           });
         reviewerSignal?.throwIfAborted();
-        const authoritativeManifest = input.restoredAcceptedHint
+        const authoritativeManifest = originalManifest
           ? await this.dependencies.invocationManifestAssembler.assemble(
               authoritativeInvocation,
-              input.restoredAcceptedHint
+              originalManifest
             )
           : await this.dependencies.invocationManifestAssembler.assemble(
               authoritativeInvocation

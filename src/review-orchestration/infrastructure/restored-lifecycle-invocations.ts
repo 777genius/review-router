@@ -9,6 +9,7 @@ import {
   type ProviderInvocationManifestAssemblerPort,
   type PreparedReviewInvocationManifestFacts,
   type ProviderInvocationManifest,
+  type ReviewWorkSlotPlan,
 } from '../application';
 import {
   createReviewPromptCoverageManifest,
@@ -81,22 +82,28 @@ export function restoreProductionLifecycleVerification(
   };
 }
 
+type RestoredInvocationScope = Readonly<{
+  reviewRevisionHash: string;
+  workSlots: readonly ReviewWorkSlotPlan[];
+}>;
+
 /** Restored lifecycle evidence never rebuilds a packet, reads source, or becomes runnable inference. */
 export function restoredLifecycleInvocations(
-  restored: RestoredReviewExecution,
-  discovery: PreparedReviewInvocationPort
+  restored: RestoredReviewExecution | null,
+  discovery: PreparedReviewInvocationPort,
+  scope?: RestoredInvocationScope
 ): PreparedReviewInvocationPort {
   const manifests = new Map(
     [
-      ...(restored.persistedPlan?.acceptedManifests ?? []),
-      ...(restored.persistedPlan?.unattachedAcceptedManifests ?? []),
+      ...(restored?.persistedPlan?.acceptedManifests ?? []),
+      ...(restored?.persistedPlan?.unattachedAcceptedManifests ?? []),
     ].map((value) => [value.workSlotId, value])
   );
   const readOnlySlots = new Set([
-    ...restored.workSlots
+    ...(restored?.workSlots ?? [])
       .filter((slot) => slot.state === RestoredReviewWorkSlotState.Satisfied)
       .map((slot) => slot.workSlotId),
-    ...(restored.persistedPlan?.unattachedAcceptedManifests ?? []).map(
+    ...(restored?.persistedPlan?.unattachedAcceptedManifests ?? []).map(
       (hint) => hint.workSlotId
     ),
   ]);
@@ -112,11 +119,28 @@ export function restoredLifecycleInvocations(
         throw new Error('review_restore_accepted_manifest_scope_mismatch');
       if (
         !input.originalManifest &&
-        input.workSlot.taskKind !== ReviewTaskKind.LifecycleRevalidation &&
-        !readOnlySlots.has(input.workSlot.workSlotId)
+        (!restored?.persistedPlan ||
+          (input.workSlot.taskKind !== ReviewTaskKind.LifecycleRevalidation &&
+            !readOnlySlots.has(input.workSlot.workSlotId)))
       )
         return discovery.prepare(input);
-      if (!original || input.attemptOrdinal !== 1)
+      const knownSlot = scope?.workSlots.find(
+        (slot) => slot.workSlotId === input.workSlot.workSlotId
+      );
+      if (
+        scope &&
+        ((restored &&
+          scope.reviewRevisionHash !== restored.reviewRevisionHash) ||
+          !knownSlot ||
+          knownSlot.providerVoteIdentityHash !==
+            input.workSlot.providerVoteIdentityHash ||
+          knownSlot.providerKind !== input.workSlot.providerKind ||
+          knownSlot.taskKind !== input.workSlot.taskKind)
+      )
+        throw new Error('review_restore_accepted_manifest_scope_mismatch');
+      const reviewRevisionHash =
+        scope?.reviewRevisionHash ?? restored?.reviewRevisionHash;
+      if (!original || input.attemptOrdinal !== 1 || !reviewRevisionHash)
         throw new Error('review_restore_accepted_manifest_unavailable');
       const wire = JSON.parse(
         original.manifestCanonicalJson
@@ -133,7 +157,7 @@ export function restoredLifecycleInvocations(
         input.workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation
           ? createReviewPromptCoverageManifest({
               workSlotId: input.workSlot.workSlotId,
-              reviewRevisionHash: restored.reviewRevisionHash,
+              reviewRevisionHash,
               assignedPaths: [],
               pathCoverage: [],
             })
@@ -158,7 +182,8 @@ export function restoredLifecycleInvocations(
     async execute(input) {
       if (
         readOnlySlots.has(input.invocation.workSlotId) ||
-        (input.invocation.manifestFacts.taskKindSet.length === 1 &&
+        (restored?.persistedPlan &&
+          input.invocation.manifestFacts.taskKindSet.length === 1 &&
           input.invocation.manifestFacts.taskKindSet[0] ===
             ReviewTaskKind.LifecycleRevalidation)
       )
@@ -170,19 +195,23 @@ export function restoredLifecycleInvocations(
 
 export function restoredLifecycleManifestAssembler(
   restored: RestoredReviewExecution | null,
-  discovery: ProviderInvocationManifestAssemblerPort
+  discovery: ProviderInvocationManifestAssemblerPort,
+  scope?: RestoredInvocationScope
 ): ProviderInvocationManifestAssemblerPort {
-  if (!restored?.persistedPlan) return discovery;
+  if (!restored?.persistedPlan && !scope) return discovery;
   const manifests = new Map(
     [
-      ...(restored.persistedPlan.acceptedManifests ?? []),
-      ...(restored.persistedPlan.unattachedAcceptedManifests ?? []),
+      ...(restored?.persistedPlan?.acceptedManifests ?? []),
+      ...(restored?.persistedPlan?.unattachedAcceptedManifests ?? []),
     ].map((value) => [value.workSlotId, value])
   );
   return {
     async assemble(invocation, originalManifest) {
       if (originalManifest) {
-        const slot = restored.workSlots.find(
+        const slot = (restored?.workSlots ?? scope?.workSlots ?? []).find(
+          (value) => value.workSlotId === invocation.workSlotId
+        );
+        const knownSlot = scope?.workSlots.find(
           (value) => value.workSlotId === invocation.workSlotId
         );
         const captured = manifests.get(invocation.workSlotId);
@@ -190,11 +219,23 @@ export function restoredLifecycleManifestAssembler(
           originalManifest.workSlotId !== invocation.workSlotId ||
           slot?.providerVoteIdentityHash !==
             originalManifest.providerVoteIdentityHash ||
+          (scope &&
+            ((restored &&
+              scope.reviewRevisionHash !== restored.reviewRevisionHash) ||
+              !knownSlot ||
+              knownSlot.providerVoteIdentityHash !==
+                originalManifest.providerVoteIdentityHash ||
+              knownSlot.providerKind !==
+                invocation.manifestFacts.providerKind ||
+              !invocation.manifestFacts.taskKindSet.includes(
+                knownSlot.taskKind
+              ))) ||
           (captured && !sameManifest(originalManifest, captured))
         )
           throw new Error('review_restore_accepted_manifest_scope_mismatch');
         return originalManifest;
       }
+      if (!restored?.persistedPlan) return discovery.assemble(invocation);
       const originalSource =
         restored.workSlots.some(
           (slot) =>

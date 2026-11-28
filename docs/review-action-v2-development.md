@@ -496,8 +496,10 @@ cancellation path instead of manufacturing an acknowledgement.
 The public runner applies the same confirmation before early closed/moved
 outcomes, including base/head drift observed during PR loading. Bind cleanup to
 the original authenticated restored execution. An initial successful null
-restore stays mutation-free; a missing later readback cannot erase known
-admission. Closed returns Cancelled; moved returns Superseded only after
+restore stays mutation-free only before any start attempt. After a lost start
+acknowledgement, read again under the same original authorization and reconcile
+any returned execution. A fresh null or failed read remains unconfirmed; a missing
+later readback cannot erase known admission. Closed returns Cancelled; moved returns Superseded only after
 confirmed original-execution termination.
 
 ### Completed output and GitHub freshness
@@ -549,6 +551,18 @@ preparation and assembly path, without capturing current memory. Conflicting
 retained and refreshed source identities are rejected. If the refreshed slot
 is already Satisfied by that exact original observation, verify its original
 lookup proof and reuse the attachment without another adoption or lease.
+
+A Satisfied slot may first appear with `acceptedManifests` in a refreshed read,
+even when planning contained no unattached hint. Carry that original manifest
+through read-only preparation and assembly and verify its exact
+`acceptedObservationRefId` against lookup. A null planning read can race with
+another owner before idempotent start returns the accepted execution. The
+single final invocation boundary uses the admitted revision and work-slot plan
+for that late original, without fabricating a restoration authority snapshot
+or adding a second per-reviewer wrapper. Without an original or persisted plan,
+fresh preparation, assembly, and execution keep their ordinary route. The existing attachment needs no
+adoption or provider lease; exhausted-slot admission rules remain specific to
+unattached-source recovery.
 
 The source work deadline and report window remain distinct. Check the Action
 hard deadline and outer abort before lookup and after the adoption refresh.

@@ -362,13 +362,13 @@ describe('ProductionT0ReviewRunner policy', () => {
               workSlot,
               attemptOrdinal: 1,
             });
-            const manifest = JSON.parse(
-              (
-                await dependencies.invocationManifestAssembler.assemble(
-                  invocation
-                )
-              ).manifestCanonicalJson
-            ) as { memoryBundleHash: string | null };
+            const assembled =
+              await dependencies.invocationManifestAssembler.assemble(
+                invocation
+              );
+            const manifest = JSON.parse(assembled.manifestCanonicalJson) as {
+              memoryBundleHash: string | null;
+            };
             prepared.push({
               prompt: invocation.reviewPrompt,
               hash: manifest.memoryBundleHash,
@@ -382,6 +382,31 @@ describe('ProductionT0ReviewRunner policy', () => {
                   manifest.memoryBundleHash
                 )
               ).toBe(true);
+            if (count === 1 && !command.restoredExecution) {
+              const original = {
+                ...assembled,
+                workSlotId: workSlot.workSlotId,
+              };
+              const readOnly = await dependencies.invocations.prepare({
+                workSlot,
+                attemptOrdinal: 1,
+                originalManifest: original,
+              });
+              expect(readOnly.reviewPrompt).toBe('');
+              expect(readOnly.immutableRequest).toBeNull();
+              expect(readOnly.manifestFacts.memoryBundleHash).toBe(
+                invocation.manifestFacts.memoryBundleHash
+              );
+              expect(readOnly.coverageManifest).toEqual(
+                invocation.coverageManifest
+              );
+              await expect(
+                dependencies.invocationManifestAssembler.assemble(
+                  readOnly,
+                  original
+                )
+              ).resolves.toBe(original);
+            }
           }
           if (mode === 'description') {
             const descriptionSlot = command.workSlots.find(
@@ -1098,6 +1123,30 @@ describe('ProductionT0ReviewRunner policy', () => {
                 expect(
                   JSON.parse(assembled.manifestCanonicalJson).requestedModel
                 ).toBe(reviewer.requestedModel);
+                expect(command.restoredExecution).toBeUndefined();
+                const original = {
+                  ...assembled,
+                  workSlotId: workSlot.workSlotId,
+                };
+                const readOnly = await dependencies.invocations.prepare({
+                  workSlot,
+                  attemptOrdinal: 1,
+                  originalManifest: original,
+                });
+                expect(readOnly.reviewPrompt).toBe('');
+                expect(readOnly.immutableRequest).toBeNull();
+                expect(readOnly.manifestFacts.memoryBundleHash).toBe(
+                  invocation.manifestFacts.memoryBundleHash
+                );
+                expect(readOnly.coverageManifest).toEqual(
+                  invocation.coverageManifest
+                );
+                await expect(
+                  dependencies.invocationManifestAssembler.assemble(
+                    readOnly,
+                    original
+                  )
+                ).resolves.toBe(original);
               }
               expect(
                 dependencies.resolveInvestigationRecording?.(workSlot)

@@ -1289,19 +1289,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 oidc: {
                   getToken: () => oidc.requestToken(input.audience),
                 },
-                invocationManifestAssembler: restoredLifecycleManifestAssembler(
-                  preplanningRestore,
+                invocationManifestAssembler:
                   new GeneratedProviderInvocationManifestAssembler(
                     authorization,
                     config,
                     ocrCompatibilityKey
-                  )
-                ),
+                  ),
                 invocations: preplanningRestore?.persistedPlan
-                  ? restoredLifecycleInvocations(
-                      preplanningRestore,
-                      discoveryInvocations
-                    )
+                  ? discoveryInvocations
                   : lifecycle && lifecycleCapability
                     ? compositeLifecycleInvocations({
                         discovery: discoveryInvocations,
@@ -1799,19 +1794,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             oidc: {
               getToken: () => oidc.requestToken(input.audience),
             },
-            invocationManifestAssembler: restoredLifecycleManifestAssembler(
-              preplanningRestore,
+            invocationManifestAssembler:
               new GeneratedProviderInvocationManifestAssembler(
                 authorization,
                 config,
                 compatibilityKey
-              )
-            ),
+              ),
             invocations: preplanningRestore?.persistedPlan
-              ? restoredLifecycleInvocations(
-                  preplanningRestore,
-                  nativeDiscoveryInvocations
-                )
+              ? nativeDiscoveryInvocations
               : lifecycle && lifecycleCapability
                 ? compositeLifecycleInvocations({
                     discovery: nativeDiscoveryInvocations,
@@ -2027,117 +2017,132 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             runtime.modelTransport,
           ]) ?? []
         );
-        const dependencies: RunT0ReviewOrchestrationDependencies = reviewerPlan
-          ? {
-              ...primary.dependencies,
-              memoryAdmission,
-              invocations: parentRestore?.persistedPlan
-                ? restoredLifecycleInvocations(parentRestore, laneInvocations)
-                : laneInvocations,
-              invocationManifestAssembler: restoredLifecycleManifestAssembler(
-                parentRestore,
-                {
+        const unwrappedDependencies: RunT0ReviewOrchestrationDependencies =
+          reviewerPlan
+            ? {
+                ...primary.dependencies,
+                memoryAdmission,
+                invocations: laneInvocations,
+                invocationManifestAssembler: {
                   assemble: (invocation) =>
                     route(
                       invocationSlot(invocation)
                     ).dependencies.invocationManifestAssembler.assemble(
                       invocation
                     ),
-                }
-              ),
-              investigationInvocations: {
-                prepare: (request) => {
-                  const port = route(request.workSlot).dependencies
-                    .investigationInvocations;
-                  if (!port)
-                    throw new Error(
-                      'review_investigation_reviewer_unavailable'
-                    );
-                  return port.prepare(request);
                 },
-                execute: (request) => {
-                  const port = route(invocationSlot(request.invocation))
-                    .dependencies.investigationInvocations;
-                  if (!port)
-                    throw new Error(
-                      'review_investigation_reviewer_unavailable'
-                    );
-                  return port.execute(request);
+                investigationInvocations: {
+                  prepare: (request) => {
+                    const port = route(request.workSlot).dependencies
+                      .investigationInvocations;
+                    if (!port)
+                      throw new Error(
+                        'review_investigation_reviewer_unavailable'
+                      );
+                    return port.prepare(request);
+                  },
+                  execute: (request) => {
+                    const port = route(invocationSlot(request.invocation))
+                      .dependencies.investigationInvocations;
+                    if (!port)
+                      throw new Error(
+                        'review_investigation_reviewer_unavailable'
+                      );
+                    return port.execute(request);
+                  },
                 },
-              },
-              resolveInvestigationRecording: (slot) =>
-                route(slot).dependencies.investigationRecording,
-              ...(preparedLanes.some((lane) => lane.dependencies.contextReplay)
-                ? {
-                    contextReplay: {
-                      replay: (request) =>
-                        route(
-                          request.candidate.observation
-                        ).dependencies.contextReplay?.replay(request) ??
-                        Promise.resolve(null),
-                    },
-                    contextAttestations: controlPlane,
-                  }
-                : {}),
-              invocationFailureClassifier:
-                new ProviderInvocationFailureClassifier((context) =>
-                  context
-                    ? modelTransports
-                        .get(context.workSlot.providerVoteIdentityHash)
-                        ?.failureFact()
-                    : undefined
-                ),
-              reviewerScheduling: reviewerSchedulingFromPlan(reviewerPlan),
-              projectionBuilder: createProductionReviewProjectionBuilder({
-                providerFailure: () =>
-                  [...modelTransports.values()]
-                    .map((transport) =>
-                      confirmedProviderFailure(transport.failureFact())
-                    )
-                    .find(
-                      (notice) =>
-                        notice === 'upstream_failure_unknown' ||
-                        notice === 'request_outcome_unknown'
-                    ) ??
-                  [...modelTransports.values()]
-                    .map((transport) =>
-                      confirmedProviderFailure(transport.failureFact())
-                    )
-                    .find((notice) => notice !== undefined) ??
-                  (lifecycleOutputInvalid ? 'output_invalid' : undefined),
-                providerQuota: () =>
-                  [...modelTransports.values()]
-                    .map((transport) =>
-                      confirmedProviderQuota(transport.failureFact())
-                    )
-                    .filter((quota) => quota !== undefined)
-                    .sort((a, b) => b.resetAt.localeCompare(a.resetAt))[0],
-                reviewerModels: new Map(
-                  reviewerPlan.reviewers.map((reviewer) => [
-                    reviewer.providerVoteIdentityHash,
-                    reviewer.requestedModel,
-                  ])
-                ),
-                authorizationFacts: authorization.facts,
-                pr,
-                config: {
-                  ...parentConfig,
-                  inlineMinAgreement: reviewerPlan.inlineMinAgreement,
-                },
-                protocolLimits: authorization.limits,
-                assignments: combined.assignments,
-                uncoveredPaths: combined.uncoveredPaths,
-                ...(combined.unfinishedPaths
-                  ? { unfinishedPaths: combined.unfinishedPaths }
+                resolveInvestigationRecording: (slot) =>
+                  route(slot).dependencies.investigationRecording,
+                ...(preparedLanes.some(
+                  (lane) => lane.dependencies.contextReplay
+                )
+                  ? {
+                      contextReplay: {
+                        replay: (request) =>
+                          route(
+                            request.candidate.observation
+                          ).dependencies.contextReplay?.replay(request) ??
+                          Promise.resolve(null),
+                      },
+                      contextAttestations: controlPlane,
+                    }
                   : {}),
-                uncoveredLifecycleTargetIds:
-                  combined.uncoveredLifecycleTargetIds,
-                lifecycleInventory,
-                ...(lifecycleVerification ? { lifecycleVerification } : {}),
-                skillsReceipt,
-              }),
-            }
-          : primary.dependencies;
+                invocationFailureClassifier:
+                  new ProviderInvocationFailureClassifier((context) =>
+                    context
+                      ? modelTransports
+                          .get(context.workSlot.providerVoteIdentityHash)
+                          ?.failureFact()
+                      : undefined
+                  ),
+                reviewerScheduling: reviewerSchedulingFromPlan(reviewerPlan),
+                projectionBuilder: createProductionReviewProjectionBuilder({
+                  providerFailure: () =>
+                    [...modelTransports.values()]
+                      .map((transport) =>
+                        confirmedProviderFailure(transport.failureFact())
+                      )
+                      .find(
+                        (notice) =>
+                          notice === 'upstream_failure_unknown' ||
+                          notice === 'request_outcome_unknown'
+                      ) ??
+                    [...modelTransports.values()]
+                      .map((transport) =>
+                        confirmedProviderFailure(transport.failureFact())
+                      )
+                      .find((notice) => notice !== undefined) ??
+                    (lifecycleOutputInvalid ? 'output_invalid' : undefined),
+                  providerQuota: () =>
+                    [...modelTransports.values()]
+                      .map((transport) =>
+                        confirmedProviderQuota(transport.failureFact())
+                      )
+                      .filter((quota) => quota !== undefined)
+                      .sort((a, b) => b.resetAt.localeCompare(a.resetAt))[0],
+                  reviewerModels: new Map(
+                    reviewerPlan.reviewers.map((reviewer) => [
+                      reviewer.providerVoteIdentityHash,
+                      reviewer.requestedModel,
+                    ])
+                  ),
+                  authorizationFacts: authorization.facts,
+                  pr,
+                  config: {
+                    ...parentConfig,
+                    inlineMinAgreement: reviewerPlan.inlineMinAgreement,
+                  },
+                  protocolLimits: authorization.limits,
+                  assignments: combined.assignments,
+                  uncoveredPaths: combined.uncoveredPaths,
+                  ...(combined.unfinishedPaths
+                    ? { unfinishedPaths: combined.unfinishedPaths }
+                    : {}),
+                  uncoveredLifecycleTargetIds:
+                    combined.uncoveredLifecycleTargetIds,
+                  lifecycleInventory,
+                  ...(lifecycleVerification ? { lifecycleVerification } : {}),
+                  skillsReceipt,
+                }),
+              }
+            : primary.dependencies;
+        const restorationScope = {
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          workSlots: plan.assignments.map((assignment) => assignment.workSlot),
+        };
+        const dependencies: RunT0ReviewOrchestrationDependencies = {
+          ...unwrappedDependencies,
+          invocations: restoredLifecycleInvocations(
+            parentRestore,
+            unwrappedDependencies.invocations,
+            restorationScope
+          ),
+          invocationManifestAssembler: restoredLifecycleManifestAssembler(
+            parentRestore,
+            unwrappedDependencies.invocationManifestAssembler,
+            restorationScope
+          ),
+        };
         const command: RunT0ReviewOrchestrationCommand = {
           executionId: identities.deterministicId('execution', [
             authorization.authorizationId,

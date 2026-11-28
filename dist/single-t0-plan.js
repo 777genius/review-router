@@ -189640,7 +189640,7 @@ var GitHubClient = class {
     }
   }
 };
-function createResilientOctokit(initialToken, tokenProvider, sleep = (delayMs) => new Promise((resolve5) => setTimeout(resolve5, delayMs))) {
+function createResilientOctokit(initialToken, tokenProvider, sleep) {
   const octokit = new import_rest.Octokit();
   octokit.hook.wrap("request", async (request3, options) => {
     const requestWithToken = (token2) => {
@@ -189681,11 +189681,29 @@ function createResilientOctokit(initialToken, tokenProvider, sleep = (delayMs) =
         info2(
           `GitHub read retry ${retries}/${GITHUB_READ_RETRY_DELAYS_MS.length} in ${waitMs} ms after ${describeFailure(failureClass, status)}`
         );
-        await sleep(waitMs);
+        if (sleep) await sleep(waitMs);
+        else await waitForGitHubReadRetry(waitMs, options.request?.signal);
+        options.request?.signal?.throwIfAborted();
       }
     }
   });
   return octokit;
+}
+function waitForGitHubReadRetry(delayMs, signal) {
+  signal?.throwIfAborted();
+  return new Promise((resolve5, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve5();
+    }, delayMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
 }
 function getHttpStatus(error3) {
   if (typeof error3 !== "object" || error3 === null) {
@@ -195590,18 +195608,23 @@ var RunT0ReviewOrchestration = class {
     let initialExecutionRestore;
     const stoppedResult = async (status) => {
       this.dependencies.signal?.throwIfAborted();
+      const currentAuthorization = authorization;
       let initialRestoredExecution;
-      if (!execution && !command.restoredExecution && !executionStartAttempted && initialExecutionRestore) {
+      if (!execution && !command.restoredExecution && !executionStartAttempted && currentAuthorization) {
         try {
+          validateAuthorizationScope(command, currentAuthorization);
+          initialExecutionRestore ??= this.dependencies.controlPlane.restoreExecution({
+            authorization: currentAuthorization,
+            reviewRevisionHash: command.reviewRevisionHash
+          });
           initialRestoredExecution = await initialExecutionRestore;
         } catch {
           this.dependencies.signal?.throwIfAborted();
         }
         this.dependencies.signal?.throwIfAborted();
       }
-      let acknowledged = !execution && !command.restoredExecution && !executionStartAttempted && (!initialExecutionRestore || initialRestoredExecution === null);
+      let acknowledged = !execution && !command.restoredExecution && !executionStartAttempted && initialRestoredExecution === null;
       let cancelledExecution = execution;
-      const currentAuthorization = authorization;
       if (!acknowledged && currentAuthorization) {
         try {
           validateAuthorizationScope(command, currentAuthorization);
@@ -195621,7 +195644,6 @@ var RunT0ReviewOrchestration = class {
             execution: original,
             controlPlane: this.dependencies.controlPlane,
             identities: this.dependencies.identities,
-            restoredExecution: initialRestoredExecution ?? void 0,
             signal: this.dependencies.signal
           });
           acknowledged = true;
@@ -195687,10 +195709,12 @@ var RunT0ReviewOrchestration = class {
         authorization,
         reviewRevisionHash: command.reviewRevisionHash
       };
-      initialExecutionRestore = this.dependencies.controlPlane.restoreExecution({
-        authorization,
-        reviewRevisionHash: command.reviewRevisionHash
-      });
+      initialExecutionRestore = this.dependencies.controlPlane.restoreExecution(
+        {
+          authorization,
+          reviewRevisionHash: command.reviewRevisionHash
+        }
+      );
       const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
@@ -195811,7 +195835,32 @@ var RunT0ReviewOrchestration = class {
           )
         };
       };
+      const restoredAcceptedHintFor = (workSlotId) => {
+        const retained = command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
+          (hint) => hint.workSlotId === workSlotId
+        );
+        const refreshed = execution.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
+          (hint) => hint.workSlotId === workSlotId
+        );
+        if (retained && refreshed && ![
+          "manifestCanonicalJson",
+          "manifestKey",
+          "providerInvocationKey",
+          "providerVoteIdentityHash",
+          "observationId",
+          "payloadHash",
+          "sourceLeaseId",
+          "sourceFencingToken",
+          "sourceOwnerIdHash"
+        ].every((key) => retained[key] === refreshed[key]))
+          throw new Error("review_orchestration_unattached_source_changed");
+        return retained ?? refreshed;
+      };
       const runWorkSlot = async (workSlot) => {
+        if (acceptedEvidence.some(
+          (item) => item.workSlotId === workSlot.workSlotId
+        ))
+          return;
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
           throw new Error("review_orchestration_restored_work_slot_missing");
@@ -195820,12 +195869,29 @@ var RunT0ReviewOrchestration = class {
           (slot) => slot.workSlotId === workSlot.workSlotId
         );
         const restoredSatisfied = restoredSlot.state === "satisfied" /* Satisfied */;
-        const restoredAcceptedHint = command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
-          (hint) => hint.workSlotId === workSlot.workSlotId
-        ) ?? execution.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
-          (hint) => hint.workSlotId === workSlot.workSlotId
+        const restoredAcceptedHint = restoredAcceptedHintFor(
+          workSlot.workSlotId
         );
-        if (restoredAcceptedHint && (!command.restoreOnly || workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */ || workSlot.attemptBudget !== 1 || persistedSlot?.nextAttemptOrdinal !== 2 || restoredSlot.state !== "exhausted" /* Exhausted */ || restoredSlot.activeLeaseId !== null || restoredSlot.acceptedObservationRefId !== null)) throw new Error("review_orchestration_unattached_source_changed");
+        if (restoredAcceptedHint) {
+          const stillUnattached = restoredSlot.state === "exhausted" /* Exhausted */ && restoredSlot.acceptedObservationRefId === null;
+          const alreadyAttached = restoredSatisfied && restoredSlot.acceptedObservationRefId === observationRefId(
+            execution.executionId,
+            workSlot.workSlotId,
+            restoredAcceptedHint.observationId
+          );
+          const acceptedManifest = execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
+            (manifest) => manifest.workSlotId === workSlot.workSlotId
+          );
+          if (!command.restoreOnly || workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */ || workSlot.attemptBudget !== 1 || persistedSlot?.nextAttemptOrdinal !== 2 || restoredSlot.activeLeaseId !== null || !stillUnattached && !alreadyAttached || alreadyAttached && acceptedManifest && ![
+            "manifestCanonicalJson",
+            "manifestKey",
+            "providerInvocationKey",
+            "providerVoteIdentityHash"
+          ].every(
+            (key) => acceptedManifest[key] === restoredAcceptedHint[key]
+          ))
+            throw new Error("review_orchestration_unattached_source_changed");
+        }
         const lifecycleEvidenceUnavailable = workSlot.taskKind === "lifecycle_revalidation" /* LifecycleRevalidation */ && (!restoredSatisfied || !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
           (manifest) => manifest.workSlotId === workSlot.workSlotId
         ));
@@ -195887,7 +195953,8 @@ var RunT0ReviewOrchestration = class {
             state3 = evolveReviewOrchestration(state3, event);
           }
         }).catch((error3) => {
-          if (!restoredAcceptedHint || error3 instanceof ReviewExecutionSupersededSignal || error3 instanceof ReviewExecutionCancelledSignal || error3 instanceof ReviewExecutionDeadlineReachedSignal) throw error3;
+          if (!restoredAcceptedHint || error3 instanceof ReviewExecutionSupersededSignal || error3 instanceof ReviewExecutionCancelledSignal || error3 instanceof ReviewExecutionDeadlineReachedSignal)
+            throw error3;
           this.dependencies.signal?.throwIfAborted();
           throw new Error(
             "review_orchestration_unattached_observation_unavailable"
@@ -196012,6 +196079,11 @@ var RunT0ReviewOrchestration = class {
           });
         };
         try {
+          for (const slot of command.workSlots) {
+            if (!restoredAcceptedHintFor(slot.workSlotId)) continue;
+            this.runAbort.signal.throwIfAborted();
+            await runWorkSlot(slot);
+          }
           while (pending.length || active.size) {
             while (!parentFailure && !this.runAbort.signal.aborted && active.size < (fallback ? 1 : scheduling.maxParallelReviewers)) {
               if (fallback && fallbackChainSettled(fallbackOutcomes)) {
@@ -196039,7 +196111,10 @@ var RunT0ReviewOrchestration = class {
                   fallbackOutcomes.set(
                     lane.providerVoteIdentityHash,
                     fallbackLaneOutcome(
-                      false,
+                      reviewerCompletedRequiredWork(
+                        lane.slots,
+                        acceptedEvidence
+                      ),
                       stopReasons.get(lane.providerVoteIdentityHash)
                     )
                   );
@@ -196580,10 +196655,14 @@ var RunT0ReviewOrchestration = class {
         const authoritativeInvocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
           attemptOrdinal,
-          ...reviewerSignal ? { signal: reviewerSignal } : {}
+          ...reviewerSignal ? { signal: reviewerSignal } : {},
+          ...input.restoredAcceptedHint ? { originalManifest: input.restoredAcceptedHint } : {}
         });
         reviewerSignal?.throwIfAborted();
-        const authoritativeManifest = await this.dependencies.invocationManifestAssembler.assemble(
+        const authoritativeManifest = input.restoredAcceptedHint ? await this.dependencies.invocationManifestAssembler.assemble(
+          authoritativeInvocation,
+          input.restoredAcceptedHint
+        ) : await this.dependencies.invocationManifestAssembler.assemble(
           authoritativeInvocation
         );
         validateManifest(authoritativeManifest);
@@ -197077,7 +197156,8 @@ var RunT0ReviewOrchestration = class {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
         }
       } catch (error3) {
-        if (input.restoredAcceptedHint || !(error3 instanceof ReviewMemoryAdmissionChangedSignal)) throw error3;
+        if (input.restoredAcceptedHint || !(error3 instanceof ReviewMemoryAdmissionChangedSignal))
+          throw error3;
         attemptOrdinal -= 1;
       }
     }
@@ -197221,7 +197301,8 @@ var RunT0ReviewOrchestration = class {
       planHash: input.planHash,
       manifest: input.manifest
     });
-    if (hint && (lookup2.kind !== "hit" /* Hit */ || lookup2.attachment.kind !== "same_execution" || lookup2.observation.observationId !== hint.observationId || lookup2.observation.payloadHash !== hint.payloadHash || lookup2.observation.providerInvocationKey !== hint.providerInvocationKey || lookup2.observation.providerVoteIdentityHash !== hint.providerVoteIdentityHash || lookup2.attachment.sourceLeaseId !== hint.sourceLeaseId || lookup2.attachment.sourceFencingToken !== hint.sourceFencingToken || lookup2.attachment.sourceOwnerIdHash !== hint.sourceOwnerIdHash)) throw new Error("review_orchestration_unattached_observation_mismatch");
+    if (hint && (lookup2.kind !== "hit" /* Hit */ || lookup2.attachment.kind !== "same_execution" || lookup2.observation.observationId !== hint.observationId || lookup2.observation.payloadHash !== hint.payloadHash || lookup2.observation.providerInvocationKey !== hint.providerInvocationKey || lookup2.observation.providerVoteIdentityHash !== hint.providerVoteIdentityHash || lookup2.attachment.sourceLeaseId !== hint.sourceLeaseId || lookup2.attachment.sourceFencingToken !== hint.sourceFencingToken || lookup2.attachment.sourceOwnerIdHash !== hint.sourceOwnerIdHash))
+      throw new Error("review_orchestration_unattached_observation_mismatch");
     if (lookup2.kind === "miss" /* Miss */) return null;
     await this.assertRevisionCurrent(input.revision);
     if (!isOriginalAcceptedManifest(input, input.manifest))
@@ -199715,7 +199796,7 @@ var CodexReviewInvocationAdapter = class {
       this.promptBuilder,
       assignment,
       this.investigationManifestBindingEnabled,
-      this.reviewMemory?.current()
+      input.originalManifest ? void 0 : this.reviewMemory?.current()
     );
     const shouldPrepareInvestigationSeed = this.investigationManifestBindingEnabled && preparedPrompt.investigationProbePlan.status === "complete" /* Complete */;
     const [gatewayPlanningConfig, canonicalInventory] = this.contextGateway ? await Promise.all([
@@ -214640,8 +214721,11 @@ function restoredLifecycleInvocations(restored, discovery) {
   ]);
   return {
     async prepare(input) {
-      const original = manifests.get(input.workSlot.workSlotId);
-      if (input.workSlot.taskKind !== "lifecycle_revalidation" /* LifecycleRevalidation */ && !readOnlySlots.has(input.workSlot.workSlotId))
+      const captured = manifests.get(input.workSlot.workSlotId);
+      const original = input.originalManifest ?? captured;
+      if (input.originalManifest && (input.originalManifest.workSlotId !== input.workSlot.workSlotId || captured && !sameManifest(input.originalManifest, captured)))
+        throw new Error("review_restore_accepted_manifest_scope_mismatch");
+      if (!input.originalManifest && input.workSlot.taskKind !== "lifecycle_revalidation" /* LifecycleRevalidation */ && !readOnlySlots.has(input.workSlot.workSlotId))
         return discovery.prepare(input);
       if (!original || input.attemptOrdinal !== 1)
         throw new Error("review_restore_accepted_manifest_unavailable");
@@ -214650,12 +214734,17 @@ function restoredLifecycleInvocations(restored, discovery) {
       );
       if (!wire.taskKindSet.includes(input.workSlot.taskKind) || wire.providerKind !== input.workSlot.providerKind || original.providerVoteIdentityHash !== input.workSlot.providerVoteIdentityHash)
         throw new Error("review_restore_accepted_manifest_scope_mismatch");
+      readOnlySlots.add(input.workSlot.workSlotId);
       const coverage = input.workSlot.taskKind === "lifecycle_revalidation" /* LifecycleRevalidation */ ? createReviewPromptCoverageManifest({
         workSlotId: input.workSlot.workSlotId,
         reviewRevisionHash: restored.reviewRevisionHash,
         assignedPaths: [],
         pathCoverage: []
-      }) : await restoreDiscoveryCoverage(discovery, input, wire);
+      }) : await restoreDiscoveryCoverage(
+        discovery,
+        { ...input, originalManifest: original },
+        wire
+      );
       return Object.freeze({
         workSlotId: input.workSlot.workSlotId,
         attemptOrdinal: 1,
@@ -214685,7 +214774,16 @@ function restoredLifecycleManifestAssembler(restored, discovery) {
     ].map((value) => [value.workSlotId, value])
   );
   return {
-    async assemble(invocation) {
+    async assemble(invocation, originalManifest) {
+      if (originalManifest) {
+        const slot = restored.workSlots.find(
+          (value) => value.workSlotId === invocation.workSlotId
+        );
+        const captured = manifests.get(invocation.workSlotId);
+        if (originalManifest.workSlotId !== invocation.workSlotId || slot?.providerVoteIdentityHash !== originalManifest.providerVoteIdentityHash || captured && !sameManifest(originalManifest, captured))
+          throw new Error("review_restore_accepted_manifest_scope_mismatch");
+        return originalManifest;
+      }
       const originalSource = restored.workSlots.some(
         (slot) => slot.workSlotId === invocation.workSlotId && slot.state === "satisfied" /* Satisfied */
       ) || restored.persistedPlan?.unattachedAcceptedManifests?.some(
@@ -214716,6 +214814,9 @@ async function restoreDiscoveryCoverage(discovery, input, original) {
   if (hash3(canonicalJson15(context5)) !== original.contextManifestHash)
     throw new Error("review_restore_coverage_commitment_mismatch");
   return rebuilt.coverageManifest;
+}
+function sameManifest(left, right) {
+  return left.manifestCanonicalJson === right.manifestCanonicalJson && left.manifestKey === right.manifestKey && left.providerInvocationKey === right.providerInvocationKey && left.providerVoteIdentityHash === right.providerVoteIdentityHash;
 }
 function hash3(value) {
   return (0, import_node_crypto9.createHash)("sha256").update(value).digest("hex");
@@ -217050,7 +217151,7 @@ var OcrReviewInvocationAdapter = class {
     if (assignedPaths.length === 0) {
       throw new Error("review_action_v2_ocr_nothing_to_review");
     }
-    const memorySnapshot = this.options.reviewMemory?.current();
+    const memorySnapshot = input.originalManifest ? void 0 : this.options.reviewMemory?.current();
     const ruleText = memorySnapshot ? appendOcrReviewMemory(
       this.options.ruleText,
       memorySnapshot.renderedPrompt
@@ -217299,9 +217400,14 @@ var OcrReviewInvocationAdapter = class {
       let processResult2;
       try {
         this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-        return await this.runInvocation(input, assignment, preimages, (result2) => {
-          processResult2 = result2;
-        });
+        return await this.runInvocation(
+          input,
+          assignment,
+          preimages,
+          (result2) => {
+            processResult2 = result2;
+          }
+        );
       } catch (error3) {
         try {
           this.options.failureDiagnostic?.(
@@ -217599,9 +217705,7 @@ function parseOcrPreviewCoverage(raw, assignedPaths) {
       throw new Error("review_action_v2_ocr_preview_contract_invalid");
     }
     if (!assigned.has(path19)) {
-      if (entry.will_review || entry.exclude_reason !== "user_exclude" && (typeof entry.exclude_reason !== "string" || !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(
-        entry.exclude_reason
-      ))) {
+      if (entry.will_review || entry.exclude_reason !== "user_exclude" && (typeof entry.exclude_reason !== "string" || !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(entry.exclude_reason))) {
         throw new Error("review_action_v2_ocr_preview_scope_invalid");
       }
       continue;
@@ -224687,12 +224791,7 @@ function mapExecutionFailureReason(failureCode2) {
 function createScmReadGitHubClient(input) {
   const { signal, timeoutMs = 3e4 } = input;
   const github = new GitHubClient(input.token, {
-    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
-    ...signal ? {
-      sleep: async (ms) => {
-        await (0, import_promises13.setTimeout)(ms, void 0, { signal });
-      }
-    } : {}
+    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input)
   });
   if (signal) {
     github.octokit.hook.wrap("request", (request3, options) => {

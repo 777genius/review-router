@@ -14175,9 +14175,9 @@ var require_timers = __commonJS({
        * before the specified function or code is executed.
        * @param {*} arg
        */
-      constructor(callback, delay6, arg) {
+      constructor(callback, delay5, arg) {
         this._onTimeout = callback;
-        this._idleTimeout = delay6;
+        this._idleTimeout = delay5;
         this._timerArg = arg;
         this.refresh();
       }
@@ -14222,8 +14222,8 @@ var require_timers = __commonJS({
        * when the timer expires.
        * @returns {NodeJS.Timeout|FastTimer}
        */
-      setTimeout(callback, delay6, arg) {
-        return delay6 <= RESOLUTION_MS ? setTimeout(callback, delay6, arg) : new FastTimer(callback, delay6, arg);
+      setTimeout(callback, delay5, arg) {
+        return delay5 <= RESOLUTION_MS ? setTimeout(callback, delay5, arg) : new FastTimer(callback, delay5, arg);
       },
       /**
        * The clearTimeout method cancels an instantiated Timer previously created
@@ -14249,8 +14249,8 @@ var require_timers = __commonJS({
        * when the timer expires.
        * @returns {FastTimer}
        */
-      setFastTimeout(callback, delay6, arg) {
-        return new FastTimer(callback, delay6, arg);
+      setFastTimeout(callback, delay5, arg) {
+        return new FastTimer(callback, delay5, arg);
       },
       /**
        * The clearTimeout method cancels an instantiated FastTimer previously
@@ -14276,8 +14276,8 @@ var require_timers = __commonJS({
        * @deprecated
        * @param {number} [delay=0] The delay in milliseconds to add to the now value.
        */
-      tick(delay6 = 0) {
-        fastNow += delay6 - RESOLUTION_MS + 1;
+      tick(delay5 = 0) {
+        fastNow += delay5 - RESOLUTION_MS + 1;
         onTick();
         onTick();
       },
@@ -17676,21 +17676,21 @@ var require_client_h1 = __commonJS({
         this.connection = "";
         this.maxResponseSize = client2[kMaxResponseSize];
       }
-      setTimeout(delay6, type2) {
-        if (delay6 !== this.timeoutValue || type2 & USE_FAST_TIMER ^ this.timeoutType & USE_FAST_TIMER) {
+      setTimeout(delay5, type2) {
+        if (delay5 !== this.timeoutValue || type2 & USE_FAST_TIMER ^ this.timeoutType & USE_FAST_TIMER) {
           if (this.timeout) {
             timers.clearTimeout(this.timeout);
             this.timeout = null;
           }
-          if (delay6) {
+          if (delay5) {
             if (type2 & USE_FAST_TIMER) {
-              this.timeout = timers.setFastTimeout(onParserTimeout, delay6, new WeakRef(this));
+              this.timeout = timers.setFastTimeout(onParserTimeout, delay5, new WeakRef(this));
             } else {
-              this.timeout = setTimeout(onParserTimeout, delay6, new WeakRef(this));
+              this.timeout = setTimeout(onParserTimeout, delay5, new WeakRef(this));
               this.timeout.unref();
             }
           }
-          this.timeoutValue = delay6;
+          this.timeoutValue = delay5;
         } else if (this.timeout) {
           if (this.timeout.refresh) {
             this.timeout.refresh();
@@ -22643,7 +22643,7 @@ var require_mock_utils = __commonJS({
       if (mockDispatch2.data.callback) {
         mockDispatch2.data = { ...mockDispatch2.data, ...mockDispatch2.data.callback(opts) };
       }
-      const { data: { statusCode, data, headers, trailers, error: error4 }, delay: delay6, persist } = mockDispatch2;
+      const { data: { statusCode, data, headers, trailers, error: error4 }, delay: delay5, persist } = mockDispatch2;
       const { timesInvoked, times } = mockDispatch2;
       mockDispatch2.consumed = !persist && timesInvoked >= times;
       mockDispatch2.pending = timesInvoked < times;
@@ -22652,10 +22652,10 @@ var require_mock_utils = __commonJS({
         handler2.onError(error4);
         return true;
       }
-      if (typeof delay6 === "number" && delay6 > 0) {
+      if (typeof delay5 === "number" && delay5 > 0) {
         setTimeout(() => {
           handleReply(this[kDispatches]);
-        }, delay6);
+        }, delay5);
       } else {
         handleReply(this[kDispatches]);
       }
@@ -30084,7 +30084,7 @@ var require_util9 = __commonJS({
       }
       return true;
     }
-    function delay6(ms) {
+    function delay5(ms) {
       return new Promise((resolve6) => {
         setTimeout(resolve6, ms).unref();
       });
@@ -30092,7 +30092,7 @@ var require_util9 = __commonJS({
     module2.exports = {
       isValidLastEventId,
       isASCIINumber,
-      delay: delay6
+      delay: delay5
     };
   }
 });
@@ -30514,7 +30514,7 @@ var require_eventsource = __commonJS({
     var { parseMIMEType } = require_data_url();
     var { createFastMessageEvent } = require_events();
     var { isNetworkError: isNetworkError2 } = require_response();
-    var { delay: delay6 } = require_util9();
+    var { delay: delay5 } = require_util9();
     var { kEnumerableProperty } = require_util2();
     var { environmentSettingsObject } = require_util3();
     var { getGlobalDispatcher } = require_global2();
@@ -30687,7 +30687,7 @@ var require_eventsource = __commonJS({
         if (this.#readyState === CLOSED) return;
         this.#readyState = CONNECTING;
         this.dispatchEvent(new Event("error"));
-        await delay6(this.#state.reconnectionTime);
+        await delay5(this.#state.reconnectionTime);
         if (this.#readyState !== CONNECTING) return;
         if (this.#state.lastEventId.length) {
           this.#request.headersList.set("last-event-id", this.#state.lastEventId, true);
@@ -36706,7 +36706,7 @@ var require_test_transport = __commonJS({
             messages.push(this.data.response);
           }
           try {
-            yield delay6(this.responseDelay, abort)(void 0);
+            yield delay5(this.responseDelay, abort)(void 0);
           } catch (error4) {
             stream4.notifyError(error4);
             return;
@@ -36718,7 +36718,7 @@ var require_test_transport = __commonJS({
           for (let msg of messages) {
             stream4.notifyMessage(msg);
             try {
-              yield delay6(this.betweenResponseDelay, abort)(void 0);
+              yield delay5(this.betweenResponseDelay, abort)(void 0);
             } catch (error4) {
               stream4.notifyError(error4);
               return;
@@ -36760,36 +36760,36 @@ var require_test_transport = __commonJS({
       }
       unary(method, input, options) {
         var _a3;
-        const requestHeaders = (_a3 = options.meta) !== null && _a3 !== void 0 ? _a3 : {}, headersPromise = this.promiseHeaders().then(delay6(this.headerDelay, options.abort)), responsePromise = headersPromise.catch((_3) => {
-        }).then(delay6(this.responseDelay, options.abort)).then((_3) => this.promiseSingleResponse(method)), statusPromise = responsePromise.catch((_3) => {
-        }).then(delay6(this.afterResponseDelay, options.abort)).then((_3) => this.promiseStatus()), trailersPromise = responsePromise.catch((_3) => {
-        }).then(delay6(this.afterResponseDelay, options.abort)).then((_3) => this.promiseTrailers());
+        const requestHeaders = (_a3 = options.meta) !== null && _a3 !== void 0 ? _a3 : {}, headersPromise = this.promiseHeaders().then(delay5(this.headerDelay, options.abort)), responsePromise = headersPromise.catch((_3) => {
+        }).then(delay5(this.responseDelay, options.abort)).then((_3) => this.promiseSingleResponse(method)), statusPromise = responsePromise.catch((_3) => {
+        }).then(delay5(this.afterResponseDelay, options.abort)).then((_3) => this.promiseStatus()), trailersPromise = responsePromise.catch((_3) => {
+        }).then(delay5(this.afterResponseDelay, options.abort)).then((_3) => this.promiseTrailers());
         this.maybeSuppressUncaught(statusPromise, trailersPromise);
         this.lastInput = { single: input };
         return new unary_call_1.UnaryCall(method, requestHeaders, input, headersPromise, responsePromise, statusPromise, trailersPromise);
       }
       serverStreaming(method, input, options) {
         var _a3;
-        const requestHeaders = (_a3 = options.meta) !== null && _a3 !== void 0 ? _a3 : {}, headersPromise = this.promiseHeaders().then(delay6(this.headerDelay, options.abort)), outputStream = new rpc_output_stream_1.RpcOutputStreamController(), responseStreamClosedPromise = headersPromise.then(delay6(this.responseDelay, options.abort)).catch(() => {
-        }).then(() => this.streamResponses(method, outputStream, options.abort)).then(delay6(this.afterResponseDelay, options.abort)), statusPromise = responseStreamClosedPromise.then(() => this.promiseStatus()), trailersPromise = responseStreamClosedPromise.then(() => this.promiseTrailers());
+        const requestHeaders = (_a3 = options.meta) !== null && _a3 !== void 0 ? _a3 : {}, headersPromise = this.promiseHeaders().then(delay5(this.headerDelay, options.abort)), outputStream = new rpc_output_stream_1.RpcOutputStreamController(), responseStreamClosedPromise = headersPromise.then(delay5(this.responseDelay, options.abort)).catch(() => {
+        }).then(() => this.streamResponses(method, outputStream, options.abort)).then(delay5(this.afterResponseDelay, options.abort)), statusPromise = responseStreamClosedPromise.then(() => this.promiseStatus()), trailersPromise = responseStreamClosedPromise.then(() => this.promiseTrailers());
         this.maybeSuppressUncaught(statusPromise, trailersPromise);
         this.lastInput = { single: input };
         return new server_streaming_call_1.ServerStreamingCall(method, requestHeaders, input, headersPromise, outputStream, statusPromise, trailersPromise);
       }
       clientStreaming(method, options) {
         var _a3;
-        const requestHeaders = (_a3 = options.meta) !== null && _a3 !== void 0 ? _a3 : {}, headersPromise = this.promiseHeaders().then(delay6(this.headerDelay, options.abort)), responsePromise = headersPromise.catch((_3) => {
-        }).then(delay6(this.responseDelay, options.abort)).then((_3) => this.promiseSingleResponse(method)), statusPromise = responsePromise.catch((_3) => {
-        }).then(delay6(this.afterResponseDelay, options.abort)).then((_3) => this.promiseStatus()), trailersPromise = responsePromise.catch((_3) => {
-        }).then(delay6(this.afterResponseDelay, options.abort)).then((_3) => this.promiseTrailers());
+        const requestHeaders = (_a3 = options.meta) !== null && _a3 !== void 0 ? _a3 : {}, headersPromise = this.promiseHeaders().then(delay5(this.headerDelay, options.abort)), responsePromise = headersPromise.catch((_3) => {
+        }).then(delay5(this.responseDelay, options.abort)).then((_3) => this.promiseSingleResponse(method)), statusPromise = responsePromise.catch((_3) => {
+        }).then(delay5(this.afterResponseDelay, options.abort)).then((_3) => this.promiseStatus()), trailersPromise = responsePromise.catch((_3) => {
+        }).then(delay5(this.afterResponseDelay, options.abort)).then((_3) => this.promiseTrailers());
         this.maybeSuppressUncaught(statusPromise, trailersPromise);
         this.lastInput = new TestInputStream(this.data, options.abort);
         return new client_streaming_call_1.ClientStreamingCall(method, requestHeaders, this.lastInput, headersPromise, responsePromise, statusPromise, trailersPromise);
       }
       duplex(method, options) {
         var _a3;
-        const requestHeaders = (_a3 = options.meta) !== null && _a3 !== void 0 ? _a3 : {}, headersPromise = this.promiseHeaders().then(delay6(this.headerDelay, options.abort)), outputStream = new rpc_output_stream_1.RpcOutputStreamController(), responseStreamClosedPromise = headersPromise.then(delay6(this.responseDelay, options.abort)).catch(() => {
-        }).then(() => this.streamResponses(method, outputStream, options.abort)).then(delay6(this.afterResponseDelay, options.abort)), statusPromise = responseStreamClosedPromise.then(() => this.promiseStatus()), trailersPromise = responseStreamClosedPromise.then(() => this.promiseTrailers());
+        const requestHeaders = (_a3 = options.meta) !== null && _a3 !== void 0 ? _a3 : {}, headersPromise = this.promiseHeaders().then(delay5(this.headerDelay, options.abort)), outputStream = new rpc_output_stream_1.RpcOutputStreamController(), responseStreamClosedPromise = headersPromise.then(delay5(this.responseDelay, options.abort)).catch(() => {
+        }).then(() => this.streamResponses(method, outputStream, options.abort)).then(delay5(this.afterResponseDelay, options.abort)), statusPromise = responseStreamClosedPromise.then(() => this.promiseStatus()), trailersPromise = responseStreamClosedPromise.then(() => this.promiseTrailers());
         this.maybeSuppressUncaught(statusPromise, trailersPromise);
         this.lastInput = new TestInputStream(this.data, options.abort);
         return new duplex_streaming_call_1.DuplexStreamingCall(method, requestHeaders, this.lastInput, headersPromise, outputStream, statusPromise, trailersPromise);
@@ -36806,7 +36806,7 @@ var require_test_transport = __commonJS({
     TestTransport.defaultTrailers = {
       responseTrailer: "test"
     };
-    function delay6(ms, abort) {
+    function delay5(ms, abort) {
       return (v2) => new Promise((resolve6, reject) => {
         if (abort === null || abort === void 0 ? void 0 : abort.aborted) {
           reject(new rpc_error_1.RpcError("user cancel", "CANCELLED"));
@@ -36841,7 +36841,7 @@ var require_test_transport = __commonJS({
         const delayMs = this.data.inputMessage === void 0 ? 10 : this.data.inputMessage;
         return Promise.resolve(void 0).then(() => {
           this._sent.push(message);
-        }).then(delay6(delayMs, this.abort));
+        }).then(delay5(delayMs, this.abort));
       }
       complete() {
         if (this.data.inputComplete instanceof rpc_error_1.RpcError) {
@@ -36850,7 +36850,7 @@ var require_test_transport = __commonJS({
         const delayMs = this.data.inputComplete === void 0 ? 10 : this.data.inputComplete;
         return Promise.resolve(void 0).then(() => {
           this._completed = true;
-        }).then(delay6(delayMs, this.abort));
+        }).then(delay5(delayMs, this.abort));
       }
     };
   }
@@ -142053,7 +142053,7 @@ async function withRetry(fn, options) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
-    let delay6 = minTimeout;
+    let delay5 = minTimeout;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await fn();
@@ -142067,9 +142067,9 @@ async function withRetry(fn, options) {
           err.message
         );
         await new Promise(
-          (resolve6) => setTimeout(resolve6, Math.max(delay6, options.retryDelayMs?.(err) ?? 0))
+          (resolve6) => setTimeout(resolve6, Math.max(delay5, options.retryDelayMs?.(err) ?? 0))
         );
-        delay6 = Math.min(delay6 * factor, options.maxTimeout ?? 4e3);
+        delay5 = Math.min(delay5 * factor, options.maxTimeout ?? 4e3);
       }
     }
   }
@@ -151015,13 +151015,13 @@ var GitHubClient = class {
    * Throttle requests when approaching rate limit
    */
   async throttleIfNeeded() {
-    const delay6 = this.calculateBackoffDelay();
-    if (delay6 > 0) {
+    const delay5 = this.calculateBackoffDelay();
+    if (delay5 > 0) {
       const status = this.rateLimitTracker.getStatus();
       debug(
-        `Throttling GitHub API request (${delay6}ms delay, ${status?.remaining} requests remaining)`
+        `Throttling GitHub API request (${delay5}ms delay, ${status?.remaining} requests remaining)`
       );
-      await new Promise((resolve6) => setTimeout(resolve6, delay6));
+      await new Promise((resolve6) => setTimeout(resolve6, delay5));
     }
   }
   /**
@@ -151076,7 +151076,7 @@ var GitHubClient = class {
     }
   }
 };
-function createResilientOctokit(initialToken, tokenProvider, sleep2 = (delayMs) => new Promise((resolve6) => setTimeout(resolve6, delayMs))) {
+function createResilientOctokit(initialToken, tokenProvider, sleep2) {
   const octokit = new import_rest.Octokit();
   octokit.hook.wrap("request", async (request3, options) => {
     const requestWithToken = (token2) => {
@@ -151117,11 +151117,29 @@ function createResilientOctokit(initialToken, tokenProvider, sleep2 = (delayMs) 
         info(
           `GitHub read retry ${retries}/${GITHUB_READ_RETRY_DELAYS_MS.length} in ${waitMs} ms after ${describeFailure(failureClass, status)}`
         );
-        await sleep2(waitMs);
+        if (sleep2) await sleep2(waitMs);
+        else await waitForGitHubReadRetry(waitMs, options.request?.signal);
+        options.request?.signal?.throwIfAborted();
       }
     }
   });
   return octokit;
+}
+function waitForGitHubReadRetry(delayMs, signal) {
+  signal?.throwIfAborted();
+  return new Promise((resolve6, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve6();
+    }, delayMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
 }
 function getHttpStatus(error4) {
   if (typeof error4 !== "object" || error4 === null) {
@@ -211585,11 +211603,11 @@ var RunInvestigationTurn = class {
       "review_agent_unclassified_failure"
     );
     const reason = abortReason(failure.failureClass);
-    const delay6 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
+    const delay5 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
       failure.retryAfterMs ?? input.minimumCapacityParkMs,
       input.minimumCapacityParkMs
     );
-    const nextEligibleAt = delay6 === null ? null : new Date(this.dependencies.now().getTime() + delay6).toISOString();
+    const nextEligibleAt = delay5 === null ? null : new Date(this.dependencies.now().getTime() + delay5).toISOString();
     return this.abort(
       input,
       reason,
@@ -212209,18 +212227,23 @@ var RunT0ReviewOrchestration = class {
     let initialExecutionRestore;
     const stoppedResult = async (status) => {
       this.dependencies.signal?.throwIfAborted();
+      const currentAuthorization = authorization;
       let initialRestoredExecution;
-      if (!execution && !command.restoredExecution && !executionStartAttempted && initialExecutionRestore) {
+      if (!execution && !command.restoredExecution && !executionStartAttempted && currentAuthorization) {
         try {
+          validateAuthorizationScope(command, currentAuthorization);
+          initialExecutionRestore ??= this.dependencies.controlPlane.restoreExecution({
+            authorization: currentAuthorization,
+            reviewRevisionHash: command.reviewRevisionHash
+          });
           initialRestoredExecution = await initialExecutionRestore;
         } catch {
           this.dependencies.signal?.throwIfAborted();
         }
         this.dependencies.signal?.throwIfAborted();
       }
-      let acknowledged = !execution && !command.restoredExecution && !executionStartAttempted && (!initialExecutionRestore || initialRestoredExecution === null);
+      let acknowledged = !execution && !command.restoredExecution && !executionStartAttempted && initialRestoredExecution === null;
       let cancelledExecution = execution;
-      const currentAuthorization = authorization;
       if (!acknowledged && currentAuthorization) {
         try {
           validateAuthorizationScope(command, currentAuthorization);
@@ -212240,7 +212263,6 @@ var RunT0ReviewOrchestration = class {
             execution: original,
             controlPlane: this.dependencies.controlPlane,
             identities: this.dependencies.identities,
-            restoredExecution: initialRestoredExecution ?? void 0,
             signal: this.dependencies.signal
           });
           acknowledged = true;
@@ -212306,10 +212328,12 @@ var RunT0ReviewOrchestration = class {
         authorization,
         reviewRevisionHash: command.reviewRevisionHash
       };
-      initialExecutionRestore = this.dependencies.controlPlane.restoreExecution({
-        authorization,
-        reviewRevisionHash: command.reviewRevisionHash
-      });
+      initialExecutionRestore = this.dependencies.controlPlane.restoreExecution(
+        {
+          authorization,
+          reviewRevisionHash: command.reviewRevisionHash
+        }
+      );
       const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
@@ -212430,7 +212454,32 @@ var RunT0ReviewOrchestration = class {
           )
         };
       };
+      const restoredAcceptedHintFor = (workSlotId) => {
+        const retained = command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
+          (hint) => hint.workSlotId === workSlotId
+        );
+        const refreshed = execution.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
+          (hint) => hint.workSlotId === workSlotId
+        );
+        if (retained && refreshed && ![
+          "manifestCanonicalJson",
+          "manifestKey",
+          "providerInvocationKey",
+          "providerVoteIdentityHash",
+          "observationId",
+          "payloadHash",
+          "sourceLeaseId",
+          "sourceFencingToken",
+          "sourceOwnerIdHash"
+        ].every((key) => retained[key] === refreshed[key]))
+          throw new Error("review_orchestration_unattached_source_changed");
+        return retained ?? refreshed;
+      };
       const runWorkSlot = async (workSlot) => {
+        if (acceptedEvidence.some(
+          (item) => item.workSlotId === workSlot.workSlotId
+        ))
+          return;
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
           throw new Error("review_orchestration_restored_work_slot_missing");
@@ -212439,12 +212488,29 @@ var RunT0ReviewOrchestration = class {
           (slot) => slot.workSlotId === workSlot.workSlotId
         );
         const restoredSatisfied = restoredSlot.state === "satisfied" /* Satisfied */;
-        const restoredAcceptedHint = command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
-          (hint) => hint.workSlotId === workSlot.workSlotId
-        ) ?? execution.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
-          (hint) => hint.workSlotId === workSlot.workSlotId
+        const restoredAcceptedHint = restoredAcceptedHintFor(
+          workSlot.workSlotId
         );
-        if (restoredAcceptedHint && (!command.restoreOnly || workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */ || workSlot.attemptBudget !== 1 || persistedSlot?.nextAttemptOrdinal !== 2 || restoredSlot.state !== "exhausted" /* Exhausted */ || restoredSlot.activeLeaseId !== null || restoredSlot.acceptedObservationRefId !== null)) throw new Error("review_orchestration_unattached_source_changed");
+        if (restoredAcceptedHint) {
+          const stillUnattached = restoredSlot.state === "exhausted" /* Exhausted */ && restoredSlot.acceptedObservationRefId === null;
+          const alreadyAttached = restoredSatisfied && restoredSlot.acceptedObservationRefId === observationRefId(
+            execution.executionId,
+            workSlot.workSlotId,
+            restoredAcceptedHint.observationId
+          );
+          const acceptedManifest = execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
+            (manifest) => manifest.workSlotId === workSlot.workSlotId
+          );
+          if (!command.restoreOnly || workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */ || workSlot.attemptBudget !== 1 || persistedSlot?.nextAttemptOrdinal !== 2 || restoredSlot.activeLeaseId !== null || !stillUnattached && !alreadyAttached || alreadyAttached && acceptedManifest && ![
+            "manifestCanonicalJson",
+            "manifestKey",
+            "providerInvocationKey",
+            "providerVoteIdentityHash"
+          ].every(
+            (key) => acceptedManifest[key] === restoredAcceptedHint[key]
+          ))
+            throw new Error("review_orchestration_unattached_source_changed");
+        }
         const lifecycleEvidenceUnavailable = workSlot.taskKind === "lifecycle_revalidation" /* LifecycleRevalidation */ && (!restoredSatisfied || !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
           (manifest) => manifest.workSlotId === workSlot.workSlotId
         ));
@@ -212506,7 +212572,8 @@ var RunT0ReviewOrchestration = class {
             state3 = evolveReviewOrchestration(state3, event);
           }
         }).catch((error4) => {
-          if (!restoredAcceptedHint || error4 instanceof ReviewExecutionSupersededSignal || error4 instanceof ReviewExecutionCancelledSignal || error4 instanceof ReviewExecutionDeadlineReachedSignal) throw error4;
+          if (!restoredAcceptedHint || error4 instanceof ReviewExecutionSupersededSignal || error4 instanceof ReviewExecutionCancelledSignal || error4 instanceof ReviewExecutionDeadlineReachedSignal)
+            throw error4;
           this.dependencies.signal?.throwIfAborted();
           throw new Error(
             "review_orchestration_unattached_observation_unavailable"
@@ -212631,6 +212698,11 @@ var RunT0ReviewOrchestration = class {
           });
         };
         try {
+          for (const slot of command.workSlots) {
+            if (!restoredAcceptedHintFor(slot.workSlotId)) continue;
+            this.runAbort.signal.throwIfAborted();
+            await runWorkSlot(slot);
+          }
           while (pending.length || active.size) {
             while (!parentFailure && !this.runAbort.signal.aborted && active.size < (fallback2 ? 1 : scheduling.maxParallelReviewers)) {
               if (fallback2 && fallbackChainSettled(fallbackOutcomes)) {
@@ -212658,7 +212730,10 @@ var RunT0ReviewOrchestration = class {
                   fallbackOutcomes.set(
                     lane.providerVoteIdentityHash,
                     fallbackLaneOutcome(
-                      false,
+                      reviewerCompletedRequiredWork(
+                        lane.slots,
+                        acceptedEvidence
+                      ),
                       stopReasons.get(lane.providerVoteIdentityHash)
                     )
                   );
@@ -213199,10 +213274,14 @@ var RunT0ReviewOrchestration = class {
         const authoritativeInvocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
           attemptOrdinal,
-          ...reviewerSignal ? { signal: reviewerSignal } : {}
+          ...reviewerSignal ? { signal: reviewerSignal } : {},
+          ...input.restoredAcceptedHint ? { originalManifest: input.restoredAcceptedHint } : {}
         });
         reviewerSignal?.throwIfAborted();
-        const authoritativeManifest = await this.dependencies.invocationManifestAssembler.assemble(
+        const authoritativeManifest = input.restoredAcceptedHint ? await this.dependencies.invocationManifestAssembler.assemble(
+          authoritativeInvocation,
+          input.restoredAcceptedHint
+        ) : await this.dependencies.invocationManifestAssembler.assemble(
           authoritativeInvocation
         );
         validateManifest(authoritativeManifest);
@@ -213696,7 +213775,8 @@ var RunT0ReviewOrchestration = class {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
         }
       } catch (error4) {
-        if (input.restoredAcceptedHint || !(error4 instanceof ReviewMemoryAdmissionChangedSignal)) throw error4;
+        if (input.restoredAcceptedHint || !(error4 instanceof ReviewMemoryAdmissionChangedSignal))
+          throw error4;
         attemptOrdinal -= 1;
       }
     }
@@ -213840,7 +213920,8 @@ var RunT0ReviewOrchestration = class {
       planHash: input.planHash,
       manifest: input.manifest
     });
-    if (hint && (lookup2.kind !== "hit" /* Hit */ || lookup2.attachment.kind !== "same_execution" || lookup2.observation.observationId !== hint.observationId || lookup2.observation.payloadHash !== hint.payloadHash || lookup2.observation.providerInvocationKey !== hint.providerInvocationKey || lookup2.observation.providerVoteIdentityHash !== hint.providerVoteIdentityHash || lookup2.attachment.sourceLeaseId !== hint.sourceLeaseId || lookup2.attachment.sourceFencingToken !== hint.sourceFencingToken || lookup2.attachment.sourceOwnerIdHash !== hint.sourceOwnerIdHash)) throw new Error("review_orchestration_unattached_observation_mismatch");
+    if (hint && (lookup2.kind !== "hit" /* Hit */ || lookup2.attachment.kind !== "same_execution" || lookup2.observation.observationId !== hint.observationId || lookup2.observation.payloadHash !== hint.payloadHash || lookup2.observation.providerInvocationKey !== hint.providerInvocationKey || lookup2.observation.providerVoteIdentityHash !== hint.providerVoteIdentityHash || lookup2.attachment.sourceLeaseId !== hint.sourceLeaseId || lookup2.attachment.sourceFencingToken !== hint.sourceFencingToken || lookup2.attachment.sourceOwnerIdHash !== hint.sourceOwnerIdHash))
+      throw new Error("review_orchestration_unattached_observation_mismatch");
     if (lookup2.kind === "miss" /* Miss */) return null;
     await this.assertRevisionCurrent(input.revision);
     if (!isOriginalAcceptedManifest(input, input.manifest))
@@ -228375,13 +228456,13 @@ var StreamableHTTPClientTransport = class {
       this.onerror?.(new Error(`Maximum reconnection attempts (${maxRetries}) exceeded.`));
       return;
     }
-    const delay6 = this._getNextReconnectionDelay(attemptCount);
+    const delay5 = this._getNextReconnectionDelay(attemptCount);
     this._reconnectionTimeout = setTimeout(() => {
       this._startOrAuthSse(options).catch((error4) => {
         this.onerror?.(new Error(`Failed to reconnect SSE stream: ${error4 instanceof Error ? error4.message : String(error4)}`));
         this._scheduleReconnection(options, attemptCount + 1);
       });
-    }, delay6);
+    }, delay5);
   }
   _handleSseStream(stream4, options, isReconnectable) {
     if (!stream4) {
@@ -235000,7 +235081,7 @@ var CodexReviewInvocationAdapter = class {
       this.promptBuilder,
       assignment,
       this.investigationManifestBindingEnabled,
-      this.reviewMemory?.current()
+      input.originalManifest ? void 0 : this.reviewMemory?.current()
     );
     const shouldPrepareInvestigationSeed = this.investigationManifestBindingEnabled && preparedPrompt.investigationProbePlan.status === "complete" /* Complete */;
     const [gatewayPlanningConfig, canonicalInventory] = this.contextGateway ? await Promise.all([
@@ -243776,8 +243857,11 @@ function restoredLifecycleInvocations(restored, discovery) {
   ]);
   return {
     async prepare(input) {
-      const original = manifests.get(input.workSlot.workSlotId);
-      if (input.workSlot.taskKind !== "lifecycle_revalidation" /* LifecycleRevalidation */ && !readOnlySlots.has(input.workSlot.workSlotId))
+      const captured = manifests.get(input.workSlot.workSlotId);
+      const original = input.originalManifest ?? captured;
+      if (input.originalManifest && (input.originalManifest.workSlotId !== input.workSlot.workSlotId || captured && !sameManifest(input.originalManifest, captured)))
+        throw new Error("review_restore_accepted_manifest_scope_mismatch");
+      if (!input.originalManifest && input.workSlot.taskKind !== "lifecycle_revalidation" /* LifecycleRevalidation */ && !readOnlySlots.has(input.workSlot.workSlotId))
         return discovery.prepare(input);
       if (!original || input.attemptOrdinal !== 1)
         throw new Error("review_restore_accepted_manifest_unavailable");
@@ -243786,12 +243870,17 @@ function restoredLifecycleInvocations(restored, discovery) {
       );
       if (!wire.taskKindSet.includes(input.workSlot.taskKind) || wire.providerKind !== input.workSlot.providerKind || original.providerVoteIdentityHash !== input.workSlot.providerVoteIdentityHash)
         throw new Error("review_restore_accepted_manifest_scope_mismatch");
+      readOnlySlots.add(input.workSlot.workSlotId);
       const coverage = input.workSlot.taskKind === "lifecycle_revalidation" /* LifecycleRevalidation */ ? createReviewPromptCoverageManifest({
         workSlotId: input.workSlot.workSlotId,
         reviewRevisionHash: restored.reviewRevisionHash,
         assignedPaths: [],
         pathCoverage: []
-      }) : await restoreDiscoveryCoverage(discovery, input, wire);
+      }) : await restoreDiscoveryCoverage(
+        discovery,
+        { ...input, originalManifest: original },
+        wire
+      );
       return Object.freeze({
         workSlotId: input.workSlot.workSlotId,
         attemptOrdinal: 1,
@@ -243821,7 +243910,16 @@ function restoredLifecycleManifestAssembler(restored, discovery) {
     ].map((value) => [value.workSlotId, value])
   );
   return {
-    async assemble(invocation) {
+    async assemble(invocation, originalManifest) {
+      if (originalManifest) {
+        const slot = restored.workSlots.find(
+          (value) => value.workSlotId === invocation.workSlotId
+        );
+        const captured = manifests.get(invocation.workSlotId);
+        if (originalManifest.workSlotId !== invocation.workSlotId || slot?.providerVoteIdentityHash !== originalManifest.providerVoteIdentityHash || captured && !sameManifest(originalManifest, captured))
+          throw new Error("review_restore_accepted_manifest_scope_mismatch");
+        return originalManifest;
+      }
       const originalSource = restored.workSlots.some(
         (slot) => slot.workSlotId === invocation.workSlotId && slot.state === "satisfied" /* Satisfied */
       ) || restored.persistedPlan?.unattachedAcceptedManifests?.some(
@@ -243852,6 +243950,9 @@ async function restoreDiscoveryCoverage(discovery, input, original) {
   if (hash4(canonicalJson15(context5)) !== original.contextManifestHash)
     throw new Error("review_restore_coverage_commitment_mismatch");
   return rebuilt.coverageManifest;
+}
+function sameManifest(left, right) {
+  return left.manifestCanonicalJson === right.manifestCanonicalJson && left.manifestKey === right.manifestKey && left.providerInvocationKey === right.providerInvocationKey && left.providerVoteIdentityHash === right.providerVoteIdentityHash;
 }
 function hash4(value) {
   return (0, import_node_crypto10.createHash)("sha256").update(value).digest("hex");
@@ -244241,7 +244342,7 @@ var OcrReviewInvocationAdapter = class {
     if (assignedPaths.length === 0) {
       throw new Error("review_action_v2_ocr_nothing_to_review");
     }
-    const memorySnapshot = this.options.reviewMemory?.current();
+    const memorySnapshot = input.originalManifest ? void 0 : this.options.reviewMemory?.current();
     const ruleText = memorySnapshot ? appendOcrReviewMemory(
       this.options.ruleText,
       memorySnapshot.renderedPrompt
@@ -244490,9 +244591,14 @@ var OcrReviewInvocationAdapter = class {
       let processResult2;
       try {
         this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-        return await this.runInvocation(input, assignment, preimages, (result2) => {
-          processResult2 = result2;
-        });
+        return await this.runInvocation(
+          input,
+          assignment,
+          preimages,
+          (result2) => {
+            processResult2 = result2;
+          }
+        );
       } catch (error4) {
         try {
           this.options.failureDiagnostic?.(
@@ -244790,9 +244896,7 @@ function parseOcrPreviewCoverage(raw, assignedPaths) {
       throw new Error("review_action_v2_ocr_preview_contract_invalid");
     }
     if (!assigned.has(path40)) {
-      if (entry.will_review || entry.exclude_reason !== "user_exclude" && (typeof entry.exclude_reason !== "string" || !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(
-        entry.exclude_reason
-      ))) {
+      if (entry.will_review || entry.exclude_reason !== "user_exclude" && (typeof entry.exclude_reason !== "string" || !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(entry.exclude_reason))) {
         throw new Error("review_action_v2_ocr_preview_scope_invalid");
       }
       continue;
@@ -249147,12 +249251,7 @@ function mapExecutionFailureReason(failureCode2) {
 function createScmReadGitHubClient(input) {
   const { signal, timeoutMs = 3e4 } = input;
   const github = new GitHubClient(input.token, {
-    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
-    ...signal ? {
-      sleep: async (ms) => {
-        await (0, import_promises16.setTimeout)(ms, void 0, { signal });
-      }
-    } : {}
+    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input)
   });
   if (signal) {
     github.octokit.hook.wrap("request", (request3, options) => {
@@ -252274,13 +252373,8 @@ function assertSafeOwnerRepoPart(value, label) {
 }
 
 // src/codex-oauth/terminal-outcome-publication.ts
-var import_promises17 = require("node:timers/promises");
 function createPublicationGitHubClient(token, options = {}) {
-  const client2 = new GitHubClient(token, {
-    sleep: async (ms) => {
-      await (0, import_promises17.setTimeout)(ms, void 0, { signal: options.signal });
-    }
-  });
+  const client2 = new GitHubClient(token);
   if (options.signal || options.timeoutMs) {
     client2.octokit.hook.wrap("request", (request3, parameters) => {
       options.signal?.throwIfAborted();

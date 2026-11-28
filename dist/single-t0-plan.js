@@ -195610,14 +195610,24 @@ var RunT0ReviewOrchestration = class {
       this.dependencies.signal?.throwIfAborted();
       const currentAuthorization = authorization;
       let initialRestoredExecution;
-      if (!execution && !command.restoredExecution && !executionStartAttempted && currentAuthorization) {
+      let preStartRestoredExecution = null;
+      if (!execution && !command.restoredExecution && currentAuthorization) {
         try {
           validateAuthorizationScope(command, currentAuthorization);
           initialExecutionRestore ??= this.dependencies.controlPlane.restoreExecution({
             authorization: currentAuthorization,
             reviewRevisionHash: command.reviewRevisionHash
           });
-          initialRestoredExecution = await initialExecutionRestore;
+          const restoredBeforeStart = await initialExecutionRestore;
+          if (executionStartAttempted) {
+            preStartRestoredExecution = restoredBeforeStart;
+            initialRestoredExecution = await this.dependencies.controlPlane.restoreExecution({
+              authorization: currentAuthorization,
+              reviewRevisionHash: command.reviewRevisionHash
+            });
+          } else {
+            initialRestoredExecution = restoredBeforeStart;
+          }
         } catch {
           this.dependencies.signal?.throwIfAborted();
         }
@@ -195638,12 +195648,17 @@ var RunT0ReviewOrchestration = class {
           } : void 0);
           if (!original || initialRestoredExecution && initialRestoredExecution.executionId !== command.executionId || original.executionId !== original.restoredExecution.executionId || original.generation !== original.restoredExecution.generation || original.restoredExecution.authorizationId !== currentAuthorization.authorizationId || original.restoredExecution.reviewRevisionHash !== currentAuthorization.facts.reviewRevisionHash || original.restoredExecution.planHash !== command.planHash || restored && (original.executionId !== restored.executionId || original.generation !== restored.generation))
             throw new Error("review_orchestration_cancellation_scope_mismatch");
+          validateRestoredExecutionContinuity(
+            preStartRestoredExecution,
+            original
+          );
           cancelledExecution = original;
           await confirmReviewExecutionCancellation({
             authorization: currentAuthorization,
             execution: original,
             controlPlane: this.dependencies.controlPlane,
             identities: this.dependencies.identities,
+            ...executionStartAttempted && initialRestoredExecution ? { restoredExecution: initialRestoredExecution } : {},
             signal: this.dependencies.signal
           });
           acknowledged = true;
@@ -196636,6 +196651,9 @@ var RunT0ReviewOrchestration = class {
       input.workSlot.providerVoteIdentityHash
     );
     const waitSignal = reviewerSignal ?? this.dependencies.signal;
+    const originalManifest = input.restoredAcceptedHint ?? (input.restoredSlot.state === "satisfied" /* Satisfied */ ? input.execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
+      (manifest) => manifest.workSlotId === input.workSlot.workSlotId
+    ) : void 0);
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest = null;
     let handledInvestigationOrdinal = null;
@@ -196656,12 +196674,12 @@ var RunT0ReviewOrchestration = class {
           workSlot: input.workSlot,
           attemptOrdinal,
           ...reviewerSignal ? { signal: reviewerSignal } : {},
-          ...input.restoredAcceptedHint ? { originalManifest: input.restoredAcceptedHint } : {}
+          ...originalManifest ? { originalManifest } : {}
         });
         reviewerSignal?.throwIfAborted();
-        const authoritativeManifest = input.restoredAcceptedHint ? await this.dependencies.invocationManifestAssembler.assemble(
+        const authoritativeManifest = originalManifest ? await this.dependencies.invocationManifestAssembler.assemble(
           authoritativeInvocation,
-          input.restoredAcceptedHint
+          originalManifest
         ) : await this.dependencies.invocationManifestAssembler.assemble(
           authoritativeInvocation
         );
@@ -214706,16 +214724,16 @@ function restoreProductionLifecycleVerification(restored, original, config2) {
     lifecycleVerification
   };
 }
-function restoredLifecycleInvocations(restored, discovery) {
+function restoredLifecycleInvocations(restored, discovery, scope) {
   const manifests = new Map(
     [
-      ...restored.persistedPlan?.acceptedManifests ?? [],
-      ...restored.persistedPlan?.unattachedAcceptedManifests ?? []
+      ...restored?.persistedPlan?.acceptedManifests ?? [],
+      ...restored?.persistedPlan?.unattachedAcceptedManifests ?? []
     ].map((value) => [value.workSlotId, value])
   );
   const readOnlySlots = /* @__PURE__ */ new Set([
-    ...restored.workSlots.filter((slot) => slot.state === "satisfied" /* Satisfied */).map((slot) => slot.workSlotId),
-    ...(restored.persistedPlan?.unattachedAcceptedManifests ?? []).map(
+    ...(restored?.workSlots ?? []).filter((slot) => slot.state === "satisfied" /* Satisfied */).map((slot) => slot.workSlotId),
+    ...(restored?.persistedPlan?.unattachedAcceptedManifests ?? []).map(
       (hint) => hint.workSlotId
     )
   ]);
@@ -214725,9 +214743,15 @@ function restoredLifecycleInvocations(restored, discovery) {
       const original = input.originalManifest ?? captured;
       if (input.originalManifest && (input.originalManifest.workSlotId !== input.workSlot.workSlotId || captured && !sameManifest(input.originalManifest, captured)))
         throw new Error("review_restore_accepted_manifest_scope_mismatch");
-      if (!input.originalManifest && input.workSlot.taskKind !== "lifecycle_revalidation" /* LifecycleRevalidation */ && !readOnlySlots.has(input.workSlot.workSlotId))
+      if (!input.originalManifest && (!restored?.persistedPlan || input.workSlot.taskKind !== "lifecycle_revalidation" /* LifecycleRevalidation */ && !readOnlySlots.has(input.workSlot.workSlotId)))
         return discovery.prepare(input);
-      if (!original || input.attemptOrdinal !== 1)
+      const knownSlot = scope?.workSlots.find(
+        (slot) => slot.workSlotId === input.workSlot.workSlotId
+      );
+      if (scope && (restored && scope.reviewRevisionHash !== restored.reviewRevisionHash || !knownSlot || knownSlot.providerVoteIdentityHash !== input.workSlot.providerVoteIdentityHash || knownSlot.providerKind !== input.workSlot.providerKind || knownSlot.taskKind !== input.workSlot.taskKind))
+        throw new Error("review_restore_accepted_manifest_scope_mismatch");
+      const reviewRevisionHash = scope?.reviewRevisionHash ?? restored?.reviewRevisionHash;
+      if (!original || input.attemptOrdinal !== 1 || !reviewRevisionHash)
         throw new Error("review_restore_accepted_manifest_unavailable");
       const wire = JSON.parse(
         original.manifestCanonicalJson
@@ -214737,7 +214761,7 @@ function restoredLifecycleInvocations(restored, discovery) {
       readOnlySlots.add(input.workSlot.workSlotId);
       const coverage = input.workSlot.taskKind === "lifecycle_revalidation" /* LifecycleRevalidation */ ? createReviewPromptCoverageManifest({
         workSlotId: input.workSlot.workSlotId,
-        reviewRevisionHash: restored.reviewRevisionHash,
+        reviewRevisionHash,
         assignedPaths: [],
         pathCoverage: []
       }) : await restoreDiscoveryCoverage(
@@ -214759,31 +214783,37 @@ function restoredLifecycleInvocations(restored, discovery) {
       });
     },
     async execute(input) {
-      if (readOnlySlots.has(input.invocation.workSlotId) || input.invocation.manifestFacts.taskKindSet.length === 1 && input.invocation.manifestFacts.taskKindSet[0] === "lifecycle_revalidation" /* LifecycleRevalidation */)
+      if (readOnlySlots.has(input.invocation.workSlotId) || restored?.persistedPlan && input.invocation.manifestFacts.taskKindSet.length === 1 && input.invocation.manifestFacts.taskKindSet[0] === "lifecycle_revalidation" /* LifecycleRevalidation */)
         throw new Error("review_restore_inference_forbidden");
       return discovery.execute(input);
     }
   };
 }
-function restoredLifecycleManifestAssembler(restored, discovery) {
-  if (!restored?.persistedPlan) return discovery;
+function restoredLifecycleManifestAssembler(restored, discovery, scope) {
+  if (!restored?.persistedPlan && !scope) return discovery;
   const manifests = new Map(
     [
-      ...restored.persistedPlan.acceptedManifests ?? [],
-      ...restored.persistedPlan.unattachedAcceptedManifests ?? []
+      ...restored?.persistedPlan?.acceptedManifests ?? [],
+      ...restored?.persistedPlan?.unattachedAcceptedManifests ?? []
     ].map((value) => [value.workSlotId, value])
   );
   return {
     async assemble(invocation, originalManifest) {
       if (originalManifest) {
-        const slot = restored.workSlots.find(
+        const slot = (restored?.workSlots ?? scope?.workSlots ?? []).find(
+          (value) => value.workSlotId === invocation.workSlotId
+        );
+        const knownSlot = scope?.workSlots.find(
           (value) => value.workSlotId === invocation.workSlotId
         );
         const captured = manifests.get(invocation.workSlotId);
-        if (originalManifest.workSlotId !== invocation.workSlotId || slot?.providerVoteIdentityHash !== originalManifest.providerVoteIdentityHash || captured && !sameManifest(originalManifest, captured))
+        if (originalManifest.workSlotId !== invocation.workSlotId || slot?.providerVoteIdentityHash !== originalManifest.providerVoteIdentityHash || scope && (restored && scope.reviewRevisionHash !== restored.reviewRevisionHash || !knownSlot || knownSlot.providerVoteIdentityHash !== originalManifest.providerVoteIdentityHash || knownSlot.providerKind !== invocation.manifestFacts.providerKind || !invocation.manifestFacts.taskKindSet.includes(
+          knownSlot.taskKind
+        )) || captured && !sameManifest(originalManifest, captured))
           throw new Error("review_restore_accepted_manifest_scope_mismatch");
         return originalManifest;
       }
+      if (!restored?.persistedPlan) return discovery.assemble(invocation);
       const originalSource = restored.workSlots.some(
         (slot) => slot.workSlotId === invocation.workSlotId && slot.state === "satisfied" /* Satisfied */
       ) || restored.persistedPlan?.unattachedAcceptedManifests?.some(
@@ -223766,18 +223796,12 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 oidc: {
                   getToken: () => oidc.requestToken(input2.audience)
                 },
-                invocationManifestAssembler: restoredLifecycleManifestAssembler(
-                  preplanningRestore2,
-                  new GeneratedProviderInvocationManifestAssembler(
-                    authorization2,
-                    config3,
-                    ocrCompatibilityKey
-                  )
+                invocationManifestAssembler: new GeneratedProviderInvocationManifestAssembler(
+                  authorization2,
+                  config3,
+                  ocrCompatibilityKey
                 ),
-                invocations: preplanningRestore2?.persistedPlan ? restoredLifecycleInvocations(
-                  preplanningRestore2,
-                  discoveryInvocations
-                ) : lifecycle2 && lifecycleCapability2 ? compositeLifecycleInvocations({
+                invocations: preplanningRestore2?.persistedPlan ? discoveryInvocations : lifecycle2 && lifecycleCapability2 ? compositeLifecycleInvocations({
                   discovery: discoveryInvocations,
                   packetsByWorkSlotId: lifecycle2.packetsByWorkSlotId,
                   capability: lifecycleCapability2,
@@ -224159,18 +224183,12 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             oidc: {
               getToken: () => oidc.requestToken(input2.audience)
             },
-            invocationManifestAssembler: restoredLifecycleManifestAssembler(
-              preplanningRestore2,
-              new GeneratedProviderInvocationManifestAssembler(
-                authorization2,
-                config3,
-                compatibilityKey
-              )
+            invocationManifestAssembler: new GeneratedProviderInvocationManifestAssembler(
+              authorization2,
+              config3,
+              compatibilityKey
             ),
-            invocations: preplanningRestore2?.persistedPlan ? restoredLifecycleInvocations(
-              preplanningRestore2,
-              nativeDiscoveryInvocations
-            ) : lifecycle && lifecycleCapability ? compositeLifecycleInvocations({
+            invocations: preplanningRestore2?.persistedPlan ? nativeDiscoveryInvocations : lifecycle && lifecycleCapability ? compositeLifecycleInvocations({
               discovery: nativeDiscoveryInvocations,
               packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
               capability: lifecycleCapability,
@@ -224344,20 +224362,17 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             runtime.modelTransport
           ]) ?? []
         );
-        const dependencies2 = reviewerPlan ? {
+        const unwrappedDependencies = reviewerPlan ? {
           ...primary.dependencies,
           memoryAdmission,
-          invocations: parentRestore?.persistedPlan ? restoredLifecycleInvocations(parentRestore, laneInvocations) : laneInvocations,
-          invocationManifestAssembler: restoredLifecycleManifestAssembler(
-            parentRestore,
-            {
-              assemble: (invocation) => route(
-                invocationSlot(invocation)
-              ).dependencies.invocationManifestAssembler.assemble(
-                invocation
-              )
-            }
-          ),
+          invocations: laneInvocations,
+          invocationManifestAssembler: {
+            assemble: (invocation) => route(
+              invocationSlot(invocation)
+            ).dependencies.invocationManifestAssembler.assemble(
+              invocation
+            )
+          },
           investigationInvocations: {
             prepare: (request3) => {
               const port = route(request3.workSlot).dependencies.investigationInvocations;
@@ -224377,7 +224392,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             }
           },
           resolveInvestigationRecording: (slot) => route(slot).dependencies.investigationRecording,
-          ...preparedLanes.some((lane) => lane.dependencies.contextReplay) ? {
+          ...preparedLanes.some(
+            (lane) => lane.dependencies.contextReplay
+          ) ? {
             contextReplay: {
               replay: (request3) => route(
                 request3.candidate.observation
@@ -224422,6 +224439,23 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             skillsReceipt
           })
         } : primary.dependencies;
+        const restorationScope = {
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          workSlots: plan.assignments.map((assignment) => assignment.workSlot)
+        };
+        const dependencies2 = {
+          ...unwrappedDependencies,
+          invocations: restoredLifecycleInvocations(
+            parentRestore,
+            unwrappedDependencies.invocations,
+            restorationScope
+          ),
+          invocationManifestAssembler: restoredLifecycleManifestAssembler(
+            parentRestore,
+            unwrappedDependencies.invocationManifestAssembler,
+            restorationScope
+          )
+        };
         const command = {
           executionId: identities.deterministicId("execution", [
             authorization.authorizationId,

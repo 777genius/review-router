@@ -46,7 +46,10 @@ export type ReviewIncompleteCauseCode =
   | 'investigation_deferred'
   | 'restored_terminal'
   | 'deadline_reached'
-  | 'admission_limited';
+  | 'admission_limited'
+  | 'review_main_incomplete'
+  | 'review_round_incomplete'
+  | 'review_phase_incomplete';
 
 type ReviewerSummaryCopy = {
   readonly noFindingsHeading: string;
@@ -1188,6 +1191,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} ${englishFindingWord(counts.total)} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: '**Why the review is incomplete:**',
     incompleteCauses: {
+      review_main_incomplete: 'Completion of all required review work was not confirmed.',
+      review_round_incomplete: 'The review stopped before completing its review rounds.',
+      review_phase_incomplete: 'A review phase could not be completed.',
       attempt_budget_exhausted:
         'The review provider did not produce accepted evidence.',
       not_runnable: 'A required review unit could not be run at all.',
@@ -1232,6 +1238,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} ${slavicFindingWord(counts.total, ['замечание', 'замечания', 'замечаний'])} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: '**Почему ревью не завершено:**',
     incompleteCauses: {
+      review_main_incomplete: 'Не подтверждено завершение всей обязательной работы по ревью.',
+      review_round_incomplete: 'Ревью остановилось до завершения раундов проверки.',
+      review_phase_incomplete: 'Не удалось завершить один из этапов ревью.',
       attempt_budget_exhausted:
         'Провайдер ревью не предоставил принятых результатов.',
       not_runnable: 'Обязательный блок ревью не удалось запустить вообще.',
@@ -1276,6 +1285,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} ${slavicFindingWord(counts.total, ['зауваження', 'зауваження', 'зауважень'])} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Чому рев'ю не завершено:**",
     incompleteCauses: {
+      review_main_incomplete: 'Завершення всієї обов’язкової роботи з рев’ю не підтверджено.',
+      review_round_incomplete: 'Рев’ю зупинилося до завершення раундів перевірки.',
+      review_phase_incomplete: 'Не вдалося завершити один з етапів рев’ю.',
       attempt_budget_exhausted:
         "Провайдер рев'ю не надав прийнятих результатів.",
       not_runnable: "Обов'язковий блок рев'ю не вдалося запустити взагалі.",
@@ -1320,6 +1332,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} ${counts.total === 1 ? 'hallazgo' : 'hallazgos'} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: '**Por qué la revisión no está completa:**',
     incompleteCauses: {
+      review_main_incomplete: 'No se confirmó la finalización de todo el trabajo de revisión obligatorio.',
+      review_round_incomplete: 'La revisión se detuvo antes de completar sus rondas.',
+      review_phase_incomplete: 'No se pudo completar una fase de la revisión.',
       attempt_budget_exhausted:
         'El proveedor de revisión no produjo evidencia aceptada.',
       not_runnable:
@@ -1366,6 +1381,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} ${counts.total === 1 ? 'achado' : 'achados'} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: '**Por que a revisão não está completa:**',
     incompleteCauses: {
+      review_main_incomplete: 'Não foi confirmada a conclusão de todo o trabalho obrigatório de revisão.',
+      review_round_incomplete: 'A revisão parou antes de concluir suas rodadas.',
+      review_phase_incomplete: 'Não foi possível concluir uma fase da revisão.',
       attempt_budget_exhausted:
         'O provedor de revisão não produziu evidência aceita.',
       not_runnable:
@@ -1411,6 +1429,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} ${counts.total === 1 ? 'anomalie' : 'anomalies'} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: '**Pourquoi la revue est incomplète :**',
     incompleteCauses: {
+      review_main_incomplete: 'La fin de l’ensemble du travail de revue requis n’a pas été confirmée.',
+      review_round_incomplete: 'La revue s’est arrêtée avant la fin de ses cycles.',
+      review_phase_incomplete: 'Une phase de la revue n’a pas pu être terminée.',
       attempt_budget_exhausted:
         "Le fournisseur de revue n'a pas produit de preuve acceptée.",
       not_runnable:
@@ -1456,6 +1477,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} ${counts.total === 1 ? 'Befund' : 'Befunde'} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: '**Warum die Prüfung unvollständig ist:**',
     incompleteCauses: {
+      review_main_incomplete: 'Der Abschluss aller erforderlichen Prüfschritte wurde nicht bestätigt.',
+      review_round_incomplete: 'Die Prüfung wurde vor Abschluss ihrer Runden beendet.',
+      review_phase_incomplete: 'Eine Prüfphase konnte nicht abgeschlossen werden.',
       attempt_budget_exhausted:
         'Der Prüfanbieter hat keine akzeptierten Ergebnisse geliefert.',
       not_runnable:
@@ -1504,6 +1528,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} ${counts.total === 1 ? 'rilievo' : 'rilievi'} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: '**Perché la revisione è incompleta:**',
     incompleteCauses: {
+      review_main_incomplete: 'Il completamento di tutto il lavoro di revisione richiesto non è stato confermato.',
+      review_round_incomplete: 'La revisione si è fermata prima di completare i suoi cicli.',
+      review_phase_incomplete: 'Non è stato possibile completare una fase della revisione.',
       attempt_budget_exhausted:
         'Il fornitore della revisione non ha prodotto evidenze accettate.',
       not_runnable:
@@ -1550,6 +1577,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} 个问题（${formatSeverityCounts(counts)}）`,
     incompleteCauseHeading: '**为什么本次审查未完成：**',
     incompleteCauses: {
+      review_main_incomplete: '尚未确认所有必需的审查工作均已完成。',
+      review_round_incomplete: '审查在完成各轮检查之前停止。',
+      review_phase_incomplete: '一个审查阶段未能完成。',
       attempt_budget_exhausted: '审查提供方未产出被接受的证据。',
       not_runnable: '一个必需的审查单元根本无法运行。',
       provider_lane_busy:
@@ -1586,6 +1616,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## 指摘 ${counts.total} 件（${formatSeverityCounts(counts)}）`,
     incompleteCauseHeading: '**レビューが完了しなかった理由:**',
     incompleteCauses: {
+      review_main_incomplete: '必須のレビュー作業がすべて完了したことを確認できませんでした。',
+      review_round_incomplete: 'レビューの各ラウンドが完了する前に処理が停止しました。',
+      review_phase_incomplete: 'レビューの一部の段階を完了できませんでした。',
       attempt_budget_exhausted:
         'レビュー提供者は受理された証拠を生成しませんでした。',
       not_runnable: '必須のレビュー単元をまったく実行できませんでした。',
@@ -1629,6 +1662,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## 이슈 ${counts.total}개 (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: '**리뷰가 완료되지 않은 이유:**',
     incompleteCauses: {
+      review_main_incomplete: '필수 검토 작업이 모두 완료되었는지 확인되지 않았습니다.',
+      review_round_incomplete: '검토 라운드가 완료되기 전에 검토가 중단되었습니다.',
+      review_phase_incomplete: '검토 단계를 완료하지 못했습니다.',
       attempt_budget_exhausted:
         '리뷰 제공자가 수락된 증거를 생성하지 못했습니다.',
       not_runnable: '필수 리뷰 단위를 전혀 실행할 수 없었습니다.',

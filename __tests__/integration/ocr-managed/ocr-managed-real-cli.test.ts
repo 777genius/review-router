@@ -1547,6 +1547,7 @@ describeHarness(
       expect(observation!.qualityFlags).toEqual([
         'context_inspection_incomplete',
         'provider_warning',
+        'review_round_incomplete',
       ]);
 
       const native = parseOcrNativeReviewResult(
@@ -1652,6 +1653,7 @@ describeHarness(
       expect(observation!.qualityFlags).toEqual([
         'context_inspection_incomplete',
         'provider_warning',
+        'review_phase_incomplete',
       ]);
 
       const native = parseOcrNativeReviewResult(
@@ -1668,7 +1670,8 @@ describeHarness(
       expect(classification.partial).toBe(true);
       expect(classification.reasons).toContain('phase_failed');
       // Null is not a false decision: no invalid_filter_decision degradation,
-      // and no preserved-comments proof either, so the full flag pair stays.
+      // and no preserved-comments proof either, so context incompleteness
+      // and the finite phase cause both stay explicit.
       expect(classification.reasons).not.toContain('invalid_filter_decision');
       expect(classification.filterCommentsPreserved).toBe(false);
     }, 120_000);

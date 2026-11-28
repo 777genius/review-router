@@ -620,11 +620,9 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
   }
 
   /** Model-free: deterministic preview and semantic capture only (§5.2). */
-  async prepare(input: {
-    readonly workSlot: ReviewWorkSlotPlan;
-    readonly attemptOrdinal: number;
-    readonly signal?: AbortSignal;
-  }): Promise<OcrPreparedReviewInvocation> {
+  async prepare(
+    input: Parameters<PreparedReviewInvocationPort['prepare']>[0]
+  ): Promise<OcrPreparedReviewInvocation> {
     this.options.signal?.throwIfAborted();
     input.signal?.throwIfAborted();
     const assignment = this.assignments.get(input.workSlot.workSlotId);
@@ -647,7 +645,9 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       // and without claiming an OCR observation (§4.3).
       throw new Error('review_action_v2_ocr_nothing_to_review');
     }
-    const memorySnapshot = this.options.reviewMemory?.current();
+    const memorySnapshot = input.originalManifest
+      ? undefined
+      : this.options.reviewMemory?.current();
     const ruleText = memorySnapshot
       ? appendOcrReviewMemory(
           this.options.ruleText,
@@ -939,9 +939,14 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       let processResult: OcrReviewProcessResult | undefined;
       try {
         this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-        return await this.runInvocation(input, assignment, preimages, (result) => {
-          processResult = result;
-        });
+        return await this.runInvocation(
+          input,
+          assignment,
+          preimages,
+          (result) => {
+            processResult = result;
+          }
+        );
       } catch (error) {
         try {
           this.options.failureDiagnostic?.(
@@ -1166,6 +1171,35 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         ? ['provider_warning']
         : ['context_inspection_incomplete', 'provider_warning']
       : [];
+    // Persist only finite presentation causes; native diagnostic prose stays local.
+    // A preserved filter is advisory even when a separate round or path gap
+    // makes the observation partial.
+    if (qualityFlags.includes('context_inspection_incomplete')) {
+      if (accepted.classification.reasons.includes('missing_required_main')) {
+        qualityFlags.push('review_main_incomplete');
+      }
+      if (accepted.classification.reasons.includes('late_round_stop')) {
+        qualityFlags.push('review_round_incomplete');
+      }
+      const outcome = accepted.native.outcome;
+      const phaseIncomplete =
+        outcome.runStopCause === 'compression' ||
+        outcome.groups.some(
+          (group) =>
+            (!group.mainCompleted && group.stopCause === 'compression') ||
+            [
+              group.phases.plan,
+              group.phases.compression,
+              group.phases.relocation,
+            ].some(
+              (phase) => phase.state === 'failed' || phase.state === 'cancelled'
+            ) ||
+            ((group.phases.filter.state === 'failed' ||
+              group.phases.filter.state === 'cancelled') &&
+              group.filterDecisionValid !== false)
+        );
+      if (phaseIncomplete) qualityFlags.push('review_phase_incomplete');
+    }
     // Preserve the finite normalization cause across evidence serialization:
     // it ranks the observation below grounded evidence for reuse and explains
     // the cause when another degradation makes the slot partial.
@@ -1304,7 +1338,10 @@ function parseOcrPreviewCoverage(
         )
       : undefined;
     const legacyPaths =
-      value.selected_paths ?? value.selectedPaths ?? value.paths ?? groupedPaths;
+      value.selected_paths ??
+      value.selectedPaths ??
+      value.paths ??
+      groupedPaths;
     if (!Array.isArray(legacyPaths)) {
       throw new Error('review_action_v2_ocr_preview_contract_invalid');
     }
@@ -1314,11 +1351,7 @@ function parseOcrPreviewCoverage(
   const observed = new Set<string>();
   const selected = new Set<string>();
   for (const file of files) {
-    if (
-      typeof file !== 'object' ||
-      file === null ||
-      Array.isArray(file)
-    ) {
+    if (typeof file !== 'object' || file === null || Array.isArray(file)) {
       throw new Error('review_action_v2_ocr_preview_contract_invalid');
     }
     const entry = file as Record<string, unknown>;
@@ -1347,19 +1380,14 @@ function parseOcrPreviewCoverage(
         entry.will_review ||
         (entry.exclude_reason !== 'user_exclude' &&
           (typeof entry.exclude_reason !== 'string' ||
-            !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(
-              entry.exclude_reason
-            )))
+            !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(entry.exclude_reason)))
       ) {
         throw new Error('review_action_v2_ocr_preview_scope_invalid');
       }
       continue;
     }
     if (entry.will_review) {
-      if (
-        entry.exclude_reason !== undefined &&
-        entry.exclude_reason !== ''
-      ) {
+      if (entry.exclude_reason !== undefined && entry.exclude_reason !== '') {
         throw new Error('review_action_v2_ocr_preview_contract_invalid');
       }
       selected.add(path);

@@ -379,11 +379,22 @@ export type RestoredReviewWorkSlot = Readonly<{
   acceptedObservationRefId: string | null;
 }>;
 
+export type PersistedReviewManifest = ProviderInvocationManifest &
+  Readonly<{ workSlotId: string }>;
+
+export type PersistedUnattachedReviewManifest = PersistedReviewManifest &
+  Readonly<{
+    observationId: string;
+    payloadHash: string;
+    sourceLeaseId: string;
+    sourceFencingToken: string;
+    sourceOwnerIdHash: string;
+  }>;
+
 export type PersistedReviewExecutionPlan = Readonly<{
+  unattachedAcceptedManifests?: readonly PersistedUnattachedReviewManifest[];
   compatibilityKey?: string;
-  acceptedManifests?: readonly (ProviderInvocationManifest & {
-    readonly workSlotId: string;
-  })[];
+  acceptedManifests?: readonly PersistedReviewManifest[];
   planHash: string;
   assignmentManifestVersion: number | null;
   assignmentManifestHash: string | null;
@@ -694,7 +705,8 @@ export interface ReviewOidcTokenPort {
 
 export interface ProviderInvocationManifestAssemblerPort {
   assemble(
-    invocation: PreparedReviewInvocation
+    invocation: PreparedReviewInvocation,
+    originalManifest?: PersistedReviewManifest
   ): Promise<ProviderInvocationManifest>;
 }
 
@@ -703,6 +715,8 @@ export interface PreparedReviewInvocationPort {
     readonly workSlot: ReviewWorkSlotPlan;
     readonly attemptOrdinal: number;
     readonly signal?: AbortSignal;
+    /** Reconstruct accepted coverage without capturing current memory. */
+    readonly originalManifest?: PersistedReviewManifest;
   }): Promise<PreparedReviewInvocation>;
   execute(input: {
     readonly invocation: PreparedReviewInvocation;

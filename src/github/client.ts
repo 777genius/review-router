@@ -184,8 +184,7 @@ export class GitHubClient {
 function createResilientOctokit(
   initialToken: string,
   tokenProvider?: GitHubTokenProvider,
-  sleep: (delayMs: number) => Promise<void> = (delayMs) =>
-    new Promise((resolve) => setTimeout(resolve, delayMs))
+  sleep?: (delayMs: number) => Promise<void>
 ): Octokit {
   const octokit = new Octokit();
   octokit.hook.wrap('request', async (request, options) => {
@@ -234,11 +233,33 @@ function createResilientOctokit(
         core.info(
           `GitHub read retry ${retries}/${GITHUB_READ_RETRY_DELAYS_MS.length} in ${waitMs} ms after ${describeFailure(failureClass, status)}`
         );
-        await sleep(waitMs);
+        if (sleep) await sleep(waitMs);
+        else await waitForGitHubReadRetry(waitMs, options.request?.signal);
+        options.request?.signal?.throwIfAborted();
       }
     }
   });
   return octokit;
+}
+
+function waitForGitHubReadRetry(
+  delayMs: number,
+  signal?: AbortSignal
+): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
 }
 
 function getHttpStatus(error: unknown): number | undefined {
@@ -351,28 +372,63 @@ function transientGitHubReadWaitMs(
 }
 
 function rateLimitWaitMs(headers: object): number {
-  const retryAfter = retryAfterMs(headers);
-  if (retryAfter !== undefined) return retryAfter;
+  const now = Date.now();
+  const retryAfter = retryAfterMs(headers, now);
   if (readHeader(headers, 'x-ratelimit-remaining') === '0') {
     const reset = numericHeader(headers, 'x-ratelimit-reset');
     if (reset !== undefined) {
-      return Math.max(0, Math.ceil(reset * 1_000 - Date.now()));
+      // Exhausted primary quota must respect both announced boundaries.
+      return Math.max(0, retryAfter ?? 0, Math.ceil(reset * 1_000 - now));
     }
   }
-  return UNANNOUNCED_RATE_LIMIT_WAIT_MS;
+  return retryAfter ?? UNANNOUNCED_RATE_LIMIT_WAIT_MS;
 }
 
-// Retry-After is either delay seconds or an HTTP date.
-function retryAfterMs(headers: object): number | undefined {
-  const seconds = numericHeader(headers, 'retry-after');
-  if (seconds !== undefined) return Math.ceil(seconds * 1_000);
-  const retryAfter = readHeader(headers, 'retry-after');
-  const retryAt =
-    retryAfter !== undefined && /[a-z]/i.test(retryAfter)
-      ? Date.parse(retryAfter)
-      : NaN;
-  return Number.isFinite(retryAt)
-    ? Math.max(0, retryAt - Date.now())
+// Retry-After is either integer delay seconds or an HTTP date.
+function retryAfterMs(headers: object, now = Date.now()): number | undefined {
+  const value = readHeader(headers, 'retry-after')?.trim();
+  if (!value) return undefined;
+  // An excessive but valid delay must exceed the window, not become absent.
+  if (/^\d+$/u.test(value)) return Number(value) * 1_000;
+  const retryAt = httpDateTimestamp(value, now);
+  return retryAt === undefined ? undefined : Math.max(0, retryAt - now);
+}
+
+/** Accept all three HTTP-date forms (RFC 9110, section 5.6.7). */
+function httpDateTimestamp(value: string, now: number): number | undefined {
+  // JavaScript dates omit leap seconds: validate :59 before advancing to :60.
+  const leapSecond = / 23:59:60(?: GMT| \d{4})$/u.test(value);
+  let normalized = leapSecond ? value.replace('23:59:60', '23:59:59') : value;
+  const obsolete =
+    /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), (\d{2})-([A-Z][a-z]{2})-(\d{2}) (\d{2}:\d{2}:\d{2}) GMT$/u.exec(
+      normalized
+    );
+  if (obsolete) {
+    const futureLimit = new Date(now);
+    futureLimit.setUTCFullYear(futureLimit.getUTCFullYear() + 50);
+    const year =
+      Math.floor(futureLimit.getUTCFullYear() / 100) * 100 +
+      Number(obsolete[4]);
+    normalized = `${obsolete[1].slice(0, 3)}, ${obsolete[2]} ${obsolete[3]} ${year} ${obsolete[5]} GMT`;
+    if (
+      Date.parse(normalized) + (leapSecond ? 1_000 : 0) >
+      futureLimit.getTime()
+    ) {
+      normalized = normalized.replace(` ${year} `, ` ${year - 100} `);
+    }
+  } else {
+    const asctime =
+      /^([A-Z][a-z]{2}) ([A-Z][a-z]{2}) ( \d|\d{2}) (\d{2}:\d{2}:\d{2}) (\d{4})$/u.exec(
+        normalized
+      );
+    if (asctime) {
+      normalized = `${asctime[1]}, ${asctime[3].trim().padStart(2, '0')} ${asctime[2]} ${asctime[5]} ${asctime[4]} GMT`;
+    }
+  }
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) &&
+    new Date(timestamp).toUTCString() === normalized
+    ? timestamp + (leapSecond ? 1_000 : 0)
     : undefined;
 }
 

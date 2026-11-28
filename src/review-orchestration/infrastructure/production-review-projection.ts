@@ -287,6 +287,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     const reviewedFiles = new Set<string>();
     const policyExcludedFiles = new Set<string>();
     const coverageLimitations: string[] = [];
+    const observationIncompleteCauses = new Set<string>();
     // Files a stopped engine run never finished stay unreviewed even though
     // its slot produced accepted (partial) evidence.
     const requiredUnfinished = new Set<string>();
@@ -401,6 +402,15 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         coverageLimitations.push(
           `work_slot_context_inspection_incomplete:${assignment.workSlotId}`
         );
+        for (const cause of [
+          'review_main_incomplete',
+          'review_round_incomplete',
+          'review_phase_incomplete',
+        ]) {
+          if (accepted.observation.qualityFlags.includes(cause)) {
+            observationIncompleteCauses.add(cause);
+          }
+        }
         if (
           accepted.observation.qualityFlags.includes('unverified_native_span')
         ) {
@@ -472,13 +482,14 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     ].sort();
     const incompleteCauses = Object.freeze(
       [
-        ...new Set(
-          requiredExhaustedWorkSlotIds
+        ...new Set([
+          ...requiredExhaustedWorkSlotIds
             .map((workSlotId) =>
               input.exhaustedWorkSlotReasons?.get(workSlotId)
             )
-            .filter((reason): reason is string => reason !== undefined)
-        ),
+            .filter((reason): reason is string => reason !== undefined),
+          ...observationIncompleteCauses,
+        ]),
       ].sort()
     );
     const providerExecution = providerExecutionSummary(

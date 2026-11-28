@@ -57,6 +57,8 @@ import {
   type ReviewInvestigationCapabilityDescriptor,
   type ReviewRunAuthorization,
   type RestoredReviewExecution,
+  type RestoredReviewWorkSlot,
+  type PersistedUnattachedReviewManifest,
   type ReviewWorkSlotPlan,
 } from '../application';
 import { ReviewActionV2RetryClass } from '../../control-plane/generated/review-action-v2/review-action-v2-negotiation';
@@ -644,7 +646,11 @@ export class ReviewActionV2ControlPlaneAdapter
     const result = await this.client
       .execute(operationId, request)
       .catch((error) => {
-        if (isBenignSupersedeTargetRevisionMismatch(error)) {
+        if (
+          input.targetRevisionHash !==
+            input.authorization.facts.reviewRevisionHash &&
+          isBenignSupersedeTargetRevisionMismatch(error)
+        ) {
           return {
             status: ReviewExecutionMutationResultStatus.Restored,
             executionId: input.execution.executionId,
@@ -654,6 +660,12 @@ export class ReviewActionV2ControlPlaneAdapter
         throw error;
       });
     requireMutationApplied(result.status, 'execution_supersede');
+    if (
+      requireString(result.executionId, 'execution_supersede_execution_id') !==
+      input.execution.executionId
+    ) {
+      throw new Error('review_action_v2_execution_supersede_execution_mismatch');
+    }
   }
 
   async lookupEvidence(
@@ -1563,12 +1575,7 @@ function parsePersistedReviewPlan(
     generation: string;
     reviewRevisionHash: string;
     planHash: string;
-    workSlots: readonly {
-      workSlotId: string;
-      providerVoteIdentityHash: string;
-      required: boolean;
-      state: RestoredReviewWorkSlotState;
-    }[];
+    workSlots: readonly RestoredReviewWorkSlot[];
   }
 ): import('../application').PersistedReviewExecutionPlan {
   if (
@@ -1692,6 +1699,15 @@ function parsePersistedReviewPlan(
           ),
         }
       : {}),
+    ...(value.unattachedAcceptedManifests !== undefined
+      ? {
+          unattachedAcceptedManifests: parseUnattachedAcceptedManifests(
+            value.unattachedAcceptedManifests,
+            expected.workSlots,
+            workSlots
+          ),
+        }
+      : {}),
     ...(value.acceptedManifests !== undefined
       ? {
           acceptedManifests: parseAcceptedRestoreManifests(
@@ -1707,6 +1723,86 @@ function parsePersistedReviewPlan(
     workSlots,
     artifact,
   });
+}
+
+
+function parseUnattachedAcceptedManifests(
+  value: unknown,
+  slots: readonly RestoredReviewWorkSlot[],
+  persistedSlots: readonly (ReviewWorkSlotPlan & {
+    readonly nextAttemptOrdinal?: number;
+  })[]
+): readonly PersistedUnattachedReviewManifest[] {
+  if (!Array.isArray(value) || value.length > slots.length)
+    throw new Error('review_restore_unattached_manifests_invalid');
+  const seen = new Set<string>();
+  return Object.freeze(
+    value.map((raw) => {
+      if (!isRecord(raw))
+        throw new Error('review_restore_unattached_manifest_invalid');
+      requireExactKeys(raw, [
+        'workSlotId',
+        'manifestCanonicalJson',
+        'manifestKey',
+        'providerInvocationKey',
+        'providerVoteIdentityHash',
+        'observationId',
+        'payloadHash',
+        'sourceLeaseId',
+        'sourceFencingToken',
+        'sourceOwnerIdHash',
+      ]);
+      const workSlotId = requireString(
+        raw.workSlotId,
+        'restore_manifest_work_slot'
+      );
+      const slot = slots.find(
+        (candidate) => candidate.workSlotId === workSlotId
+      );
+      const persisted = persistedSlots.find(
+        (candidate) => candidate.workSlotId === workSlotId
+      );
+      if (
+        !slot ||
+        slot.state !== RestoredReviewWorkSlotState.Exhausted ||
+        slot.activeLeaseId !== null ||
+        slot.acceptedObservationRefId !== null ||
+        persisted?.taskKind !== ReviewTaskKind.FindingDiscovery ||
+        persisted.attemptBudget !== 1 ||
+        persisted.nextAttemptOrdinal !== 2 ||
+        seen.has(workSlotId) ||
+        raw.providerVoteIdentityHash !== slot.providerVoteIdentityHash
+      )
+        throw new Error('review_restore_unattached_manifest_scope_mismatch');
+      seen.add(workSlotId);
+      const manifestCanonicalJson = requireString(
+        raw.manifestCanonicalJson,
+        'restore_prepared_manifest'
+      );
+      parseCanonicalObject(manifestCanonicalJson);
+      return Object.freeze({
+        workSlotId,
+        manifestCanonicalJson,
+        manifestKey: requireDigest(raw.manifestKey, 'restore_manifest_key'),
+        providerInvocationKey: requireDigest(
+          raw.providerInvocationKey,
+          'restore_provider_invocation_key'
+        ),
+        providerVoteIdentityHash: slot.providerVoteIdentityHash,
+        observationId: requireString(raw.observationId, 'restore_observation_id'),
+        payloadHash: requireDigest(raw.payloadHash, 'restore_payload_hash'),
+        sourceLeaseId: requireString(raw.sourceLeaseId, 'restore_source_lease_id'),
+        sourceFencingToken: requireDecimal(
+          raw.sourceFencingToken,
+          'restore_source_fencing_token'
+        ),
+        sourceOwnerIdHash: requireDigest(
+          raw.sourceOwnerIdHash,
+          'restore_source_owner_hash'
+        ),
+      });
+    })
+  );
 }
 
 function parseAcceptedRestoreManifests(

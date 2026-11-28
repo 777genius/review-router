@@ -250,10 +250,9 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     };
   }
 
-  async prepare(input: {
-    readonly workSlot: ReviewWorkSlotPlan;
-    readonly attemptOrdinal: number;
-  }): Promise<CodexPreparedReviewInvocation> {
+  async prepare(
+    input: Parameters<PreparedReviewInvocationPort['prepare']>[0]
+  ): Promise<CodexPreparedReviewInvocation> {
     const assignment = this.assignments.get(input.workSlot.workSlotId);
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error('review_action_v2_assignment_missing');
@@ -270,7 +269,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
       this.promptBuilder,
       assignment,
       this.investigationManifestBindingEnabled,
-      this.reviewMemory?.current()
+      input.originalManifest ? undefined : this.reviewMemory?.current()
     );
     const shouldPrepareInvestigationSeed =
       this.investigationManifestBindingEnabled &&

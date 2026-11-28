@@ -403,6 +403,12 @@ test.each(['upstream_failure', 'relay_unknown', 'provider_quota_exhausted'])(
           'An incomplete review does not approve the changes.'
         );
         expect(message).toContain(
+          'The earlier provider request may still be running after this GitHub run finishes.'
+        );
+        expect(message).toContain(
+          'Starting a new review may repeat that work.'
+        );
+        expect(message).not.toContain(
           'Wait for this run to finish, then start a new review.'
         );
       } else {

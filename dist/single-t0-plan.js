@@ -120013,7 +120013,7 @@ function providerFailureMessage(notice, incompleteReview = false) {
     return incompleteReview ? "The review used its whole allowance of model requests before it reached every file. This review is incomplete and does not approve the changes." : "The review used its whole allowance of model requests before it finished. The result is incomplete.";
   if (notice !== "upstream_failure" && notice !== "upstream_failure_unknown" && notice !== "request_outcome_unknown")
     return void 0;
-  return (notice === "request_outcome_unknown" ? "The review request did not produce a confirmed result. " : "The review provider could not return a usable result. ") + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : notice === "request_outcome_unknown" ? "The request may have reached the provider. " : "") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "Automatic retry was withheld to avoid running the request twice. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + "Wait for this run to finish, then start a new review.";
+  return (notice === "request_outcome_unknown" ? "The review request did not produce a confirmed result. " : "The review provider could not return a usable result. ") + (notice === "upstream_failure_unknown" ? "The outcome of the failed provider request is unknown. " : notice === "request_outcome_unknown" ? "The request may have reached the provider. " : "") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "Automatic retry was withheld to avoid running the request twice. " : "") + (incompleteReview ? "This review is incomplete and does not approve the changes. " : "An incomplete review does not approve the changes. ") + (notice === "upstream_failure_unknown" || notice === "request_outcome_unknown" ? "The earlier provider request may still be running after this GitHub run finishes. Starting a new review may repeat that work." : "Wait for this run to finish, then start a new review.");
 }
 
 // src/control-plane/generated/review-action-v2/review-model-dispatch-contract.ts
@@ -120050,6 +120050,13 @@ var reviewModelDispatchCapacity128Contract = Object.freeze({
   capacityPolicy: "model-dispatch-policy.capacity128.v1",
   maxRequests: 128
 });
+var reviewModelDispatchNativeRetryContract = Object.freeze({
+  ...reviewModelDispatchCapacity128Contract,
+  policyVersion: "model-dispatch-policy.native-retry.v1",
+  retryPolicy: "native-rejection-once.v1",
+  nativeRetryProof: "native_rejection_after_forward",
+  maxNativeRetries: 1
+});
 var reviewModelDispatchHeaders = Object.freeze({
   dispatchVersion: "x-reviewrouter-model-dispatch-version",
   requestOrdinal: "x-reviewrouter-model-request-ordinal",
@@ -120082,14 +120089,18 @@ function parseReviewModelDispatchCapabilityV2(value) {
   );
 }
 function parseReviewModelDispatchCapability(value) {
+  if (record(value) && Object.hasOwn(value, "retryPolicy"))
+    return parseCapability(value, reviewModelDispatchNativeRetryContract);
   return record(value) && Object.hasOwn(value, "capacityPolicy") ? parseCapability(value, reviewModelDispatchCapacity128Contract) : parseReviewModelDispatchCapabilityV2(value);
 }
 function parseCapability(value, contract) {
-  const capacity128 = contract === reviewModelDispatchCapacity128Contract;
+  const capacity128 = contract !== reviewModelDispatchContract;
+  const nativeRetry = contract === reviewModelDispatchNativeRetryContract;
   if (!record(value) || !keys(value, [
     "extensionId",
     "version",
     ...capacity128 ? ["capacityPolicy"] : [],
+    ...nativeRetry ? ["retryPolicy"] : [],
     "routeIdentityHash",
     "transport",
     "wireProtocol",
@@ -120103,7 +120114,7 @@ function parseCapability(value, contract) {
     "maxRequestBytes",
     "maxResponseBytes",
     "maxOutputTokens"
-  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || capacity128 && value.capacityPolicy !== reviewModelDispatchCapacity128Contract.capacityPolicy || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
+  ]) || value.extensionId !== reviewModelDispatchContract.extensionId || value.version !== 2 || capacity128 && value.capacityPolicy !== reviewModelDispatchCapacity128Contract.capacityPolicy || nativeRetry && (value.retryPolicy !== reviewModelDispatchNativeRetryContract.retryPolicy || value.transport !== "account_gateway") || !hash(value.routeIdentityHash) || !isReviewModelTransport(value.transport) || !isReviewModelWireProtocol(value.wireProtocol) || value.outputTokenLimit !== "upstream_request" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "codex-responses" && value.outputTokenLimit !== "terminal_acceptance" || value.wireProtocol === "anthropic-messages" && value.outputTokenLimit !== "upstream_request" || !reviewModelWireProtocolMatchesTransport(
     value.transport,
     value.wireProtocol
   ) || !Number.isSafeInteger(value.providerIndex) || Number(value.providerIndex) < 0 || Number(value.providerIndex) > 15 || typeof value.model !== "string" || !value.model.trim() || value.model.length > 256 || Object.hasOwn(value, "configuredModel") && (value.transport !== "runner_local_anthropic" || !anthropicModelAliases.includes(
@@ -120192,7 +120203,8 @@ var MODEL_DISPATCH_CLAIM_DENIAL_CODES = [
   "model_dispatch_effect_unresolved",
   "model_dispatch_authority_changed",
   "model_dispatch_ordinal_invalid",
-  "model_dispatch_authorization_denied"
+  "model_dispatch_authorization_denied",
+  "model_dispatch_retry_denied"
 ];
 function scopedModelInvocations(invocations, transport) {
   return {
@@ -126638,6 +126650,20 @@ function validateUsagePriceSnapshot(value) {
   }
 }
 
+// src/control-plane/generated/review-action-v2/native-usage-context.ts
+function validNativeUsageContext(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (Object.keys(value).length !== 6 || value.schemaVersion !== 1 || ![value.providerId, value.productId, value.profileId].every(
+    (id) => typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(id)
+  ) || typeof value.modelId !== "string" || !value.modelId.length || value.modelId.length > 256 || [...value.modelId].some(
+    (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
+  ) || !value.billing || typeof value.billing !== "object" || Array.isArray(value.billing))
+    return false;
+  return value.billing.status === "unknown" ? Object.keys(value.billing).length === 1 : value.billing.status === "known" && Object.keys(value.billing).length === 2 && ["subscription", "credits", "free", "payg", "mixed"].includes(
+    value.billing.kind
+  );
+}
+
 // src/control-plane/generated/review-action-v2/usage-v1.ts
 var UsageError = class extends Error {
   constructor(code) {
@@ -126690,9 +126716,13 @@ function validateUsageFact(f) {
       "correctionReason",
       "childCallIds"
     ],
-    ["serviceTier", "priceSnapshot"]
+    ["serviceTier", "priceSnapshot", "nativeContext", "nativeEvidenceVersion"]
   );
   if (Object.hasOwn(f, "serviceTier")) text2(f.serviceTier, true);
+  if (Object.hasOwn(f, "nativeEvidenceVersion") && (f.nativeEvidenceVersion !== 2 || f.authority !== "native" || f.identity?.route !== "gateway"))
+    invalid2();
+  if (Object.hasOwn(f, "nativeContext") && (f.authority !== "native" || f.identity?.route !== "gateway" || f.nativeEvidenceVersion !== 2 || !validNativeUsageContext(f.nativeContext)))
+    invalid2();
   if (Object.hasOwn(f, "priceSnapshot") && f.priceSnapshot !== null) {
     try {
       validateUsagePriceSnapshot(f.priceSnapshot);
@@ -189610,7 +189640,7 @@ var GitHubClient = class {
     }
   }
 };
-function createResilientOctokit(initialToken, tokenProvider, sleep = (delayMs) => new Promise((resolve5) => setTimeout(resolve5, delayMs))) {
+function createResilientOctokit(initialToken, tokenProvider, sleep) {
   const octokit = new import_rest.Octokit();
   octokit.hook.wrap("request", async (request3, options) => {
     const requestWithToken = (token2) => {
@@ -189651,11 +189681,29 @@ function createResilientOctokit(initialToken, tokenProvider, sleep = (delayMs) =
         info2(
           `GitHub read retry ${retries}/${GITHUB_READ_RETRY_DELAYS_MS.length} in ${waitMs} ms after ${describeFailure(failureClass, status)}`
         );
-        await sleep(waitMs);
+        if (sleep) await sleep(waitMs);
+        else await waitForGitHubReadRetry(waitMs, options.request?.signal);
+        options.request?.signal?.throwIfAborted();
       }
     }
   });
   return octokit;
+}
+function waitForGitHubReadRetry(delayMs, signal) {
+  signal?.throwIfAborted();
+  return new Promise((resolve5, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve5();
+    }, delayMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
 }
 function getHttpStatus(error3) {
   if (typeof error3 !== "object" || error3 === null) {
@@ -189716,22 +189764,47 @@ function transientGitHubReadWaitMs(error3, failureClass, delayMs, remainingMs) {
   return waitMs < remainingMs ? waitMs : void 0;
 }
 function rateLimitWaitMs(headers) {
-  const retryAfter = retryAfterMs(headers);
-  if (retryAfter !== void 0) return retryAfter;
+  const now = Date.now();
+  const retryAfter = retryAfterMs(headers, now);
   if (readHeader(headers, "x-ratelimit-remaining") === "0") {
     const reset = numericHeader(headers, "x-ratelimit-reset");
     if (reset !== void 0) {
-      return Math.max(0, Math.ceil(reset * 1e3 - Date.now()));
+      return Math.max(0, retryAfter ?? 0, Math.ceil(reset * 1e3 - now));
     }
   }
-  return UNANNOUNCED_RATE_LIMIT_WAIT_MS;
+  return retryAfter ?? UNANNOUNCED_RATE_LIMIT_WAIT_MS;
 }
-function retryAfterMs(headers) {
-  const seconds = numericHeader(headers, "retry-after");
-  if (seconds !== void 0) return Math.ceil(seconds * 1e3);
-  const retryAfter = readHeader(headers, "retry-after");
-  const retryAt = retryAfter !== void 0 && /[a-z]/i.test(retryAfter) ? Date.parse(retryAfter) : NaN;
-  return Number.isFinite(retryAt) ? Math.max(0, retryAt - Date.now()) : void 0;
+function retryAfterMs(headers, now = Date.now()) {
+  const value = readHeader(headers, "retry-after")?.trim();
+  if (!value) return void 0;
+  if (/^\d+$/u.test(value)) return Number(value) * 1e3;
+  const retryAt = httpDateTimestamp(value, now);
+  return retryAt === void 0 ? void 0 : Math.max(0, retryAt - now);
+}
+function httpDateTimestamp(value, now) {
+  const leapSecond = / 23:59:60(?: GMT| \d{4})$/u.test(value);
+  let normalized = leapSecond ? value.replace("23:59:60", "23:59:59") : value;
+  const obsolete = /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), (\d{2})-([A-Z][a-z]{2})-(\d{2}) (\d{2}:\d{2}:\d{2}) GMT$/u.exec(
+    normalized
+  );
+  if (obsolete) {
+    const futureLimit = new Date(now);
+    futureLimit.setUTCFullYear(futureLimit.getUTCFullYear() + 50);
+    const year = Math.floor(futureLimit.getUTCFullYear() / 100) * 100 + Number(obsolete[4]);
+    normalized = `${obsolete[1].slice(0, 3)}, ${obsolete[2]} ${obsolete[3]} ${year} ${obsolete[5]} GMT`;
+    if (Date.parse(normalized) + (leapSecond ? 1e3 : 0) > futureLimit.getTime()) {
+      normalized = normalized.replace(` ${year} `, ` ${year - 100} `);
+    }
+  } else {
+    const asctime = /^([A-Z][a-z]{2}) ([A-Z][a-z]{2}) ( \d|\d{2}) (\d{2}:\d{2}:\d{2}) (\d{4})$/u.exec(
+      normalized
+    );
+    if (asctime) {
+      normalized = `${asctime[1]}, ${asctime[3].trim().padStart(2, "0")} ${asctime[2]} ${asctime[5]} ${asctime[4]} GMT`;
+    }
+  }
+  const timestamp3 = Date.parse(normalized);
+  return Number.isFinite(timestamp3) && new Date(timestamp3).toUTCString() === normalized ? timestamp3 + (leapSecond ? 1e3 : 0) : void 0;
 }
 function numericHeader(headers, name) {
   const value = readHeader(headers, name)?.trim();
@@ -195531,6 +195604,80 @@ var RunT0ReviewOrchestration = class {
     );
     let authorization;
     let execution;
+    let executionStartAttempted = false;
+    let initialExecutionRestore;
+    const stoppedResult = async (status) => {
+      this.dependencies.signal?.throwIfAborted();
+      const currentAuthorization = authorization;
+      let initialRestoredExecution;
+      let preStartRestoredExecution = null;
+      if (!execution && !command.restoredExecution && currentAuthorization) {
+        try {
+          validateAuthorizationScope(command, currentAuthorization);
+          initialExecutionRestore ??= this.dependencies.controlPlane.restoreExecution({
+            authorization: currentAuthorization,
+            reviewRevisionHash: command.reviewRevisionHash
+          });
+          const restoredBeforeStart = await initialExecutionRestore;
+          if (executionStartAttempted) {
+            preStartRestoredExecution = restoredBeforeStart;
+            initialRestoredExecution = await this.dependencies.controlPlane.restoreExecution({
+              authorization: currentAuthorization,
+              reviewRevisionHash: command.reviewRevisionHash
+            });
+          } else {
+            initialRestoredExecution = restoredBeforeStart;
+          }
+        } catch {
+          this.dependencies.signal?.throwIfAborted();
+        }
+        this.dependencies.signal?.throwIfAborted();
+      }
+      let acknowledged = !execution && !command.restoredExecution && !executionStartAttempted && initialRestoredExecution === null;
+      let cancelledExecution = execution;
+      if (!acknowledged && currentAuthorization) {
+        try {
+          validateAuthorizationScope(command, currentAuthorization);
+          const restored = command.restoredExecution ?? initialRestoredExecution;
+          const original = execution ?? (restored ? {
+            executionId: restored.executionId,
+            generation: restored.generation,
+            streamVersion: restored.streamVersion,
+            executionVersion: restored.version,
+            restoredExecution: restored
+          } : void 0);
+          if (!original || initialRestoredExecution && initialRestoredExecution.executionId !== command.executionId || original.executionId !== original.restoredExecution.executionId || original.generation !== original.restoredExecution.generation || original.restoredExecution.authorizationId !== currentAuthorization.authorizationId || original.restoredExecution.reviewRevisionHash !== currentAuthorization.facts.reviewRevisionHash || original.restoredExecution.planHash !== command.planHash || restored && (original.executionId !== restored.executionId || original.generation !== restored.generation))
+            throw new Error("review_orchestration_cancellation_scope_mismatch");
+          validateRestoredExecutionContinuity(
+            preStartRestoredExecution,
+            original
+          );
+          cancelledExecution = original;
+          await confirmReviewExecutionCancellation({
+            authorization: currentAuthorization,
+            execution: original,
+            controlPlane: this.dependencies.controlPlane,
+            identities: this.dependencies.identities,
+            ...executionStartAttempted && initialRestoredExecution ? { restoredExecution: initialRestoredExecution } : {},
+            signal: this.dependencies.signal
+          });
+          acknowledged = true;
+        } catch {
+          this.dependencies.signal?.throwIfAborted();
+        }
+      }
+      if (!isTerminal4(state3.phase)) {
+        state3 = evolveReviewOrchestration(state3, {
+          type: acknowledged ? "superseded" /* Superseded */ : "failed" /* Failed */
+        });
+      }
+      return {
+        status: acknowledged ? status : "failed" /* Failed */,
+        state: state3,
+        ...cancelledExecution ? { executionId: cancelledExecution.executionId } : {},
+        ...acknowledged ? {} : { failureCode: "review_orchestration_cancellation_unconfirmed" }
+      };
+    };
     try {
       this.dependencies.signal?.throwIfAborted();
       validateCommand(command);
@@ -195544,16 +195691,10 @@ var RunT0ReviewOrchestration = class {
       });
       const admittedRevision = await this.dependencies.revisionGuard.loadCurrentRevision();
       if (admittedRevision.pullRequestState === "closed") {
-        state3 = evolveReviewOrchestration(state3, {
-          type: "superseded" /* Superseded */
-        });
-        return { status: "cancelled" /* Cancelled */, state: state3 };
+        return await stoppedResult("cancelled" /* Cancelled */);
       }
       if (!sameRevision(admittedRevision, command)) {
-        state3 = evolveReviewOrchestration(state3, {
-          type: "superseded" /* Superseded */
-        });
-        return { status: "superseded" /* Superseded */, state: state3 };
+        return await stoppedResult("superseded" /* Superseded */);
       }
       state3 = evolveReviewOrchestration(state3, {
         type: "revision_confirmed" /* RevisionConfirmed */
@@ -195583,15 +195724,18 @@ var RunT0ReviewOrchestration = class {
         authorization,
         reviewRevisionHash: command.reviewRevisionHash
       };
+      initialExecutionRestore = this.dependencies.controlPlane.restoreExecution(
+        {
+          authorization,
+          reviewRevisionHash: command.reviewRevisionHash
+        }
+      );
       const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
           reviewRevisionHash: command.reviewRevisionHash
         }),
-        this.dependencies.controlPlane.restoreExecution({
-          authorization,
-          reviewRevisionHash: command.reviewRevisionHash
-        }),
+        initialExecutionRestore,
         Promise.resolve().then(
           () => this.dependencies.controlPlane.restoreComparisonBaseline?.(
             comparisonBaselineRequest
@@ -195604,6 +195748,7 @@ var RunT0ReviewOrchestration = class {
       if (command.restoredExecution && restoredExecution && (restoredExecution.executionId !== command.restoredExecution.executionId || restoredExecution.generation !== command.restoredExecution.generation || restoredExecution.planHash !== command.planHash))
         throw new Error("review_orchestration_restored_execution_drift");
       const continuingExecution = command.restoredExecution ? restoredExecution ?? command.restoredExecution : void 0;
+      executionStartAttempted = continuingExecution === void 0;
       execution = continuingExecution ? {
         executionId: continuingExecution.executionId,
         generation: continuingExecution.generation,
@@ -195705,7 +195850,32 @@ var RunT0ReviewOrchestration = class {
           )
         };
       };
+      const restoredAcceptedHintFor = (workSlotId) => {
+        const retained = command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
+          (hint) => hint.workSlotId === workSlotId
+        );
+        const refreshed = execution.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
+          (hint) => hint.workSlotId === workSlotId
+        );
+        if (retained && refreshed && ![
+          "manifestCanonicalJson",
+          "manifestKey",
+          "providerInvocationKey",
+          "providerVoteIdentityHash",
+          "observationId",
+          "payloadHash",
+          "sourceLeaseId",
+          "sourceFencingToken",
+          "sourceOwnerIdHash"
+        ].every((key) => retained[key] === refreshed[key]))
+          throw new Error("review_orchestration_unattached_source_changed");
+        return retained ?? refreshed;
+      };
       const runWorkSlot = async (workSlot) => {
+        if (acceptedEvidence.some(
+          (item) => item.workSlotId === workSlot.workSlotId
+        ))
+          return;
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
           throw new Error("review_orchestration_restored_work_slot_missing");
@@ -195714,11 +195884,34 @@ var RunT0ReviewOrchestration = class {
           (slot) => slot.workSlotId === workSlot.workSlotId
         );
         const restoredSatisfied = restoredSlot.state === "satisfied" /* Satisfied */;
+        const restoredAcceptedHint = restoredAcceptedHintFor(
+          workSlot.workSlotId
+        );
+        if (restoredAcceptedHint) {
+          const stillUnattached = restoredSlot.state === "exhausted" /* Exhausted */ && restoredSlot.acceptedObservationRefId === null;
+          const alreadyAttached = restoredSatisfied && restoredSlot.acceptedObservationRefId === observationRefId(
+            execution.executionId,
+            workSlot.workSlotId,
+            restoredAcceptedHint.observationId
+          );
+          const acceptedManifest = execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
+            (manifest) => manifest.workSlotId === workSlot.workSlotId
+          );
+          if (!command.restoreOnly || workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */ || workSlot.attemptBudget !== 1 || persistedSlot?.nextAttemptOrdinal !== 2 || restoredSlot.activeLeaseId !== null || !stillUnattached && !alreadyAttached || alreadyAttached && acceptedManifest && ![
+            "manifestCanonicalJson",
+            "manifestKey",
+            "providerInvocationKey",
+            "providerVoteIdentityHash"
+          ].every(
+            (key) => acceptedManifest[key] === restoredAcceptedHint[key]
+          ))
+            throw new Error("review_orchestration_unattached_source_changed");
+        }
         const lifecycleEvidenceUnavailable = workSlot.taskKind === "lifecycle_revalidation" /* LifecycleRevalidation */ && (!restoredSatisfied || !command.restoredExecution?.persistedPlan?.acceptedManifests?.some(
           (manifest) => manifest.workSlotId === workSlot.workSlotId
         ));
         const discoveryDispatchUncertain = workSlot.taskKind === "finding_discovery" /* FindingDiscovery */ && !restoredSatisfied && (restoredSlot.state === "leased" /* Leased */ || restoredSlot.activeLeaseId !== null || (persistedSlot?.nextAttemptOrdinal ?? 1) > 1);
-        if (command.restoreOnly && (lifecycleEvidenceUnavailable || discoveryDispatchUncertain) || restoredSlot.state === "exhausted" /* Exhausted */ || restoredSlot.state === "cancelled" /* Cancelled */) {
+        if (!restoredAcceptedHint && (command.restoreOnly && (lifecycleEvidenceUnavailable || discoveryDispatchUncertain) || restoredSlot.state === "exhausted" /* Exhausted */ || restoredSlot.state === "cancelled" /* Cancelled */)) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
             workSlot.workSlotId,
@@ -195732,7 +195925,7 @@ var RunT0ReviewOrchestration = class {
           });
           return;
         }
-        if (restoredSlot.state !== "satisfied" /* Satisfied */ && !this.canStartBatch()) {
+        if (!restoredAcceptedHint && restoredSlot.state !== "satisfied" /* Satisfied */ && !this.canStartBatch()) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
             workSlot.workSlotId,
@@ -195744,7 +195937,7 @@ var RunT0ReviewOrchestration = class {
           });
           return;
         }
-        if (restoredSlot.state !== "satisfied" /* Satisfied */ && this.providerLaneBusyBudgetExhausted(
+        if (!restoredAcceptedHint && restoredSlot.state !== "satisfied" /* Satisfied */ && this.providerLaneBusyBudgetExhausted(
           busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0
         )) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
@@ -195767,13 +195960,25 @@ var RunT0ReviewOrchestration = class {
           ownerIdHash: command.ownerIdHash,
           revision: command,
           restoredSlot,
+          ...restoredAcceptedHint ? { restoredAcceptedHint } : {},
           restoreOnly: command.restoreOnly === true,
           busyPollsByProviderLane,
           admissionLimited: this.dependencies.reviewerScheduling ? false : admissionLimited,
           onEvent: (event) => {
             state3 = evolveReviewOrchestration(state3, event);
           }
+        }).catch((error3) => {
+          if (!restoredAcceptedHint || error3 instanceof ReviewExecutionSupersededSignal || error3 instanceof ReviewExecutionCancelledSignal || error3 instanceof ReviewExecutionDeadlineReachedSignal)
+            throw error3;
+          this.dependencies.signal?.throwIfAborted();
+          throw new Error(
+            "review_orchestration_unattached_observation_unavailable"
+          );
         });
+        if (restoredAcceptedHint && !outcome.observation)
+          throw new Error(
+            "review_orchestration_unattached_observation_unavailable"
+          );
         execution = {
           ...execution,
           streamVersion: maxVersion(
@@ -195889,6 +196094,11 @@ var RunT0ReviewOrchestration = class {
           });
         };
         try {
+          for (const slot of command.workSlots) {
+            if (!restoredAcceptedHintFor(slot.workSlotId)) continue;
+            this.runAbort.signal.throwIfAborted();
+            await runWorkSlot(slot);
+          }
           while (pending.length || active.size) {
             while (!parentFailure && !this.runAbort.signal.aborted && active.size < (fallback ? 1 : scheduling.maxParallelReviewers)) {
               if (fallback && fallbackChainSettled(fallbackOutcomes)) {
@@ -195916,7 +196126,10 @@ var RunT0ReviewOrchestration = class {
                   fallbackOutcomes.set(
                     lane.providerVoteIdentityHash,
                     fallbackLaneOutcome(
-                      false,
+                      reviewerCompletedRequiredWork(
+                        lane.slots,
+                        acceptedEvidence
+                      ),
                       stopReasons.get(lane.providerVoteIdentityHash)
                     )
                   );
@@ -196367,18 +196580,6 @@ var RunT0ReviewOrchestration = class {
       };
     } catch (error3) {
       this.dependencies.signal?.throwIfAborted();
-      if (error3 instanceof ReviewExecutionCancelledSignal) {
-        if (!isTerminal4(state3.phase)) {
-          state3 = evolveReviewOrchestration(state3, {
-            type: "superseded" /* Superseded */
-          });
-        }
-        return {
-          status: "cancelled" /* Cancelled */,
-          state: state3,
-          ...execution ? { executionId: execution.executionId } : {}
-        };
-      }
       if (error3 instanceof ReviewExecutionSupersededSignal) {
         if (authorization && execution) {
           await this.dependencies.controlPlane.supersedeExecution({
@@ -196404,17 +196605,8 @@ var RunT0ReviewOrchestration = class {
           ...execution ? { executionId: execution.executionId } : {}
         };
       }
-      if (await this.pullRequestClosedAfterFailure()) {
-        if (!isTerminal4(state3.phase)) {
-          state3 = evolveReviewOrchestration(state3, {
-            type: "superseded" /* Superseded */
-          });
-        }
-        return {
-          status: "cancelled" /* Cancelled */,
-          state: state3,
-          ...execution ? { executionId: execution.executionId } : {}
-        };
+      if (error3 instanceof ReviewExecutionCancelledSignal || await this.pullRequestClosedAfterFailure()) {
+        return await stoppedResult("cancelled" /* Cancelled */);
       }
       if (!isTerminal4(state3.phase)) {
         state3 = evolveReviewOrchestration(state3, {
@@ -196459,6 +196651,9 @@ var RunT0ReviewOrchestration = class {
       input.workSlot.providerVoteIdentityHash
     );
     const waitSignal = reviewerSignal ?? this.dependencies.signal;
+    const originalManifest = input.restoredAcceptedHint ?? (input.restoredSlot.state === "satisfied" /* Satisfied */ ? input.execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
+      (manifest) => manifest.workSlotId === input.workSlot.workSlotId
+    ) : void 0);
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest = null;
     let handledInvestigationOrdinal = null;
@@ -196478,10 +196673,14 @@ var RunT0ReviewOrchestration = class {
         const authoritativeInvocation = await this.dependencies.invocations.prepare({
           workSlot: input.workSlot,
           attemptOrdinal,
-          ...reviewerSignal ? { signal: reviewerSignal } : {}
+          ...reviewerSignal ? { signal: reviewerSignal } : {},
+          ...originalManifest ? { originalManifest } : {}
         });
         reviewerSignal?.throwIfAborted();
-        const authoritativeManifest = await this.dependencies.invocationManifestAssembler.assemble(
+        const authoritativeManifest = originalManifest ? await this.dependencies.invocationManifestAssembler.assemble(
+          authoritativeInvocation,
+          originalManifest
+        ) : await this.dependencies.invocationManifestAssembler.assemble(
           authoritativeInvocation
         );
         validateManifest(authoritativeManifest);
@@ -196819,9 +197018,7 @@ var RunT0ReviewOrchestration = class {
               return activeInvocation;
             }
           });
-          if (invocation.manifestFacts.executionProfile !== "context_gateway_v1") {
-            await this.assertRevisionCurrent(input.revision);
-          }
+          this.dependencies.signal?.throwIfAborted();
           if (this.providerOperationRemainingMs() <= 0) {
             throw new ReviewExecutionDeadlineReachedSignal();
           }
@@ -196977,7 +197174,8 @@ var RunT0ReviewOrchestration = class {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
         }
       } catch (error3) {
-        if (!(error3 instanceof ReviewMemoryAdmissionChangedSignal)) throw error3;
+        if (input.restoredAcceptedHint || !(error3 instanceof ReviewMemoryAdmissionChangedSignal))
+          throw error3;
         attemptOrdinal -= 1;
       }
     }
@@ -197108,6 +197306,10 @@ var RunT0ReviewOrchestration = class {
     return refreshed.streamVersion;
   }
   async trySatisfyFromLookup(input) {
+    const hint = input.restoredAcceptedHint;
+    if (hint) this.assertExecutionDeadlineAvailable();
+    if (hint && !isOriginalAcceptedManifest(input, input.manifest))
+      throw new Error("review_orchestration_unattached_manifest_mismatch");
     if (!isOriginalAcceptedManifest(input, input.manifest))
       await this.assertMemoryEligible(input.invocation);
     const lookup2 = await this.dependencies.controlPlane.lookupEvidence({
@@ -197117,6 +197319,8 @@ var RunT0ReviewOrchestration = class {
       planHash: input.planHash,
       manifest: input.manifest
     });
+    if (hint && (lookup2.kind !== "hit" /* Hit */ || lookup2.attachment.kind !== "same_execution" || lookup2.observation.observationId !== hint.observationId || lookup2.observation.payloadHash !== hint.payloadHash || lookup2.observation.providerInvocationKey !== hint.providerInvocationKey || lookup2.observation.providerVoteIdentityHash !== hint.providerVoteIdentityHash || lookup2.attachment.sourceLeaseId !== hint.sourceLeaseId || lookup2.attachment.sourceFencingToken !== hint.sourceFencingToken || lookup2.attachment.sourceOwnerIdHash !== hint.sourceOwnerIdHash))
+      throw new Error("review_orchestration_unattached_observation_mismatch");
     if (lookup2.kind === "miss" /* Miss */) return null;
     await this.assertRevisionCurrent(input.revision);
     if (!isOriginalAcceptedManifest(input, input.manifest))
@@ -197205,22 +197409,25 @@ var RunT0ReviewOrchestration = class {
       );
       const adopted = await this.parentCommand(
         { ...input, execution: adoptionExecution },
-        (execution) => this.dependencies.controlPlane.adoptObservation({
-          authorization: input.authorization,
-          idempotencyKey: this.idempotencyKey("adopt", [
-            input.execution.executionId,
-            input.workSlot.workSlotId,
-            lookup2.observation.observationId,
-            attachment.sourceLeaseId,
-            attachment.sourceFencingToken
-          ]),
-          execution,
-          workSlot: input.workSlot,
-          planHash: input.planHash,
-          manifest: input.manifest,
-          observation: lookup2.observation,
-          source: attachment
-        })
+        (execution) => {
+          if (hint) this.assertExecutionDeadlineAvailable();
+          return this.dependencies.controlPlane.adoptObservation({
+            authorization: input.authorization,
+            idempotencyKey: this.idempotencyKey("adopt", [
+              input.execution.executionId,
+              input.workSlot.workSlotId,
+              lookup2.observation.observationId,
+              attachment.sourceLeaseId,
+              attachment.sourceFencingToken
+            ]),
+            execution,
+            workSlot: input.workSlot,
+            planHash: input.planHash,
+            manifest: input.manifest,
+            observation: lookup2.observation,
+            source: attachment
+          });
+        }
       );
       streamVersion = adopted.streamVersion;
     }
@@ -197304,8 +197511,10 @@ var RunT0ReviewOrchestration = class {
   async pullRequestClosedAfterFailure() {
     try {
       const currentRevision = await this.dependencies.revisionGuard.loadCurrentRevision();
+      this.dependencies.signal?.throwIfAborted();
       return currentRevision.pullRequestState === "closed";
     } catch {
+      this.dependencies.signal?.throwIfAborted();
       return false;
     }
   }
@@ -197710,6 +197919,42 @@ var RunT0ReviewOrchestration = class {
     return this.dependencies.identities.deterministicId(namespace, parts);
   }
 };
+async function confirmReviewExecutionCancellation(input) {
+  const { authorization, execution, controlPlane, signal } = input;
+  signal?.throwIfAborted();
+  if (execution.executionId !== execution.restoredExecution.executionId || execution.generation !== execution.restoredExecution.generation || execution.restoredExecution.authorizationId !== authorization.authorizationId || execution.restoredExecution.reviewRevisionHash !== authorization.facts.reviewRevisionHash)
+    throw new Error("review_orchestration_cancellation_scope_mismatch");
+  const latest = input.restoredExecution ?? await controlPlane.restoreExecution({
+    authorization,
+    reviewRevisionHash: authorization.facts.reviewRevisionHash
+  });
+  signal?.throwIfAborted();
+  const current = latest ? refreshExecutionAdmission(execution, latest) : execution;
+  const alreadyTerminal = latest !== null && [
+    "superseded" /* Superseded */,
+    "completed" /* Completed */,
+    "partial" /* Partial */,
+    "failed" /* Failed */
+  ].includes(latest.state);
+  if (!alreadyTerminal) {
+    signal?.throwIfAborted();
+    await controlPlane.supersedeExecution({
+      authorization,
+      idempotencyKey: input.identities.deterministicId(
+        "idempotency-cancel-closed-pr",
+        [
+          current.executionId,
+          current.generation,
+          current.streamVersion,
+          authorization.facts.reviewRevisionHash
+        ]
+      ),
+      execution: current,
+      targetRevisionHash: authorization.facts.reviewRevisionHash
+    });
+    signal?.throwIfAborted();
+  }
+}
 function terminalizeCommand(reason) {
   if (reason === "deadline_reached" /* DeadlineReached */) {
     return { terminalState: "cancelled", reasonCode: "deadline_reached" };
@@ -198018,9 +198263,9 @@ var ReviewProviderUnavailableSignal = class extends Error {
   }
 };
 function isOriginalAcceptedManifest(input, manifest) {
-  if (input.restoredSlot.state !== "satisfied" /* Satisfied */ || input.execution.restoredExecution.executionId !== input.execution.executionId)
+  if (!input.restoredAcceptedHint && input.restoredSlot.state !== "satisfied" /* Satisfied */ || input.execution.restoredExecution.executionId !== input.execution.executionId)
     return false;
-  const original = input.execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
+  const original = input.restoredAcceptedHint ?? input.execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
     (value) => value.workSlotId === input.workSlot.workSlotId
   );
   return original !== void 0 && original.manifestCanonicalJson === manifest.manifestCanonicalJson && original.manifestKey === manifest.manifestKey && original.providerInvocationKey === manifest.providerInvocationKey && original.providerVoteIdentityHash === manifest.providerVoteIdentityHash;
@@ -199569,7 +199814,7 @@ var CodexReviewInvocationAdapter = class {
       this.promptBuilder,
       assignment,
       this.investigationManifestBindingEnabled,
-      this.reviewMemory?.current()
+      input.originalManifest ? void 0 : this.reviewMemory?.current()
     );
     const shouldPrepareInvestigationSeed = this.investigationManifestBindingEnabled && preparedPrompt.investigationProbePlan.status === "complete" /* Complete */;
     const [gatewayPlanningConfig, canonicalInventory] = this.contextGateway ? await Promise.all([
@@ -210553,6 +210798,9 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${englishFindingWord(counts.total)} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Why the review is incomplete:**",
     incompleteCauses: {
+      review_main_incomplete: "Completion of all required review work was not confirmed.",
+      review_round_incomplete: "The review stopped before completing its review rounds.",
+      review_phase_incomplete: "A review phase could not be completed.",
       attempt_budget_exhausted: "The review provider did not produce accepted evidence.",
       not_runnable: "A required review unit could not be run at all.",
       provider_lane_busy: "The review provider stayed unavailable (busy or at capacity) for the entire run.",
@@ -210585,6 +210833,9 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**\u041F\u043E\u0447\u0435\u043C\u0443 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E:**",
     incompleteCauses: {
+      review_main_incomplete: "\u041D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u0435 \u0432\u0441\u0435\u0439 \u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E\u0439 \u0440\u0430\u0431\u043E\u0442\u044B \u043F\u043E \u0440\u0435\u0432\u044C\u044E.",
+      review_round_incomplete: "\u0420\u0435\u0432\u044C\u044E \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u043B\u043E\u0441\u044C \u0434\u043E \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0440\u0430\u0443\u043D\u0434\u043E\u0432 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438.",
+      review_phase_incomplete: "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u043E\u0434\u0438\u043D \u0438\u0437 \u044D\u0442\u0430\u043F\u043E\u0432 \u0440\u0435\u0432\u044C\u044E.",
       attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u043F\u0440\u0435\u0434\u043E\u0441\u0442\u0430\u0432\u0438\u043B \u043F\u0440\u0438\u043D\u044F\u0442\u044B\u0445 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u0432.",
       not_runnable: "\u041E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u0439 \u0431\u043B\u043E\u043A \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u0432\u043E\u043E\u0431\u0449\u0435.",
       provider_lane_busy: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432\u044C\u044E \u0431\u044B\u043B \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D (\u0437\u0430\u043D\u044F\u0442 \u0438\u043B\u0438 \u043D\u0430 \u043F\u0440\u0435\u0434\u0435\u043B\u0435 \u043C\u043E\u0449\u043D\u043E\u0441\u0442\u0438) \u0432\u0435\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u043A.",
@@ -210617,6 +210868,9 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**\u0427\u043E\u043C\u0443 \u0440\u0435\u0432'\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E:**",
     incompleteCauses: {
+      review_main_incomplete: "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043D\u044F \u0432\u0441\u0456\u0454\u0457 \u043E\u0431\u043E\u0432\u2019\u044F\u0437\u043A\u043E\u0432\u043E\u0457 \u0440\u043E\u0431\u043E\u0442\u0438 \u0437 \u0440\u0435\u0432\u2019\u044E \u043D\u0435 \u043F\u0456\u0434\u0442\u0432\u0435\u0440\u0434\u0436\u0435\u043D\u043E.",
+      review_round_incomplete: "\u0420\u0435\u0432\u2019\u044E \u0437\u0443\u043F\u0438\u043D\u0438\u043B\u043E\u0441\u044F \u0434\u043E \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043D\u044F \u0440\u0430\u0443\u043D\u0434\u0456\u0432 \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u043A\u0438.",
+      review_phase_incomplete: "\u041D\u0435 \u0432\u0434\u0430\u043B\u043E\u0441\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0438 \u043E\u0434\u0438\u043D \u0437 \u0435\u0442\u0430\u043F\u0456\u0432 \u0440\u0435\u0432\u2019\u044E.",
       attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432'\u044E \u043D\u0435 \u043D\u0430\u0434\u0430\u0432 \u043F\u0440\u0438\u0439\u043D\u044F\u0442\u0438\u0445 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0456\u0432.",
       not_runnable: "\u041E\u0431\u043E\u0432'\u044F\u0437\u043A\u043E\u0432\u0438\u0439 \u0431\u043B\u043E\u043A \u0440\u0435\u0432'\u044E \u043D\u0435 \u0432\u0434\u0430\u043B\u043E\u0441\u044F \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0438 \u0432\u0437\u0430\u0433\u0430\u043B\u0456.",
       provider_lane_busy: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432'\u044E \u0431\u0443\u0432 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0438\u0439 (\u0437\u0430\u0439\u043D\u044F\u0442\u0438\u0439 \u0430\u0431\u043E \u043D\u0430 \u043C\u0435\u0436\u0456 \u043F\u043E\u0442\u0443\u0436\u043D\u043E\u0441\u0442\u0456) \u0432\u0435\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u043A.",
@@ -210649,6 +210903,9 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "hallazgo" : "hallazgos"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Por qu\xE9 la revisi\xF3n no est\xE1 completa:**",
     incompleteCauses: {
+      review_main_incomplete: "No se confirm\xF3 la finalizaci\xF3n de todo el trabajo de revisi\xF3n obligatorio.",
+      review_round_incomplete: "La revisi\xF3n se detuvo antes de completar sus rondas.",
+      review_phase_incomplete: "No se pudo completar una fase de la revisi\xF3n.",
       attempt_budget_exhausted: "El proveedor de revisi\xF3n no produjo evidencia aceptada.",
       not_runnable: "No se pudo ejecutar en absoluto una unidad de revisi\xF3n obligatoria.",
       provider_lane_busy: "El proveedor de revisi\xF3n estuvo indisponible (ocupado o al l\xEDmite de capacidad) durante toda la ejecuci\xF3n.",
@@ -210681,6 +210938,9 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "achado" : "achados"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Por que a revis\xE3o n\xE3o est\xE1 completa:**",
     incompleteCauses: {
+      review_main_incomplete: "N\xE3o foi confirmada a conclus\xE3o de todo o trabalho obrigat\xF3rio de revis\xE3o.",
+      review_round_incomplete: "A revis\xE3o parou antes de concluir suas rodadas.",
+      review_phase_incomplete: "N\xE3o foi poss\xEDvel concluir uma fase da revis\xE3o.",
       attempt_budget_exhausted: "O provedor de revis\xE3o n\xE3o produziu evid\xEAncia aceita.",
       not_runnable: "N\xE3o foi poss\xEDvel executar uma unidade de revis\xE3o obrigat\xF3ria.",
       provider_lane_busy: "O provedor de revis\xE3o ficou indispon\xEDvel (ocupado ou no limite de capacidade) durante toda a execu\xE7\xE3o.",
@@ -210713,6 +210973,9 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "anomalie" : "anomalies"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Pourquoi la revue est incompl\xE8te :**",
     incompleteCauses: {
+      review_main_incomplete: "La fin de l\u2019ensemble du travail de revue requis n\u2019a pas \xE9t\xE9 confirm\xE9e.",
+      review_round_incomplete: "La revue s\u2019est arr\xEAt\xE9e avant la fin de ses cycles.",
+      review_phase_incomplete: "Une phase de la revue n\u2019a pas pu \xEAtre termin\xE9e.",
       attempt_budget_exhausted: "Le fournisseur de revue n'a pas produit de preuve accept\xE9e.",
       not_runnable: "Une unit\xE9 de revue obligatoire n'a pas pu \xEAtre ex\xE9cut\xE9e du tout.",
       provider_lane_busy: "Le fournisseur de revue est rest\xE9 indisponible (occup\xE9 ou \xE0 saturation) pendant toute l'ex\xE9cution.",
@@ -210745,6 +211008,9 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "Befund" : "Befunde"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Warum die Pr\xFCfung unvollst\xE4ndig ist:**",
     incompleteCauses: {
+      review_main_incomplete: "Der Abschluss aller erforderlichen Pr\xFCfschritte wurde nicht best\xE4tigt.",
+      review_round_incomplete: "Die Pr\xFCfung wurde vor Abschluss ihrer Runden beendet.",
+      review_phase_incomplete: "Eine Pr\xFCfphase konnte nicht abgeschlossen werden.",
       attempt_budget_exhausted: "Der Pr\xFCfanbieter hat keine akzeptierten Ergebnisse geliefert.",
       not_runnable: "Eine erforderliche Pr\xFCfeinheit konnte \xFCberhaupt nicht ausgef\xFChrt werden.",
       provider_lane_busy: "Der Pr\xFCfanbieter war w\xE4hrend des gesamten Laufs nicht verf\xFCgbar (ausgelastet oder an der Kapazit\xE4tsgrenze).",
@@ -210777,6 +211043,9 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "rilievo" : "rilievi"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Perch\xE9 la revisione \xE8 incompleta:**",
     incompleteCauses: {
+      review_main_incomplete: "Il completamento di tutto il lavoro di revisione richiesto non \xE8 stato confermato.",
+      review_round_incomplete: "La revisione si \xE8 fermata prima di completare i suoi cicli.",
+      review_phase_incomplete: "Non \xE8 stato possibile completare una fase della revisione.",
       attempt_budget_exhausted: "Il fornitore della revisione non ha prodotto evidenze accettate.",
       not_runnable: "Non \xE8 stato possibile eseguire affatto un'unit\xE0 di revisione obbligatoria.",
       provider_lane_busy: "Il fornitore della revisione \xE8 rimasto non disponibile (occupato o al limite della capacit\xE0) per tutta l'esecuzione.",
@@ -210809,6 +211078,9 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} \u4E2A\u95EE\u9898\uFF08${formatSeverityCounts(counts)}\uFF09`,
     incompleteCauseHeading: "**\u4E3A\u4EC0\u4E48\u672C\u6B21\u5BA1\u67E5\u672A\u5B8C\u6210\uFF1A**",
     incompleteCauses: {
+      review_main_incomplete: "\u5C1A\u672A\u786E\u8BA4\u6240\u6709\u5FC5\u9700\u7684\u5BA1\u67E5\u5DE5\u4F5C\u5747\u5DF2\u5B8C\u6210\u3002",
+      review_round_incomplete: "\u5BA1\u67E5\u5728\u5B8C\u6210\u5404\u8F6E\u68C0\u67E5\u4E4B\u524D\u505C\u6B62\u3002",
+      review_phase_incomplete: "\u4E00\u4E2A\u5BA1\u67E5\u9636\u6BB5\u672A\u80FD\u5B8C\u6210\u3002",
       attempt_budget_exhausted: "\u5BA1\u67E5\u63D0\u4F9B\u65B9\u672A\u4EA7\u51FA\u88AB\u63A5\u53D7\u7684\u8BC1\u636E\u3002",
       not_runnable: "\u4E00\u4E2A\u5FC5\u9700\u7684\u5BA1\u67E5\u5355\u5143\u6839\u672C\u65E0\u6CD5\u8FD0\u884C\u3002",
       provider_lane_busy: "\u6574\u4E2A\u8FD0\u884C\u671F\u95F4\u5BA1\u67E5\u63D0\u4F9B\u65B9\u4E00\u76F4\u4E0D\u53EF\u7528\uFF08\u7E41\u5FD9\u6216\u8FBE\u5230\u5BB9\u91CF\u4E0A\u9650\uFF09\u3002",
@@ -210841,6 +211113,9 @@ var copies = {
     findingsHeading: (counts) => `## \u6307\u6458 ${counts.total} \u4EF6\uFF08${formatSeverityCounts(counts)}\uFF09`,
     incompleteCauseHeading: "**\u30EC\u30D3\u30E5\u30FC\u304C\u5B8C\u4E86\u3057\u306A\u304B\u3063\u305F\u7406\u7531:**",
     incompleteCauses: {
+      review_main_incomplete: "\u5FC5\u9808\u306E\u30EC\u30D3\u30E5\u30FC\u4F5C\u696D\u304C\u3059\u3079\u3066\u5B8C\u4E86\u3057\u305F\u3053\u3068\u3092\u78BA\u8A8D\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
+      review_round_incomplete: "\u30EC\u30D3\u30E5\u30FC\u306E\u5404\u30E9\u30A6\u30F3\u30C9\u304C\u5B8C\u4E86\u3059\u308B\u524D\u306B\u51E6\u7406\u304C\u505C\u6B62\u3057\u307E\u3057\u305F\u3002",
+      review_phase_incomplete: "\u30EC\u30D3\u30E5\u30FC\u306E\u4E00\u90E8\u306E\u6BB5\u968E\u3092\u5B8C\u4E86\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
       attempt_budget_exhausted: "\u30EC\u30D3\u30E5\u30FC\u63D0\u4F9B\u8005\u306F\u53D7\u7406\u3055\u308C\u305F\u8A3C\u62E0\u3092\u751F\u6210\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
       not_runnable: "\u5FC5\u9808\u306E\u30EC\u30D3\u30E5\u30FC\u5358\u5143\u3092\u307E\u3063\u305F\u304F\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
       provider_lane_busy: "\u5B9F\u884C\u5168\u4F53\u3092\u901A\u3058\u3066\u30EC\u30D3\u30E5\u30FC\u63D0\u4F9B\u8005\u304C\u5229\u7528\u4E0D\u80FD\u3067\u3057\u305F\uFF08\u6DF7\u96D1\u307E\u305F\u306F\u5BB9\u91CF\u4E0A\u9650\uFF09\u3002",
@@ -210873,6 +211148,9 @@ var copies = {
     findingsHeading: (counts) => `## \uC774\uC288 ${counts.total}\uAC1C (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**\uB9AC\uBDF0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC740 \uC774\uC720:**",
     incompleteCauses: {
+      review_main_incomplete: "\uD544\uC218 \uAC80\uD1A0 \uC791\uC5C5\uC774 \uBAA8\uB450 \uC644\uB8CC\uB418\uC5C8\uB294\uC9C0 \uD655\uC778\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+      review_round_incomplete: "\uAC80\uD1A0 \uB77C\uC6B4\uB4DC\uAC00 \uC644\uB8CC\uB418\uAE30 \uC804\uC5D0 \uAC80\uD1A0\uAC00 \uC911\uB2E8\uB418\uC5C8\uC2B5\uB2C8\uB2E4.",
+      review_phase_incomplete: "\uAC80\uD1A0 \uB2E8\uACC4\uB97C \uC644\uB8CC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
       attempt_budget_exhausted: "\uB9AC\uBDF0 \uC81C\uACF5\uC790\uAC00 \uC218\uB77D\uB41C \uC99D\uAC70\uB97C \uC0DD\uC131\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
       not_runnable: "\uD544\uC218 \uB9AC\uBDF0 \uB2E8\uC704\uB97C \uC804\uD600 \uC2E4\uD589\uD560 \uC218 \uC5C6\uC5C8\uC2B5\uB2C8\uB2E4.",
       provider_lane_busy: "\uC2E4\uD589 \uB0B4\uB0B4 \uB9AC\uBDF0 \uC81C\uACF5\uC790\uB97C \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC5C8\uC2B5\uB2C8\uB2E4(\uD63C\uC7A1 \uB610\uB294 \uC6A9\uB7C9 \uD55C\uACC4).",
@@ -212974,6 +213252,7 @@ var ProductionReviewProjectionCommandFactory = class {
     const reviewedFiles = /* @__PURE__ */ new Set();
     const policyExcludedFiles = /* @__PURE__ */ new Set();
     const coverageLimitations = [];
+    const observationIncompleteCauses = /* @__PURE__ */ new Set();
     const requiredUnfinished = /* @__PURE__ */ new Set();
     const unfinishedPaths = (workSlotId) => new Set(
       (this.input.unfinishedPaths?.(workSlotId) ?? []).map(
@@ -213067,6 +213346,15 @@ var ProductionReviewProjectionCommandFactory = class {
         coverageLimitations.push(
           `work_slot_context_inspection_incomplete:${assignment.workSlotId}`
         );
+        for (const cause of [
+          "review_main_incomplete",
+          "review_round_incomplete",
+          "review_phase_incomplete"
+        ]) {
+          if (accepted.observation.qualityFlags.includes(cause)) {
+            observationIncompleteCauses.add(cause);
+          }
+        }
         if (accepted.observation.qualityFlags.includes("unverified_native_span")) {
           coverageLimitations.push(
             "Quoted code could not be verified against a unique span in the reviewed file. Affected findings remain at file level without inline anchors or suggested patches."
@@ -213118,11 +213406,12 @@ var ProductionReviewProjectionCommandFactory = class {
     ].sort();
     const incompleteCauses = Object.freeze(
       [
-        ...new Set(
-          requiredExhaustedWorkSlotIds.map(
+        .../* @__PURE__ */ new Set([
+          ...requiredExhaustedWorkSlotIds.map(
             (workSlotId) => input.exhaustedWorkSlotReasons?.get(workSlotId)
-          ).filter((reason) => reason !== void 0)
-        )
+          ).filter((reason) => reason !== void 0),
+          ...observationIncompleteCauses
+        ])
       ].sort()
     );
     const providerExecution = providerExecutionSummary(
@@ -214435,34 +214724,51 @@ function restoreProductionLifecycleVerification(restored, original, config2) {
     lifecycleVerification
   };
 }
-function restoredLifecycleInvocations(restored, discovery) {
+function restoredLifecycleInvocations(restored, discovery, scope) {
   const manifests = new Map(
-    restored.persistedPlan?.acceptedManifests?.map((value) => [
-      value.workSlotId,
-      value
-    ]) ?? []
+    [
+      ...restored?.persistedPlan?.acceptedManifests ?? [],
+      ...restored?.persistedPlan?.unattachedAcceptedManifests ?? []
+    ].map((value) => [value.workSlotId, value])
   );
-  const satisfied = new Set(
-    restored.workSlots.filter((slot) => slot.state === "satisfied" /* Satisfied */).map((slot) => slot.workSlotId)
-  );
+  const readOnlySlots = /* @__PURE__ */ new Set([
+    ...(restored?.workSlots ?? []).filter((slot) => slot.state === "satisfied" /* Satisfied */).map((slot) => slot.workSlotId),
+    ...(restored?.persistedPlan?.unattachedAcceptedManifests ?? []).map(
+      (hint) => hint.workSlotId
+    )
+  ]);
   return {
     async prepare(input) {
-      const original = manifests.get(input.workSlot.workSlotId);
-      if (input.workSlot.taskKind !== "lifecycle_revalidation" /* LifecycleRevalidation */ && !satisfied.has(input.workSlot.workSlotId))
+      const captured = manifests.get(input.workSlot.workSlotId);
+      const original = input.originalManifest ?? captured;
+      if (input.originalManifest && (input.originalManifest.workSlotId !== input.workSlot.workSlotId || captured && !sameManifest(input.originalManifest, captured)))
+        throw new Error("review_restore_accepted_manifest_scope_mismatch");
+      if (!input.originalManifest && (!restored?.persistedPlan || input.workSlot.taskKind !== "lifecycle_revalidation" /* LifecycleRevalidation */ && !readOnlySlots.has(input.workSlot.workSlotId)))
         return discovery.prepare(input);
-      if (!original || input.attemptOrdinal !== 1)
+      const knownSlot = scope?.workSlots.find(
+        (slot) => slot.workSlotId === input.workSlot.workSlotId
+      );
+      if (scope && (restored && scope.reviewRevisionHash !== restored.reviewRevisionHash || !knownSlot || knownSlot.providerVoteIdentityHash !== input.workSlot.providerVoteIdentityHash || knownSlot.providerKind !== input.workSlot.providerKind || knownSlot.taskKind !== input.workSlot.taskKind))
+        throw new Error("review_restore_accepted_manifest_scope_mismatch");
+      const reviewRevisionHash = scope?.reviewRevisionHash ?? restored?.reviewRevisionHash;
+      if (!original || input.attemptOrdinal !== 1 || !reviewRevisionHash)
         throw new Error("review_restore_accepted_manifest_unavailable");
       const wire = JSON.parse(
         original.manifestCanonicalJson
       );
       if (!wire.taskKindSet.includes(input.workSlot.taskKind) || wire.providerKind !== input.workSlot.providerKind || original.providerVoteIdentityHash !== input.workSlot.providerVoteIdentityHash)
         throw new Error("review_restore_accepted_manifest_scope_mismatch");
+      readOnlySlots.add(input.workSlot.workSlotId);
       const coverage = input.workSlot.taskKind === "lifecycle_revalidation" /* LifecycleRevalidation */ ? createReviewPromptCoverageManifest({
         workSlotId: input.workSlot.workSlotId,
-        reviewRevisionHash: restored.reviewRevisionHash,
+        reviewRevisionHash,
         assignedPaths: [],
         pathCoverage: []
-      }) : await restoreDiscoveryCoverage(discovery, input, wire);
+      }) : await restoreDiscoveryCoverage(
+        discovery,
+        { ...input, originalManifest: original },
+        wire
+      );
       return Object.freeze({
         workSlotId: input.workSlot.workSlotId,
         attemptOrdinal: 1,
@@ -214477,26 +214783,43 @@ function restoredLifecycleInvocations(restored, discovery) {
       });
     },
     async execute(input) {
-      if (satisfied.has(input.invocation.workSlotId) || input.invocation.manifestFacts.taskKindSet.length === 1 && input.invocation.manifestFacts.taskKindSet[0] === "lifecycle_revalidation" /* LifecycleRevalidation */)
+      if (readOnlySlots.has(input.invocation.workSlotId) || restored?.persistedPlan && input.invocation.manifestFacts.taskKindSet.length === 1 && input.invocation.manifestFacts.taskKindSet[0] === "lifecycle_revalidation" /* LifecycleRevalidation */)
         throw new Error("review_restore_inference_forbidden");
       return discovery.execute(input);
     }
   };
 }
-function restoredLifecycleManifestAssembler(restored, discovery) {
-  if (!restored?.persistedPlan) return discovery;
+function restoredLifecycleManifestAssembler(restored, discovery, scope) {
+  if (!restored?.persistedPlan && !scope) return discovery;
   const manifests = new Map(
-    restored?.persistedPlan?.acceptedManifests?.map((value) => [
-      value.workSlotId,
-      value
-    ]) ?? []
+    [
+      ...restored?.persistedPlan?.acceptedManifests ?? [],
+      ...restored?.persistedPlan?.unattachedAcceptedManifests ?? []
+    ].map((value) => [value.workSlotId, value])
   );
   return {
-    async assemble(invocation) {
-      const satisfied = restored.workSlots.some(
+    async assemble(invocation, originalManifest) {
+      if (originalManifest) {
+        const slot = (restored?.workSlots ?? scope?.workSlots ?? []).find(
+          (value) => value.workSlotId === invocation.workSlotId
+        );
+        const knownSlot = scope?.workSlots.find(
+          (value) => value.workSlotId === invocation.workSlotId
+        );
+        const captured = manifests.get(invocation.workSlotId);
+        if (originalManifest.workSlotId !== invocation.workSlotId || slot?.providerVoteIdentityHash !== originalManifest.providerVoteIdentityHash || scope && (restored && scope.reviewRevisionHash !== restored.reviewRevisionHash || !knownSlot || knownSlot.providerVoteIdentityHash !== originalManifest.providerVoteIdentityHash || knownSlot.providerKind !== invocation.manifestFacts.providerKind || !invocation.manifestFacts.taskKindSet.includes(
+          knownSlot.taskKind
+        )) || captured && !sameManifest(originalManifest, captured))
+          throw new Error("review_restore_accepted_manifest_scope_mismatch");
+        return originalManifest;
+      }
+      if (!restored?.persistedPlan) return discovery.assemble(invocation);
+      const originalSource = restored.workSlots.some(
         (slot) => slot.workSlotId === invocation.workSlotId && slot.state === "satisfied" /* Satisfied */
+      ) || restored.persistedPlan?.unattachedAcceptedManifests?.some(
+        (hint) => hint.workSlotId === invocation.workSlotId
       );
-      if (!satisfied && (invocation.manifestFacts.taskKindSet.length !== 1 || invocation.manifestFacts.taskKindSet[0] !== "lifecycle_revalidation" /* LifecycleRevalidation */))
+      if (!originalSource && (invocation.manifestFacts.taskKindSet.length !== 1 || invocation.manifestFacts.taskKindSet[0] !== "lifecycle_revalidation" /* LifecycleRevalidation */))
         return discovery.assemble(invocation);
       const original = manifests.get(invocation.workSlotId);
       if (!original)
@@ -214521,6 +214844,9 @@ async function restoreDiscoveryCoverage(discovery, input, original) {
   if (hash3(canonicalJson15(context5)) !== original.contextManifestHash)
     throw new Error("review_restore_coverage_commitment_mismatch");
   return rebuilt.coverageManifest;
+}
+function sameManifest(left, right) {
+  return left.manifestCanonicalJson === right.manifestCanonicalJson && left.manifestKey === right.manifestKey && left.providerInvocationKey === right.providerInvocationKey && left.providerVoteIdentityHash === right.providerVoteIdentityHash;
 }
 function hash3(value) {
   return (0, import_node_crypto9.createHash)("sha256").update(value).digest("hex");
@@ -215005,7 +215331,7 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
       targetRevisionHash: input.targetRevisionHash
     };
     const result2 = await this.client.execute(operationId, request3).catch((error3) => {
-      if (isBenignSupersedeTargetRevisionMismatch(error3)) {
+      if (input.targetRevisionHash !== input.authorization.facts.reviewRevisionHash && isBenignSupersedeTargetRevisionMismatch(error3)) {
         return {
           status: "restored" /* Restored */,
           executionId: input.execution.executionId,
@@ -215015,6 +215341,9 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
       throw error3;
     });
     requireMutationApplied(result2.status, "execution_supersede");
+    if (requireString3(result2.executionId, "execution_supersede_execution_id") !== input.execution.executionId) {
+      throw new Error("review_action_v2_execution_supersede_execution_mismatch");
+    }
   }
   async lookupEvidence(input) {
     const result2 = await this.client.execute(
@@ -215804,6 +216133,13 @@ function parsePersistedReviewPlan(value, expected) {
         "persisted_compatibility_key"
       )
     } : {},
+    ...value.unattachedAcceptedManifests !== void 0 ? {
+      unattachedAcceptedManifests: parseUnattachedAcceptedManifests(
+        value.unattachedAcceptedManifests,
+        expected.workSlots,
+        workSlots
+      )
+    } : {},
     ...value.acceptedManifests !== void 0 ? {
       acceptedManifests: parseAcceptedRestoreManifests(
         value.acceptedManifests,
@@ -215817,6 +216153,68 @@ function parsePersistedReviewPlan(value, expected) {
     workSlots,
     artifact
   });
+}
+function parseUnattachedAcceptedManifests(value, slots, persistedSlots) {
+  if (!Array.isArray(value) || value.length > slots.length)
+    throw new Error("review_restore_unattached_manifests_invalid");
+  const seen = /* @__PURE__ */ new Set();
+  return Object.freeze(
+    value.map((raw) => {
+      if (!isRecord9(raw))
+        throw new Error("review_restore_unattached_manifest_invalid");
+      requireExactKeys3(raw, [
+        "workSlotId",
+        "manifestCanonicalJson",
+        "manifestKey",
+        "providerInvocationKey",
+        "providerVoteIdentityHash",
+        "observationId",
+        "payloadHash",
+        "sourceLeaseId",
+        "sourceFencingToken",
+        "sourceOwnerIdHash"
+      ]);
+      const workSlotId = requireString3(
+        raw.workSlotId,
+        "restore_manifest_work_slot"
+      );
+      const slot = slots.find(
+        (candidate) => candidate.workSlotId === workSlotId
+      );
+      const persisted = persistedSlots.find(
+        (candidate) => candidate.workSlotId === workSlotId
+      );
+      if (!slot || slot.state !== "exhausted" /* Exhausted */ || slot.activeLeaseId !== null || slot.acceptedObservationRefId !== null || persisted?.taskKind !== "finding_discovery" /* FindingDiscovery */ || persisted.attemptBudget !== 1 || persisted.nextAttemptOrdinal !== 2 || seen.has(workSlotId) || raw.providerVoteIdentityHash !== slot.providerVoteIdentityHash)
+        throw new Error("review_restore_unattached_manifest_scope_mismatch");
+      seen.add(workSlotId);
+      const manifestCanonicalJson = requireString3(
+        raw.manifestCanonicalJson,
+        "restore_prepared_manifest"
+      );
+      parseCanonicalObject(manifestCanonicalJson);
+      return Object.freeze({
+        workSlotId,
+        manifestCanonicalJson,
+        manifestKey: requireDigest4(raw.manifestKey, "restore_manifest_key"),
+        providerInvocationKey: requireDigest4(
+          raw.providerInvocationKey,
+          "restore_provider_invocation_key"
+        ),
+        providerVoteIdentityHash: slot.providerVoteIdentityHash,
+        observationId: requireString3(raw.observationId, "restore_observation_id"),
+        payloadHash: requireDigest4(raw.payloadHash, "restore_payload_hash"),
+        sourceLeaseId: requireString3(raw.sourceLeaseId, "restore_source_lease_id"),
+        sourceFencingToken: requireDecimal(
+          raw.sourceFencingToken,
+          "restore_source_fencing_token"
+        ),
+        sourceOwnerIdHash: requireDigest4(
+          raw.sourceOwnerIdHash,
+          "restore_source_owner_hash"
+        )
+      });
+    })
+  );
 }
 function parseAcceptedRestoreManifests(value, slots) {
   if (!Array.isArray(value) || value.length > slots.length)
@@ -216783,7 +217181,7 @@ var OcrReviewInvocationAdapter = class {
     if (assignedPaths.length === 0) {
       throw new Error("review_action_v2_ocr_nothing_to_review");
     }
-    const memorySnapshot = this.options.reviewMemory?.current();
+    const memorySnapshot = input.originalManifest ? void 0 : this.options.reviewMemory?.current();
     const ruleText = memorySnapshot ? appendOcrReviewMemory(
       this.options.ruleText,
       memorySnapshot.renderedPrompt
@@ -217032,9 +217430,14 @@ var OcrReviewInvocationAdapter = class {
       let processResult2;
       try {
         this.assertDispatchPermitted(assignment.workSlot.workSlotId);
-        return await this.runInvocation(input, assignment, preimages, (result2) => {
-          processResult2 = result2;
-        });
+        return await this.runInvocation(
+          input,
+          assignment,
+          preimages,
+          (result2) => {
+            processResult2 = result2;
+          }
+        );
       } catch (error3) {
         try {
           this.options.failureDiagnostic?.(
@@ -217195,6 +217598,25 @@ var OcrReviewInvocationAdapter = class {
       (reason) => reason === "unverified_native_span"
     ) && accepted.uncoveredPaths.length === 0 && !accepted.outputTruncated && !accepted.requestBudgetReached;
     const qualityFlags = accepted.partial ? inspectionIntact ? ["provider_warning"] : ["context_inspection_incomplete", "provider_warning"] : [];
+    if (qualityFlags.includes("context_inspection_incomplete")) {
+      if (accepted.classification.reasons.includes("missing_required_main")) {
+        qualityFlags.push("review_main_incomplete");
+      }
+      if (accepted.classification.reasons.includes("late_round_stop")) {
+        qualityFlags.push("review_round_incomplete");
+      }
+      const outcome = accepted.native.outcome;
+      const phaseIncomplete = outcome.runStopCause === "compression" || outcome.groups.some(
+        (group) => !group.mainCompleted && group.stopCause === "compression" || [
+          group.phases.plan,
+          group.phases.compression,
+          group.phases.relocation
+        ].some(
+          (phase) => phase.state === "failed" || phase.state === "cancelled"
+        ) || (group.phases.filter.state === "failed" || group.phases.filter.state === "cancelled") && group.filterDecisionValid !== false
+      );
+      if (phaseIncomplete) qualityFlags.push("review_phase_incomplete");
+    }
     if (normalization.reasons.includes("unverified_native_span")) {
       qualityFlags.push("unverified_native_span");
     }
@@ -217313,9 +217735,7 @@ function parseOcrPreviewCoverage(raw, assignedPaths) {
       throw new Error("review_action_v2_ocr_preview_contract_invalid");
     }
     if (!assigned.has(path19)) {
-      if (entry.will_review || entry.exclude_reason !== "user_exclude" && (typeof entry.exclude_reason !== "string" || !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(
-        entry.exclude_reason
-      ))) {
+      if (entry.will_review || entry.exclude_reason !== "user_exclude" && (typeof entry.exclude_reason !== "string" || !OCR_INTENTIONAL_EXCLUSION_REASONS.includes(entry.exclude_reason))) {
         throw new Error("review_action_v2_ocr_preview_scope_invalid");
       }
       continue;
@@ -222773,15 +223193,53 @@ var ProductionT0ReviewRunner = class {
       if (checkedOutHead !== authorization.facts.headSha) {
         throw new Error("review_action_v2_checked_out_revision_mismatch");
       }
+      const stoppedBeforePlanning = async (status, knownExecution) => {
+        try {
+          signal?.throwIfAborted();
+          const restored = knownExecution == null ? await controlPlane.restoreExecution({
+            authorization,
+            reviewRevisionHash: authorization.facts.reviewRevisionHash
+          }) : knownExecution;
+          signal?.throwIfAborted();
+          if (restored) {
+            await confirmReviewExecutionCancellation({
+              authorization,
+              execution: {
+                executionId: restored.executionId,
+                generation: restored.generation,
+                streamVersion: restored.streamVersion,
+                executionVersion: restored.version,
+                restoredExecution: restored
+              },
+              controlPlane,
+              identities: new DeterministicReviewOrchestrationIdentity(),
+              // An earlier positive restore stays bound while its CAS refreshes.
+              ...knownExecution == null ? { restoredExecution: restored } : {},
+              signal
+            });
+          } else {
+            throw new Error("review_orchestration_cancellation_unconfirmed");
+          }
+          signal?.throwIfAborted();
+          return mapOrchestrationResultToCodexOutcome({ status });
+        } catch {
+          signal?.throwIfAborted();
+          return mapOrchestrationResultToCodexOutcome({
+            status: "failed" /* Failed */,
+            failureCode: "review_orchestration_cancellation_unconfirmed"
+          });
+        }
+      };
       const currentRevision = await revisionGuard.loadCurrentRevision();
       if (currentRevision.pullRequestState === "closed") {
-        return {
-          outcome: "cancelled" /* Cancelled */,
-          reason: "pull_request_closed" /* PullRequestClosed */
-        };
+        return await stoppedBeforePlanning(
+          "cancelled" /* Cancelled */
+        );
       }
       if (!sameAuthorizedRevision(currentRevision, authorization)) {
-        return { outcome: "superseded" /* Superseded */ };
+        return await stoppedBeforePlanning(
+          "superseded" /* Superseded */
+        );
       }
       const preplanningRestore = await controlPlane.restoreExecution({
         authorization,
@@ -222810,7 +223268,10 @@ var ProductionT0ReviewRunner = class {
         authorization.facts.pullRequestNumber
       );
       if (pr.baseSha.toLowerCase() !== authorization.facts.baseSha || pr.headSha.toLowerCase() !== authorization.facts.headSha) {
-        return { outcome: "superseded" /* Superseded */ };
+        return await stoppedBeforePlanning(
+          "superseded" /* Superseded */,
+          preplanningRestore
+        );
       }
       signal?.throwIfAborted();
       const captureMemory = (task, available = true) => ReviewMemorySession.capture({
@@ -223335,18 +223796,12 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
                 oidc: {
                   getToken: () => oidc.requestToken(input2.audience)
                 },
-                invocationManifestAssembler: restoredLifecycleManifestAssembler(
-                  preplanningRestore2,
-                  new GeneratedProviderInvocationManifestAssembler(
-                    authorization2,
-                    config3,
-                    ocrCompatibilityKey
-                  )
+                invocationManifestAssembler: new GeneratedProviderInvocationManifestAssembler(
+                  authorization2,
+                  config3,
+                  ocrCompatibilityKey
                 ),
-                invocations: preplanningRestore2?.persistedPlan ? restoredLifecycleInvocations(
-                  preplanningRestore2,
-                  discoveryInvocations
-                ) : lifecycle2 && lifecycleCapability2 ? compositeLifecycleInvocations({
+                invocations: preplanningRestore2?.persistedPlan ? discoveryInvocations : lifecycle2 && lifecycleCapability2 ? compositeLifecycleInvocations({
                   discovery: discoveryInvocations,
                   packetsByWorkSlotId: lifecycle2.packetsByWorkSlotId,
                   capability: lifecycleCapability2,
@@ -223728,18 +224183,12 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             oidc: {
               getToken: () => oidc.requestToken(input2.audience)
             },
-            invocationManifestAssembler: restoredLifecycleManifestAssembler(
-              preplanningRestore2,
-              new GeneratedProviderInvocationManifestAssembler(
-                authorization2,
-                config3,
-                compatibilityKey
-              )
+            invocationManifestAssembler: new GeneratedProviderInvocationManifestAssembler(
+              authorization2,
+              config3,
+              compatibilityKey
             ),
-            invocations: preplanningRestore2?.persistedPlan ? restoredLifecycleInvocations(
-              preplanningRestore2,
-              nativeDiscoveryInvocations
-            ) : lifecycle && lifecycleCapability ? compositeLifecycleInvocations({
+            invocations: preplanningRestore2?.persistedPlan ? nativeDiscoveryInvocations : lifecycle && lifecycleCapability ? compositeLifecycleInvocations({
               discovery: nativeDiscoveryInvocations,
               packetsByWorkSlotId: lifecycle.packetsByWorkSlotId,
               capability: lifecycleCapability,
@@ -223913,20 +224362,17 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             runtime.modelTransport
           ]) ?? []
         );
-        const dependencies2 = reviewerPlan ? {
+        const unwrappedDependencies = reviewerPlan ? {
           ...primary.dependencies,
           memoryAdmission,
-          invocations: parentRestore?.persistedPlan ? restoredLifecycleInvocations(parentRestore, laneInvocations) : laneInvocations,
-          invocationManifestAssembler: restoredLifecycleManifestAssembler(
-            parentRestore,
-            {
-              assemble: (invocation) => route(
-                invocationSlot(invocation)
-              ).dependencies.invocationManifestAssembler.assemble(
-                invocation
-              )
-            }
-          ),
+          invocations: laneInvocations,
+          invocationManifestAssembler: {
+            assemble: (invocation) => route(
+              invocationSlot(invocation)
+            ).dependencies.invocationManifestAssembler.assemble(
+              invocation
+            )
+          },
           investigationInvocations: {
             prepare: (request3) => {
               const port = route(request3.workSlot).dependencies.investigationInvocations;
@@ -223946,7 +224392,9 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             }
           },
           resolveInvestigationRecording: (slot) => route(slot).dependencies.investigationRecording,
-          ...preparedLanes.some((lane) => lane.dependencies.contextReplay) ? {
+          ...preparedLanes.some(
+            (lane) => lane.dependencies.contextReplay
+          ) ? {
             contextReplay: {
               replay: (request3) => route(
                 request3.candidate.observation
@@ -223991,6 +224439,23 @@ ${REVIEW_SKILLS_RECEIPT_UNAVAILABLE}
             skillsReceipt
           })
         } : primary.dependencies;
+        const restorationScope = {
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          workSlots: plan.assignments.map((assignment) => assignment.workSlot)
+        };
+        const dependencies2 = {
+          ...unwrappedDependencies,
+          invocations: restoredLifecycleInvocations(
+            parentRestore,
+            unwrappedDependencies.invocations,
+            restorationScope
+          ),
+          invocationManifestAssembler: restoredLifecycleManifestAssembler(
+            parentRestore,
+            unwrappedDependencies.invocationManifestAssembler,
+            restorationScope
+          )
+        };
         const command = {
           executionId: identities.deterministicId("execution", [
             authorization.authorizationId,
@@ -224360,12 +224825,7 @@ function mapExecutionFailureReason(failureCode2) {
 function createScmReadGitHubClient(input) {
   const { signal, timeoutMs = 3e4 } = input;
   const github = new GitHubClient(input.token, {
-    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
-    ...signal ? {
-      sleep: async (ms) => {
-        await (0, import_promises13.setTimeout)(ms, void 0, { signal });
-      }
-    } : {}
+    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input)
   });
   if (signal) {
     github.octokit.hook.wrap("request", (request3, options) => {

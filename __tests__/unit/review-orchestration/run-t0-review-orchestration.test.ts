@@ -37,9 +37,11 @@ import {
   type RunT0ReviewOrchestrationCommand,
   type RunT0ReviewOrchestrationDependencies,
   type PreparedReviewInvocationPort,
+  type RestoredReviewExecution,
 } from '../../../src/review-orchestration/application';
 import {
   createReviewPromptCoverageManifest,
+  createProviderVisibleReviewCoverage,
   ReviewOrchestrationPhase,
   ReviewPromptPathCoverageKind,
 } from '../../../src/review-orchestration/domain';
@@ -1106,24 +1108,29 @@ describe('RunT0ReviewOrchestration', () => {
     }
   );
 
-  it('fails closed at the orchestration boundary when a provider aborts', async () => {
-    const fixture = createFixture();
-    const abort = new Error('provider aborted before terminal output');
-    abort.name = 'AbortError';
-    jest
-      .mocked(fixture.dependencies.invocations.execute)
-      .mockRejectedValue(abort);
+  it.each(['AbortError', 'native_effect_unknown'])(
+    'fails closed when a provider has no terminal output after %s',
+    async (failureName) => {
+      const fixture = createFixture();
+      const failure = new Error('provider has no complete terminal output');
+      failure.name = failureName;
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mockRejectedValue(failure);
 
-    const result = await fixture.useCase.execute(fixture.command);
+      const result = await fixture.useCase.execute(fixture.command);
 
-    expect(result).toMatchObject({
-      status: ReviewOrchestrationResultStatus.Failed,
-      failureCode: 'required_work_exhausted',
-    });
-    expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
-    expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
-    expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
-  });
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'required_work_exhausted',
+      });
+      expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
 
   it('fails closed at the orchestration boundary when provider output is missing', async () => {
     const fixture = createFixture();
@@ -2390,6 +2397,873 @@ describe('RunT0ReviewOrchestration', () => {
     expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
   });
 
+  it.each(['matching', 'wrong_reference', 'wrong_manifest'] as const)(
+    'reuses an already-satisfied original hint only with matching identity: %s',
+    async (outcome) => {
+      const fixture = unattachedAcceptedFixture();
+      fixture.setCurrent({
+        ...fixture.restored,
+        version: '2',
+        streamVersion: '2',
+        workSlots: fixture.restored.workSlots.map((slot) => ({
+          ...slot,
+          state: RestoredReviewWorkSlotState.Satisfied,
+          acceptedObservationRefId: observationRef(
+            fixture.restored.executionId,
+            slot.workSlotId,
+            outcome === 'wrong_reference'
+              ? 'different-observation'
+              : fixture.hint.observationId
+          ),
+        })),
+        persistedPlan: {
+          ...fixture.restored.persistedPlan!,
+          unattachedAcceptedManifests: [],
+          acceptedManifests: [
+            outcome === 'wrong_manifest'
+              ? { ...fixture.hint, manifestKey: hash('different-manifest') }
+              : fixture.hint,
+          ],
+        },
+      });
+      const result = await fixture.useCase.execute(fixture.command);
+      if (outcome === 'matching') {
+        expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+        expect(fixture.controlPlane.lookupEvidence).toHaveBeenCalledTimes(1);
+        expect(fixture.controlPlane.lookupEvidence).toHaveBeenCalledWith(
+          expect.objectContaining({ manifest: fixture.hint })
+        );
+      } else {
+        expect(result).toMatchObject({
+          status: ReviewOrchestrationResultStatus.Failed,
+          failureCode: 'review_orchestration_unattached_source_changed',
+        });
+        expect(fixture.controlPlane.lookupEvidence).not.toHaveBeenCalled();
+      }
+      expect(fixture.controlPlane.adoptObservation).not.toHaveBeenCalled();
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    'manifestCanonicalJson',
+    'manifestKey',
+    'providerInvocationKey',
+    'providerVoteIdentityHash',
+    'observationId',
+    'payloadHash',
+    'sourceLeaseId',
+    'sourceFencingToken',
+    'sourceOwnerIdHash',
+  ] as const)(
+    'rejects a refreshed hint conflicting with the retained %s',
+    async (field) => {
+      const fixture = unattachedAcceptedFixture();
+      fixture.setCurrent({
+        ...fixture.restored,
+        persistedPlan: {
+          ...fixture.restored.persistedPlan!,
+          unattachedAcceptedManifests: [
+            { ...fixture.hint, [field]: hash('conflicting-' + field) },
+          ],
+        },
+      });
+      const result = await fixture.useCase.execute(fixture.command);
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'review_orchestration_unattached_source_changed',
+      });
+      expect(fixture.dependencies.invocations.prepare).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.lookupEvidence).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.adoptObservation).not.toHaveBeenCalled();
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['empty_plan', 'exact_hit'],
+    ['empty_plan', 'wrong_reference'],
+    ['empty_plan', 'lookup_miss'],
+    ['null', 'exact_hit'],
+    ['null', 'wrong_reference'],
+    ['null', 'lookup_miss'],
+  ] as const)(
+    'restores a refresh-only Satisfied original after %s planning: %s',
+    async (planningState, outcome) => {
+      const fixture = createFixture();
+      const workSlot = fixture.command.workSlots[0]!;
+      const discovery = fixture.dependencies.invocations;
+      const prepare = jest.mocked(discovery.prepare);
+      const prepared = await prepare({ workSlot, attemptOrdinal: 1 });
+      const context = {
+        coverageHash: createProviderVisibleReviewCoverage(
+          prepared.coverageManifest
+        ).coverageHash,
+      };
+      const filePatchPreimage = '[]';
+      const contextPreimage = canonicalJson(context);
+      const originalMemory = hash('original-memory');
+      const memoryFree = {
+        ...prepared,
+        manifestFacts: {
+          ...prepared.manifestFacts,
+          memoryBundleHash: null,
+          filePatchManifestHash: hash(filePatchPreimage),
+          contextManifestHash: hash(contextPreimage),
+        },
+        manifestPreimages: {
+          filePatchManifestHash: filePatchPreimage,
+          contextManifestHash: contextPreimage,
+        },
+      };
+      const manifestCanonicalJson = canonicalJson({
+        ...memoryFree.manifestFacts,
+        requestedModel: prepared.requestedModel,
+        memoryBundleHash: originalMemory,
+        contextManifestHash: hash(
+          canonicalJson({ ...context, memoryBundleHash: originalMemory })
+        ),
+      });
+      const original = {
+        workSlotId: workSlot.workSlotId,
+        manifestCanonicalJson,
+        manifestKey: hash(manifestCanonicalJson),
+        providerInvocationKey: acceptedObservation.providerInvocationKey,
+        providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+      };
+      const persistedPlan = {
+        planHash: fixture.command.planHash,
+        assignmentManifestVersion: 1,
+        assignmentManifestHash: fixture.command.assignmentManifestHash,
+        assignmentManifestCanonicalJson:
+          fixture.command.assignmentManifestCanonicalJson,
+        workSlots: [{ ...workSlot, nextAttemptOrdinal: 2 }],
+        acceptedManifests: [],
+        unattachedAcceptedManifests: [],
+        artifact: null,
+      };
+      const emptyPlanning: RestoredReviewExecution = {
+        ...restoredAdmission(fixture.command, {
+          state: RestoredReviewWorkSlotState.Exhausted,
+          acceptedObservationRefId: null,
+        }).restoredExecution,
+        persistedPlan,
+      };
+      const current: RestoredReviewExecution = {
+        ...emptyPlanning,
+        version: '2',
+        streamVersion: '2',
+        workSlots: emptyPlanning.workSlots.map((slot) => ({
+          ...slot,
+          state: RestoredReviewWorkSlotState.Satisfied,
+          acceptedObservationRefId: observationRef(
+            emptyPlanning.executionId,
+            slot.workSlotId,
+            outcome === 'wrong_reference'
+              ? 'different-observation'
+              : acceptedObservation.observationId
+          ),
+        })),
+        persistedPlan: { ...persistedPlan, acceptedManifests: [original] },
+      };
+      const planning = planningState === 'null' ? null : emptyPlanning;
+      fixture.controlPlane.restoreExecution
+        .mockReset()
+        .mockResolvedValue(current);
+      if (!planning) {
+        fixture.controlPlane.restoreExecution.mockResolvedValueOnce(null);
+        fixture.controlPlane.startExecution.mockResolvedValue({
+          executionId: current.executionId,
+          generation: current.generation,
+          streamVersion: current.streamVersion,
+          executionVersion: current.version,
+          restoredExecution: current,
+        });
+      }
+      fixture.controlPlane.lookupEvidence.mockImplementation(
+        async ({ manifest }) =>
+          outcome === 'lookup_miss' ||
+          manifest.manifestKey !== original.manifestKey
+            ? { kind: ReviewEvidenceLookupKind.Miss }
+            : {
+                kind: ReviewEvidenceLookupKind.Hit,
+                observation: acceptedObservation,
+                attachment: sameExecutionAttachment,
+              }
+      );
+      prepare.mockClear();
+      prepare.mockImplementation(async (input) =>
+        input.originalManifest
+          ? memoryFree
+          : {
+              ...memoryFree,
+              manifestFacts: {
+                ...memoryFree.manifestFacts,
+                memoryBundleHash: hash('current-memory'),
+              },
+            }
+      );
+      const assembler = fixture.dependencies.invocationManifestAssembler;
+      jest.mocked(assembler.assemble).mockResolvedValue({
+        ...original,
+        manifestKey: hash('fresh-current-memory-manifest'),
+      });
+      const isEligible = jest.fn(async () => true);
+      const discard = jest.fn();
+      const scope = {
+        reviewRevisionHash: fixture.command.reviewRevisionHash,
+        workSlots: fixture.command.workSlots,
+      };
+      Object.assign(fixture.dependencies, {
+        invocations: restoredLifecycleInvocations(planning, discovery, scope),
+        invocationManifestAssembler: restoredLifecycleManifestAssembler(
+          planning,
+          assembler,
+          scope
+        ),
+        memoryAdmission: { isEligible, discard },
+      });
+
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        ...(planning ? { restoredExecution: planning, restoreOnly: true } : {}),
+      });
+      if (outcome === 'exact_hit') {
+        expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+        expect(
+          fixture.dependencies.projectionBuilder.build
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            acceptedEvidence: [
+              expect.objectContaining({
+                workSlotId: workSlot.workSlotId,
+                observation: acceptedObservation,
+              }),
+            ],
+          })
+        );
+      } else {
+        expect(result).toMatchObject({
+          status: ReviewOrchestrationResultStatus.Failed,
+          failureCode:
+            outcome === 'wrong_reference'
+              ? 'review_orchestration_restored_observation_identity_mismatch'
+              : 'review_orchestration_restored_observation_unavailable',
+        });
+        expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+      }
+      expect(prepare).toHaveBeenCalledTimes(1);
+      expect(prepare).toHaveBeenCalledWith(
+        expect.objectContaining({ originalManifest: original })
+      );
+      expect(assembler.assemble).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.lookupEvidence).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.lookupEvidence).toHaveBeenCalledWith(
+        expect.objectContaining({ manifest: original })
+      );
+      expect(isEligible).not.toHaveBeenCalled();
+      expect(discard).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.adoptObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+      expect(discovery.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.startExecution).toHaveBeenCalledTimes(
+        planning ? 0 : 1
+      );
+    }
+  );
+
+  it('delegates fresh lifecycle prepare, manifest assembly and execution without an original', async () => {
+    const fixture = createFixture();
+    const workSlot = {
+      ...fixture.command.workSlots[0]!,
+      taskKind: ReviewTaskKind.LifecycleRevalidation,
+    };
+    const scope = {
+      reviewRevisionHash: fixture.command.reviewRevisionHash,
+      workSlots: [workSlot],
+    };
+    const discovery = fixture.dependencies.invocations;
+    const assembler = fixture.dependencies.invocationManifestAssembler;
+    const invocations = restoredLifecycleInvocations(null, discovery, scope);
+    const manifests = restoredLifecycleManifestAssembler(
+      null,
+      assembler,
+      scope
+    );
+    const input = { workSlot, attemptOrdinal: 1 };
+    const invocation = await invocations.prepare(input);
+    expect(discovery.prepare).toHaveBeenCalledTimes(1);
+    expect(discovery.prepare).toHaveBeenCalledWith(input);
+    expect(invocation.manifestFacts.taskKindSet).toEqual([
+      ReviewTaskKind.LifecycleRevalidation,
+    ]);
+    const manifest = await manifests.assemble(invocation);
+    expect(assembler.assemble).toHaveBeenCalledTimes(1);
+    expect(assembler.assemble).toHaveBeenCalledWith(invocation);
+    const execution = {
+      invocation,
+      manifest,
+      lease,
+      sourceExecutionId: fixture.command.executionId,
+      sourceReviewRevisionHash: fixture.command.reviewRevisionHash,
+      signal: new AbortController().signal,
+    };
+    await expect(invocations.execute(execution)).resolves.toBe(
+      observationPayload
+    );
+    expect(discovery.execute).toHaveBeenCalledTimes(1);
+    expect(discovery.execute).toHaveBeenCalledWith(execution);
+  });
+
+  it('passes a refresh-only memory-bearing original through real restoration wrappers', async () => {
+    const fixture = unattachedAcceptedFixture();
+    const workSlot = fixture.command.workSlots[0]!;
+    const discovery = fixture.dependencies.invocations;
+    const prepare = jest.mocked(discovery.prepare);
+    const prepared = await prepare({ workSlot, attemptOrdinal: 1 });
+    const context = {
+      coverageHash: createProviderVisibleReviewCoverage(
+        prepared.coverageManifest
+      ).coverageHash,
+    };
+    const filePatchPreimage = '[]';
+    const contextPreimage = canonicalJson(context);
+    const originalMemory = hash('original-memory');
+    const memoryFree = {
+      ...prepared,
+      manifestFacts: {
+        ...prepared.manifestFacts,
+        memoryBundleHash: null,
+        filePatchManifestHash: hash(filePatchPreimage),
+        contextManifestHash: hash(contextPreimage),
+      },
+      manifestPreimages: {
+        filePatchManifestHash: filePatchPreimage,
+        contextManifestHash: contextPreimage,
+      },
+    };
+    const manifestCanonicalJson = canonicalJson({
+      ...memoryFree.manifestFacts,
+      requestedModel: prepared.requestedModel,
+      memoryBundleHash: originalMemory,
+      contextManifestHash: hash(
+        canonicalJson({ ...context, memoryBundleHash: originalMemory })
+      ),
+    });
+    const hint = {
+      ...fixture.hint,
+      manifestCanonicalJson,
+      manifestKey: hash(manifestCanonicalJson),
+    };
+    const planning = {
+      ...fixture.restored,
+      persistedPlan: {
+        ...fixture.restored.persistedPlan!,
+        unattachedAcceptedManifests: [],
+      },
+    };
+    fixture.setCurrent({
+      ...planning,
+      persistedPlan: {
+        ...planning.persistedPlan,
+        unattachedAcceptedManifests: [hint],
+      },
+    });
+    prepare.mockClear();
+    prepare.mockImplementation(async (input) => {
+      expect(input.originalManifest).toEqual(hint);
+      return memoryFree;
+    });
+    const assembler = fixture.dependencies.invocationManifestAssembler;
+    jest.mocked(assembler.assemble).mockClear();
+    const isEligible = jest.fn(async () => false);
+    const discard = jest.fn();
+    Object.assign(fixture.dependencies, {
+      invocations: restoredLifecycleInvocations(planning, discovery),
+      invocationManifestAssembler: restoredLifecycleManifestAssembler(
+        planning,
+        assembler
+      ),
+      memoryAdmission: { isEligible, discard },
+    });
+    const adopt =
+      fixture.controlPlane.adoptObservation.getMockImplementation()!;
+    fixture.controlPlane.adoptObservation.mockImplementation(async (input) => {
+      const result = await adopt(input);
+      fixture.setCurrent({
+        ...fixture.current(),
+        persistedPlan: {
+          ...fixture.current().persistedPlan!,
+          acceptedManifests: [hint],
+        },
+      });
+      return result;
+    });
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      restoredExecution: planning,
+    });
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(assembler.assemble).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.lookupEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({ manifest: hint })
+    );
+    expect(fixture.controlPlane.adoptObservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: hint,
+        observation: acceptedObservation,
+        source: sameExecutionAttachment,
+      })
+    );
+    expect(isEligible).not.toHaveBeenCalled();
+    expect(discard).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.acquireInvocationLease).not.toHaveBeenCalled();
+    expect(discovery.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'adopts an exhausted original source below the provider window; refreshed hint omitted=%s',
+    async (omitRefreshedHint) => {
+      const fixture = unattachedAcceptedFixture();
+      expect(fixture.deadline.canStartBatch()).toBe(false);
+      if (omitRefreshedHint) {
+        fixture.setCurrent({
+          ...fixture.restored,
+          persistedPlan: {
+            ...fixture.restored.persistedPlan!,
+            unattachedAcceptedManifests: [],
+          },
+        });
+      }
+      const result = await fixture.useCase.execute(fixture.command);
+      expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+      expect(fixture.controlPlane.adoptObservation).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.adoptObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          manifest: fixture.hint,
+          observation: acceptedObservation,
+          source: sameExecutionAttachment,
+        })
+      );
+      expect(
+        fixture.current().persistedPlan!.workSlots[0]!.nextAttemptOrdinal
+      ).toBe(2);
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each(['queued', 'active', 'fallback'] as const)(
+    'recovers accepted work before an allocation stops its %s lane',
+    async (layout) => {
+      const fixture = unattachedAcceptedFixture(true);
+      const original = fixture.command.workSlots[0]!;
+      const blocked = {
+        ...fixture.command.workSlots[1]!,
+        providerVoteIdentityHash:
+          layout === 'active'
+            ? original.providerVoteIdentityHash
+            : hash('blocked-vote'),
+      };
+      const unused: ReviewWorkSlotPlan = {
+        ...blocked,
+        workSlotId: 'slot-3',
+        shardKey: 'batch-3',
+        providerVoteIdentityHash: hash('unused-fallback-vote'),
+      };
+      const workSlots = [
+        blocked,
+        original,
+        ...(layout === 'fallback' ? [unused] : []),
+      ];
+      const restored: RestoredReviewExecution = {
+        ...fixture.restored,
+        workSlots: workSlots.map((slot) => ({
+          workSlotId: slot.workSlotId,
+          state:
+            slot.workSlotId === original.workSlotId
+              ? RestoredReviewWorkSlotState.Exhausted
+              : RestoredReviewWorkSlotState.Pending,
+          required: slot.required,
+          providerVoteIdentityHash: slot.providerVoteIdentityHash,
+          activeLeaseId: null,
+          acceptedObservationRefId: null,
+        })),
+        persistedPlan: {
+          ...fixture.restored.persistedPlan!,
+          workSlots: workSlots.map((slot) => ({
+            ...slot,
+            nextAttemptOrdinal: slot.workSlotId === original.workSlotId ? 2 : 1,
+          })),
+        },
+      };
+      fixture.setCurrent(restored);
+      Object.assign(fixture.dependencies, {
+        reviewerScheduling: {
+          ...(layout === 'fallback'
+            ? { providerMode: 'fallback' as const }
+            : {}),
+          maxParallelReviewers: 1,
+          reviewers: [
+            {
+              reviewerId: 'blocked',
+              providerVoteIdentityHash: blocked.providerVoteIdentityHash,
+              concurrencyGroupId: 'shared',
+            },
+            ...(layout === 'active'
+              ? []
+              : [
+                  {
+                    reviewerId: 'original',
+                    providerVoteIdentityHash: original.providerVoteIdentityHash,
+                    concurrencyGroupId: 'shared',
+                  },
+                ]),
+            ...(layout === 'fallback'
+              ? [
+                  {
+                    reviewerId: 'unused',
+                    providerVoteIdentityHash: unused.providerVoteIdentityHash,
+                    concurrencyGroupId: 'unused',
+                  },
+                ]
+              : []),
+          ],
+          concurrencyGroups: [
+            { id: 'shared', maxParallel: 1 },
+            ...(layout === 'fallback'
+              ? [{ id: 'unused', maxParallel: 1 }]
+              : []),
+          ],
+        } satisfies NonNullable<
+          RunT0ReviewOrchestrationDependencies['reviewerScheduling']
+        >,
+      });
+      Object.assign(fixture.dependencies.invocationFailureClassifier, {
+        classify: jest.fn(
+          () => ReviewInvocationFailureClass.AuthenticationUnavailable
+        ),
+        scope: jest.fn(() => 'allocation'),
+      });
+      jest
+        .mocked(fixture.dependencies.invocationManifestAssembler.assemble)
+        .mockImplementation(async (invocation) => {
+          if (invocation.workSlotId === original.workSlotId)
+            return fixture.hint;
+          const slot = workSlots.find(
+            (candidate) => candidate.workSlotId === invocation.workSlotId
+          );
+          if (!slot) throw new Error('unexpected_work_slot');
+          const canonical = JSON.stringify({ workSlotId: slot.workSlotId });
+          return {
+            manifestCanonicalJson: canonical,
+            manifestKey: hash(canonical),
+            providerInvocationKey: hash('invocation-' + slot.workSlotId),
+            providerVoteIdentityHash: slot.providerVoteIdentityHash,
+          };
+        });
+      fixture.controlPlane.lookupEvidence.mockImplementation(
+        async ({ workSlot }) =>
+          workSlot.workSlotId === original.workSlotId
+            ? fixture.hit
+            : { kind: ReviewEvidenceLookupKind.Miss }
+      );
+      const events: string[] = [];
+      const adopt =
+        fixture.controlPlane.adoptObservation.getMockImplementation()!;
+      fixture.controlPlane.adoptObservation.mockImplementation(
+        async (request) => {
+          events.push('adopt');
+          return adopt(request);
+        }
+      );
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mockImplementation(async () => {
+          events.push('provider-stop');
+          throw new Error('allocation_authentication_unavailable');
+        });
+      if (layout === 'fallback') {
+        const finalize =
+          fixture.controlPlane.finalizeExecution.getMockImplementation()!;
+        fixture.controlPlane.finalizeExecution.mockImplementation(
+          async (request) => {
+            fixture.setCurrent({
+              ...fixture.current(),
+              state: RestoredReviewExecutionState.Completed,
+            });
+            return finalize(request);
+          }
+        );
+      }
+
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        workSlots,
+        workSlotsCanonicalJson: canonicalizeReviewWorkSlots(workSlots),
+        restoredExecution: restored,
+        allowPartial: true,
+      });
+
+      expect(result.status).toBe(
+        layout === 'fallback'
+          ? ReviewOrchestrationResultStatus.Completed
+          : ReviewOrchestrationResultStatus.PartialCompleted
+      );
+      expect(events).toEqual(['adopt', 'provider-stop']);
+      expect(fixture.controlPlane.adoptObservation).toHaveBeenCalledTimes(1);
+      expect(
+        jest
+          .mocked(fixture.dependencies.invocations.prepare)
+          .mock.calls.map(([request]) => request.workSlot.workSlotId)
+      ).toEqual([original.workSlotId, blocked.workSlotId]);
+      expect(
+        fixture.controlPlane.acquireInvocationLease.mock.calls.map(
+          ([request]) => request.workSlot.workSlotId
+        )
+      ).toEqual([blocked.workSlotId]);
+      expect(
+        jest
+          .mocked(fixture.dependencies.invocations.execute)
+          .mock.calls.map(([request]) => request.invocation.workSlotId)
+      ).toEqual([blocked.workSlotId]);
+      expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acceptedEvidence: [
+            expect.objectContaining({
+              workSlotId: original.workSlotId,
+              observation: acceptedObservation,
+            }),
+          ],
+          exhaustedWorkSlotIds:
+            layout === 'fallback'
+              ? [blocked.workSlotId, unused.workSlotId]
+              : [blocked.workSlotId],
+        })
+      );
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each([
+    'miss',
+    'replay_required',
+    'cross_execution',
+    'observation',
+    'payload',
+    'invocation',
+    'vote',
+    'lease',
+    'fence',
+    'owner',
+    'lookup_failure',
+    'prepare_configuration',
+    'disappearing_hint',
+  ])(
+    'fails hinted %s without provider admission or a fallback reviewer',
+    async (failure) => {
+      const fixture = unattachedAcceptedFixture(true);
+      const hit = fixture.hit;
+      switch (failure) {
+        case 'miss':
+        case 'disappearing_hint':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            kind: ReviewEvidenceLookupKind.Miss,
+          });
+          if (failure === 'disappearing_hint') {
+            fixture.setCurrent({
+              ...fixture.restored,
+              persistedPlan: {
+                ...fixture.restored.persistedPlan!,
+                unattachedAcceptedManifests: [],
+              },
+            });
+          }
+          break;
+        case 'replay_required':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            kind: ReviewEvidenceLookupKind.ReplayRequired,
+            observation: acceptedObservation,
+            attestationId: 'foreign-attestation',
+            attestationHash: hash('foreign-attestation'),
+            replayCapability: 'foreign-replay',
+            replayPlanCanonicalJson: '{}',
+            replayPlanHash: hash('{}'),
+          });
+          break;
+        case 'cross_execution':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            ...hit,
+            attachment: {
+              kind: 'exact_revision_reuse',
+              capability: 'foreign-attachment',
+              reuseSafetyDecisionHash: hash('foreign-attachment'),
+            },
+          });
+          break;
+        case 'observation':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            ...hit,
+            observation: { ...hit.observation, observationId: 'foreign' },
+          });
+          break;
+        case 'payload':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            ...hit,
+            observation: { ...hit.observation, payloadHash: hash('foreign') },
+          });
+          break;
+        case 'invocation':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            ...hit,
+            observation: {
+              ...hit.observation,
+              providerInvocationKey: hash('foreign'),
+            },
+          });
+          break;
+        case 'vote':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            ...hit,
+            observation: {
+              ...hit.observation,
+              providerVoteIdentityHash: hash('foreign'),
+            },
+          });
+          break;
+        case 'lease':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            ...hit,
+            attachment: { ...hit.attachment, sourceLeaseId: 'foreign' },
+          });
+          break;
+        case 'fence':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            ...hit,
+            attachment: { ...hit.attachment, sourceFencingToken: '2' },
+          });
+          break;
+        case 'owner':
+          fixture.controlPlane.lookupEvidence.mockResolvedValue({
+            ...hit,
+            attachment: {
+              ...hit.attachment,
+              sourceOwnerIdHash: hash('foreign'),
+            },
+          });
+          break;
+        case 'lookup_failure':
+          fixture.controlPlane.lookupEvidence.mockRejectedValue(
+            new Error('read_failed')
+          );
+          break;
+        case 'prepare_configuration':
+          jest
+            .mocked(fixture.dependencies.invocations.prepare)
+            .mockRejectedValue(
+              new ReviewInvocationConfigurationMismatchError(
+                ReviewInvocationConfigurationMismatchReason.ContextGatewayPolicyMismatch
+              )
+            );
+          break;
+      }
+      const result = await fixture.useCase.execute(fixture.command);
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'review_orchestration_unattached_observation_unavailable',
+      });
+      expect(fixture.dependencies.invocations.prepare).toHaveBeenCalledTimes(1);
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(
+        fixture.dependencies.invocationFailureClassifier.classify
+      ).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.adoptObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['deadline', 'before_lookup', false],
+    ['deadline', 'after_refresh', false],
+    ['abort', 'before_lookup', false],
+    ['abort', 'after_refresh', false],
+    ['deadline', 'before_lookup', true],
+    ['deadline', 'after_refresh', true],
+    ['abort', 'before_lookup', true],
+    ['abort', 'after_refresh', true],
+  ] as const)(
+    'stops hinted adoption on %s %s with scheduling=%s',
+    async (cause, boundary, scheduled) => {
+      const fixture = unattachedAcceptedFixture(scheduled);
+      const abort = new AbortController();
+      const abortReason = new Error('outer_cancelled');
+      Object.assign(fixture.dependencies, { signal: abort.signal });
+      const stop = () => {
+        if (cause === 'abort') abort.abort(abortReason);
+        else fixture.expire();
+      };
+      if (boundary === 'before_lookup') {
+        jest
+          .mocked(fixture.dependencies.invocationManifestAssembler.assemble)
+          .mockImplementation(async () => {
+            stop();
+            return fixture.hint;
+          });
+      } else {
+        fixture.controlPlane.restoreExecution.mockImplementation(async () => {
+          if (fixture.controlPlane.lookupEvidence.mock.calls.length > 0) stop();
+          return fixture.current();
+        });
+      }
+      const running = fixture.useCase.execute(fixture.command);
+      if (cause === 'abort') await expect(running).rejects.toBe(abortReason);
+      else
+        await expect(running).resolves.toMatchObject({
+          status: ReviewOrchestrationResultStatus.Failed,
+          failureCode: 'review_orchestration_execution_deadline_reached',
+        });
+      expect(fixture.controlPlane.lookupEvidence).toHaveBeenCalledTimes(
+        boundary === 'before_lookup' ? 0 : 1
+      );
+      expect(fixture.controlPlane.adoptObservation).not.toHaveBeenCalled();
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+    }
+  );
+
   it('adopts same-execution evidence without rerunning the provider', async () => {
     const fixture = createFixture();
     const pending = restoredAdmission(fixture.command, {
@@ -2777,16 +3651,940 @@ describe('RunT0ReviewOrchestration', () => {
       .mockResolvedValueOnce(revisionOf(fixture.command))
       .mockResolvedValueOnce({
         ...revisionOf(fixture.command),
+        headSha: '9'.repeat(40),
+        reviewRevisionHash: hash('closed-new-head'),
         pullRequestState: 'closed',
       });
 
     const result = await fixture.useCase.execute(fixture.command);
 
     expect(result.status).toBe(ReviewOrchestrationResultStatus.Cancelled);
+    expect(fixture.controlPlane.startExecution).toHaveBeenCalledTimes(1);
     expect(fixture.dependencies.invocations.prepare).not.toHaveBeenCalled();
     expect(fixture.dependencies.projectionBuilder.build).not.toHaveBeenCalled();
     expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorization: expect.objectContaining({
+          authorizationId: authorization.authorizationId,
+          authorizationToken: 'authorization.renewed-token',
+        }),
+        execution: expect.objectContaining({
+          executionId: 'execution-1',
+          generation: '1',
+          streamVersion: '2',
+        }),
+        targetRevisionHash: authorization.facts.reviewRevisionHash,
+      })
+    );
+    expect(fixture.controlPlane.renewAuthorization).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not mutate RR when the PR is already closed before any admission', async () => {
+    const fixture = createFixture();
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        pullRequestState: 'closed',
+      });
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Cancelled);
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledWith({
+      authorization,
+      reviewRevisionHash: fixture.command.reviewRevisionHash,
+    });
     expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+  });
+
+  it.each(['closed', 'moved'] as const)(
+    'restores the original execution when the PR is %s before the initial restore',
+    async (revision) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      fixture.controlPlane.restoreExecution
+        .mockReset()
+        .mockResolvedValue(restored);
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: revision === 'closed' ? 'closed' : 'open',
+          ...(revision === 'moved'
+            ? {
+                headSha: '9'.repeat(40),
+                reviewRevisionHash: hash('moved-head'),
+              }
+            : {}),
+        });
+
+      const result = await fixture.useCase.executeAuthorized(
+        fixture.command,
+        authorization
+      );
+
+      expect(result).toMatchObject({
+        status:
+          revision === 'closed'
+            ? ReviewOrchestrationResultStatus.Cancelled
+            : ReviewOrchestrationResultStatus.Superseded,
+        executionId: restored.executionId,
+      });
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(2);
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenNthCalledWith(1, {
+        authorization,
+        reviewRevisionHash: fixture.command.reviewRevisionHash,
+      });
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenNthCalledWith(2, {
+        authorization,
+        reviewRevisionHash: fixture.command.reviewRevisionHash,
+      });
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authorization,
+          execution: expect.objectContaining({
+            executionId: restored.executionId,
+            generation: restored.generation,
+            streamVersion: restored.streamVersion,
+          }),
+          targetRevisionHash: authorization.facts.reviewRevisionHash,
+        })
+      );
+      expect(fixture.controlPlane.authorize).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.prepare).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
+
+  it('keeps an early closed result unconfirmed when the original restore fails', async () => {
+    const fixture = createFixture();
+    fixture.controlPlane.restoreExecution
+      .mockReset()
+      .mockRejectedValue(new Error('original_restore_unavailable'));
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        pullRequestState: 'closed',
+      });
+
+    const result = await fixture.useCase.executeAuthorized(
+      fixture.command,
+      authorization
+    );
+
+    expect(result).toMatchObject({
+      status: ReviewOrchestrationResultStatus.Failed,
+      failureCode: 'review_orchestration_cancellation_unconfirmed',
+    });
+    expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledWith({
+      authorization,
+      reviewRevisionHash: fixture.command.reviewRevisionHash,
+    });
+    expect(fixture.controlPlane.authorize).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+  });
+
+  it.each(['closed', 'moved'] as const)(
+    'reconciles the exact supplied execution when the PR is %s before restore admission',
+    async (revision) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      fixture.controlPlane.restoreExecution.mockReset();
+      fixture.controlPlane.restoreExecution.mockResolvedValue({
+        ...restored,
+        version: '2',
+        streamVersion: '3',
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: revision === 'closed' ? 'closed' : 'open',
+          ...(revision === 'moved'
+            ? {
+                headSha: '9'.repeat(40),
+                reviewRevisionHash: hash('moved-head'),
+              }
+            : {}),
+        });
+
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        restoredExecution: restored,
+        restoreOnly: true,
+      });
+
+      expect(result).toMatchObject({
+        status:
+          revision === 'closed'
+            ? ReviewOrchestrationResultStatus.Cancelled
+            : ReviewOrchestrationResultStatus.Superseded,
+        executionId: restored.executionId,
+      });
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authorization,
+          execution: expect.objectContaining({
+            executionId: restored.executionId,
+            generation: restored.generation,
+            streamVersion: '3',
+          }),
+          targetRevisionHash: authorization.facts.reviewRevisionHash,
+        })
+      );
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it('does not claim supersession when the original execution cleanup is unconfirmed before restore admission', async () => {
+    const fixture = createFixture();
+    const restored = restoredAdmission(fixture.command, {
+      state: RestoredReviewWorkSlotState.Pending,
+      acceptedObservationRefId: null,
+    }).restoredExecution;
+    fixture.controlPlane.restoreExecution.mockResolvedValue(restored);
+    fixture.controlPlane.supersedeExecution.mockRejectedValue(
+      new Error('supersede_acknowledgement_lost')
+    );
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        headSha: '9'.repeat(40),
+        reviewRevisionHash: hash('moved-head'),
+      });
+
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      restoredExecution: restored,
+      restoreOnly: true,
+    });
+
+    expect(result).toMatchObject({
+      status: ReviewOrchestrationResultStatus.Failed,
+      executionId: restored.executionId,
+      failureCode: 'review_orchestration_cancellation_unconfirmed',
+    });
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.acquireInvocationLease).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { field: 'executionId', value: 'foreign-execution' },
+    { field: 'generation', value: '2' },
+    { field: 'authorizationId', value: 'foreign-authorization' },
+    { field: 'reviewRevisionHash', value: hash('foreign-revision') },
+    { field: 'planHash', value: hash('foreign-plan') },
+  ])(
+    'does not confirm cancellation from changed $field readback',
+    async ({ field, value }) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      fixture.controlPlane.restoreExecution.mockReset();
+      fixture.controlPlane.restoreExecution.mockResolvedValue({
+        ...restored,
+        state: RestoredReviewExecutionState.Superseded,
+        [field]: value,
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: 'closed',
+        });
+
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        restoredExecution: restored,
+        restoreOnly: true,
+      });
+
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'review_orchestration_cancellation_unconfirmed',
+      });
+      expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    }
+  );
+
+  it('rejects a supplied execution from another authorization before cleanup I/O', async () => {
+    const fixture = createFixture();
+    const restored = restoredAdmission(fixture.command, {
+      state: RestoredReviewWorkSlotState.Pending,
+      acceptedObservationRefId: null,
+    }).restoredExecution;
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        pullRequestState: 'closed',
+      });
+
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      restoredExecution: {
+        ...restored,
+        authorizationId: 'foreign-authorization',
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: ReviewOrchestrationResultStatus.Failed,
+      failureCode: 'review_orchestration_cancellation_unconfirmed',
+    });
+    expect(fixture.controlPlane.restoreExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+  });
+
+  it.each(['present', 'absent', 'failed', 'foreign'] as const)(
+    'joins an initial %s execution restore when a sibling restore fails after PR closure',
+    async (outcome) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      let finishRestore!: (value: typeof restored | null) => void;
+      let failRestore!: (reason: Error) => void;
+      const pendingRestore = new Promise<typeof restored | null>(
+        (resolve, reject) => {
+          finishRestore = resolve;
+          failRestore = reject;
+        }
+      );
+      fixture.controlPlane.restoreExecution.mockReset();
+      fixture.controlPlane.restoreExecution
+        .mockReturnValueOnce(pendingRestore)
+        .mockResolvedValue({
+          ...restored,
+          version: '2',
+          streamVersion: '3',
+        });
+      fixture.controlPlane.restoreSnapshot.mockRejectedValue(
+        new Error('snapshot_restore_failed')
+      );
+      let closureObserved!: () => void;
+      const closedRead = new Promise<void>((resolve) => {
+        closureObserved = resolve;
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValueOnce(revisionOf(fixture.command))
+        .mockImplementation(async () => {
+          closureObserved();
+          return {
+            ...revisionOf(fixture.command),
+            pullRequestState: 'closed',
+          };
+        });
+
+      const resultPromise = fixture.useCase.execute(fixture.command);
+      await closedRead;
+      if (outcome === 'failed') {
+        failRestore(new Error('execution_restore_failed'));
+      } else {
+        finishRestore(
+          outcome === 'absent'
+            ? null
+            : outcome === 'foreign'
+              ? { ...restored, executionId: 'foreign-execution' }
+              : restored
+        );
+      }
+      const result = await resultPromise;
+
+      expect(result.status).toBe(
+        outcome === 'failed' || outcome === 'foreign'
+          ? ReviewOrchestrationResultStatus.Failed
+          : ReviewOrchestrationResultStatus.Cancelled
+      );
+      if (outcome === 'failed' || outcome === 'foreign') {
+        expect(result.failureCode).toBe(
+          'review_orchestration_cancellation_unconfirmed'
+        );
+      }
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(
+        outcome === 'present' ? 2 : 1
+      );
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        outcome === 'present' ? 1 : 0
+      );
+      if (outcome === 'present') {
+        expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            execution: expect.objectContaining({
+              executionId: fixture.command.executionId,
+              generation: restored.generation,
+              streamVersion: '3',
+            }),
+            targetRevisionHash: authorization.facts.reviewRevisionHash,
+          })
+        );
+      }
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['missing', 'foreign', 'regressed', 'failed'] as const)(
+    'keeps known original admission unconfirmed after a %s fresh cancellation read',
+    async (outcome) => {
+      const fixture = createFixture();
+      const restored = {
+        ...restoredAdmission(fixture.command, {
+          state: RestoredReviewWorkSlotState.Pending,
+          acceptedObservationRefId: null,
+        }).restoredExecution,
+        version: '3',
+        streamVersion: '3',
+      };
+      fixture.controlPlane.restoreExecution
+        .mockReset()
+        .mockResolvedValueOnce(restored);
+      if (outcome === 'failed') {
+        fixture.controlPlane.restoreExecution.mockRejectedValue(
+          new Error('latest_restore_unavailable')
+        );
+      } else {
+        fixture.controlPlane.restoreExecution.mockResolvedValue(
+          outcome === 'missing'
+            ? null
+            : outcome === 'foreign'
+              ? {
+                  ...restored,
+                  executionId: 'foreign-execution',
+                  state: RestoredReviewExecutionState.Superseded,
+                }
+              : {
+                  ...restored,
+                  version: '2',
+                  streamVersion: '2',
+                  state: RestoredReviewExecutionState.Superseded,
+                }
+        );
+      }
+      // Missing readback cannot replace the original CAS acknowledgement.
+      fixture.controlPlane.supersedeExecution.mockRejectedValue(
+        new Error('original_supersession_unconfirmed')
+      );
+      fixture.controlPlane.restoreSnapshot.mockRejectedValue(
+        new Error('snapshot_restore_failed')
+      );
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValueOnce(revisionOf(fixture.command))
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: 'closed',
+        });
+
+      const result = await fixture.useCase.executeAuthorized(
+        fixture.command,
+        authorization
+      );
+
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        executionId: restored.executionId,
+        failureCode: 'review_orchestration_cancellation_unconfirmed',
+      });
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(2);
+      const originalAuthorization =
+        fixture.controlPlane.restoreExecution.mock.calls[0][0].authorization;
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenNthCalledWith(2, {
+        authorization: originalAuthorization,
+        reviewRevisionHash: fixture.command.reviewRevisionHash,
+      });
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        outcome === 'missing' ? 1 : 0
+      );
+      if (outcome === 'missing') {
+        expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            authorization: originalAuthorization,
+            execution: expect.objectContaining({
+              executionId: restored.executionId,
+              generation: restored.generation,
+              streamVersion: restored.streamVersion,
+            }),
+            targetRevisionHash: authorization.facts.reviewRevisionHash,
+          })
+        );
+      }
+      expect(fixture.controlPlane.authorize).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.renewAuthorization).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['absent', 'running'],
+    ['present', 'running'],
+    ['absent', 'terminal'],
+    ['present', 'terminal'],
+  ] as const)(
+    'confirms a lost start ACK after an initial %s restore with a %s original',
+    async (initialRead, originalState) => {
+      const fixture = createFixture();
+      const initial = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      const latest = {
+        ...restoredAdmission(fixture.command, {
+          state:
+            originalState === 'terminal'
+              ? RestoredReviewWorkSlotState.Satisfied
+              : RestoredReviewWorkSlotState.Pending,
+          acceptedObservationRefId:
+            originalState === 'terminal'
+              ? observationRef(
+                  fixture.command.executionId,
+                  'slot-1',
+                  acceptedObservation.observationId
+                )
+              : null,
+        }).restoredExecution,
+        version: '3',
+        streamVersion: '3',
+        state:
+          originalState === 'terminal'
+            ? RestoredReviewExecutionState.Completed
+            : RestoredReviewExecutionState.Running,
+      };
+      fixture.controlPlane.restoreExecution
+        .mockReset()
+        .mockResolvedValueOnce(initialRead === 'present' ? initial : null)
+        .mockResolvedValue(latest);
+      let startAttempted = false;
+      fixture.controlPlane.startExecution.mockImplementation(async () => {
+        startAttempted = true;
+        throw new Error('lost_start_ack');
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockImplementation(async () => ({
+          ...revisionOf(fixture.command),
+          pullRequestState: startAttempted ? 'closed' : 'open',
+        }));
+
+      const result = await fixture.useCase.executeAuthorized(
+        fixture.command,
+        authorization
+      );
+
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Cancelled,
+        executionId: fixture.command.executionId,
+      });
+      expect(result).not.toHaveProperty('failureCode');
+      expect(fixture.controlPlane.startExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(2);
+      const originalAuthorization =
+        fixture.controlPlane.startExecution.mock.calls[0][0].authorization;
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenNthCalledWith(2, {
+        authorization: originalAuthorization,
+        reviewRevisionHash: fixture.command.reviewRevisionHash,
+      });
+      expect(
+        fixture.controlPlane.restoreExecution.mock.calls[1][0].authorization
+      ).toBe(originalAuthorization);
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        originalState === 'running' ? 1 : 0
+      );
+      if (originalState === 'running') {
+        expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            authorization: originalAuthorization,
+            execution: expect.objectContaining({
+              executionId: latest.executionId,
+              generation: latest.generation,
+              executionVersion: latest.version,
+              streamVersion: latest.streamVersion,
+            }),
+            targetRevisionHash: originalAuthorization.facts.reviewRevisionHash,
+          })
+        );
+      }
+      expect(fixture.controlPlane.authorize).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.renewAuthorization).toHaveBeenCalledTimes(1);
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.prepare).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['absent', 'missing'],
+    ['absent', 'failed'],
+    ['present', 'missing'],
+    ['present', 'failed'],
+  ] as const)(
+    'keeps a lost start ACK unconfirmed after an initial %s restore and a %s cleanup read',
+    async (initialRead, cleanupRead) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      fixture.controlPlane.restoreExecution
+        .mockReset()
+        .mockResolvedValueOnce(initialRead === 'present' ? restored : null);
+      if (cleanupRead === 'failed') {
+        fixture.controlPlane.restoreExecution.mockRejectedValue(
+          new Error('post_start_restore_failed')
+        );
+      } else {
+        fixture.controlPlane.restoreExecution.mockResolvedValue(null);
+      }
+      let startAttempted = false;
+      fixture.controlPlane.startExecution.mockImplementation(async () => {
+        startAttempted = true;
+        throw new Error('lost_start_ack');
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockImplementation(async () => ({
+          ...revisionOf(fixture.command),
+          pullRequestState: startAttempted ? 'closed' : 'open',
+        }));
+
+      const result = await fixture.useCase.execute(fixture.command);
+
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'review_orchestration_cancellation_unconfirmed',
+      });
+      expect(fixture.controlPlane.startExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(2);
+      const originalAuthorization =
+        fixture.controlPlane.startExecution.mock.calls[0][0].authorization;
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenNthCalledWith(2, {
+        authorization: originalAuthorization,
+        reviewRevisionHash: fixture.command.reviewRevisionHash,
+      });
+      expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.authorize).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.renewAuthorization).toHaveBeenCalledTimes(1);
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    'foreign_execution',
+    'foreign_generation',
+    'regressed_execution_version',
+    'regressed_stream_version',
+  ] as const)(
+    'rejects %s in the post-start cancellation read',
+    async (outcome) => {
+      const fixture = createFixture();
+      const initial = {
+        ...restoredAdmission(fixture.command, {
+          state: RestoredReviewWorkSlotState.Pending,
+          acceptedObservationRefId: null,
+        }).restoredExecution,
+        version: '3',
+        streamVersion: '3',
+      };
+      const latest = {
+        ...initial,
+        executionId:
+          outcome === 'foreign_execution'
+            ? 'other-execution'
+            : initial.executionId,
+        generation: outcome === 'foreign_generation' ? '2' : initial.generation,
+        version: outcome === 'regressed_execution_version' ? '2' : '4',
+        streamVersion: outcome === 'regressed_stream_version' ? '2' : '4',
+      };
+      fixture.controlPlane.restoreExecution
+        .mockReset()
+        .mockResolvedValueOnce(initial)
+        .mockResolvedValue(latest);
+      let startAttempted = false;
+      fixture.controlPlane.startExecution.mockImplementation(async () => {
+        startAttempted = true;
+        throw new Error('lost_start_ack');
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockImplementation(async () => ({
+          ...revisionOf(fixture.command),
+          pullRequestState: startAttempted ? 'closed' : 'open',
+        }));
+
+      const result = await fixture.useCase.executeAuthorized(
+        fixture.command,
+        authorization
+      );
+
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'review_orchestration_cancellation_unconfirmed',
+      });
+      expect(fixture.controlPlane.startExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(2);
+      expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.authorize).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.renewAuthorization).toHaveBeenCalledTimes(1);
+      expect(
+        fixture.controlPlane.acquireInvocationLease
+      ).not.toHaveBeenCalled();
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
+
+  it('preserves the exact abort during the post-start cancellation read', async () => {
+    const fixture = createFixture();
+    const abort = new AbortController();
+    const reason = new Error('outer_abort_during_start_reconciliation');
+    Object.assign(fixture.dependencies, { signal: abort.signal });
+    const restored = restoredAdmission(fixture.command, {
+      state: RestoredReviewWorkSlotState.Pending,
+      acceptedObservationRefId: null,
+    }).restoredExecution;
+    fixture.controlPlane.restoreExecution
+      .mockReset()
+      .mockResolvedValueOnce(null)
+      .mockImplementation(async () => {
+        abort.abort(reason);
+        return restored;
+      });
+    let startAttempted = false;
+    fixture.controlPlane.startExecution.mockImplementation(async () => {
+      startAttempted = true;
+      throw new Error('lost_start_ack');
+    });
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockImplementation(async () => ({
+        ...revisionOf(fixture.command),
+        pullRequestState: startAttempted ? 'closed' : 'open',
+      }));
+
+    await expect(
+      fixture.useCase.executeAuthorized(fixture.command, authorization)
+    ).rejects.toBe(reason);
+    expect(fixture.controlPlane.startExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(2);
+    expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.authorize).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.renewAuthorization).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+  });
+
+  it('preserves exact already-terminal RR work on PR-closed readback', async () => {
+    const fixture = createFixture();
+    const restored = restoredAdmission(fixture.command, {
+      state: RestoredReviewWorkSlotState.Satisfied,
+      acceptedObservationRefId: observationRef(
+        fixture.command.executionId,
+        'slot-1',
+        acceptedObservation.observationId
+      ),
+    }).restoredExecution;
+    fixture.controlPlane.restoreExecution.mockReset();
+    fixture.controlPlane.restoreExecution.mockResolvedValue({
+      ...restored,
+      version: '2',
+      state: RestoredReviewExecutionState.Completed,
+    });
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        pullRequestState: 'closed',
+      });
+
+    const result = await fixture.useCase.execute({
+      ...fixture.command,
+      restoredExecution: restored,
+    });
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Cancelled);
+    expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'restore_failed',
+    'supersede_refused',
+    'supersede_ack_lost',
+  ] as const)(
+    'does not claim confirmed cancellation after %s',
+    async (failure) => {
+      const fixture = createFixture();
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      if (failure === 'restore_failed') {
+        fixture.controlPlane.restoreExecution.mockReset();
+        fixture.controlPlane.restoreExecution.mockRejectedValue(
+          new Error(failure)
+        );
+      } else {
+        // A missing restore cannot turn either refusal or lost ACK into success.
+        fixture.controlPlane.supersedeExecution.mockRejectedValue(
+          new Error(failure)
+        );
+      }
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: 'closed',
+        });
+
+      const result = await fixture.useCase.execute({
+        ...fixture.command,
+        restoredExecution: restored,
+      });
+
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'review_orchestration_cancellation_unconfirmed',
+      });
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        failure === 'restore_failed' ? 0 : 1
+      );
+      expect(fixture.controlPlane.renewAuthorization).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+    }
+  );
+
+  it('settles an admitted execution when failure-time GitHub read confirms closure', async () => {
+    const fixture = createFixture();
+    let failed = false;
+    fixture.controlPlane.lookupEvidence.mockImplementation(async () => {
+      failed = true;
+      throw new Error('evidence_lookup_failed');
+    });
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockImplementation(async () => ({
+        ...revisionOf(fixture.command),
+        pullRequestState: failed ? 'closed' : 'open',
+      }));
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Cancelled);
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.acquireInvocationLease).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+  });
+
+  it.each(['restore', 'supersede'] as const)(
+    'preserves outer abort during cancellation %s',
+    async (phase) => {
+      const fixture = createFixture();
+      const abort = new AbortController();
+      const reason = new Error('outer_cancelled');
+      Object.assign(fixture.dependencies, { signal: abort.signal });
+      const restored = restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Pending,
+        acceptedObservationRefId: null,
+      }).restoredExecution;
+      fixture.controlPlane.restoreExecution.mockReset();
+      fixture.controlPlane.restoreExecution.mockImplementation(async () => {
+        if (phase === 'restore') abort.abort(reason);
+        return restored;
+      });
+      fixture.controlPlane.supersedeExecution.mockImplementation(async () => {
+        abort.abort(reason);
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockResolvedValue({
+          ...revisionOf(fixture.command),
+          pullRequestState: 'closed',
+        });
+
+      await expect(
+        fixture.useCase.execute({
+          ...fixture.command,
+          restoredExecution: restored,
+        })
+      ).rejects.toBe(reason);
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        phase === 'restore' ? 0 : 1
+      );
+      expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it('preserves outer abort during the failure-time GitHub read', async () => {
+    const fixture = createFixture();
+    const abort = new AbortController();
+    const reason = new Error('outer_cancelled');
+    Object.assign(fixture.dependencies, { signal: abort.signal });
+    let failed = false;
+    fixture.controlPlane.lookupEvidence.mockImplementation(async () => {
+      failed = true;
+      throw new Error('evidence_lookup_failed');
+    });
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockImplementation(async () => {
+        if (failed) abort.abort(reason);
+        return revisionOf(fixture.command);
+      });
+
+    await expect(fixture.useCase.execute(fixture.command)).rejects.toBe(reason);
+    expect(fixture.controlPlane.supersedeExecution).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
   });
 
   it('maps a control-plane race to cancellation when GitHub confirms the pull request closed', async () => {
@@ -2810,6 +4608,24 @@ describe('RunT0ReviewOrchestration', () => {
 
   it('releases a lease acquired concurrently with pull request closure', async () => {
     const fixture = createFixture();
+    const latest = {
+      ...restoredAdmission(fixture.command, {
+        state: RestoredReviewWorkSlotState.Exhausted,
+        acceptedObservationRefId: null,
+      }).restoredExecution,
+      version: '5',
+      streamVersion: '4',
+    };
+    fixture.controlPlane.restoreExecution
+      .mockReset()
+      .mockResolvedValueOnce(null)
+      .mockImplementation(async () => {
+        expect(
+          fixture.controlPlane.releaseInvocationLease
+        ).toHaveBeenCalledTimes(1);
+        // A concurrent parent transition, not lease release alone, advanced CAS.
+        return latest;
+      });
     jest
       .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
       .mockImplementation(async () =>
@@ -2831,44 +4647,151 @@ describe('RunT0ReviewOrchestration', () => {
       1
     );
     expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        execution: expect.objectContaining({
+          executionId: fixture.command.executionId,
+          generation: '1',
+          streamVersion: '4',
+          executionVersion: '5',
+        }),
+        targetRevisionHash: authorization.facts.reviewRevisionHash,
+      })
+    );
   });
 
-  it('releases the lease and supersedes when revision moves after provider execution', async () => {
-    const fixture = createFixture();
-    jest.mocked(fixture.dependencies.delay.sleep).mockImplementation(
-      (_delayMs, signal) =>
-        new Promise<void>((resolve) => {
-          if (!signal) throw new Error('held_revision_sleep_requires_signal');
-          const finish = () => {
-            signal.removeEventListener('abort', finish);
-            resolve();
-          };
-          signal.addEventListener('abort', finish, { once: true });
-          if (signal.aborted) finish();
+  it.each([
+    ['unavailable', ReviewOrchestrationResultStatus.Failed],
+    ['closed', ReviewOrchestrationResultStatus.Cancelled],
+    ['moved', ReviewOrchestrationResultStatus.Superseded],
+  ] as const)(
+    'commits completed evidence before an %s revision read without replaying the provider',
+    async (outcome, expectedStatus) => {
+      const fixture = createFixture({ maxAttempts: 2 });
+      const events: string[] = [];
+      let providerCompleted = false;
+      let unavailableReadFailed = false;
+      jest.mocked(fixture.dependencies.delay.sleep).mockImplementation(
+        (_delayMs, signal) =>
+          new Promise<void>((resolve) => {
+            if (!signal) {
+              resolve();
+              return;
+            }
+            const finish = () => {
+              signal.removeEventListener('abort', finish);
+              resolve();
+            };
+            signal.addEventListener('abort', finish, { once: true });
+            if (signal.aborted) finish();
+          })
+      );
+      jest
+        .mocked(fixture.dependencies.invocations.execute)
+        .mockImplementation(async () => {
+          providerCompleted = true;
+          events.push('provider-completed');
+          return observationPayload;
+        });
+      fixture.controlPlane.commitEvidence.mockImplementation(async () => {
+        events.push('evidence-committed');
+        return {
+          observationId: 'observation-1',
+          historicalOnly: false,
+          eligibilityPolicyVersion: 't0-v1',
+        };
+      });
+      jest
+        .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+        .mockImplementation(async () => {
+          if (!providerCompleted || unavailableReadFailed)
+            return revisionOf(fixture.command);
+          events.push('revision-refused');
+          if (outcome === 'unavailable') {
+            unavailableReadFailed = true;
+            throw new Error('review_action_v2_revision_guard_unavailable');
+          }
+          return outcome === 'closed'
+            ? { ...revisionOf(fixture.command), pullRequestState: 'closed' }
+            : {
+                ...revisionOf(fixture.command),
+                mergeBaseSha: '8'.repeat(40),
+                reviewRevisionHash: hash('new-head'),
+              };
+        });
+
+      const result = await fixture.useCase.execute(fixture.command);
+
+      expect(result.status).toBe(expectedStatus);
+      expect(events.slice(0, 3)).toEqual([
+        'provider-completed',
+        'evidence-committed',
+        'revision-refused',
+      ]);
+      expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+        1
+      );
+      expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lease,
+          ownerIdHash: fixture.command.ownerIdHash,
+          observation: observationPayload,
         })
-    );
-    const revisionGuard = jest.mocked(
-      fixture.dependencies.revisionGuard.loadCurrentRevision
-    );
-    revisionGuard.mockReset().mockResolvedValue(revisionOf(fixture.command));
-    for (let call = 0; call < 4; call += 1) {
-      revisionGuard.mockResolvedValueOnce(revisionOf(fixture.command));
+      );
+      expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.adoptObservation).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+        1
+      );
+      expect(
+        fixture.dependencies.invocationFailureClassifier.classify
+      ).not.toHaveBeenCalled();
+      expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(
+        outcome === 'unavailable' ? 0 : 1
+      );
+      if (outcome === 'closed') {
+        expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            targetRevisionHash: authorization.facts.reviewRevisionHash,
+          })
+        );
+      }
     }
-    revisionGuard.mockResolvedValueOnce({
-      ...revisionOf(fixture.command),
-      mergeBaseSha: '8'.repeat(40),
-      reviewRevisionHash: hash('new-head'),
-    });
+  );
 
-    const result = await fixture.useCase.execute(fixture.command);
+  it('retains cancellation after the lease supervisor returns a completed result', async () => {
+    const fixture = createFixture();
+    const controller = new AbortController();
+    const reason = new Error('cancelled_after_provider_completion');
+    Object.assign(fixture.dependencies, { signal: controller.signal });
+    const supervise: RunT0ReviewOrchestrationDependencies['leaseSupervisor']['run'] =
+      async ({ lease: currentLease, operation }) => {
+        const result = await operation(
+          new AbortController().signal,
+          () => currentLease
+        );
+        controller.abort(reason);
+        return result;
+      };
+    jest
+      .mocked(fixture.dependencies.leaseSupervisor.run)
+      .mockImplementation(supervise);
 
-    expect(result.status).toBe(ReviewOrchestrationResultStatus.Superseded);
+    await expect(fixture.useCase.execute(fixture.command)).rejects.toBe(reason);
+
     expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
     expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.requestPublication).not.toHaveBeenCalled();
     expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
       1
     );
-    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
   });
 
   it('aborts an active provider invocation when the revision moves', async () => {
@@ -4033,6 +5956,148 @@ function restoredAdmission(
         activeLeaseId: null as string | null,
         acceptedObservationRefId: slot.acceptedObservationRefId,
       })),
+    },
+  };
+}
+
+function unattachedAcceptedFixture(withFallback = false) {
+  const fixture = createFixture({ workSlotCount: withFallback ? 2 : 1 });
+  const workSlots = fixture.command.workSlots.map((slot, index) => ({
+    ...slot,
+    providerVoteIdentityHash:
+      index === 0 ? hash('vote') : hash('fallback-vote'),
+  }));
+  const originalCommand = {
+    ...fixture.command,
+    workSlots,
+    workSlotsCanonicalJson: canonicalizeReviewWorkSlots(workSlots),
+  };
+  const workSlot = workSlots[0]!;
+  const hint = {
+    workSlotId: workSlot.workSlotId,
+    manifestCanonicalJson: '{"fixture":true}',
+    manifestKey: hash('{"fixture":true}'),
+    providerInvocationKey: acceptedObservation.providerInvocationKey,
+    providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+    observationId: acceptedObservation.observationId,
+    payloadHash: acceptedObservation.payloadHash,
+    sourceLeaseId: sameExecutionAttachment.sourceLeaseId,
+    sourceFencingToken: sameExecutionAttachment.sourceFencingToken,
+    sourceOwnerIdHash: sameExecutionAttachment.sourceOwnerIdHash,
+  };
+  const restored: RestoredReviewExecution = {
+    ...restoredAdmission(originalCommand, {
+      state: RestoredReviewWorkSlotState.Exhausted,
+      acceptedObservationRefId: null,
+    }).restoredExecution,
+    workSlots: originalCommand.workSlots.map((slot, index) => ({
+      workSlotId: slot.workSlotId,
+      state:
+        index === 0
+          ? RestoredReviewWorkSlotState.Exhausted
+          : RestoredReviewWorkSlotState.Pending,
+      required: slot.required,
+      providerVoteIdentityHash: slot.providerVoteIdentityHash,
+      activeLeaseId: null,
+      acceptedObservationRefId: null,
+    })),
+    persistedPlan: {
+      planHash: originalCommand.planHash,
+      assignmentManifestVersion: 1,
+      assignmentManifestHash: originalCommand.assignmentManifestHash ?? null,
+      assignmentManifestCanonicalJson:
+        originalCommand.assignmentManifestCanonicalJson ?? null,
+      workSlots: workSlots.map((slot, index) => ({
+        ...slot,
+        nextAttemptOrdinal: index === 0 ? 2 : 1,
+      })),
+      acceptedManifests: [],
+      unattachedAcceptedManifests: [hint],
+      artifact: null,
+    },
+  };
+  let current = restored;
+  fixture.controlPlane.restoreExecution
+    .mockReset()
+    .mockImplementation(async () => current);
+  const hit = {
+    kind: ReviewEvidenceLookupKind.Hit,
+    observation: acceptedObservation,
+    attachment: sameExecutionAttachment,
+  } satisfies Awaited<
+    ReturnType<ReviewActionV2ControlPlanePort['lookupEvidence']>
+  >;
+  fixture.controlPlane.lookupEvidence.mockResolvedValue(hit);
+  jest
+    .mocked(fixture.dependencies.invocationManifestAssembler.assemble)
+    .mockResolvedValue(hint);
+  fixture.controlPlane.adoptObservation.mockImplementation(async () => {
+    current = {
+      ...current,
+      version: '2',
+      streamVersion: '2',
+      workSlots: current.workSlots.map((slot) =>
+        slot.workSlotId === hint.workSlotId
+          ? {
+              ...slot,
+              state: RestoredReviewWorkSlotState.Satisfied,
+              acceptedObservationRefId: observationRef(
+                current.executionId,
+                slot.workSlotId,
+                hint.observationId
+              ),
+            }
+          : slot
+      ),
+      persistedPlan: {
+        ...current.persistedPlan!,
+        acceptedManifests: [hint],
+        unattachedAcceptedManifests: [],
+      },
+    };
+    return { streamVersion: current.streamVersion };
+  });
+  let now = 0;
+  const deadline = orchestrationDeadline(100_000, () => now);
+  Object.assign(fixture.dependencies, { executionDeadline: deadline });
+  if (withFallback) {
+    Object.assign(fixture.dependencies, {
+      reviewerScheduling: {
+        providerMode: 'fallback',
+        maxParallelReviewers: 1,
+        reviewers: workSlots.map((slot, index) => ({
+          reviewerId: index === 0 ? 'original' : 'fallback',
+          providerVoteIdentityHash: slot.providerVoteIdentityHash,
+          concurrencyGroupId: index === 0 ? 'original' : 'fallback',
+        })),
+        concurrencyGroups: [
+          { id: 'original', maxParallel: 1 },
+          { id: 'fallback', maxParallel: 1 },
+        ],
+      },
+    });
+    // A fallback would have enough time for a real paid attempt if reached.
+    Object.assign(fixture.dependencies, {
+      executionDeadline: orchestrationDeadline(500_000, () => now),
+    });
+  }
+  return {
+    ...fixture,
+    command: {
+      ...originalCommand,
+      restoredExecution: restored,
+      restoreOnly: true,
+    },
+    restored,
+    hint,
+    hit,
+    deadline,
+    expire: () => {
+      now = 500_000;
+    },
+    current: () => current,
+    setCurrent: (value: RestoredReviewExecution) => {
+      current = value;
     },
   };
 }

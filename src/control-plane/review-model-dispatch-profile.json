@@ -1,7 +1,7 @@
 {
   "extensionId": "review-model-dispatch.v2",
-  "descriptorDigest": "sha256:d529a458a0d6e6644df1d8e341f42988b5c137920f6883cd1467bfe524e8aadb",
-  "policyVersion": "model-dispatch-policy.capacity128.v1",
+  "descriptorDigest": "sha256:00bde3897762c23761f76c8ea9e7b8ef9fb97e4299d31d47b5acbaf3ad1fa530",
+  "policyVersion": "model-dispatch-policy.native-retry.v1",
   "transports": [
     "runner_local_responses",
     "runner_local_anthropic",

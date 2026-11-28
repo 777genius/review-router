@@ -1,3 +1,7 @@
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { build as buildBundle } from 'esbuild';
 import profiles from '../../../src/control-plane/review-agent-profiles.json';
 import { parseReviewAgentProfiles } from '../../../src/control-plane/generated/review-action-v2/review-agent-profile';
 import { createHash } from 'crypto';
@@ -90,6 +94,89 @@ function reviewInvestigationDescriptor(
 }
 
 describe('ReviewActionV2ControlPlaneAdapter', () => {
+
+  const oldReaderSource = process.env.REVIEWROUTER_PRE_B_READER_DIR;
+  const oldReaderTest = oldReaderSource ? it : it.skip;
+  oldReaderTest('keeps nested restore hints compatible with the actual unchanged pre-B decoder', async () => {
+    if (!oldReaderSource || !path.isAbsolute(oldReaderSource))
+      throw new Error('old_reader_absolute_source_required');
+    const baseline = 'cd2140516d32c10650c1e37f4470d10c767806b2';
+    const adapterPath =
+      'src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts';
+    expect(execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: oldReaderSource, encoding: 'utf8',
+    }).trim()).toBe(baseline);
+    expect(execFileSync('git', ['status', '--porcelain=v1', '--', 'src'], {
+      cwd: oldReaderSource, encoding: 'utf8',
+    })).toBe('');
+    const source = readFileSync(path.join(oldReaderSource, adapterPath));
+    expect(createHash('sha1')
+      .update(Buffer.from(`blob ${source.length}\0`))
+      .update(source).digest('hex'))
+      .toBe('3f43384a193b24c38995c0d1b796a99384ce5249');
+    mkdirSync(path.join(process.cwd(), 'tmp'), { recursive: true });
+    const scratch = mkdtempSync(path.join(process.cwd(), 'tmp/old-reader-'));
+    const driver = path.resolve(
+      '__tests__/integration/fixtures/accepted-source-old-reader.ts'
+    );
+    const bundle = path.join(scratch, 'reader.cjs');
+    try {
+      await buildBundle({
+        entryPoints: [driver],
+        outfile: bundle,
+        bundle: true,
+        platform: 'node',
+        target: 'node24',
+        logLevel: 'silent',
+        external: ['tree-sitter', 'tree-sitter-*'],
+        plugins: [{
+          name: 'exact-pre-b-reader',
+          setup(build) {
+            build.onResolve({ filter: /^\.\.\/\.\.\/\.\.\/src\// }, (input) => {
+              if (input.importer !== driver) return undefined;
+              return { path: path.join(oldReaderSource, input.path.slice(9)) + '.ts' };
+            });
+          },
+        }],
+      });
+      const f = unattachedRestoreWireFixture();
+      const run = (value: unknown) => {
+        const input = path.join(scratch, 'input.json');
+        writeFileSync(input, JSON.stringify({
+          authorization: authorizationResponse(),
+          restore: f.response(value),
+          reviewRevisionHash: f.raw.reviewRevisionHash,
+        }), { mode: 0o600 });
+        return spawnSync(process.execPath, [bundle, input], {
+          encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536,
+        });
+      };
+      const accepted = run(f.raw);
+      expect({ status: accepted.status, stderr: accepted.stderr })
+        .toEqual({ status: 0, stderr: '' });
+      const parsed: unknown = JSON.parse(accepted.stdout);
+      expect(parsed).toMatchObject({
+        restored: {
+          executionId: f.raw.executionId,
+          planHash: f.raw.planHash,
+          workSlots: [{ state: RestoredReviewWorkSlotState.Exhausted }],
+          persistedPlan: {
+            planHash: f.raw.persistedPlan.planHash,
+            workSlots: f.raw.persistedPlan.workSlots,
+            acceptedManifests: [],
+          },
+        },
+      });
+      expect(parsed).not.toHaveProperty('restored.persistedPlan.unattachedAcceptedManifests');
+      const rejected = run({ ...f.raw, unattachedAcceptedManifests: [f.hint] });
+      expect({ status: rejected.status, stderr: rejected.stderr })
+        .toEqual({ status: 1, stderr: 'review_action_v2_canonical_json_fields_invalid' });
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+
   it('rejects a different numeric repository before git reads or control-plane effects', async () => {
     const execute = jest.fn();
     const previousHome = process.env.CODEX_HOME;
@@ -890,6 +977,81 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('does not acknowledge original-revision cancellation when RR denies its target', async () => {
+    const failure = new ReviewActionV2ClientError(
+      ReviewActionV2ClientFailureCode.ProtocolError,
+      ReviewActionV2OperationId.ReviewExecutionSupersede,
+      {
+        httpStatus: 403,
+        protocolErrorCode: ReviewActionV2ProtocolErrorCode.Forbidden,
+        issues: ['target_revision_mismatch'],
+      }
+    );
+    const execute = jest.fn().mockRejectedValue(failure);
+
+    await expect(
+      createAdapter(execute).supersedeExecution({
+        authorization,
+        idempotencyKey: 'cancel-closed-pr-key',
+        execution,
+        targetRevisionHash: authorization.facts.reviewRevisionHash,
+      })
+    ).rejects.toBe(failure);
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ReviewExecutionMutationResultStatus.Applied,
+    ReviewExecutionMutationResultStatus.Restored,
+  ])(
+    'requires the original execution in a %s supersede receipt',
+    async (status) => {
+      const execute = jest.fn().mockResolvedValueOnce({
+        status,
+        executionId: execution.executionId,
+        streamVersion: execution.streamVersion,
+      });
+      const adapter = createAdapter(execute);
+      const input = {
+        authorization,
+        idempotencyKey: 'cancel-original-execution',
+        execution,
+        targetRevisionHash: authorization.facts.reviewRevisionHash,
+      };
+      await expect(adapter.supersedeExecution(input)).resolves.toBeUndefined();
+      for (const response of [
+        {
+          executionId: 'foreign-execution',
+          failure: 'review_action_v2_execution_supersede_execution_mismatch',
+        },
+        {
+          executionId: undefined,
+          failure: 'review_action_v2_execution_supersede_execution_id_missing',
+        },
+      ]) {
+        execute.mockResolvedValueOnce({
+          status,
+          executionId: response.executionId,
+          streamVersion: execution.streamVersion,
+        });
+        await expect(adapter.supersedeExecution(input)).rejects.toThrow(
+          response.failure
+        );
+      }
+      expect(execute).toHaveBeenCalledTimes(3);
+      expect(execute).toHaveBeenLastCalledWith(
+        ReviewActionV2OperationId.ReviewExecutionSupersede,
+        {
+          authorizationToken: authorization.authorizationToken,
+          idempotencyKey: input.idempotencyKey,
+          executionId: execution.executionId,
+          expectedStreamVersion: execution.streamVersion,
+          targetRevisionHash: authorization.facts.reviewRevisionHash,
+        }
+      );
+    }
+  );
+
   it('opens and seals a target-bound context gateway session', async () => {
     const execute = jest
       .fn()
@@ -1557,6 +1719,104 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
       payloadCanonicalJson: JSON.stringify(baseline),
     });
     expect(await adapter.restoreComparisonBaseline(input)).toBeNull();
+  });
+
+  it('parses an original unattached hint outside the immutable plan bytes', async () => {
+    const f = unattachedRestoreWireFixture();
+    const execute = jest.fn().mockResolvedValue(f.response(f.raw));
+    const restored = await createAdapter(execute).restoreExecution({
+      authorization,
+      reviewRevisionHash: startInput.reviewRevisionHash,
+    });
+    expect(restored?.persistedPlan?.unattachedAcceptedManifests).toEqual([f.hint]);
+    expect(restored?.planHash).toBe(f.raw.planHash);
+    expect(restored?.persistedPlan?.assignmentManifestCanonicalJson).toBeNull();
+    expect(restored?.persistedPlan?.acceptedManifests).toEqual([]);
+    expect(restored?.workSlots[0]).toMatchObject({
+      state: RestoredReviewWorkSlotState.Exhausted,
+      activeLeaseId: null,
+      acceptedObservationRefId: null,
+    });
+  });
+
+  it('rejects malformed and ineligible unattached source hints', async () => {
+    const f = unattachedRestoreWireFixture();
+    const withHint = (hint: unknown) => ({
+      ...f.raw,
+      persistedPlan: { ...f.raw.persistedPlan, unattachedAcceptedManifests: [hint] },
+    });
+    const invalid = [
+      withHint({ ...f.hint, extra: true }),
+      withHint({ ...f.hint, workSlotId: 'foreign-slot' }),
+      withHint({ ...f.hint, sourceFencingToken: '-1' }),
+      withHint({ ...f.hint, sourceOwnerIdHash: 'invalid' }),
+      withHint({ ...f.hint, providerVoteIdentityHash: 'f'.repeat(64) }),
+      withHint({ ...f.hint, manifestCanonicalJson: '{invalid' }),
+      {
+        ...f.raw,
+        persistedPlan: {
+          ...f.raw.persistedPlan,
+          workSlots: [{ ...workSlot, attemptBudget: 2, nextAttemptOrdinal: 2 }],
+        },
+      },
+      {
+        ...f.raw,
+        persistedPlan: {
+          ...f.raw.persistedPlan,
+          workSlots: [{ ...workSlot, nextAttemptOrdinal: 1 }],
+        },
+      },
+      { ...f.raw, unattachedAcceptedManifests: [f.hint] },
+    ];
+    const execute = jest.fn();
+    const adapter = createAdapter(execute);
+    for (const raw of invalid) {
+      execute.mockResolvedValueOnce(f.response(raw));
+      await expect(adapter.restoreExecution({
+        authorization,
+        reviewRevisionHash: startInput.reviewRevisionHash,
+      })).rejects.toThrow();
+    }
+    expect(execute).toHaveBeenCalledTimes(invalid.length);
+  });
+
+  it('rejects duplicate unattached hints within the restored slot count', async () => {
+    const f = unattachedRestoreWireFixture();
+    const raw = {
+      ...f.raw,
+      workSlots: [
+        ...f.raw.workSlots,
+        { ...f.raw.workSlots[0]!, workSlotId: 'second-slot' },
+      ],
+      persistedPlan: {
+        ...f.raw.persistedPlan,
+        workSlots: [
+          ...f.raw.persistedPlan.workSlots,
+          { ...f.raw.persistedPlan.workSlots[0]!, workSlotId: 'second-slot' },
+        ],
+      },
+    };
+    const execute = jest.fn().mockResolvedValueOnce(f.response(raw));
+    const adapter = createAdapter(execute);
+    const input = {
+      authorization,
+      reviewRevisionHash: startInput.reviewRevisionHash,
+    };
+    const restored = await adapter.restoreExecution(input);
+    expect(restored?.persistedPlan?.unattachedAcceptedManifests).toEqual([f.hint]);
+    execute.mockResolvedValueOnce(
+      f.response({
+        ...raw,
+        persistedPlan: {
+          ...raw.persistedPlan,
+          unattachedAcceptedManifests: [f.hint, f.hint],
+        },
+      })
+    );
+    await expect(adapter.restoreExecution(input)).rejects.toThrow(
+      'review_restore_unattached_manifest_scope_mismatch'
+    );
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it('restores original accepted manifests only for their exact satisfied slots', async () => {
@@ -2500,6 +2760,54 @@ function createAdapter(execute: jest.Mock) {
       serverTime: '2026-07-22T12:00:00.000Z',
     }),
   } as unknown as ReviewActionV2Client);
+}
+
+function unattachedRestoreWireFixture() {
+  const hint = {
+    workSlotId: workSlot.workSlotId,
+    ...providerManifest,
+    observationId: 'original-observation',
+    payloadHash: 'e'.repeat(64),
+    sourceLeaseId: 'released-original-lease',
+    sourceFencingToken: '7',
+    sourceOwnerIdHash: 'd'.repeat(64),
+  };
+  const raw = {
+    authorizationId: authorization.authorizationId,
+    executionId: execution.executionId,
+    generation: execution.generation,
+    version: execution.executionVersion,
+    planHash: startInput.planHash,
+    reviewRevisionHash: startInput.reviewRevisionHash,
+    state: RestoredReviewExecutionState.Running,
+    workSlots: [{
+      workSlotId: workSlot.workSlotId,
+      state: RestoredReviewWorkSlotState.Exhausted,
+      required: workSlot.required,
+      providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+      activeLeaseId: null,
+      acceptedObservationRefId: null,
+    }],
+    persistedPlan: {
+      planHash: startInput.planHash,
+      assignmentManifestVersion: null,
+      assignmentManifestCanonicalJson: null,
+      assignmentManifestHash: null,
+      workSlots: [{ ...workSlot, nextAttemptOrdinal: 2 }],
+      artifact: null,
+      acceptedManifests: [],
+      unattachedAcceptedManifests: [hint],
+    },
+  };
+  const response = (value: unknown) => ({
+    status: ReviewExecutionRestoreResultStatus.Found,
+    executionId: execution.executionId,
+    generation: execution.generation,
+    streamVersion: execution.streamVersion,
+    executionState: RestoredReviewExecutionState.Running,
+    executionCanonicalJson: canonicalJson(value),
+  });
+  return { raw, hint, response };
 }
 
 function renewalInput() {

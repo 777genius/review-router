@@ -252,6 +252,30 @@ describe('reviewer summary markdown', () => {
     }
   });
 
+  it.each(['en', 'ru', 'uk', 'es', 'pt', 'fr', 'de', 'it', 'zh', 'ja', 'ko'])(
+    'renders finite review phase causes in %s without exposing codes',
+    (language) => {
+      const causes = [
+        'review_main_incomplete',
+        'review_round_incomplete',
+        'review_phase_incomplete',
+      ] as const;
+      const copy = reviewerSummaryCopy(language);
+      const markdown = renderReviewerSummaryMarkdown({
+        language,
+        metrics,
+        findings: [],
+        incomplete: true,
+        incompleteCauses: causes,
+      });
+      for (const cause of causes) {
+        expect(copy.incompleteCauses[cause].length).toBeGreaterThan(0);
+        expect(markdown).toContain(copy.incompleteCauses[cause]);
+        expect(markdown).not.toContain(cause);
+      }
+    }
+  );
+
   it('keeps machine limitation tokens out of the posted summary', () => {
     const markdown = renderReviewerSummaryMarkdown({
       language: 'English',

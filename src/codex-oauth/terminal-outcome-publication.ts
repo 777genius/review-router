@@ -1,6 +1,5 @@
 import * as core from '../actions/core';
 import { GitHubClient } from '../github/client';
-import { setTimeout as delay } from 'node:timers/promises';
 
 export type PublicationRequestOptions = {
   readonly signal?: AbortSignal;
@@ -11,11 +10,7 @@ export function createPublicationGitHubClient(
   token: string,
   options: PublicationRequestOptions = {}
 ): GitHubClient {
-  const client = new GitHubClient(token, {
-    sleep: async (ms) => {
-      await delay(ms, undefined, { signal: options.signal });
-    },
-  });
+  const client = new GitHubClient(token);
   if (options.signal || options.timeoutMs) {
     client.octokit.hook.wrap('request', (request, parameters) => {
       options.signal?.throwIfAborted();

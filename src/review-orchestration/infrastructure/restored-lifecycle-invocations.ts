@@ -8,6 +8,8 @@ import {
   type PreparedReviewInvocationPort,
   type ProviderInvocationManifestAssemblerPort,
   type PreparedReviewInvocationManifestFacts,
+  type ProviderInvocationManifest,
+  type ReviewWorkSlotPlan,
 } from '../application';
 import {
   createReviewPromptCoverageManifest,
@@ -80,31 +82,65 @@ export function restoreProductionLifecycleVerification(
   };
 }
 
+type RestoredInvocationScope = Readonly<{
+  reviewRevisionHash: string;
+  workSlots: readonly ReviewWorkSlotPlan[];
+}>;
+
 /** Restored lifecycle evidence never rebuilds a packet, reads source, or becomes runnable inference. */
 export function restoredLifecycleInvocations(
-  restored: RestoredReviewExecution,
-  discovery: PreparedReviewInvocationPort
+  restored: RestoredReviewExecution | null,
+  discovery: PreparedReviewInvocationPort,
+  scope?: RestoredInvocationScope
 ): PreparedReviewInvocationPort {
   const manifests = new Map(
-    restored.persistedPlan?.acceptedManifests?.map((value) => [
-      value.workSlotId,
-      value,
-    ]) ?? []
+    [
+      ...(restored?.persistedPlan?.acceptedManifests ?? []),
+      ...(restored?.persistedPlan?.unattachedAcceptedManifests ?? []),
+    ].map((value) => [value.workSlotId, value])
   );
-  const satisfied = new Set(
-    restored.workSlots
+  const readOnlySlots = new Set([
+    ...(restored?.workSlots ?? [])
       .filter((slot) => slot.state === RestoredReviewWorkSlotState.Satisfied)
-      .map((slot) => slot.workSlotId)
-  );
+      .map((slot) => slot.workSlotId),
+    ...(restored?.persistedPlan?.unattachedAcceptedManifests ?? []).map(
+      (hint) => hint.workSlotId
+    ),
+  ]);
   return {
     async prepare(input): Promise<PreparedReviewInvocation> {
-      const original = manifests.get(input.workSlot.workSlotId);
+      const captured = manifests.get(input.workSlot.workSlotId);
+      const original = input.originalManifest ?? captured;
       if (
-        input.workSlot.taskKind !== ReviewTaskKind.LifecycleRevalidation &&
-        !satisfied.has(input.workSlot.workSlotId)
+        input.originalManifest &&
+        (input.originalManifest.workSlotId !== input.workSlot.workSlotId ||
+          (captured && !sameManifest(input.originalManifest, captured)))
+      )
+        throw new Error('review_restore_accepted_manifest_scope_mismatch');
+      if (
+        !input.originalManifest &&
+        (!restored?.persistedPlan ||
+          (input.workSlot.taskKind !== ReviewTaskKind.LifecycleRevalidation &&
+            !readOnlySlots.has(input.workSlot.workSlotId)))
       )
         return discovery.prepare(input);
-      if (!original || input.attemptOrdinal !== 1)
+      const knownSlot = scope?.workSlots.find(
+        (slot) => slot.workSlotId === input.workSlot.workSlotId
+      );
+      if (
+        scope &&
+        ((restored &&
+          scope.reviewRevisionHash !== restored.reviewRevisionHash) ||
+          !knownSlot ||
+          knownSlot.providerVoteIdentityHash !==
+            input.workSlot.providerVoteIdentityHash ||
+          knownSlot.providerKind !== input.workSlot.providerKind ||
+          knownSlot.taskKind !== input.workSlot.taskKind)
+      )
+        throw new Error('review_restore_accepted_manifest_scope_mismatch');
+      const reviewRevisionHash =
+        scope?.reviewRevisionHash ?? restored?.reviewRevisionHash;
+      if (!original || input.attemptOrdinal !== 1 || !reviewRevisionHash)
         throw new Error('review_restore_accepted_manifest_unavailable');
       const wire = JSON.parse(
         original.manifestCanonicalJson
@@ -116,15 +152,20 @@ export function restoredLifecycleInvocations(
           input.workSlot.providerVoteIdentityHash
       )
         throw new Error('review_restore_accepted_manifest_scope_mismatch');
+      readOnlySlots.add(input.workSlot.workSlotId);
       const coverage =
         input.workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation
           ? createReviewPromptCoverageManifest({
               workSlotId: input.workSlot.workSlotId,
-              reviewRevisionHash: restored.reviewRevisionHash,
+              reviewRevisionHash,
               assignedPaths: [],
               pathCoverage: [],
             })
-          : await restoreDiscoveryCoverage(discovery, input, wire);
+          : await restoreDiscoveryCoverage(
+              discovery,
+              { ...input, originalManifest: original },
+              wire
+            );
       return Object.freeze({
         workSlotId: input.workSlot.workSlotId,
         attemptOrdinal: 1,
@@ -140,8 +181,9 @@ export function restoredLifecycleInvocations(
     },
     async execute(input) {
       if (
-        satisfied.has(input.invocation.workSlotId) ||
-        (input.invocation.manifestFacts.taskKindSet.length === 1 &&
+        readOnlySlots.has(input.invocation.workSlotId) ||
+        (restored?.persistedPlan &&
+          input.invocation.manifestFacts.taskKindSet.length === 1 &&
           input.invocation.manifestFacts.taskKindSet[0] ===
             ReviewTaskKind.LifecycleRevalidation)
       )
@@ -153,24 +195,58 @@ export function restoredLifecycleInvocations(
 
 export function restoredLifecycleManifestAssembler(
   restored: RestoredReviewExecution | null,
-  discovery: ProviderInvocationManifestAssemblerPort
+  discovery: ProviderInvocationManifestAssemblerPort,
+  scope?: RestoredInvocationScope
 ): ProviderInvocationManifestAssemblerPort {
-  if (!restored?.persistedPlan) return discovery;
+  if (!restored?.persistedPlan && !scope) return discovery;
   const manifests = new Map(
-    restored?.persistedPlan?.acceptedManifests?.map((value) => [
-      value.workSlotId,
-      value,
-    ]) ?? []
+    [
+      ...(restored?.persistedPlan?.acceptedManifests ?? []),
+      ...(restored?.persistedPlan?.unattachedAcceptedManifests ?? []),
+    ].map((value) => [value.workSlotId, value])
   );
   return {
-    async assemble(invocation) {
-      const satisfied = restored.workSlots.some(
-        (slot) =>
-          slot.workSlotId === invocation.workSlotId &&
-          slot.state === RestoredReviewWorkSlotState.Satisfied
-      );
+    async assemble(invocation, originalManifest) {
+      if (originalManifest) {
+        const slot = (restored?.workSlots ?? scope?.workSlots ?? []).find(
+          (value) => value.workSlotId === invocation.workSlotId
+        );
+        const knownSlot = scope?.workSlots.find(
+          (value) => value.workSlotId === invocation.workSlotId
+        );
+        const captured = manifests.get(invocation.workSlotId);
+        if (
+          originalManifest.workSlotId !== invocation.workSlotId ||
+          slot?.providerVoteIdentityHash !==
+            originalManifest.providerVoteIdentityHash ||
+          (scope &&
+            ((restored &&
+              scope.reviewRevisionHash !== restored.reviewRevisionHash) ||
+              !knownSlot ||
+              knownSlot.providerVoteIdentityHash !==
+                originalManifest.providerVoteIdentityHash ||
+              knownSlot.providerKind !==
+                invocation.manifestFacts.providerKind ||
+              !invocation.manifestFacts.taskKindSet.includes(
+                knownSlot.taskKind
+              ))) ||
+          (captured && !sameManifest(originalManifest, captured))
+        )
+          throw new Error('review_restore_accepted_manifest_scope_mismatch');
+        return originalManifest;
+      }
+      if (!restored?.persistedPlan) return discovery.assemble(invocation);
+      const originalSource =
+        restored.workSlots.some(
+          (slot) =>
+            slot.workSlotId === invocation.workSlotId &&
+            slot.state === RestoredReviewWorkSlotState.Satisfied
+        ) ||
+        restored.persistedPlan?.unattachedAcceptedManifests?.some(
+          (hint) => hint.workSlotId === invocation.workSlotId
+        );
       if (
-        !satisfied &&
+        !originalSource &&
         (invocation.manifestFacts.taskKindSet.length !== 1 ||
           invocation.manifestFacts.taskKindSet[0] !==
             ReviewTaskKind.LifecycleRevalidation)
@@ -234,6 +310,17 @@ async function restoreDiscoveryCoverage(
   if (hash(canonicalJson(context)) !== original.contextManifestHash)
     throw new Error('review_restore_coverage_commitment_mismatch');
   return rebuilt.coverageManifest;
+}
+function sameManifest(
+  left: ProviderInvocationManifest,
+  right: ProviderInvocationManifest
+): boolean {
+  return (
+    left.manifestCanonicalJson === right.manifestCanonicalJson &&
+    left.manifestKey === right.manifestKey &&
+    left.providerInvocationKey === right.providerInvocationKey &&
+    left.providerVoteIdentityHash === right.providerVoteIdentityHash
+  );
 }
 function hash(value: string) {
   return createHash('sha256').update(value).digest('hex');

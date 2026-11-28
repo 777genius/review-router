@@ -31,6 +31,22 @@ is recorded as rejected, not successful. This bounded runtime fix does not
 migrate those embedded tools or change the required assertions, coverage, or
 committed-artifact checks.
 
+CI acquires the exact separate compiler through npm's temporary package cache;
+the repository dependency tree and lockfile remain unchanged. Install scripts
+are disabled only for this qualification step. The version assertion and project
+check use the same resolved executable; installation, version or compiler failure
+fails the job. The retained embedded compiler is not credited as TypeScript 7:
+
+```sh
+npm_config_ignore_scripts=true npm exec --yes --package=typescript@7.0.2 --call '
+  set -eu
+  reviewrouter_tsc=$(command -v tsc)
+  reviewrouter_tsc_version=$("$reviewrouter_tsc" --version)
+  test "$reviewrouter_tsc_version" = "Version 7.0.2"
+  exec "$reviewrouter_tsc" --project tsconfig.json --noEmit --module preserve --moduleResolution bundler
+'
+```
+
 ## Memory inputs
 
 Fresh T0 reviews capture one bounded, authorized memory snapshot and bind its
@@ -428,6 +444,139 @@ suggested patches still require a unique verified span.
 An incomplete review with a closed `effect_unknown`, `dispatch_started` or
 `response_started` failure fact explains that the request may have reached the
 provider and that automatic replay was withheld. An unclassified Gateway error
-does not establish an upstream HTTP cause or exhausted quota. The user can wait
-for the run to finish and start a new review. This display-only diagnostic does
-not reopen dispatch, alter settlement or change coverage acceptance.
+does not establish an upstream HTTP cause or exhausted quota. A GitHub run
+finishing does not establish that the earlier provider request has stopped;
+starting another review can repeat that work. This display-only diagnostic
+does not reopen dispatch, alter settlement or change coverage acceptance.
+
+### Managed OCR incomplete-review causes
+
+Accepted evidence carries three finite presentation causes in its existing
+quality flags: `review_main_incomplete`, `review_round_incomplete` and
+`review_phase_incomplete`. Each requires `context_inspection_incomplete`.
+The adapter derives main/round causes from its finite outcome classification;
+the phase cause requires a structured failed/cancelled non-filter phase,
+a failed/cancelled filter without preserved-comment proof, or a compression
+stop. A preserved filter is advisory even beside an unrelated round,
+normalization or path gap. Native diagnostic prose remains local.
+
+Required accepted observations carry these causes through canonical evidence,
+server persistence and readback into the existing localized incomplete-summary
+section. Complete path coverage can coexist with an incomplete phase. Findings,
+coverage decisions, baseline eligibility and retry authority remain governed by
+their existing rules; the new flags add no reuse penalty. Accepted attempt
+metadata is immutable, including these causes.
+
+This is a receiver-first semantic extension of the existing quality-flags field.
+Qualify all SaaS API and worker/evidence readers before activating a producer
+that emits the values. After they are persisted, rollback must retain readers
+that accept them. Use the official generator/check/export and committed bundle
+gates; an unchanged envelope shape alone does not prove receiver compatibility.
+The existing paired compiled-Action/PostgreSQL fixture exercises full-path phase
+failure and preserved-filter publication without live provider effects.
+
+
+### Closed pull request cancellation acknowledgement
+
+A closed pull request does not by itself terminalize an admitted server
+execution. Reconcile the exact original execution under its current authorization,
+plan/revision identity and stream CAS, then use the existing supersede command
+with that authorization's original revision. Acknowledged Applied/Restored or an
+exact authenticated terminal readback permits confirmed local cancellation.
+Missing, foreign, regressing or ambiguous cleanup yields the explicit
+`review_orchestration_cancellation_unconfirmed` failure; a lost start acknowledgement is not proof
+that no execution was admitted. Closure before any admission stays mutation-free.
+
+This cooperation neither proves native transport closure nor authorizes provider
+replay. Existing deadlines, abort signals and scope checks still apply; no token
+renewal, current-target discovery or new cancellation endpoint is introduced.
+The adapter must propagate a target-revision denial for the original-revision
+cancellation path instead of manufacturing an acknowledgement.
+
+The public runner applies the same confirmation before early closed/moved
+outcomes, including base/head drift observed during PR loading. Bind cleanup to
+the original authenticated restored execution. An initial successful null
+restore stays mutation-free only before any start attempt. After a lost start
+acknowledgement, read again under the same original authorization and reconcile
+any returned execution. A fresh null or failed read remains unconfirmed; a missing
+later readback cannot erase known admission. Closed returns Cancelled; moved returns Superseded only after
+confirmed original-execution termination.
+
+### Completed output and GitHub freshness
+
+Persist a validated completed non-context invocation through the original scoped
+evidence-commit operation before the subsequent GitHub revision read. A transient
+GitHub failure after provider completion must not be classified as a provider
+failure or start another paid attempt. Preserve the outer abort, original work
+cutoff, payload/context validation and original lease/reporting authority.
+
+Attachment, finalization and publication still require their existing current
+revision checks. Preserving the evidence does not by itself restore an unattached
+observation after runner exit, extend its reporting window or prove publication.
+
+### Preserving generated runtime for source review
+
+The ordinary CI job retains its official `npm run build` and unchanged committed
+runtime/clean-tree verification. After a successful build it also preserves the
+resulting `dist` and provenance as a seven-day workflow artifact, even when the
+following clean-tree gate finds stale committed generated files. This artifact
+is build output for review, not a release or a successful qualification result.
+
+Provenance records the actual checkout commit/tree, requested PR source and
+workflow run/attempt. PR CI uses a merge checkout: verify its recorded source tree
+against the intended reviewed source before committing generated bytes. Retrieve
+the actual artifact, keep official output unchanged, and rerun the ordinary gates
+on the resulting source commit. Never hand-edit the bundle or infer its identity
+from an artifact name alone. Registration and activation still require the
+existing release handoff and exact-source checks.
+
+### Restoring an unattached original accepted result
+
+The server may include `unattachedAcceptedManifests` inside the computed
+`persistedPlan` readback, separate from satisfied-only `acceptedManifests`.
+The immutable admitted plan, assignment hash and canonical slot list do not
+change. Qualify actual old decoder compatibility at this nested boundary;
+its strict top-level execution object must not receive a new field.
+
+This path is limited to the current original Running execution and an Exhausted
+finding-discovery slot whose single provider attempt was already spent.
+Reconstruct its original manifest and committed coverage through the existing
+read-only wrapper; never execute that invocation. Lookup must prove the exact
+original accepted observation, payload, reviewer, lease, owner and fence with a
+`same_execution` attachment. Adoption uses the existing RPC and refreshed
+execution CAS, within current original authorization/report authority.
+
+A hint first observed in a refreshed read uses the same original-manifest
+preparation and assembly path, without capturing current memory. Conflicting
+retained and refreshed source identities are rejected. If the refreshed slot
+is already Satisfied by that exact original observation, verify its original
+lookup proof and reuse the attachment without another adoption or lease.
+
+A Satisfied slot may first appear with `acceptedManifests` in a refreshed read,
+even when planning contained no unattached hint. Carry that original manifest
+through read-only preparation and assembly and verify its exact
+`acceptedObservationRefId` against lookup. A null planning read can race with
+another owner before idempotent start returns the accepted execution. The
+single final invocation boundary uses the admitted revision and work-slot plan
+for that late original, without fabricating a restoration authority snapshot
+or adding a second per-reviewer wrapper. Without an original or persisted plan,
+fresh preparation, assembly, and execution keep their ordinary route. The existing attachment needs no
+adoption or provider lease; exhausted-slot admission rules remain specific to
+unattached-source recovery.
+
+The source work deadline and report window remain distinct. Check the Action
+hard deadline and outer abort before lookup and after the adoption refresh.
+Retain a previously received hint across a later omission only while exact
+current lookup/adoption still proves the original source. Hint failures are
+run failures, never provider admission, reviewer fallback or context replay.
+A response without any hint retains the existing exhausted-slot behavior.
+
+The joined acceptance gate must cold-enter the compiled public runner after
+the real source release is applied but its acknowledgement is held, before the
+first child can close its transport. Supply only original runtime/authority;
+the child must discover source IDs and adopt the stored bytes without a new
+provider invocation, lease attempt, dispatch or preparation. A successful
+explicit restore within that live window does not add an automatic wakeup,
+after-close continuation, new authorization or deadline extension. The new
+source, actual old decoder and compiled PostgreSQL gates require their own
+results; earlier bundle qualification does not cover this behavior.

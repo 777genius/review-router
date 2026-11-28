@@ -30,6 +30,7 @@ import {
   type PrDescriptionGenerationPort,
   type PreparedReviewInvocation,
   type ProviderInvocationManifest,
+  type PersistedUnattachedReviewManifest,
   type ProviderInvocationManifestAssemblerPort,
   type ReviewActionV2ControlPlanePort,
   type ReviewContextAttestationPort,
@@ -310,6 +311,121 @@ export class RunT0ReviewOrchestration {
     );
     let authorization: ReviewRunAuthorization | undefined;
     let execution: ReviewExecutionAdmission | undefined;
+    let executionStartAttempted = false;
+    let initialExecutionRestore:
+      | Promise<RestoredReviewExecution | null>
+      | undefined;
+    const stoppedResult = async (
+      status:
+        | ReviewOrchestrationResultStatus.Cancelled
+        | ReviewOrchestrationResultStatus.Superseded
+    ): Promise<ReviewOrchestrationResult> => {
+      this.dependencies.signal?.throwIfAborted();
+      const currentAuthorization = authorization;
+      let initialRestoredExecution: RestoredReviewExecution | null | undefined;
+      let preStartRestoredExecution: RestoredReviewExecution | null = null;
+      if (!execution && !command.restoredExecution && currentAuthorization) {
+        // An omitted or failed restore does not prove this execution is absent.
+        try {
+          validateAuthorizationScope(command, currentAuthorization);
+          initialExecutionRestore ??=
+            this.dependencies.controlPlane.restoreExecution({
+              authorization: currentAuthorization,
+              reviewRevisionHash: command.reviewRevisionHash,
+            });
+          const restoredBeforeStart = await initialExecutionRestore;
+          if (executionStartAttempted) {
+            // A lost start ACK can hide work admitted after this earlier read.
+            preStartRestoredExecution = restoredBeforeStart;
+            initialRestoredExecution =
+              await this.dependencies.controlPlane.restoreExecution({
+                authorization: currentAuthorization,
+                reviewRevisionHash: command.reviewRevisionHash,
+              });
+          } else {
+            initialRestoredExecution = restoredBeforeStart;
+          }
+        } catch {
+          this.dependencies.signal?.throwIfAborted();
+        }
+        this.dependencies.signal?.throwIfAborted();
+      }
+      let acknowledged =
+        !execution &&
+        !command.restoredExecution &&
+        !executionStartAttempted &&
+        initialRestoredExecution === null;
+      let cancelledExecution = execution;
+      if (!acknowledged && currentAuthorization) {
+        try {
+          validateAuthorizationScope(command, currentAuthorization);
+          const restored =
+            command.restoredExecution ?? initialRestoredExecution;
+          const original =
+            execution ??
+            (restored
+              ? {
+                  executionId: restored.executionId,
+                  generation: restored.generation,
+                  streamVersion: restored.streamVersion,
+                  executionVersion: restored.version,
+                  restoredExecution: restored,
+                }
+              : undefined);
+          if (
+            !original ||
+            (initialRestoredExecution &&
+              initialRestoredExecution.executionId !== command.executionId) ||
+            original.executionId !== original.restoredExecution.executionId ||
+            original.generation !== original.restoredExecution.generation ||
+            original.restoredExecution.authorizationId !==
+              currentAuthorization.authorizationId ||
+            original.restoredExecution.reviewRevisionHash !==
+              currentAuthorization.facts.reviewRevisionHash ||
+            original.restoredExecution.planHash !== command.planHash ||
+            (restored &&
+              (original.executionId !== restored.executionId ||
+                original.generation !== restored.generation))
+          )
+            throw new Error('review_orchestration_cancellation_scope_mismatch');
+          validateRestoredExecutionContinuity(
+            preStartRestoredExecution,
+            original
+          );
+          cancelledExecution = original;
+          await confirmReviewExecutionCancellation({
+            authorization: currentAuthorization,
+            execution: original,
+            controlPlane: this.dependencies.controlPlane,
+            identities: this.dependencies.identities,
+            ...(executionStartAttempted && initialRestoredExecution
+              ? { restoredExecution: initialRestoredExecution }
+              : {}),
+            signal: this.dependencies.signal,
+          });
+          acknowledged = true;
+        } catch {
+          this.dependencies.signal?.throwIfAborted();
+        }
+      }
+      if (!isTerminal(state.phase)) {
+        state = evolveReviewOrchestration(state, {
+          type: acknowledged
+            ? ReviewOrchestrationEventType.Superseded
+            : ReviewOrchestrationEventType.Failed,
+        });
+      }
+      return {
+        status: acknowledged ? status : ReviewOrchestrationResultStatus.Failed,
+        state,
+        ...(cancelledExecution
+          ? { executionId: cancelledExecution.executionId }
+          : {}),
+        ...(acknowledged
+          ? {}
+          : { failureCode: 'review_orchestration_cancellation_unconfirmed' }),
+      };
+    };
 
     try {
       this.dependencies.signal?.throwIfAborted();
@@ -328,16 +444,10 @@ export class RunT0ReviewOrchestration {
       const admittedRevision =
         await this.dependencies.revisionGuard.loadCurrentRevision();
       if (admittedRevision.pullRequestState === 'closed') {
-        state = evolveReviewOrchestration(state, {
-          type: ReviewOrchestrationEventType.Superseded,
-        });
-        return { status: ReviewOrchestrationResultStatus.Cancelled, state };
+        return await stoppedResult(ReviewOrchestrationResultStatus.Cancelled);
       }
       if (!sameRevision(admittedRevision, command)) {
-        state = evolveReviewOrchestration(state, {
-          type: ReviewOrchestrationEventType.Superseded,
-        });
-        return { status: ReviewOrchestrationResultStatus.Superseded, state };
+        return await stoppedResult(ReviewOrchestrationResultStatus.Superseded);
       }
       state = evolveReviewOrchestration(state, {
         type: ReviewOrchestrationEventType.RevisionConfirmed,
@@ -374,15 +484,18 @@ export class RunT0ReviewOrchestration {
         authorization,
         reviewRevisionHash: command.reviewRevisionHash,
       };
+      initialExecutionRestore = this.dependencies.controlPlane.restoreExecution(
+        {
+          authorization,
+          reviewRevisionHash: command.reviewRevisionHash,
+        }
+      );
       const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
           reviewRevisionHash: command.reviewRevisionHash,
         }),
-        this.dependencies.controlPlane.restoreExecution({
-          authorization,
-          reviewRevisionHash: command.reviewRevisionHash,
-        }),
+        initialExecutionRestore,
         Promise.resolve()
           .then(
             () =>
@@ -409,6 +522,7 @@ export class RunT0ReviewOrchestration {
       const continuingExecution = command.restoredExecution
         ? (restoredExecution ?? command.restoredExecution)
         : undefined;
+      executionStartAttempted = continuingExecution === undefined;
       execution = continuingExecution
         ? {
             executionId: continuingExecution.executionId,
@@ -533,9 +647,44 @@ export class RunT0ReviewOrchestration {
           ),
         };
       };
+      const restoredAcceptedHintFor = (workSlotId: string) => {
+        const retained =
+          command.restoredExecution?.persistedPlan?.unattachedAcceptedManifests?.find(
+            (hint) => hint.workSlotId === workSlotId
+          );
+        const refreshed =
+          execution!.restoredExecution.persistedPlan?.unattachedAcceptedManifests?.find(
+            (hint) => hint.workSlotId === workSlotId
+          );
+        if (
+          retained &&
+          refreshed &&
+          !(
+            [
+              'manifestCanonicalJson',
+              'manifestKey',
+              'providerInvocationKey',
+              'providerVoteIdentityHash',
+              'observationId',
+              'payloadHash',
+              'sourceLeaseId',
+              'sourceFencingToken',
+              'sourceOwnerIdHash',
+            ] as const
+          ).every((key) => retained[key] === refreshed[key])
+        )
+          throw new Error('review_orchestration_unattached_source_changed');
+        return retained ?? refreshed;
+      };
       const runWorkSlot = async (
         workSlot: ReviewWorkSlotPlan
       ): Promise<void> => {
+        if (
+          acceptedEvidence.some(
+            (item) => item.workSlotId === workSlot.workSlotId
+          )
+        )
+          return;
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
           throw new Error('review_orchestration_restored_work_slot_missing');
@@ -546,6 +695,48 @@ export class RunT0ReviewOrchestration {
           );
         const restoredSatisfied =
           restoredSlot.state === RestoredReviewWorkSlotState.Satisfied;
+        // A known accepted source cannot become ordinary admission or fallback.
+        const restoredAcceptedHint = restoredAcceptedHintFor(
+          workSlot.workSlotId
+        );
+        if (restoredAcceptedHint) {
+          const stillUnattached =
+            restoredSlot.state === RestoredReviewWorkSlotState.Exhausted &&
+            restoredSlot.acceptedObservationRefId === null;
+          const alreadyAttached =
+            restoredSatisfied &&
+            restoredSlot.acceptedObservationRefId ===
+              observationRefId(
+                execution!.executionId,
+                workSlot.workSlotId,
+                restoredAcceptedHint.observationId
+              );
+          const acceptedManifest =
+            execution!.restoredExecution.persistedPlan?.acceptedManifests?.find(
+              (manifest) => manifest.workSlotId === workSlot.workSlotId
+            );
+          if (
+            !command.restoreOnly ||
+            workSlot.taskKind !== ReviewTaskKind.FindingDiscovery ||
+            workSlot.attemptBudget !== 1 ||
+            persistedSlot?.nextAttemptOrdinal !== 2 ||
+            restoredSlot.activeLeaseId !== null ||
+            (!stillUnattached && !alreadyAttached) ||
+            (alreadyAttached &&
+              acceptedManifest &&
+              !(
+                [
+                  'manifestCanonicalJson',
+                  'manifestKey',
+                  'providerInvocationKey',
+                  'providerVoteIdentityHash',
+                ] as const
+              ).every(
+                (key) => acceptedManifest[key] === restoredAcceptedHint[key]
+              ))
+          )
+            throw new Error('review_orchestration_unattached_source_changed');
+        }
         const lifecycleEvidenceUnavailable =
           workSlot.taskKind === ReviewTaskKind.LifecycleRevalidation &&
           (!restoredSatisfied ||
@@ -561,10 +752,11 @@ export class RunT0ReviewOrchestration {
             restoredSlot.activeLeaseId !== null ||
             (persistedSlot?.nextAttemptOrdinal ?? 1) > 1);
         if (
-          (command.restoreOnly &&
+          !restoredAcceptedHint &&
+          ((command.restoreOnly &&
             (lifecycleEvidenceUnavailable || discoveryDispatchUncertain)) ||
-          restoredSlot.state === RestoredReviewWorkSlotState.Exhausted ||
-          restoredSlot.state === RestoredReviewWorkSlotState.Cancelled
+            restoredSlot.state === RestoredReviewWorkSlotState.Exhausted ||
+            restoredSlot.state === RestoredReviewWorkSlotState.Cancelled)
         ) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
@@ -586,6 +778,7 @@ export class RunT0ReviewOrchestration {
           return;
         }
         if (
+          !restoredAcceptedHint &&
           restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied &&
           !this.canStartBatch()
         ) {
@@ -601,6 +794,7 @@ export class RunT0ReviewOrchestration {
           return;
         }
         if (
+          !restoredAcceptedHint &&
           restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied &&
           this.providerLaneBusyBudgetExhausted(
             busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0
@@ -626,6 +820,7 @@ export class RunT0ReviewOrchestration {
           ownerIdHash: command.ownerIdHash,
           revision: command,
           restoredSlot,
+          ...(restoredAcceptedHint ? { restoredAcceptedHint } : {}),
           restoreOnly: command.restoreOnly === true,
           busyPollsByProviderLane,
           admissionLimited: this.dependencies.reviewerScheduling
@@ -634,7 +829,24 @@ export class RunT0ReviewOrchestration {
           onEvent: (event) => {
             state = evolveReviewOrchestration(state, event);
           },
+        }).catch((error: unknown) => {
+          if (
+            !restoredAcceptedHint ||
+            error instanceof ReviewExecutionSupersededSignal ||
+            error instanceof ReviewExecutionCancelledSignal ||
+            error instanceof ReviewExecutionDeadlineReachedSignal
+          )
+            throw error;
+          this.dependencies.signal?.throwIfAborted();
+          // A recovery refusal is a run failure, never a reviewer-route fallback.
+          throw new Error(
+            'review_orchestration_unattached_observation_unavailable'
+          );
         });
+        if (restoredAcceptedHint && !outcome.observation)
+          throw new Error(
+            'review_orchestration_unattached_observation_unavailable'
+          );
         execution = {
           ...execution!,
           streamVersion: maxVersion(
@@ -784,6 +996,13 @@ export class RunT0ReviewOrchestration {
           });
         };
         try {
+          // Existing accepted work is read-only recovery. Resolve it before
+          // provider stops or fallback selection can discard a later slot.
+          for (const slot of command.workSlots) {
+            if (!restoredAcceptedHintFor(slot.workSlotId)) continue;
+            this.runAbort.signal.throwIfAborted();
+            await runWorkSlot(slot);
+          }
           while (pending.length || active.size) {
             while (
               !parentFailure &&
@@ -825,7 +1044,10 @@ export class RunT0ReviewOrchestration {
                   fallbackOutcomes.set(
                     lane.providerVoteIdentityHash,
                     fallbackLaneOutcome(
-                      false,
+                      reviewerCompletedRequiredWork(
+                        lane.slots,
+                        acceptedEvidence
+                      ),
                       stopReasons.get(lane.providerVoteIdentityHash)
                     )
                   );
@@ -1356,18 +1578,6 @@ export class RunT0ReviewOrchestration {
       };
     } catch (error) {
       this.dependencies.signal?.throwIfAborted();
-      if (error instanceof ReviewExecutionCancelledSignal) {
-        if (!isTerminal(state.phase)) {
-          state = evolveReviewOrchestration(state, {
-            type: ReviewOrchestrationEventType.Superseded,
-          });
-        }
-        return {
-          status: ReviewOrchestrationResultStatus.Cancelled,
-          state,
-          ...(execution ? { executionId: execution.executionId } : {}),
-        };
-      }
       if (error instanceof ReviewExecutionSupersededSignal) {
         if (authorization && execution) {
           await this.dependencies.controlPlane.supersedeExecution({
@@ -1393,17 +1603,11 @@ export class RunT0ReviewOrchestration {
           ...(execution ? { executionId: execution.executionId } : {}),
         };
       }
-      if (await this.pullRequestClosedAfterFailure()) {
-        if (!isTerminal(state.phase)) {
-          state = evolveReviewOrchestration(state, {
-            type: ReviewOrchestrationEventType.Superseded,
-          });
-        }
-        return {
-          status: ReviewOrchestrationResultStatus.Cancelled,
-          state,
-          ...(execution ? { executionId: execution.executionId } : {}),
-        };
+      if (
+        error instanceof ReviewExecutionCancelledSignal ||
+        (await this.pullRequestClosedAfterFailure())
+      ) {
+        return await stoppedResult(ReviewOrchestrationResultStatus.Cancelled);
       }
       if (!isTerminal(state.phase)) {
         state = evolveReviewOrchestration(state, {
@@ -1461,6 +1665,7 @@ export class RunT0ReviewOrchestration {
     readonly ownerIdHash: string;
     readonly revision: ReviewRevisionFacts;
     readonly restoredSlot: RestoredReviewWorkSlot;
+    readonly restoredAcceptedHint?: PersistedUnattachedReviewManifest;
     readonly restoreOnly: boolean;
     readonly busyPollsByProviderLane: Map<string, number>;
     readonly admissionLimited: boolean;
@@ -1483,6 +1688,13 @@ export class RunT0ReviewOrchestration {
       input.workSlot.providerVoteIdentityHash
     );
     const waitSignal = reviewerSignal ?? this.dependencies.signal;
+    const originalManifest =
+      input.restoredAcceptedHint ??
+      (input.restoredSlot.state === RestoredReviewWorkSlotState.Satisfied
+        ? input.execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
+            (manifest) => manifest.workSlotId === input.workSlot.workSlotId
+          )
+        : undefined);
     let streamVersion = input.execution.streamVersion;
     let exhaustionManifest: ProviderInvocationManifest | null = null;
     let handledInvestigationOrdinal: number | null = null;
@@ -1508,12 +1720,17 @@ export class RunT0ReviewOrchestration {
             workSlot: input.workSlot,
             attemptOrdinal,
             ...(reviewerSignal ? { signal: reviewerSignal } : {}),
+            ...(originalManifest ? { originalManifest } : {}),
           });
         reviewerSignal?.throwIfAborted();
-        const authoritativeManifest =
-          await this.dependencies.invocationManifestAssembler.assemble(
-            authoritativeInvocation
-          );
+        const authoritativeManifest = originalManifest
+          ? await this.dependencies.invocationManifestAssembler.assemble(
+              authoritativeInvocation,
+              originalManifest
+            )
+          : await this.dependencies.invocationManifestAssembler.assemble(
+              authoritativeInvocation
+            );
         validateManifest(authoritativeManifest);
         if (!isOriginalAcceptedManifest(input, authoritativeManifest))
           await this.assertMemoryEligible(authoritativeInvocation);
@@ -1925,11 +2142,9 @@ export class RunT0ReviewOrchestration {
               return activeInvocation;
             },
           });
-          if (
-            invocation.manifestFacts.executionProfile !== 'context_gateway_v1'
-          ) {
-            await this.assertRevisionCurrent(input.revision);
-          }
+          // Preserve the completed result before a GitHub read can fail.
+          // Attachment below still requires the current revision.
+          this.dependencies.signal?.throwIfAborted();
           if (this.providerOperationRemainingMs() <= 0) {
             throw new ReviewExecutionDeadlineReachedSignal();
           }
@@ -2123,7 +2338,11 @@ export class RunT0ReviewOrchestration {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
         }
       } catch (error) {
-        if (!(error instanceof ReviewMemoryAdmissionChangedSignal)) throw error;
+        if (
+          input.restoredAcceptedHint ||
+          !(error instanceof ReviewMemoryAdmissionChangedSignal)
+        )
+          throw error;
         // No authoritative lease was granted for this stale input. Prepare a
         // memory-free prompt/manifest at the same attempt ordinal; completed
         // investigation work is not repeated or reused under the new manifest.
@@ -2311,6 +2530,7 @@ export class RunT0ReviewOrchestration {
     readonly invocation: PreparedReviewInvocation;
     readonly revision: ReviewRevisionFacts;
     readonly restoredSlot: RestoredReviewWorkSlot;
+    readonly restoredAcceptedHint?: PersistedUnattachedReviewManifest;
     readonly onEvent: (event: {
       readonly type: ReviewOrchestrationEventType.SlotSatisfied;
       readonly workSlotId: string;
@@ -2319,6 +2539,10 @@ export class RunT0ReviewOrchestration {
     readonly observation: AcceptedReviewObservation;
     readonly streamVersion: string;
   } | null> {
+    const hint = input.restoredAcceptedHint;
+    if (hint) this.assertExecutionDeadlineAvailable();
+    if (hint && !isOriginalAcceptedManifest(input, input.manifest))
+      throw new Error('review_orchestration_unattached_manifest_mismatch');
     if (!isOriginalAcceptedManifest(input, input.manifest))
       await this.assertMemoryEligible(input.invocation);
     const lookup = await this.dependencies.controlPlane.lookupEvidence({
@@ -2328,6 +2552,21 @@ export class RunT0ReviewOrchestration {
       planHash: input.planHash,
       manifest: input.manifest,
     });
+    if (
+      hint &&
+      (lookup.kind !== ReviewEvidenceLookupKind.Hit ||
+        lookup.attachment.kind !== 'same_execution' ||
+        lookup.observation.observationId !== hint.observationId ||
+        lookup.observation.payloadHash !== hint.payloadHash ||
+        lookup.observation.providerInvocationKey !==
+          hint.providerInvocationKey ||
+        lookup.observation.providerVoteIdentityHash !==
+          hint.providerVoteIdentityHash ||
+        lookup.attachment.sourceLeaseId !== hint.sourceLeaseId ||
+        lookup.attachment.sourceFencingToken !== hint.sourceFencingToken ||
+        lookup.attachment.sourceOwnerIdHash !== hint.sourceOwnerIdHash)
+    )
+      throw new Error('review_orchestration_unattached_observation_mismatch');
     if (lookup.kind === ReviewEvidenceLookupKind.Miss) return null;
 
     await this.assertRevisionCurrent(input.revision);
@@ -2427,8 +2666,9 @@ export class RunT0ReviewOrchestration {
           );
       const adopted = await this.parentCommand(
         { ...input, execution: adoptionExecution },
-        (execution) =>
-          this.dependencies.controlPlane.adoptObservation({
+        (execution) => {
+          if (hint) this.assertExecutionDeadlineAvailable();
+          return this.dependencies.controlPlane.adoptObservation({
             authorization: input.authorization,
             idempotencyKey: this.idempotencyKey('adopt', [
               input.execution.executionId,
@@ -2443,7 +2683,8 @@ export class RunT0ReviewOrchestration {
             manifest: input.manifest,
             observation: lookup.observation,
             source: attachment,
-          })
+          });
+        }
       );
       streamVersion = adopted.streamVersion;
     }
@@ -2561,8 +2802,10 @@ export class RunT0ReviewOrchestration {
     try {
       const currentRevision =
         await this.dependencies.revisionGuard.loadCurrentRevision();
+      this.dependencies.signal?.throwIfAborted();
       return currentRevision.pullRequestState === 'closed';
     } catch {
+      this.dependencies.signal?.throwIfAborted();
       return false;
     }
   }
@@ -3122,6 +3365,70 @@ export class RunT0ReviewOrchestration {
   }
 }
 
+/**
+ * Confirm termination of the original admitted execution without new authority.
+ * Callers retain their command-plan checks and admission history.
+ */
+export async function confirmReviewExecutionCancellation(input: {
+  readonly authorization: ReviewRunAuthorization;
+  readonly execution: ReviewExecutionAdmission;
+  readonly controlPlane: ReviewActionV2ControlPlanePort;
+  readonly identities: ReviewOrchestrationIdentityPort;
+  /** An authenticated readback just loaded by this caller. */
+  readonly restoredExecution?: RestoredReviewExecution;
+  readonly signal?: AbortSignal;
+}): Promise<void> {
+  const { authorization, execution, controlPlane, signal } = input;
+  signal?.throwIfAborted();
+  if (
+    execution.executionId !== execution.restoredExecution.executionId ||
+    execution.generation !== execution.restoredExecution.generation ||
+    execution.restoredExecution.authorizationId !==
+      authorization.authorizationId ||
+    execution.restoredExecution.reviewRevisionHash !==
+      authorization.facts.reviewRevisionHash
+  )
+    throw new Error('review_orchestration_cancellation_scope_mismatch');
+  const latest =
+    input.restoredExecution ??
+    (await controlPlane.restoreExecution({
+      authorization,
+      reviewRevisionHash: authorization.facts.reviewRevisionHash,
+    }));
+  signal?.throwIfAborted();
+  const current = latest
+    ? refreshExecutionAdmission(execution, latest)
+    : execution;
+  const alreadyTerminal =
+    latest !== null &&
+    [
+      RestoredReviewExecutionState.Superseded,
+      RestoredReviewExecutionState.Completed,
+      RestoredReviewExecutionState.Partial,
+      RestoredReviewExecutionState.Failed,
+    ].includes(latest.state);
+  if (!alreadyTerminal) {
+    // A missing restore is not terminal proof. The exact original
+    // execution may still acknowledge an idempotent supersession.
+    signal?.throwIfAborted();
+    await controlPlane.supersedeExecution({
+      authorization,
+      idempotencyKey: input.identities.deterministicId(
+        'idempotency-cancel-closed-pr',
+        [
+          current.executionId,
+          current.generation,
+          current.streamVersion,
+          authorization.facts.reviewRevisionHash,
+        ]
+      ),
+      execution: current,
+      targetRevisionHash: authorization.facts.reviewRevisionHash,
+    });
+    signal?.throwIfAborted();
+  }
+}
+
 function terminalizeCommand(
   reason: ReviewWorkSlotExhaustionReason | undefined
 ): {
@@ -3666,16 +3973,19 @@ function isOriginalAcceptedManifest(
     readonly execution: ReviewExecutionAdmission;
     readonly restoredSlot: RestoredReviewWorkSlot;
     readonly workSlot: ReviewWorkSlotPlan;
+    readonly restoredAcceptedHint?: PersistedUnattachedReviewManifest;
   },
   manifest: ProviderInvocationManifest
 ): boolean {
   if (
-    input.restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied ||
+    (!input.restoredAcceptedHint &&
+      input.restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied) ||
     input.execution.restoredExecution.executionId !==
       input.execution.executionId
   )
     return false;
   const original =
+    input.restoredAcceptedHint ??
     input.execution.restoredExecution.persistedPlan?.acceptedManifests?.find(
       (value) => value.workSlotId === input.workSlot.workSlotId
     );
